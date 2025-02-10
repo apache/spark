@@ -293,19 +293,21 @@ case class VariantGet(
   protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tmp = ctx.freshVariable("tmp", classOf[Object])
     val childCode = child.genCode(ctx)
-    val pathCode = path.genCode(ctx)
     val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
     val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
-    val parsedPathArg = if (parsedPath.isEmpty) {
-      pathCode.value
+    val (pathCode, parsedPathArg) = if (parsedPath.isEmpty) {
+      val pathCode = path.genCode(ctx)
+      (pathCode, pathCode.value)
     } else {
-      ctx.addReferenceObj("parsedPath", parsedPath.get)
+      (
+        new ExprCode(EmptyBlock, FalseLiteral, TrueLiteral),
+        ctx.addReferenceObj("parsedPath", parsedPath.get)
+      )
     }
     val code = code"""
       ${childCode.code}
-      ${if (parsedPath.isEmpty) pathCode.code else EmptyBlock}
-      boolean ${ev.isNull} = ${childCode.isNull} ||
-        ${if (parsedPath.isEmpty) pathCode.isNull else "false"};
+      ${pathCode.code}
+      boolean ${ev.isNull} = ${childCode.isNull} || ${pathCode.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
         Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
