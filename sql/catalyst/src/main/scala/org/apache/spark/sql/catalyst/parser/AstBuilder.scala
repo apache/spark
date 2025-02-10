@@ -2345,44 +2345,12 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (canEagerlyEvaluateInlineTable(ctx, unresolvedTable)) {
+    val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
       EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
     }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
-  }
-
-  /**
-   * Determines if the inline table can be eagerly evaluated.
-   */
-  private def canEagerlyEvaluateInlineTable(
-      ctx: InlineTableContext,
-      table: UnresolvedInlineTable): Boolean = {
-    if (!conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
-      return false
-    } else if (!ResolveDefaultStringTypes.needsResolution(table.expressions)) {
-      // if there are no strings to be resolved we can always evaluate eagerly
-      return true
-    }
-
-    !contextInsideCreate(ctx)
-  }
-
-  private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {
-    var currentContext: RuleContext = ctx
-
-    while (currentContext != null) {
-      if (currentContext.isInstanceOf[CreateTableContext] ||
-          currentContext.isInstanceOf[ReplaceTableContext] ||
-          currentContext.isInstanceOf[CreateViewContext]) {
-        return true
-      }
-
-      currentContext = currentContext.parent
-    }
-
-    false
   }
 
   /**

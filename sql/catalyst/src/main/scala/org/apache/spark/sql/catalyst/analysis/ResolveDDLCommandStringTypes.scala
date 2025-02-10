@@ -19,97 +19,46 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
- * Resolves default string types in queries and commands. For queries, the default string type is
- * determined by the default string type, which is UTF8_BINARY. For DDL, the default string type
- * is the default type of the object (table/view -> schema -> catalog).
+ * Resolves string types in DDL commands, where the string type inherits the
+ * collation from the corresponding object (table/view -> schema -> catalog).
  */
-object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
+object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val newPlan = apply0(plan)
-    if (plan.ne(newPlan)) {
-      // Due to how tree transformations work and StringType object being equal to
-      // StringType("UTF8_BINARY"), we need to transform the plan twice
-      // to ensure the correct results for occurrences of default string type.
-      val finalPlan = apply0(newPlan)
-      RuleExecutor.forceAdditionalIteration(finalPlan)
-      finalPlan
-    } else {
-      newPlan
-    }
-  }
-
-  private def apply0(plan: LogicalPlan): LogicalPlan = {
     if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
-      transformPlan(plan, stringTypeForDML)
+      // For non-DDL commands no need to do any further resolution of string types
+      plan
     }
   }
 
-  /**
-   * Returns whether any of the given `plan` needs to have its
-   * default string type resolved.
-   */
-  def needsResolution(plan: LogicalPlan): Boolean = {
-    if (!isDDLCommand(plan)) {
-      return false
-    }
-
-    plan.exists(node => needsResolution(node.expressions))
-  }
-
-  /**
-   * Returns whether any of the given `expressions` needs to have its
-   * default string type resolved.
-   */
-  def needsResolution(expressions: Seq[Expression]): Boolean = {
-    expressions.exists(needsResolution)
-  }
-
-  /**
-   * Returns whether the given `expression` needs to have its
-   * default string type resolved.
-   */
-  def needsResolution(expression: Expression): Boolean = {
-    expression.exists(e => transformExpression.isDefinedAt(e))
-  }
-
-  /** Default string type is UTF8_BINARY */
+  /** Default string type used, if object level collation is not provided */
   private def defaultStringType: StringType = StringType("UTF8_BINARY")
 
-  /** Returns the default string type that should be used in a given DDL command */
+  /** Returns the string type that should be used in a given DDL command */
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType = {
-    if (table.isInstanceOf[CreateTable]) {
-      if (table.asInstanceOf[CreateTable].tableSpec.collation.isDefined) {
-        return StringType(table.asInstanceOf[CreateTable].tableSpec.collation.get)
-      }
-    }
-    else if (table.isInstanceOf[CreateView]) {
-      if (table.asInstanceOf[CreateView].collation.isDefined) {
-        return StringType(table.asInstanceOf[CreateView].collation.get)
-      }
-    }
-    else if (table.isInstanceOf[AlterTableCommand]) {
-      if (table.asInstanceOf[AlterTableCommand].table.resolved) {
-        val collation = Option(table.asInstanceOf[AlterTableCommand]
+    table match {
+      case createTable: CreateTable if createTable.tableSpec.collation.isDefined =>
+        StringType(createTable.tableSpec.collation.get)
+      case createView: CreateView if createView.collation.isDefined =>
+        StringType(createView.collation.get)
+      case alterTable: AlterTableCommand if alterTable.table.resolved =>
+        val collation = Option(alterTable
           .table.asInstanceOf[ResolvedTable]
           .table.properties.get(TableCatalog.PROP_COLLATION))
         if (collation.isDefined) {
-          return StringType(collation.get)
+          StringType(collation.get)
+        } else {
+          defaultStringType
         }
-      }
+      case _ => defaultStringType
     }
-    defaultStringType
   }
-
-  /** Returns the session default string type used for DML queries */
-  private def stringTypeForDML: StringType =
-    defaultStringType
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
     case _: AddColumns | _: ReplaceColumns | _: AlterColumns => true
@@ -175,9 +124,7 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
 
   private def isDefaultStringType(dataType: DataType): Boolean = {
     dataType match {
-      case st: StringType =>
-        // should only return true for StringType object and not StringType("UTF8_BINARY")
-        st.eq(StringType) || st.isInstanceOf[TemporaryStringType]
+      case st: StringType => st.eq(StringType)
       case _ => false
     }
   }
@@ -185,11 +132,7 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
     dataType.transformRecursively {
       case currentType: StringType if isDefaultStringType(currentType) =>
-        if (currentType == newType) {
-          TemporaryStringType()
-        } else {
-          newType
-        }
+        newType
     }
   }
 
@@ -204,8 +147,4 @@ object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
       case col => col
     }
   }
-}
-
-case class TemporaryStringType() extends StringType(1) {
-  override def toString: String = s"TemporaryStringType($collationId)"
 }
