@@ -602,18 +602,9 @@
         <version>4.0.5</version>
         <scope>compile</scope>
         <exclusions>
-          <!-- for now, we only write XML in PMML export, and these can be excluded -->
-          <exclusion>
-            <groupId>com.sun.xml.fastinfoset</groupId>
-            <artifactId>FastInfoset</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.glassfish.jaxb</groupId>
             <artifactId>txw2</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jvnet.staxex</groupId>
-            <artifactId>stax-ex</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.eclipse.angus</groupId>
