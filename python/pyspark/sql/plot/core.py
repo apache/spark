@@ -85,6 +85,13 @@ class PySparkSampledPlotBase:
 
 
 class PySparkPlotAccessor:
+    """
+    Accessor for DataFrame plotting functionality in PySpark.
+
+    Users can call the accessor as ``df.plot(kind="line")`` or use the dedicated
+    methods like ``df.plot.line(...)`` to generate plots.
+    """
+
     plot_data_map = {
         "area": PySparkSampledPlotBase().get_sampled,
         "bar": PySparkTopNPlotBase().get_top_n,

@@ -6828,13 +6828,13 @@ class DataFrame:
     @property
     def plot(self) -> "PySparkPlotAccessor":
         """
-        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+        Returns a :class:`plot.core.PySparkPlotAccessor` for plotting functions.
 
         .. versionadded:: 4.0.0
 
         Returns
         -------
-        :class:`PySparkPlotAccessor`
+        :class:`plot.core.PySparkPlotAccessor`
 
         Notes
         -----
