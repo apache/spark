@@ -2251,13 +2251,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATE_STORE_PARTITION_METRICS_REPORT_LIMIT =
-    buildConf("spark.sql.streaming.stateStore.numPartitionMetricsToReport")
+  val STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT =
+    buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
       .internal()
       .doc(
-        "Number of partition-level metrics to include in state store progress reporting. The " +
-        "default limit is 20% of partitions clamped between 1 and 10 (please refer to " +
-        "numPartitionMetricsToReport for details)."
+        "Number of state store instance metrics to include in state store progress reporting. " +
+        "The default limit is 20% of partitions clamped between 1 and 10 (please refer to " +
+        "numStateStoreInstanceMetricsToReport for details)."
       )
       .version("4.0.0")
       .intConf
@@ -5746,8 +5746,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
 
-  def numPartitionMetricsToReport: Int = {
-    getConf(STATE_STORE_PARTITION_METRICS_REPORT_LIMIT).getOrElse(
+  def numStateStoreInstanceMetricsToReport: Int = {
+    getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT).getOrElse(
       Math.min(10, Math.max(1, defaultNumShufflePartitions / 5))
     )
   }

@@ -448,7 +448,7 @@ class SymmetricHashJoinStateManager(
       keyWithIndexToValueMetrics.customMetrics.map {
         case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
       } ++ keyToNumValuesMetrics.customMetrics.collect {
-        case (metric: StateStoreCustomPartitionMetric, value) =>
+        case (metric: StateStoreInstanceMetric, value) =>
           (metric.withNewDesc(desc = newDesc(metric.desc)), value)
       }
     )

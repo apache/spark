@@ -48,7 +48,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   import testImplicits._
 
   private val SNAPSHOT_LAG_METRIC_PREFIX =
-    ("rocksdbSnapshotLastUploaded" + StateStoreProvider.PARTITION_METRIC_SUFFIX)
+    ("rocksdbSnapshotLastUploaded" + StateStoreProvider.INSTANCE_METRIC_SUFFIX)
 
   testWithColumnFamilies("RocksDBStateStore",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -87,7 +87,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         (SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10"),
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
         (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
-        (SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "0"),
+        (SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "0"),
         (SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
         val inputData = MemoryStream[Int]
 
@@ -290,18 +290,19 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   private def snapshotLagMetricName(
       partitionId: Long,
-      storeName: String = StateStoreId.DEFAULT_STORE_NAME): String =
-    (s"$SNAPSHOT_LAG_METRIC_PREFIX${partitionId}_$storeName")
+      storeName: String = StateStoreId.DEFAULT_STORE_NAME): String = {
+    s"$SNAPSHOT_LAG_METRIC_PREFIX${partitionId}_$storeName"
+  }
 
   testWithChangelogCheckpointingEnabled(
-    "SPARK-51097: Verify snapshot lag metric is updated correctly with RocksDBStateStoreProvider"
+    "SPARK-51097: Verify snapshot lag metrics are updated correctly with RocksDBStateStoreProvider"
   ) {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "5"
+      SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "5"
     ) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
@@ -317,18 +318,18 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           Execute { q =>
             // Make sure only smallest K active metrics are published
             eventually(timeout(10.seconds)) {
-              val partitionMetrics = q.lastProgress
+              val instanceMetrics = q.lastProgress
                 .stateOperators(0)
                 .customMetrics
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by numPartitionMetricsToReport
+              // Determined by numStateStoreInstanceMetricsToReport
               assert(
-                partitionMetrics.size ==
-                  q.sparkSession.sessionState.conf.numPartitionMetricsToReport
+                instanceMetrics.size ==
+                  q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
               )
-              assert(partitionMetrics.forall(_._2 == 1))
+              assert(instanceMetrics.forall(_._2 == 1))
             }
           },
           StopStream
@@ -338,7 +339,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   }
 
   testWithChangelogCheckpointingEnabled(
-    "SPARK-51097: Verify snapshot lag metric is updated correctly with " +
+    "SPARK-51097: Verify snapshot lag metrics are updated correctly with " +
     "SkipMaintenanceOnCertainPartitionsProvider"
   ) {
     withSQLConf(
@@ -347,7 +348,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "3"
+      SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
     ) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
@@ -362,7 +363,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           CheckNewAnswer("a", "b"),
           Execute { q =>
             // Partitions getting skipped (id 0 and 1) do not have an uploaded version, leaving
-            // the metric as -1.
+            // those instance metrics as -1.
             eventually(timeout(10.seconds)) {
               assert(
                 q.lastProgress
@@ -377,22 +378,22 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                   .get(snapshotLagMetricName(1)) === -1
               )
               // Make sure only smallest K active metrics are published
-              val partitionMetrics = q.lastProgress
+              val instanceMetrics = q.lastProgress
                 .stateOperators(0)
                 .customMetrics
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by numPartitionMetricsToReport for this scenario
+              // Determined by numStateStoreInstanceMetricsToReport for this scenario
               assert(
-                partitionMetrics.size ==
-                q.sparkSession.sessionState.conf.numPartitionMetricsToReport
+                instanceMetrics.size ==
+                q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
               )
               // Two metrics published are -1, the remainder should all be 1 as they
               // uploaded properly.
               assert(
-                partitionMetrics.count(_._2 == 1) ==
-                q.sparkSession.sessionState.conf.numPartitionMetricsToReport - 2
+                instanceMetrics.count(_._2 == 1) ==
+                q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport - 2
               )
             }
           },
@@ -412,7 +413,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "10"
+      SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
     ) {
       withTempDir { checkpointDir =>
         val input1 = MemoryStream[Int]
@@ -435,19 +436,19 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             eventually(timeout(10.seconds)) {
               // Make sure only smallest K active metrics are published.
               // There are 5 * 4 = 20 metrics in total because of join, but only 10 are published.
-              val partitionMetrics = q.lastProgress
+              val instanceMetrics = q.lastProgress
                 .stateOperators(0)
                 .customMetrics
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by numPartitionMetricsToReport
+              // Determined by numStateStoreInstanceMetricsToReport
               assert(
-                partitionMetrics.size ==
-                  q.sparkSession.sessionState.conf.numPartitionMetricsToReport
+                instanceMetrics.size ==
+                  q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
               )
-              // All partitions should have uploaded a version
-              assert(partitionMetrics.forall(_._2 == 1))
+              // All state store instances should have uploaded a version
+              assert(instanceMetrics.forall(_._2 == 1))
             }
           },
           StopStream
@@ -466,7 +467,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-      SQLConf.STATE_STORE_PARTITION_METRICS_REPORT_LIMIT.key -> "10"
+      SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
     ) {
       withTempDir { checkpointDir =>
         val input1 = MemoryStream[Int]
@@ -489,25 +490,27 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             eventually(timeout(10.seconds)) {
               // Make sure only smallest K active metrics are published.
               // There are 5 * 4 = 20 metrics in total because of join, but only 10 are published.
-              val partitionMetrics = q.lastProgress
+              val allInstanceMetrics = q.lastProgress
                 .stateOperators(0)
                 .customMetrics
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              val badPartitionMetrics = partitionMetrics.filterKeys(
+              val badInstanceMetrics = allInstanceMetrics.filterKeys(
                 k =>
                   k.startsWith(snapshotLagMetricName(0, "")) ||
                   k.startsWith(snapshotLagMetricName(1, ""))
               )
-              val numPartitionMetricsToReport =
-                q.sparkSession.sessionState.conf.numPartitionMetricsToReport
-              // Determined by numPartitionMetricsToReport
-              assert(partitionMetrics.size == numPartitionMetricsToReport)
+              val numStateStoreInstanceMetricsToReport =
+                q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
+              // Determined by numStateStoreInstanceMetricsToReport
+              assert(allInstanceMetrics.size == numStateStoreInstanceMetricsToReport)
               // Two ids are blocked, each with four state stores
-              assert(badPartitionMetrics.count(_._2 == -1) == 2 * 4)
+              assert(badInstanceMetrics.count(_._2 == -1) == 2 * 4)
               // The rest should have uploaded a version
-              assert(partitionMetrics.count(_._2 == 1) == numPartitionMetricsToReport - 2 * 4)
+              assert(
+                allInstanceMetrics.count(_._2 == 1) == numStateStoreInstanceMetricsToReport - 2 * 4
+              )
             }
           },
           StopStream

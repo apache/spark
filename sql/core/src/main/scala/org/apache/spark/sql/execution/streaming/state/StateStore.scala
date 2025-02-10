@@ -321,7 +321,7 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-case class StateStoreCustomPartitionMetric(
+case class StateStoreInstanceMetric(
     metricPrefix: String,
     descPrefix: String,
     partitionId: Option[Int] = None,
@@ -330,7 +330,7 @@ case class StateStoreCustomPartitionMetric(
   override def name: String = {
     partitionId
       .map { id =>
-        s"$metricPrefix${StateStoreProvider.PARTITION_METRIC_SUFFIX}${id}_${storeName}"
+        s"$metricPrefix${StateStoreProvider.INSTANCE_METRIC_SUFFIX}${id}_${storeName}"
       }
       .getOrElse(metricPrefix)
   }
@@ -343,12 +343,12 @@ case class StateStoreCustomPartitionMetric(
       .getOrElse(descPrefix)
   }
 
-  override def withNewDesc(desc: String): StateStoreCustomPartitionMetric = copy(descPrefix = desc)
+  override def withNewDesc(desc: String): StateStoreInstanceMetric = copy(descPrefix = desc)
 
   override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
-    SQLMetrics.createPartitionMetric(sparkContext, desc)
+    SQLMetrics.createSizeMetric(sparkContext, desc)
 
-  def withNewPartition(partitionId: Int, storeName: String): StateStoreCustomPartitionMetric = {
+  def withNewPartition(partitionId: Int, storeName: String): StateStoreInstanceMetric = {
     copy(partitionId = Some(partitionId), storeName = storeName)
   }
 }
@@ -538,16 +538,16 @@ trait StateStoreProvider {
   def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
 
   /**
-   * Optional custom partition-specific metrics that the implementation may want to report.
+   * Optional custom state store instance metrics that the implementation may want to report.
    * @note The StateStore objects created by this provider must report the same custom metrics
    * (specifically, same names) through `StateStore.metrics`.
    */
-  def supportedCustomPartitionMetrics: Seq[StateStoreCustomPartitionMetric] = Seq.empty
+  def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = Seq.empty
 }
 
 object StateStoreProvider {
 
-  val PARTITION_METRIC_SUFFIX = ".partition_"
+  val INSTANCE_METRIC_SUFFIX = ".partition_"
 
   /**
    * Return a instance of the given provider class name. The instance will not be initialized.

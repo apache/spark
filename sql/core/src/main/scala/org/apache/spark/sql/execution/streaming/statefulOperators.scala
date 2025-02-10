@@ -105,10 +105,6 @@ object StatefulOperatorStateInfo {
  * [[IncrementalExecution]].
  */
 trait StatefulOperator extends SparkPlan {
-  // Used to determine state store names used when allocation metric names,
-  // since join operations use multiple state stores with non-default names.
-  val isJoinOperator: Boolean = false
-
   def stateInfo: Option[StatefulOperatorStateInfo]
 
   def getStateInfo: StatefulOperatorStateInfo = {
@@ -130,6 +126,10 @@ trait StatefulOperator extends SparkPlan {
   def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult]
+
+  // Used to determine state store names used when allocation metric names,
+  // since join operations use multiple state stores with non-default names.
+  def isJoinOperator: Boolean = false
 }
 
 /**
@@ -221,7 +221,7 @@ trait StateStoreWriter
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
-  ) ++ stateStoreCustomMetrics ++ pythonMetrics ++ stateStoreCustomPartitionMetrics
+  ) ++ stateStoreCustomMetrics ++ pythonMetrics ++ stateStoreInstanceMetrics
 
   // This method is only used to fetch the state schema directory path for
   // operators that use StateSchemaV3, as prior versions only use a single
@@ -325,19 +325,19 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    // Still publish custom partition metrics that are marked as unpopulated,
-    // as they represent partitions that never uploaded a snapshot.
-    val customPartitionMetrics = stateStoreCustomPartitionMetrics.map { entry =>
+    // Still publish the instance metrics that are marked as unpopulated,
+    // as they represent state store instances that never uploaded a snapshot.
+    val instanceMetrics = stateStoreInstanceMetrics.map { entry =>
       entry._1 -> (if (longMetric(entry._1).isZero) -1L else longMetric(entry._1).value)
     }
-    // Only keep the smallest N custom partition metrics to report to driver.
-    val customPartitionMetricsToReport = customPartitionMetrics.toSeq
+    // Only keep the smallest N instance metrics to report to driver.
+    val instanceMetricsToReport = instanceMetrics.toSeq
       .sortBy(_._2)
-      .take(conf.numPartitionMetricsToReport)
+      .take(conf.numStateStoreInstanceMetricsToReport)
       .toMap
     val customMetrics = (stateStoreCustomMetrics ++ statefulOperatorCustomMetrics)
       .map(entry => entry._1 -> longMetric(entry._1).value)
-    val allCustomMetrics = customMetrics ++ customPartitionMetricsToReport
+    val allCustomMetrics = customMetrics ++ instanceMetricsToReport
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
       new java.util.HashMap(allCustomMetrics.transform((_, v) => long2Long(v)).asJava)
@@ -390,12 +390,17 @@ trait StateStoreWriter
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
     storeMetrics.customMetrics.foreach {
-      // Set for custom partition metrics
-      case (metric: StateStoreCustomPartitionMetric, value) =>
+      // Set the max for instance metrics
+      case (metric: StateStoreInstanceMetric, value) =>
         // Check for cases where value < 0 and .value converts metric to 0
+        // Metrics like last uploaded snapshot version can have an init value of -1,
+        // which need special handling to avoid setting the metric to 0 using `.value`.
         longMetric(metric.name).set(
-          if (longMetric(metric.name).isZero) value
-          else Math.max(value, longMetric(metric.name).value)
+          if (longMetric(metric.name).isZero) {
+            value
+          } else {
+            Math.max(value, longMetric(metric.name).value)
+          }
         )
       case (metric, value) =>
         longMetric(metric.name) += value
@@ -422,12 +427,12 @@ trait StateStoreWriter
     }.toMap
   }
 
-  private def stateStoreCustomPartitionMetrics: Map[String, SQLMetric] = {
+  private def stateStoreInstanceMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     val maxPartitions = conf.defaultNumShufflePartitions
 
     (0 until maxPartitions).flatMap { partitionId =>
-      provider.supportedCustomPartitionMetrics.flatMap { metric =>
+      provider.supportedInstanceMetrics.flatMap { metric =>
         val storeNames = if (isJoinOperator) {
           SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
         } else {

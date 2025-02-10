@@ -141,7 +141,6 @@ case class StreamingSymmetricHashJoinExec(
     stateFormatVersion: Int,
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with StateStoreWriter {
-  override val isJoinOperator: Boolean = true
 
   def this(
       leftKeys: Seq[Expression],
@@ -529,12 +528,17 @@ case class StreamingSymmetricHashJoinExec(
         numTotalStateRows += combinedMetrics.numKeys
         stateMemory += combinedMetrics.memoryUsedBytes
         combinedMetrics.customMetrics.foreach {
-          // Set for custom partition metrics
-          case (metric: StateStoreCustomPartitionMetric, value) =>
-            // Check for cases where value < 0 and .value converts metric to 0
+          // Set the max for instance metrics
+          case (metric: StateStoreInstanceMetric, value) =>
+            // Check for cases where value < 0 and .value converts metric to 0.
+            // Metrics like last uploaded snapshot version can have an init value of -1,
+            // which need special handling to avoid setting the metric to 0 using `.value`.
             longMetric(metric.name).set(
-              if (longMetric(metric.name).isZero) value
-              else Math.max(value, longMetric(metric.name).value)
+              if (longMetric(metric.name).isZero) {
+                value
+              } else {
+                Math.max(value, longMetric(metric.name).value)
+              }
             )
           case (metric, value) =>
             longMetric(metric.name) += value
@@ -821,4 +825,8 @@ case class StreamingSymmetricHashJoinExec(
 
     Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
   }
+
+  // Used to determine state store names used when allocation metric names,
+  // since join operations use multiple state stores with non-default names.
+  override def isJoinOperator: Boolean = true
 }
