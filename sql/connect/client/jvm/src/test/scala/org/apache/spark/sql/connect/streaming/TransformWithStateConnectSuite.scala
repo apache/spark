@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connect.streaming
 
-import java.io.{BufferedWriter, FileWriter}
-import java.nio.file.{Files, Paths}
+import java.io.{BufferedWriter, File, FileWriter}
+import java.nio.file.Paths
 import java.sql.Timestamp
 
 import org.scalatest.concurrent.Eventually.eventually
@@ -55,7 +55,7 @@ class BasicCountStatefulProcessor
       inputRows: Iterator[InputRowForConnectTest],
       timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
     val count =
-      _countState.getOption().getOrElse(StateRowForConnectTest(0L)).count + inputRows.toSeq.length
+      Option(_countState.get()).getOrElse(StateRowForConnectTest(0L)).count + inputRows.toSeq.length
     _countState.update(StateRowForConnectTest(count))
     Iterator(OutputRowForConnectTest(key, count.toString))
   }
@@ -79,7 +79,7 @@ class TestInitialStatefulProcessor
       key: String,
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
+    val count = Option(_countState.get()).getOrElse(0L) + inputRows.toSeq.length
     _countState.update(count)
     Iterator((key, count.toString))
   }
@@ -88,7 +88,7 @@ class TestInitialStatefulProcessor
       key: String,
       initialState: (String, String, String),
       timerValues: TimerValues): Unit = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+    val count = Option(_countState.get()).getOrElse(0L) + 1
     _countState.update(count)
   }
 }
@@ -136,16 +136,12 @@ class TTLTestStatefulProcessor
       key: String,
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    var count = 0
-    var ttlCount = 0
-    var ttlListStateCount = 0
-    var ttlMapStateCount = 0
-    if (countState.exists()) {
-      count = countState.get()
-    }
-    if (ttlCountState.exists()) {
-      ttlCount = ttlCountState.get()
-    }
+    val numOfInputRows = inputRows.toSeq.length
+    val count = Option(countState.get()).getOrElse(0) + numOfInputRows
+    val ttlCount = Option(ttlCountState.get()).getOrElse(0) + numOfInputRows
+    var ttlListStateCount = numOfInputRows
+    var ttlMapStateCount = numOfInputRows
+
     if (ttlListState.exists()) {
       for (value <- ttlListState.get()) {
         ttlListStateCount += value
@@ -153,12 +149,6 @@ class TTLTestStatefulProcessor
     }
     if (ttlMapState.exists()) {
       ttlMapStateCount = ttlMapState.getValue(key)
-    }
-    for (_ <- inputRows) {
-      count += 1
-      ttlCount += 1
-      ttlListStateCount += 1
-      ttlMapStateCount += 1
     }
     countState.update(count)
     if (key != "0") {
@@ -302,15 +292,20 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
       }
 
       val checkResultFunc: (Dataset[Row], Long) => Unit = { (batchDF, batchId) =>
-        val realDf = batchDF.orderBy("outputTimestamp").collect().toSet
+        val realDf = batchDF.collect().toSet
         if (batchId == 0) {
           assert(realDf.isEmpty, s"BatchId: $batchId, RealDF: $realDf")
         } else if (batchId == 1) {
+          // eviction watermark = 15 - 5 = 10 (max event time from batch 0),
+          // late event watermark = 0 (eviction event time from batch 0)
           val expectedDF = Seq(Row(timestamp(10), 1L)).toSet
           assert(
             realDf == expectedDF,
             s"BatchId: $batchId, expectedDf: $expectedDF, RealDF: $realDf")
         } else if (batchId == 2) {
+          // eviction watermark = 25 - 5 = 20, late event watermark = 10;
+          // row with watermark=5<10 is dropped so it does not show up in the results;
+          // row with eventTime<=20 are finalized and emitted
           val expectedDF = Seq(Row(timestamp(11), 1L), Row(timestamp(15), 1L)).toSet
           assert(
             realDf == expectedDF,
@@ -320,11 +315,11 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        prepareInputData(path + "/text-test3.txt", Seq("a", "b"), Seq(10, 15))
+        prepareInputData(path + "/text-test3.csv", Seq("a", "b"), Seq(10, 15))
         Thread.sleep(2000)
-        prepareInputData(path + "/text-test4.txt", Seq("a", "c"), Seq(11, 25))
+        prepareInputData(path + "/text-test4.csv", Seq("a", "c"), Seq(11, 25))
         Thread.sleep(2000)
-        prepareInputData(path + "/text-test1.txt", Seq("a"), Seq(5))
+        prepareInputData(path + "/text-test1.csv", Seq("a"), Seq(5))
 
         val q = buildTestDf(path, spark)
           .select(col("key").as("key"), timestamp_seconds(col("value")).as("eventTime"))
@@ -393,9 +388,11 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        prepareInputData(path + "/text-test3.txt", Seq("1", "0"), Seq(0, 0))
-        Thread.sleep(2000)
-        prepareInputData(path + "/text-test4.txt", Seq("1", "0"), Seq(0, 0))
+        val curTime = System.currentTimeMillis
+        val file1 = prepareInputData(path + "/text-test3.csv", Seq("1", "0"), Seq(0, 0))
+        file1.setLastModified(curTime + 2L)
+        val file2 = prepareInputData(path + "/text-test4.csv", Seq("1", "0"), Seq(0, 0))
+        file2.setLastModified(curTime + 4L)
 
         val q = buildTestDf(path, spark)
           .as[(String, String)]
@@ -457,12 +454,12 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
   }
 
   /* Utils functions for tests */
-  def prepareInputData(inputPath: String, col1: Seq[String], col2: Seq[Int]): Unit = {
+  def prepareInputData(inputPath: String, col1: Seq[String], col2: Seq[Int]): File = {
     // Ensure the parent directory exists
-    val file = Paths.get(inputPath)
-    val parentDir = file.getParent
-    if (parentDir != null && !Files.exists(parentDir)) {
-      Files.createDirectories(parentDir)
+    val file = Paths.get(inputPath).toFile
+    val parentDir = file.getParentFile
+    if (parentDir != null && !parentDir.exists()) {
+      parentDir.mkdirs()
     }
 
     val writer = new BufferedWriter(new FileWriter(inputPath))
@@ -473,19 +470,16 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
     } finally {
       writer.close()
     }
+    file
   }
 
   def buildTestDf(inputPath: String, sparkSession: SparkSession): DataFrame = {
-    val df = sparkSession.readStream
-      .format("text")
+    sparkSession.readStream
+      .format("csv")
+      .schema(
+        new StructType().add(StructField("key", StringType)).add(StructField("value", StringType)))
       .option("maxFilesPerTrigger", 1)
       .load(inputPath)
-
-    val dfSplit = df.withColumn("split_values", split(col("value"), ","))
-    val dfFinal = dfSplit.select(
-      col("split_values").getItem(0).alias("key").cast("string"),
-      col("split_values").getItem(1).alias("value").cast("int"))
-
-    dfFinal
+      .select(col("key").as("key"), col("value").cast("integer"))
   }
 }
