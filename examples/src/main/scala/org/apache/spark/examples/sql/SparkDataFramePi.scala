@@ -26,7 +26,7 @@ object SparkDataFramePi {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
-      .appName("Spark Connect Pi")
+      .appName("Spark DataFrame Pi")
       .getOrCreate()
     import spark.implicits._
     val slices = if (args.length > 0) args(0).toInt else 2
