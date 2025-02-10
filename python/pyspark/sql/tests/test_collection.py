@@ -305,6 +305,7 @@ class DataFrameCollectionTestsMixin:
         # SPARK-51112: Segfault must not occur when converting empty DataFrame with nested array
         # columns to pandas DataFrame.
         import pandas as pd
+
         df = self.spark.createDataFrame(
             data=[],
             schema=StructType(
