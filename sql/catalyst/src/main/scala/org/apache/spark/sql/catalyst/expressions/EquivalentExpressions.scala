@@ -87,7 +87,7 @@ class EquivalentExpressions(
         case _ =>
           if (useCount > 0) {
             val stats = if (conditional) {
-              ExpressionStats(expr)(useCount = 0, useCount)
+              ExpressionStats(expr)(useCount = 0, conditionalUseCount = useCount)
             } else {
               ExpressionStats(expr)(useCount)
             }
