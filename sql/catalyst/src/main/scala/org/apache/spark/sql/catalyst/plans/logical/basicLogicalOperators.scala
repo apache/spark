@@ -722,6 +722,8 @@ case class CTERelationRef(
  */
 case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends LogicalPlan {
 
+  val curId = new java.util.concurrent.atomic.AtomicLong()
+
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   override def output: Seq[Attribute] = plan.output
@@ -735,6 +737,28 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
 
   def withNewPlan(newPlan: LogicalPlan): WithCTE = {
     withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
+  }
+
+  override def doCanonicalize(): LogicalPlan = {
+    def canonicalizeCTE(plan: LogicalPlan, defIdToNewId: Map[Long, Long]): LogicalPlan = {
+      plan.transformDownWithPruning(
+        _.containsAnyPattern(CTE, PLAN_EXPRESSION)) {
+        case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
+          ref.copy(cteId = defIdToNewId(ref.cteId))
+        case other =>
+          other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+            case e: SubqueryExpression => e.withNewPlan(canonicalizeCTE(e.plan, defIdToNewId))
+          }
+      }
+    }
+    val canonicalize = super.doCanonicalize().asInstanceOf[WithCTE]
+    val defIdToNewId = canonicalize.cteDefs.map(_.id).map((_, curId.getAndIncrement())).toMap
+    val normalizedPlan = canonicalizeCTE(canonicalize.plan, defIdToNewId)
+    val newCteDefs = canonicalize.cteDefs.map { cteDef =>
+      val normalizedCteDef = canonicalizeCTE(cteDef.child, defIdToNewId)
+      cteDef.copy(child = normalizedCteDef, id = defIdToNewId(cteDef.id))
+    }
+    canonicalize.copy(plan = normalizedPlan, cteDefs = newCteDefs)
   }
 }
 
