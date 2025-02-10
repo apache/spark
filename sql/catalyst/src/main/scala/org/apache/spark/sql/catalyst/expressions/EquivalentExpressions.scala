@@ -87,7 +87,7 @@ class EquivalentExpressions(
         case _ =>
           if (useCount > 0) {
             val stats = if (conditional) {
-              ExpressionStats(expr)(0, useCount)
+              ExpressionStats(expr)(useCount = 0, useCount)
             } else {
               ExpressionStats(expr)(useCount)
             }
@@ -101,21 +101,21 @@ class EquivalentExpressions(
   }
 
   /**
-   * Adds or removes only expressions which are common in each of given expressions, in a recursive
+   * Returns a list of expressions which are common in each of given expressions, in a recursive
    * way.
    * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`, the common
-   * expression `(c + 1)` will be added into `equivalenceMap`.
+   * expression `(c + 1)` will be returned.
    *
    * Note that as we don't know in advance if any child node of an expression will be common across
    * all given expressions, we compute local equivalence maps for all given expressions and filter
    * only the common nodes.
-   * Those common nodes are then removed from the local map and added to the final map of
+   * Those common nodes are then removed from the local map and added to the final list of
    * expressions.
    *
    * Conditional expressions are not considered because we are simply looking for expressions
    * evaluated once in each parent expression.
    */
-  private def updateCommonExprs(exprs: Seq[Expression]): Seq[ExpressionEquals] = {
+  private def getCommonExprs(exprs: Seq[Expression]): Seq[ExpressionEquals] = {
     assert(exprs.length > 1)
     var localEquivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
     updateExprTree(exprs.head, localEquivalenceMap, conditionalsEnabled = false)
@@ -212,16 +212,16 @@ class EquivalentExpressions(
       }
 
       /**
-       * If the `commonExpressions` already appears in the equivalence map, calling `addExprTree`
-       * will increase the `useCount` and mark it as a common subexpression. Otherwise,
-       * `addExprTree` will recursively add `commonExpressions` and its descendant to the
-       * equivalence map, in case they also appear in other places. For example,
+       * If the `commonExpressions` already appears in the equivalence map, calling
+       * `updateExprTree` will increase the `useCount` and mark it as a common subexpression.
+       * Otherwise, `updateExprTree` will recursively add `commonExpressions` and its descendant to
+       * the equivalence map, in case they also appear in other places. For example,
        * `If(a + b > 1, a + b + c, a + b + c)`, `a + b` also appears in the condition and should
        * be treated as common subexpression.
        */
       val commonExpressions = recurseChildren.commonChildren.flatMap { exprs =>
         if (exprs.nonEmpty) {
-          updateCommonExprs(exprs)
+          getCommonExprs(exprs)
         } else {
           Nil
         }
@@ -315,12 +315,18 @@ case class ExpressionStats(expr: Expression)(
 }
 
 /**
- * A wrapper for the different types of children of expressions. `alwaysChildren` are child
- * expressions that will always be evaluated and should be considered for subexpressions.
- * `commonChildren` are children such that if there are any common expressions among them, those
- * should be considered for subexpressions. `conditionalChildren` are children that are
- * conditionally evaluated, such as in If, CaseWhen, or Coalesce expressions, and should only
- * be considered for subexpressions if they are evaluated non-conditionally elsewhere.
+ * A wrapper for the different types of children of expressions.
+ * 
+ * `alwaysChildren` are child expressions that will always be evaluated and should be considered
+ * for subexpressions.
+ * 
+ * `commonChildren` are children such that each of the children might be evaluated, but at last once
+ * will definitely be evaluated. If there are any common expressions among them, those expressions
+ * will definitely be evaluated and should be considered for subexpressions.
+ * 
+ * `conditionalChildren` are children that are conditionally evaluated, such as in If, CaseWhen,
+ * or Coalesce expressions, and should only be considered for subexpressions if they are evaluated
+ * non-conditionally elsewhere.
  */
 case class RecurseChildren(
     alwaysChildren: Seq[Expression],
