@@ -26,6 +26,7 @@ import org.apache.spark.sql.streaming.TimeMode
  *
  * Note that we need to keep TimeMode.None() named as "NoTime" in case class here because a case
  * class named "None" will introduce naming collision with scala native type None.
+ * See SPARK-51151 for more info.
  * */
 case object NoTime extends TimeMode
 

@@ -108,7 +108,6 @@ class Relation(google.protobuf.message.Message):
     TRANSPOSE_FIELD_NUMBER: builtins.int
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
-    UPDATE_EVENT_TIME_WATERMARK_COLUMN_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -217,8 +216,6 @@ class Relation(google.protobuf.message.Message):
     @property
     def lateral_join(self) -> global___LateralJoin: ...
     @property
-    def update_event_time_watermark_column(self) -> global___UpdateEventTimeWatermarkColumn: ...
-    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -304,7 +301,6 @@ class Relation(google.protobuf.message.Message):
         transpose: global___Transpose | None = ...,
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         lateral_join: global___LateralJoin | None = ...,
-        update_event_time_watermark_column: global___UpdateEventTimeWatermarkColumn | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -436,8 +432,6 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "unresolved_table_valued_function",
             b"unresolved_table_valued_function",
-            "update_event_time_watermark_column",
-            b"update_event_time_watermark_column",
             "with_columns",
             b"with_columns",
             "with_columns_renamed",
@@ -563,8 +557,6 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "unresolved_table_valued_function",
             b"unresolved_table_valued_function",
-            "update_event_time_watermark_column",
-            b"update_event_time_watermark_column",
             "with_columns",
             b"with_columns",
             "with_columns_renamed",
@@ -622,7 +614,6 @@ class Relation(google.protobuf.message.Message):
             "transpose",
             "unresolved_table_valued_function",
             "lateral_join",
-            "update_event_time_watermark_column",
             "fill_na",
             "drop_na",
             "replace",
@@ -3668,7 +3659,7 @@ class GroupMap(google.protobuf.message.Message):
         """(Optional) The schema for the grouped state."""
     @property
     def transformWithStateInfo(self) -> global___TransformWithStateInfo:
-        """Below fields are only used by TransformWithState
+        """Below fields are used by TransformWithState and TransformWithStateInPandas
         (Optional) TransformWithState related parameters.
         """
     def __init__(
@@ -3793,66 +3784,55 @@ class GroupMap(google.protobuf.message.Message):
 
 global___GroupMap = GroupMap
 
-class UpdateEventTimeWatermarkColumn(google.protobuf.message.Message):
-    """Event time rule needed for chaining of operator of TransformWithState"""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    INPUT_FIELD_NUMBER: builtins.int
-    EVENT_TIME_COL_NAME_FIELD_NUMBER: builtins.int
-    @property
-    def input(self) -> global___Relation:
-        """(Required) Input relation."""
-    event_time_col_name: builtins.str
-    """(Required) Event time column name."""
-    def __init__(
-        self,
-        *,
-        input: global___Relation | None = ...,
-        event_time_col_name: builtins.str = ...,
-    ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "event_time_col_name", b"event_time_col_name", "input", b"input"
-        ],
-    ) -> None: ...
-
-global___UpdateEventTimeWatermarkColumn = UpdateEventTimeWatermarkColumn
-
 class TransformWithStateInfo(google.protobuf.message.Message):
+    """Additional input parameters used for TransformWithState operator."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    STATEFUL_PROCESSOR_PAYLOAD_FIELD_NUMBER: builtins.int
     TIME_MODE_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
-    stateful_processor_payload: builtins.bytes
-    """(Required) Bytes for java serialized user-defined stateful processor."""
+    EVENT_TIME_COLUMN_NAME_FIELD_NUMBER: builtins.int
     time_mode: builtins.str
     """(Required) Time mode string for transformWithState."""
     output_mode: builtins.str
     """(Required) Output mode string for transformWithState."""
+    event_time_column_name: builtins.str
+    """(Optional) Event time column name."""
     def __init__(
         self,
         *,
-        stateful_processor_payload: builtins.bytes = ...,
         time_mode: builtins.str = ...,
         output_mode: builtins.str = ...,
+        event_time_column_name: builtins.str | None = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_event_time_column_name",
+            b"_event_time_column_name",
+            "event_time_column_name",
+            b"event_time_column_name",
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_event_time_column_name",
+            b"_event_time_column_name",
+            "event_time_column_name",
+            b"event_time_column_name",
             "output_mode",
             b"output_mode",
-            "stateful_processor_payload",
-            b"stateful_processor_payload",
             "time_mode",
             b"time_mode",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_event_time_column_name", b"_event_time_column_name"
+        ],
+    ) -> typing_extensions.Literal["event_time_column_name"] | None: ...
 
 global___TransformWithStateInfo = TransformWithStateInfo
 
