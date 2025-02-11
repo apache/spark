@@ -80,6 +80,24 @@
       <groupId>com.lihaoyi</groupId>
       <artifactId>ammonite_${scala.version}</artifactId>
       <version>${ammonite.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.scala-lang</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jline</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.javassist</groupId>
+          <artifactId>javassist</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -208,7 +226,7 @@
       </plugin>
       <plugin>
         <!--
-          Here we download Spark Connect cleint dependencies for REPL and copy
+          Here we download Spark Connect client dependencies for REPL and copy
           Spark Connect client to target's jars/connect-repl directory (at assembly/pom.xml).
           Those jars will only be loaded when we run Spark Connect shell, see also SPARK-49198
         -->
