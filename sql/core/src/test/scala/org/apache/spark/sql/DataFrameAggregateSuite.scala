@@ -636,7 +636,7 @@ class DataFrameAggregateSuite extends QueryTest
     )
 
     checkAnswer(
-      df.select(listagg($"a", null), listagg($"b", "-")),
+      df.select(listagg($"a", null.asInstanceOf[String]), listagg($"b", "-")),
       Seq(Row("abc", "b-c-d"))
     )
 
@@ -648,7 +648,7 @@ class DataFrameAggregateSuite extends QueryTest
     )
 
     checkAnswer(
-      df2.select(listagg_distinct($"a", null), listagg_distinct($"b", "-")),
+      df2.select(listagg_distinct($"a", ""), listagg_distinct($"b", "-")),
       Seq(Row("ab", "b-d"))
     )
 
