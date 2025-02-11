@@ -326,6 +326,7 @@ if [ "$MAKE_TGZ" == "true" ]; then
       sed -i '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-shell"
       sed -i '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-submit"
     fi
+    $TAR -czf "$TARDIR_NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
     rm -rf "$TARDIR"
   fi
 fi
