@@ -635,11 +635,21 @@ class DataFrameAggregateSuite extends QueryTest
       Seq(Row("abc", "bcd"))
     )
 
+    checkAnswer(
+      df.select(listagg($"a", null), listagg($"b", "-")),
+      Seq(Row("abc", "b-c-d"))
+    )
+
     // distinct case
     val df2 = Seq(("a", "b"), ("a", "b"), ("b", "d")).toDF("a", "b")
     checkAnswer(
       df2.select(listagg_distinct($"a"), listagg_distinct($"b")),
       Seq(Row("ab", "bd"))
+    )
+
+    checkAnswer(
+      df2.select(listagg_distinct($"a", null), listagg_distinct($"b", "-")),
+      Seq(Row("ab", "b-d"))
     )
 
     // null case
