@@ -1197,7 +1197,8 @@ object functions {
    * @group agg_funcs
    * @since 4.0.0
    */
-  def string_agg(e: Column, delimiter: String): Column = Column.fn("string_agg", e, lit(delimiter))
+  def string_agg(e: Column, delimiter: String): Column =
+    Column.fn("string_agg", e, lit(delimiter))
 
   /**
    * Aggregate function: returns the concatenation of distinct non-null input values. Alias for
