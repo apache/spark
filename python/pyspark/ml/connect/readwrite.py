@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import cast, Type, TYPE_CHECKING, Union, Dict, Any, Optional
+from typing import cast, Type, TYPE_CHECKING, Union, Dict, Any
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
