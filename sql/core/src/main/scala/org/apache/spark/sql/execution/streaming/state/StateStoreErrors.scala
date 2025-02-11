@@ -145,6 +145,12 @@ object StateStoreErrors {
     new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
   }
 
+  def twsSchemaMustBeNullable(
+      columnFamilyName: String,
+      schema: String): TWSSchemaMustBeNullable = {
+    new TWSSchemaMustBeNullable(columnFamilyName, schema)
+  }
+
   def stateStoreInvalidValueSchemaEvolution(
       oldValueSchema: String,
       newValueSchema: String): StateStoreInvalidValueSchemaEvolution = {
@@ -345,6 +351,15 @@ class StateStoreValueSchemaNotCompatible(
     messageParameters = Map(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
+
+class TWSSchemaMustBeNullable(
+    columnFamilyName: String,
+    schema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE",
+    messageParameters = Map(
+      "columnFamilyName" -> columnFamilyName,
+      "schema" -> schema))
 
 class StateStoreInvalidValueSchemaEvolution(
     oldValueSchema: String,

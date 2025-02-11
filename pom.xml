@@ -97,6 +97,7 @@
     <module>sql/hive</module>
     <module>sql/connect/server</module>
     <module>sql/connect/common</module>
+    <module>sql/connect/client/jvm</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
@@ -106,7 +107,6 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connector/connect/client/jvm</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
@@ -169,7 +169,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.15</scala.version>
+    <scala.version>2.13.16</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
@@ -193,7 +193,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.17.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.12.0</commons-pool2.version>
+    <commons-pool2.version>2.12.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
@@ -211,10 +211,10 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.9.0</commons-cli.version>
-    <bouncycastle.version>1.79</bouncycastle.version>
+    <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.115.Final</netty.version>
+    <netty.version>4.1.117.Final</netty.version>
     <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.4</junit-jupiter.version>
@@ -230,7 +230,7 @@
     and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.1.0</arrow.version>
-    <ammonite.version>3.0.0</ammonite.version>
+    <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -329,13 +329,13 @@
       -Dio.netty.tryReflectionSetAccessible=true
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
-    <mysql.connector.version>9.1.0</mysql.connector.version>
+    <mysql.connector.version>9.2.0</mysql.connector.version>
     <postgresql.version>42.7.5</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
-    <snowflake.jdbc.version>3.21.0</snowflake.jdbc.version>
+    <snowflake.jdbc.version>3.22.0</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
@@ -571,7 +571,7 @@
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.4.8</version>
+        <version>1.7.1</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
@@ -599,31 +599,23 @@
       <dependency>
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
-        <version>2.3.2</version>
+        <version>4.0.5</version>
         <scope>compile</scope>
         <exclusions>
-          <!-- for now, we only write XML in PMML export, and these can be excluded -->
-          <exclusion>
-            <groupId>com.sun.xml.fastinfoset</groupId>
-            <artifactId>FastInfoset</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.glassfish.jaxb</groupId>
             <artifactId>txw2</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.jvnet.staxex</groupId>
-            <artifactId>stax-ex</artifactId>
-          </exclusion>
-          <!--
-            SPARK-27611: Exclude redundant javax.activation implementation, which
-            conflicts with the existing javax.activation:activation:1.1.1 dependency.
-            -->
-          <exclusion>
-            <groupId>jakarta.activation</groupId>
-            <artifactId>jakarta.activation-api</artifactId>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-activation</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.xml.bind</groupId>
+        <artifactId>jakarta.xml.bind-api</artifactId>
+        <version>4.0.2</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -841,7 +833,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-9</version>
+        <version>1.5.6-10</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -881,10 +873,6 @@
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-codec-dns</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
             <artifactId>netty-codec-haproxy</artifactId>
           </exclusion>
           <exclusion>
@@ -910,10 +898,6 @@
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-xml</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-resolver-dns</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1069,13 +1053,6 @@
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
-        <!-- SPARK-28765 Unused JDK11-specific dependency -->
-        <exclusions>
-          <exclusion>
-            <groupId>jakarta.xml.bind</groupId>
-            <artifactId>jakarta.xml.bind-api</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
@@ -1552,16 +1529,6 @@
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
         <version>1.10</version>
-      </dependency>
-      <!-- See SPARK-23654 for info on this dependency;
-      It is used to keep javax.activation at v1.1.1 after dropping
-      jets3t as a dependency.
-       -->
-      <dependency>
-        <groupId>javax.activation</groupId>
-        <artifactId>activation</artifactId>
-        <version>1.1.1</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -2255,7 +2222,7 @@
         <groupId>${hive.group}</groupId>
         <artifactId>hive-llap-common</artifactId>
         <version>${hive.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.llap.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -2657,14 +2624,6 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
-                    <ignoreClasses>
-                      <!--
-                        The package `org.jline.terminal.impl.ffm.*` contains some class files
-                        that are not compatible with JDK17 (only JDK21 is supported).
-                        However, it will not cause problems for use. See: https://github.com/scala/bug/issues/12994
-                      -->
-                      <ignoreClass>org.jline.terminal.impl.ffm.*</ignoreClass>
-                    </ignoreClasses>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>

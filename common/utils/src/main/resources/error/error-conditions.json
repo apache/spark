@@ -772,7 +772,7 @@
     "subClass" : {
       "ATTRIBUTE_NOT_ALLOWED" : {
         "message" : [
-          "<attribute> is not allowed to be accessed."
+          "<attribute> in <className> is not allowed to be accessed."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {
@@ -1253,6 +1253,30 @@
       "Found duplicate clauses: <clauseName>. Please, remove one of them."
     ],
     "sqlState" : "42614"
+  },
+  "DUPLICATE_CONDITION_IN_SCOPE" : {
+    "message" : [
+      "Found duplicate condition <condition> in the scope. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
+  "DUPLICATE_EXCEPTION_HANDLER" : {
+    "message" : [
+      "Found duplicate handlers. Please, remove one of them."
+    ],
+    "subClass" : {
+      "CONDITION" : {
+        "message" : [
+          "Found duplicate handlers for the same condition <condition>."
+        ]
+      },
+      "SQLSTATE" : {
+        "message" : [
+          "Found duplicate handlers for the same SQLSTATE <sqlState>."
+        ]
+      }
+    },
+    "sqlState" : "42734"
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -2440,6 +2464,29 @@
     ],
     "sqlState" : "42K05"
   },
+  "INVALID_ERROR_CONDITION_DECLARATION" : {
+    "message" : [
+      "Invalid condition declaration."
+    ],
+    "subClass" : {
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Condition <conditionName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_CONDITION_NAME" : {
+        "message" : [
+          "Condition <conditionName> cannot be qualified."
+        ]
+      },
+      "SPECIAL_CHARACTER_FOUND" : {
+        "message" : [
+          "Special character found in condition name <conditionName>. Only alphanumeric characters and underscores are allowed."
+        ]
+      }
+    },
+    "sqlState" : "42K0R"
+  },
   "INVALID_ESC" : {
     "message" : [
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
@@ -2607,6 +2654,39 @@
       }
     },
     "sqlState" : "HY000"
+  },
+  "INVALID_HANDLER_DECLARATION" : {
+    "message" : [
+      "Invalid handler declaration."
+    ],
+    "subClass" : {
+      "CONDITION_NOT_FOUND" : {
+        "message" : [
+          "Condition <condition> not found."
+        ]
+      },
+      "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate sqlState <sqlState> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "INVALID_CONDITION_COMBINATION" : {
+        "message" : [
+          "Invalid combination of conditions in the handler declaration. SQLEXCEPTION and NOT FOUND cannot be used together with other condition/sqlstate values."
+        ]
+      },
+      "WRONG_PLACE_OF_DECLARATION" : {
+        "message" : [
+          "Handlers must be declared after variable/condition declaration, and before other statements."
+        ]
+      }
+    },
+    "sqlState" : "42K0Q"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -3264,6 +3344,12 @@
     },
     "sqlState" : "42616"
   },
+  "INVALID_SQLSTATE" : {
+    "message" : [
+      "Invalid SQLSTATE value: '<sqlState>'. SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9. SQLSTATE must not start with '00', '01', or 'XX'."
+    ],
+    "sqlState" : "428B3"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
@@ -3834,6 +3920,12 @@
       "Cannot call function <functionName> because named argument references are not enabled here.",
       "In this case, the named argument reference was <argument>.",
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NEGATIVE_SCALE_DISALLOWED" : {
+    "message" : [
+      "Negative scale is not allowed: '<scale>'. Set the config <sqlConf> to \"true\" to allow it."
     ],
     "sqlState" : "0A000"
   },
@@ -4537,6 +4629,12 @@
     ],
     "sqlState" : "42K0I"
   },
+  "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script. Make sure the sql_string is a well-formed SQL statement and does not contain BEGIN and END."
+    ],
+    "sqlState" : "07501"
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -4850,9 +4948,21 @@
     },
     "sqlState" : "42KDE"
   },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_COMMUNICATION_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed during initial config communication. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
     "message" : [
       "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_TIMEOUT_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
     ],
     "sqlState" : "XXKST"
   },
@@ -4967,6 +5077,14 @@
       "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
     ],
     "sqlState" : "42601"
+  },
+  "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE" : {
+    "message" : [
+      "If Avro encoding is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable",
+      "when using the TransformWithState operator.",
+      "Please make the schema nullable. Current schema: <schema>"
+    ],
+    "sqlState" : "XXKST"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
@@ -5290,19 +5408,9 @@
           "Resilient Distributed Datasets (RDDs)."
         ]
       },
-      "REGISTER_UDAF" : {
-        "message" : [
-          "Registering User Defined Aggregate Functions (UDAFs)."
-        ]
-      },
       "SESSION_BASE_RELATION_TO_DATAFRAME" : {
         "message" : [
           "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
-        ]
-      },
-      "SESSION_EXECUTE_COMMAND" : {
-        "message" : [
-          "Invoking SparkSession 'executeCommand'."
         ]
       },
       "SESSION_EXPERIMENTAL_METHODS" : {
@@ -5490,6 +5598,11 @@
       "COMMENT_NAMESPACE" : {
         "message" : [
           "Attach a comment to the namespace <namespace>."
+        ]
+      },
+      "CONTINUE_EXCEPTION_HANDLER" : {
+        "message" : [
+          "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
       "DESC_TABLE_COLUMN_JSON" : {

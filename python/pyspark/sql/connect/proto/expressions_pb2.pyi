@@ -1537,6 +1537,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     PYTHON_UDF_FIELD_NUMBER: builtins.int
     SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     JAVA_UDF_FIELD_NUMBER: builtins.int
+    IS_DISTINCT_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
     deterministic: builtins.bool
@@ -1552,6 +1553,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
     @property
     def java_udf(self) -> global___JavaUDF: ...
+    is_distinct: builtins.bool
+    """(Required) Indicate if this function should be applied on distinct values."""
     def __init__(
         self,
         *,
@@ -1561,6 +1564,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         python_udf: global___PythonUDF | None = ...,
         scalar_scala_udf: global___ScalarScalaUDF | None = ...,
         java_udf: global___JavaUDF | None = ...,
+        is_distinct: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1586,6 +1590,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"function",
             "function_name",
             b"function_name",
+            "is_distinct",
+            b"is_distinct",
             "java_udf",
             b"java_udf",
             "python_udf",
@@ -1961,29 +1967,112 @@ class SubqueryExpression(google.protobuf.message.Message):
         SUBQUERY_TYPE_UNKNOWN: SubqueryExpression._SubqueryType.ValueType  # 0
         SUBQUERY_TYPE_SCALAR: SubqueryExpression._SubqueryType.ValueType  # 1
         SUBQUERY_TYPE_EXISTS: SubqueryExpression._SubqueryType.ValueType  # 2
+        SUBQUERY_TYPE_TABLE_ARG: SubqueryExpression._SubqueryType.ValueType  # 3
 
     class SubqueryType(_SubqueryType, metaclass=_SubqueryTypeEnumTypeWrapper): ...
     SUBQUERY_TYPE_UNKNOWN: SubqueryExpression.SubqueryType.ValueType  # 0
     SUBQUERY_TYPE_SCALAR: SubqueryExpression.SubqueryType.ValueType  # 1
     SUBQUERY_TYPE_EXISTS: SubqueryExpression.SubqueryType.ValueType  # 2
+    SUBQUERY_TYPE_TABLE_ARG: SubqueryExpression.SubqueryType.ValueType  # 3
+
+    class TableArgOptions(google.protobuf.message.Message):
+        """Nested message for table argument options."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PARTITION_SPEC_FIELD_NUMBER: builtins.int
+        ORDER_SPEC_FIELD_NUMBER: builtins.int
+        WITH_SINGLE_PARTITION_FIELD_NUMBER: builtins.int
+        @property
+        def partition_spec(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression
+        ]:
+            """(Optional) The way that input rows are partitioned."""
+        @property
+        def order_spec(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression.SortOrder
+        ]:
+            """(Optional) Ordering of rows in a partition."""
+        with_single_partition: builtins.bool
+        """(Optional) Whether this is a single partition."""
+        def __init__(
+            self,
+            *,
+            partition_spec: collections.abc.Iterable[global___Expression] | None = ...,
+            order_spec: collections.abc.Iterable[global___Expression.SortOrder] | None = ...,
+            with_single_partition: builtins.bool | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_with_single_partition",
+                b"_with_single_partition",
+                "with_single_partition",
+                b"with_single_partition",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_with_single_partition",
+                b"_with_single_partition",
+                "order_spec",
+                b"order_spec",
+                "partition_spec",
+                b"partition_spec",
+                "with_single_partition",
+                b"with_single_partition",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_with_single_partition", b"_with_single_partition"
+            ],
+        ) -> typing_extensions.Literal["with_single_partition"] | None: ...
 
     PLAN_ID_FIELD_NUMBER: builtins.int
     SUBQUERY_TYPE_FIELD_NUMBER: builtins.int
+    TABLE_ARG_OPTIONS_FIELD_NUMBER: builtins.int
     plan_id: builtins.int
-    """(Required) The id of corresponding connect plan."""
+    """(Required) The ID of the corresponding connect plan."""
     subquery_type: global___SubqueryExpression.SubqueryType.ValueType
     """(Required) The type of the subquery."""
+    @property
+    def table_arg_options(self) -> global___SubqueryExpression.TableArgOptions:
+        """(Optional) Options specific to table arguments."""
     def __init__(
         self,
         *,
         plan_id: builtins.int = ...,
         subquery_type: global___SubqueryExpression.SubqueryType.ValueType = ...,
+        table_arg_options: global___SubqueryExpression.TableArgOptions | None = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_table_arg_options", b"_table_arg_options", "table_arg_options", b"table_arg_options"
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "plan_id", b"plan_id", "subquery_type", b"subquery_type"
+            "_table_arg_options",
+            b"_table_arg_options",
+            "plan_id",
+            b"plan_id",
+            "subquery_type",
+            b"subquery_type",
+            "table_arg_options",
+            b"table_arg_options",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_table_arg_options", b"_table_arg_options"]
+    ) -> typing_extensions.Literal["table_arg_options"] | None: ...
 
 global___SubqueryExpression = SubqueryExpression

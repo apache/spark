@@ -21,7 +21,7 @@ import scala.util.{Either, Left, Right}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -177,6 +177,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
       }
     } else {
       catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
+    }
+
+    if (plan.isInstanceOf[CompoundBody]) {
+      throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
     }
 
     // do not allow nested execute immediate
