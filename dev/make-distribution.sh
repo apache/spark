@@ -182,7 +182,7 @@ BUILD_COMMAND=("$MVN" clean package \
 echo -e "\nBuilding with..."
 echo -e "\$ ${BUILD_COMMAND[@]}\n"
 
-"${BUILD_COMMAND[@]}"
+# "${BUILD_COMMAND[@]}"
 
 # Make directories
 rm -rf "$DISTDIR"
@@ -317,14 +317,15 @@ if [ "$MAKE_TGZ" == "true" ]; then
     TARDIR="$SPARK_HOME/$TARDIR_NAME"
     rm -rf "$TARDIR"
     cp -r "$DISTDIR" "$TARDIR"
-    SED_I="sed -i"
     if [ "$(uname -s)" = "Darwin" ]; then
-      SED_I="sed -i ''"
+      sed -i '' '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/pyspark"
+      sed -i '' '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-shell"
+      sed -i '' '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-submit"
+    else
+      sed -i '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/pyspark"
+      sed -i '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-shell"
+      sed -i '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-submit"
     fi
-    $SED_I '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/pyspark"
-    $SED_I '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-shell"
-    $SED_I '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-submit"
-    $TAR -czf "$TARDIR_NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
     rm -rf "$TARDIR"
   fi
 fi
