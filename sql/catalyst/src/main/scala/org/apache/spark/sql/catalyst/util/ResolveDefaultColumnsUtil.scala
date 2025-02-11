@@ -320,14 +320,20 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /**
-   * Analyze EXISTS_DEFAULT value.  This skips some steps of analyze as most of the
-   * analysis has been done before.
+   * Analyze EXISTS_DEFAULT value.  EXISTS_DEFAULT value was created from CURRENT_DEFAQULT
+   * via [[analyze]] and thus this can skip most of those steps.
    */
   private def analyzeExistenceDefaultValue(field: StructField): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     // Parse the expression.
-    val expr = Literal.fromSQL(defaultSQL)
+    val expr = Literal.fromSQL(defaultSQL) match {
+      // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
+      // hence we need to add timezone to the cast if necessary
+      case c: Cast if c.needsTimeZone =>
+        c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
+      case e: Expression => e
+    }
 
     // Check invariants
     if (expr.containsPattern(PLAN_EXPRESSION)) {

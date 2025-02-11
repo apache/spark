@@ -268,6 +268,9 @@ object Literal {
       s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
 
+  /**
+   * Inverse of [[Literal.sql]]
+   */
   def fromSQL(sql: String): Expression = {
     CatalystSqlParser.parseExpression(sql).transformUp {
       case u: UnresolvedFunction =>
@@ -278,10 +281,6 @@ object Literal {
         assert(u.orderingWithinGroup.isEmpty)
         assert(!u.isInternal)
         FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
-    } match {
-      case c: Cast if c.needsTimeZone =>
-        c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
-      case e: Expression => e
     }
   }
 }
