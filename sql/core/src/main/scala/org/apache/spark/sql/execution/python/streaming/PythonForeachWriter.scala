@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.execution.python.streaming
 
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.python.{EvaluatePython, HybridRowQueue}
 import org.apache.spark.sql.execution.streaming.sources.ForeachUserFuncException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType

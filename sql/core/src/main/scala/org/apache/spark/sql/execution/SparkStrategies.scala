@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
+import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -828,7 +829,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case FlatMapGroupsInPandasWithState(
         func, groupAttr, outputAttr, stateType, outputMode, timeout, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
-        val execPlan = python.FlatMapGroupsInPandasWithStateExec(
+        val execPlan = FlatMapGroupsInPandasWithStateExec(
           func, groupAttr, outputAttr, stateType, None, stateVersion, outputMode, timeout,
           batchTimestampMs = None, eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,

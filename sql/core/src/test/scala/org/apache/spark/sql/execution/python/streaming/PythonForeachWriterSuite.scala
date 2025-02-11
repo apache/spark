@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.execution.python.streaming
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -28,7 +28,7 @@ import org.apache.spark._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
-import org.apache.spark.sql.execution.python.PythonForeachWriter.UnsafeRowBuffer
+import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter.UnsafeRowBuffer
 import org.apache.spark.sql.types.{DataType, IntegerType}
 import org.apache.spark.util.Utils
 

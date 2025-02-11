@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.execution.python.streaming
 
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -25,6 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
+import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog, ProcessingTimeTrigger}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
