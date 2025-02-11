@@ -1035,7 +1035,7 @@ message GroupMap {
 
   // Below fields are used by TransformWithState and TransformWithStateInPandas
   // (Optional) TransformWithState related parameters.
-  optional TransformWithStateInfo transformWithStateInfo = 11;
+  optional TransformWithStateInfo transform_with_state_info = 11;
 }
 
 // Additional input parameters used for TransformWithState operator.
