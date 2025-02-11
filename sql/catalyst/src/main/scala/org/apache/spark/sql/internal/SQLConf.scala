@@ -4756,7 +4756,7 @@ object SQLConf {
         "When false, it only reads unshredded variant.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PUSH_VARIANT_INTO_SCAN =
     buildConf("spark.sql.variant.pushVariantIntoScan")
