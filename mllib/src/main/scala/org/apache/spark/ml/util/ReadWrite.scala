@@ -486,8 +486,8 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue]): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
-    val params = instance.paramMap.toSeq
-    val defaultParams = instance.defaultParamMap.toSeq
+    val params = instance.paramMap.toSeq.sortBy(_.param.name)
+    val defaultParams = instance.defaultParamMap.toSeq.sortBy(_.param.name)
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
