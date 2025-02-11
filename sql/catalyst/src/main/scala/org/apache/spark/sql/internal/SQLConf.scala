@@ -3372,7 +3372,7 @@ object SQLConf {
       .doc(
         s"Same as ${Python.PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT.key} for Python execution with " +
           "DataFrame and SQL. It can change during runtime.")
-      .version("4.0.0")
+      .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
 
   val PYSPARK_PLOT_MAX_ROWS =
