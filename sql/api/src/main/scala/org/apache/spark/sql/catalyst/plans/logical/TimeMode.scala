@@ -21,7 +21,12 @@ import java.util.Locale
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.streaming.TimeMode
 
-/** TimeMode types used in transformWithState operator */
+/**
+ * TimeMode types used in transformWithState operator
+ *
+ * Note that we need to keep TimeMode.None() named as "NoTime" in case class here because a case
+ * class named "None" will introduce naming collision with scala native type None.
+ * */
 case object NoTime extends TimeMode
 
 case object ProcessingTime extends TimeMode

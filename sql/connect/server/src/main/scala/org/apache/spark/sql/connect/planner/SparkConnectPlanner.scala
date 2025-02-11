@@ -683,7 +683,6 @@ class SparkConnectPlanner(
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
 
       val twsInfo = rel.getTransformWithStateInfo
-      val statefulProcessorByteStr = twsInfo.getStatefulProcessorPayload
       val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
       val outputAttr = udf.outputObjAttr
 
@@ -691,10 +690,8 @@ class SparkConnectPlanner(
       val outputMode = InternalOutputModes(twsInfo.getOutputMode)
 
       val twsNode = if (hasInitialState) {
-        val statefulProcessor =
-          Utils.deserialize[StatefulProcessorWithInitialState[Any, Any, Any, Any]](
-            statefulProcessorByteStr.toByteArray,
-            Utils.getContextOrSparkClassLoader)
+        val statefulProcessor = unpackedUdf.function
+            .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
         val initDs = UntypedKeyValueGroupedDataset(
           rel.getInitialInput,
           rel.getInitialGroupingExpressionsList,
@@ -716,9 +713,7 @@ class SparkConnectPlanner(
           initDs.valueDeserializer,
           initDs.analyzed)
       } else {
-        val statefulProcessor = Utils.deserialize[StatefulProcessor[Any, Any, Any]](
-          statefulProcessorByteStr.toByteArray,
-          Utils.getContextOrSparkClassLoader)
+        val statefulProcessor = unpackedUdf.function.asInstanceOf[StatefulProcessor[Any, Any, Any]]
         new TransformWithState(
           keyDeserializer,
           ds.valueDeserializer,

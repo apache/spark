@@ -1033,24 +1033,21 @@ message GroupMap {
   // (Optional) The schema for the grouped state.
   optional DataType state_schema = 10;
 
-  // Below fields are only used by TransformWithState
+  // Below fields are used by TransformWithState and TransformWithStateInPandas
   // (Optional) TransformWithState related parameters.
   optional TransformWithStateInfo transformWithStateInfo = 11;
 }
 
-// This is only used for Scala TWS. Python requires a different API and it is in separate proto schema.
+// Additional input parameters used for TransformWithState operator.
 message TransformWithStateInfo {
-  // (Required) Bytes for java serialized user-defined stateful processor.
-  bytes stateful_processor_payload = 1;
-
   // (Required) Time mode string for transformWithState.
-  string time_mode = 2;
+  string time_mode = 1;
 
   // (Required) Output mode string for transformWithState.
-  string output_mode = 3;
+  string output_mode = 2;
 
   // (Optional) Event time column name.
-  optional string event_time_column_name = 4;
+  optional string event_time_column_name = 3;
 }
 
 message CoGroupMap {

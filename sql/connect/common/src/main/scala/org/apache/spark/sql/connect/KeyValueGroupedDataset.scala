@@ -20,8 +20,6 @@ package org.apache.spark.sql.connect
 import scala.annotation.unused
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
-
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql
@@ -36,7 +34,6 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{ColumnNode, InvokeInlineUserDefinedFunction, UDFAdaptors, UnresolvedAttribute, UnresolvedFunction, UnresolvedStar}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -666,24 +663,20 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       eventTimeColumnName: String = ""): Dataset[U] = {
     val outputEncoder = agnosticEncoderFor[U]
     val stateEncoder = agnosticEncoderFor[S]
-
     val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, stateEncoder, ivEncoder)
-    val dummyGroupingFunc = SparkUserDefinedFunction(
-      function = UdfUtils.noOp[K, U](),
-      inputEncoders = inputEncoders,
-      outputEncoder = outputEncoder)
-    // This dummy udf is an no-op and only used for transmitting encoders
-    val udf = toExpr(
-      dummyGroupingFunc.apply(
-        inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
+
+    // SparkUserDefinedFunction is creating a udfPacket where the input function are
+    // being java serialized into bytes; we pass in `statefulProcessor` as function so it can be
+    // serialized into bytes and deserialized back on connect server
+    val sparkUserDefinedFunc =
+      SparkUserDefinedFunction(statefulProcessor, inputEncoders, outputEncoder)
+    val funcProto = UdfToProtoUtils.toProto(sparkUserDefinedFunc)
 
     val initialStateImpl = if (initialState.isDefined) {
       initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
     } else {
       null
     }
-    val statefulProcessorByteStr =
-      ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))
 
     sparkSession.newDataset[U](outputEncoder) { builder =>
       val twsBuilder = builder.getGroupMapBuilder
@@ -694,13 +687,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       twsBuilder
         .setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
-        .setFunc(udf)
+        .setFunc(funcProto)
         .setTransformWithStateInfo(
           twsInfoBuilder
             .setOutputMode(outputMode.toString)
-            // we pass time mode as string here and restore it in planner
+            // we pass time mode as string here and deterministically restored on server
             .setTimeMode(timeMode.toString)
-            .setStatefulProcessorPayload(statefulProcessorByteStr)
             .build()
         )
       if (initialStateImpl != null) {
