@@ -2831,5 +2831,6 @@ package object config {
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .checkValues(Set("connect", "classic"))
-      .createWithDefault("classic")
+      .createWithDefault(
+        if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
 }
