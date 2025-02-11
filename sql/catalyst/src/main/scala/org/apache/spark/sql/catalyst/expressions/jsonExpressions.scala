@@ -42,6 +42,8 @@ import org.apache.spark.unsafe.types.UTF8String
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
+      > SELECT _FUNC_('[{"a":"b"},{"a":"c"}]', '$[*].a');
+       ["b","c"]
   """,
   group = "json_funcs",
   since = "1.5.0")
