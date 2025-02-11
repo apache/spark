@@ -41,7 +41,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.python.PythonSQLMetrics
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
@@ -126,10 +125,6 @@ trait StatefulOperator extends SparkPlan {
   def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult]
-
-  // Used to determine state store names used when allocation metric names,
-  // since join operations use multiple state stores with non-default names.
-  def isJoinOperator: Boolean = false
 }
 
 /**
@@ -222,6 +217,8 @@ trait StateStoreWriter
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
   ) ++ stateStoreCustomMetrics ++ pythonMetrics ++ stateStoreInstanceMetrics
+
+  val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
 
   // This method is only used to fetch the state schema directory path for
   // operators that use StateSchemaV3, as prior versions only use a single
@@ -389,22 +386,7 @@ trait StateStoreWriter
     val storeMetrics = store.metrics
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
-    storeMetrics.customMetrics.foreach {
-      // Set the max for instance metrics
-      case (metric: StateStoreInstanceMetric, value) =>
-        // Check for cases where value < 0 and .value converts metric to 0
-        // Metrics like last uploaded snapshot version can have an init value of -1,
-        // which need special handling to avoid setting the metric to 0 using `.value`.
-        longMetric(metric.name).set(
-          if (longMetric(metric.name).isZero) {
-            value
-          } else {
-            Math.max(value, longMetric(metric.name).value)
-          }
-        )
-      case (metric, value) =>
-        longMetric(metric.name) += value
-    }
+    setStoreCustomMetrics(storeMetrics)
 
     if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
       // Set the state store checkpoint information for the driver to collect
@@ -417,6 +399,27 @@ trait StateStoreWriter
           ssInfo.baseStateStoreCkptId.map(Array(_))
         )
       )
+    }
+  }
+
+  protected def setStoreCustomMetrics(storeMetrics: StateStoreMetrics): Unit = {
+    storeMetrics.customMetrics.foreach {
+      // Set the max for instance metrics
+      case (metric: StateStoreInstanceMetric, value) =>
+        // Check for cases where value < 0 and .value converts metric to 0
+        // Metrics like last uploaded snapshot version can have an init value of -1,
+        // which need special handling to avoid setting the metric to 0 using `.value`.
+        longMetric(metric.name).set(
+          if (longMetric(metric.name).isZero) {
+            value
+          } else {
+            // Use max to grab the most updated value across all state store instances,
+            // which for snapshot versions is the largest version number.
+            Math.max(value, longMetric(metric.name).value)
+          }
+        )
+      case (metric, value) =>
+        longMetric(metric.name) += value
     }
   }
 
@@ -433,13 +436,8 @@ trait StateStoreWriter
 
     (0 until maxPartitions).flatMap { partitionId =>
       provider.supportedInstanceMetrics.flatMap { metric =>
-        val storeNames = if (isJoinOperator) {
-          SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
-        } else {
-          Seq(StateStoreId.DEFAULT_STORE_NAME)
-        }
-        storeNames.map { storeName =>
-          val metricWithPartition = metric.withNewPartition(partitionId, storeName)
+        stateStoreNames.map { storeName =>
+          val metricWithPartition = metric.withNewId(partitionId, storeName)
           (metricWithPartition.name, metricWithPartition.createSQLMetric(sparkContext))
         }
       }

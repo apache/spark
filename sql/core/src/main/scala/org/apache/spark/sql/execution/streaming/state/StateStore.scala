@@ -330,7 +330,7 @@ case class StateStoreInstanceMetric(
   override def name: String = {
     partitionId
       .map { id =>
-        s"$metricPrefix${StateStoreProvider.INSTANCE_METRIC_SUFFIX}${id}_${storeName}"
+        s"$metricPrefix.partition_${id}_${storeName}"
       }
       .getOrElse(metricPrefix)
   }
@@ -348,7 +348,7 @@ case class StateStoreInstanceMetric(
   override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
     SQLMetrics.createSizeMetric(sparkContext, desc)
 
-  def withNewPartition(partitionId: Int, storeName: String): StateStoreInstanceMetric = {
+  def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric = {
     copy(partitionId = Some(partitionId), storeName = storeName)
   }
 }
@@ -546,8 +546,6 @@ trait StateStoreProvider {
 }
 
 object StateStoreProvider {
-
-  val INSTANCE_METRIC_SUFFIX = ".partition_"
 
   /**
    * Return a instance of the given provider class name. The instance will not be initialized.

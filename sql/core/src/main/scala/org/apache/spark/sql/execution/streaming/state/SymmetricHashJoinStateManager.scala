@@ -448,6 +448,8 @@ class SymmetricHashJoinStateManager(
       keyWithIndexToValueMetrics.customMetrics.map {
         case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
       } ++ keyToNumValuesMetrics.customMetrics.collect {
+        // We want to collect instance metrics from both state stores, unlike other custom
+        // metrics which are only collected through keyWithIndexToValue
         case (metric: StateStoreInstanceMetric, value) =>
           (metric.withNewDesc(desc = newDesc(metric.desc)), value)
       }

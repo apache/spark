@@ -47,8 +47,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
-  private val SNAPSHOT_LAG_METRIC_PREFIX =
-    ("rocksdbSnapshotLastUploaded" + StateStoreProvider.INSTANCE_METRIC_SUFFIX)
+  private val SNAPSHOT_LAG_METRIC_PREFIX = "rocksdbSnapshotLastUploaded.partition_"
 
   testWithColumnFamilies("RocksDBStateStore",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -324,10 +323,10 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by numStateStoreInstanceMetricsToReport
+              // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
               assert(
-                instanceMetrics.size ==
-                  q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
+                instanceMetrics.size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
               )
               assert(instanceMetrics.forall(_._2 == 1))
             }
@@ -384,10 +383,10 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by numStateStoreInstanceMetricsToReport for this scenario
+              // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
               assert(
-                instanceMetrics.size ==
-                q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
+                instanceMetrics.size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
               )
               // Two metrics published are -1, the remainder should all be 1 as they
               // uploaded properly.
@@ -442,10 +441,10 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                 .asScala
                 .view
                 .filterKeys(_.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-              // Determined by numStateStoreInstanceMetricsToReport
+              // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
               assert(
-                instanceMetrics.size ==
-                  q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
+                instanceMetrics.size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
               )
               // All state store instances should have uploaded a version
               assert(instanceMetrics.forall(_._2 == 1))
@@ -501,15 +500,17 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                   k.startsWith(snapshotLagMetricName(0, "")) ||
                   k.startsWith(snapshotLagMetricName(1, ""))
               )
-              val numStateStoreInstanceMetricsToReport =
-                q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport
-              // Determined by numStateStoreInstanceMetricsToReport
-              assert(allInstanceMetrics.size == numStateStoreInstanceMetricsToReport)
+              // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
+              assert(
+                allInstanceMetrics.size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
+              )
               // Two ids are blocked, each with four state stores
               assert(badInstanceMetrics.count(_._2 == -1) == 2 * 4)
               // The rest should have uploaded a version
               assert(
-                allInstanceMetrics.count(_._2 == 1) == numStateStoreInstanceMetricsToReport - 2 * 4
+                allInstanceMetrics.count(_._2 == 1) == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2 * 4
               )
             }
           },

@@ -2255,14 +2255,13 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
       .internal()
       .doc(
-        "Number of state store instance metrics to include in state store progress reporting. " +
-        "The default limit is 20% of partitions clamped between 1 and 10 (please refer to " +
-        "numStateStoreInstanceMetricsToReport for details)."
+        "Number of state store instance metrics to include in streaming progress reporting." +
+        "This is used to reduce noise in the progress report."
       )
       .version("4.0.0")
       .intConf
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
-      .createOptional
+      .createWithDefault(10)
 
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
@@ -5746,11 +5745,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
 
-  def numStateStoreInstanceMetricsToReport: Int = {
-    getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT).getOrElse(
-      Math.min(10, Math.max(1, defaultNumShufflePartitions / 5))
-    )
-  }
+  def numStateStoreInstanceMetricsToReport: Int =
+    getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
