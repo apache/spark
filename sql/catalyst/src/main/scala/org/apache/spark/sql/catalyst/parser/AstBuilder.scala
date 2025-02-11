@@ -290,14 +290,21 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitSignalStatementWithCondition(
       ctx: SignalStatementWithConditionContext): SignalStatement = {
+    // Parse message text value which can either be a string literal or variable.
     val messageString = Option(ctx.msgStr)
-      .map(sl => Left(string(visitStringLit(sl)).replace("'", "")))
+      .map(sl => Left(string(visitStringLit(sl))))
     val messageVariable = Option(ctx.msgVar)
       .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
+    // Parse message arguments which are represented by a variable of type "MAP<STRING, STRING>".
     val messageArguments = Option(ctx.argVar)
       .map(mpi => UnresolvedAttribute(visitMultipartIdentifier(mpi)))
 
+    // isBuiltinError is false because we need to resolve it based on the value of errorCondition.
+    // sqlState is None because we need to resolve it based on the value of errorCondition.
+    // This is done in visitCompoundBodyImpl once all conditions have been resolved.
     SignalStatement(
+      isBuiltinError = false,
       errorCondition = Some(ctx.conditionName.getText.toUpperCase(Locale.ROOT)),
       sqlState = None,
       message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
@@ -307,14 +314,18 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitSignalStatementWithSqlState(
       ctx: SignalStatementWithSqlStateContext): SignalStatement = {
-    val sqlState = visitStringLit(ctx.sqlState).getText.replace("'", "")
+    // Parse SQLSTATE value.
+    val sqlState = string(visitStringLit(ctx.sqlState))
     assertSqlState(sqlState)
 
+    // Parse message text value which can either be a string literal or variable.
     val messageString = Option(ctx.msgStr)
-      .map(sl => Left(string(visitStringLit(sl)).replace("'", "")))
+      .map(sl => Left(string(visitStringLit(sl))))
     val messageVariable = Option(ctx.msgVar)
       .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
 
+    // isBuiltinError is false because user can override sqlState of the
+    // predefined USER_RAISED_EXCEPTION.
     SignalStatement(
       isBuiltinError = false,
       errorCondition = Some("USER_RAISED_EXCEPTION"),
@@ -366,10 +377,13 @@ class AstBuilder extends DataTypeAstBuilder
           }
           conditions += condition.conditionName -> condition.sqlState
         case signalStatement: SignalStatement if signalStatement.sqlState.isEmpty =>
-          // Try to get sqlState if condition is user defined.
+
+          // If SQLSTATE is not already resolved, we need to resolve sqlState for the given
+          // error condition. First try to get sqlState if condition is user defined.
           signalStatement.sqlState = conditions.get(signalStatement.errorCondition.get)
 
-          // If condition is not user defined, check if it is a spark defined error condition.
+          // If condition is not user defined, check if it is a spark defined error condition,
+          // and get appropriate SQLSTATE.
           if (signalStatement.sqlState.isEmpty) {
             if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition.get)) {
               signalStatement.sqlState =

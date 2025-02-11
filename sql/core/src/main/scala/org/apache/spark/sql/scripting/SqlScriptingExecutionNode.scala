@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{ColumnResolutionHelper, NameParam
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -1030,19 +1030,21 @@ class ExceptionHandlerExec(
  * @param errorCondition Name of the error condition/SQL State for error that will be thrown.
  * @param sqlState SQL State of the error that will be thrown.
  * @param message Error message (either string or variable name).
+ * @param isBuiltinError Whether the error condition is a builtin condition.
  * @param msgArguments Error message parameters for builtin conditions.
  * @param session Spark session that SQL script is executed within.
+ * @param origin Origin descriptor for the statement.
  */
 class SignalStatementExec(
-    val errorCondition: Option[String] = None,
-    val sqlState: Option[String] = None,
+    val errorCondition: String,
+    val sqlState: String,
     val message: Either[String, UnresolvedAttribute],
     val msgArguments: Option[UnresolvedAttribute],
     val isBuiltinError: Boolean,
     val session: SparkSession,
     override val origin: Origin)
   extends LeafStatementExec
-    with ColumnResolutionHelper with WithOrigin {
+  with ColumnResolutionHelper with WithOrigin {
 
   override def catalogManager: CatalogManager = session.sessionState.catalogManager
   override def conf: SQLConf = session.sessionState.conf
@@ -1054,13 +1056,13 @@ class SignalStatementExec(
 
         if (!argsReference.dataType.sameType(MapType(StringType, StringType))) {
           throw SqlScriptingErrors
-            .invalidSignalStatementVariableType(CurrentOrigin.get, argsReference.dataType)
+            .invalidSignalStatementVariableType(origin, argsReference.dataType)
         }
 
         val argsValue = argsReference.eval(null)
 
         if (argsValue == null) {
-          throw SqlScriptingErrors.nullVariableSignalStatement(CurrentOrigin.get, args.name)
+          throw SqlScriptingErrors.nullVariableSignalStatement(origin, args.name)
         }
 
         val mapData = argsValue.asInstanceOf[MapData]
@@ -1083,7 +1085,7 @@ class SignalStatementExec(
 
         if (!varReference.dataType.sameType(StringType)) {
           throw SqlScriptingErrors
-            .invalidSignalStatementVariableType(CurrentOrigin.get, varReference.dataType)
+            .invalidSignalStatementVariableType(origin, varReference.dataType)
         }
 
         // Call eval with null value passed instead of a row.
@@ -1093,7 +1095,7 @@ class SignalStatementExec(
 
         if (varReferenceValue == null) {
           throw SqlScriptingErrors
-            .nullVariableSignalStatement(CurrentOrigin.get, u.name)
+            .nullVariableSignalStatement(origin, u.name)
         }
 
         varReferenceValue.toString
@@ -1114,7 +1116,7 @@ class SignalStatementExec(
 
   private[scripting] def getException: SqlScriptingRuntimeException = {
     new SqlScriptingRuntimeException(
-      condition = errorCondition.get,
+      condition = errorCondition,
       sqlState = sqlState,
       message = getMessageText,
       cause = null,

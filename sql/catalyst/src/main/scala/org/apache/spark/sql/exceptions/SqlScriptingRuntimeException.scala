@@ -24,27 +24,27 @@ import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.exceptions.SqlScriptingRuntimeException.errorMessageWithLineNumber
 
 class SqlScriptingRuntimeException (
-     condition: String,
-     sqlState: Option[String] = None,
-     message: String,
-     cause: Throwable,
-     val origin: Origin,
-     messageParameters: Map[String, String] = Map.empty,
-     isBuiltinError: Boolean = false)
+    condition: String,
+    sqlState: String,
+    message: String,
+    cause: Throwable,
+    val origin: Origin,
+    messageParameters: Map[String, String] = Map.empty,
+    isBuiltinError: Boolean = false)
   extends Exception(
     errorMessageWithLineNumber(
-      Option(origin),
+      origin,
       condition,
       sqlState,
       message,
       messageParameters,
       isBuiltinError),
     cause)
-    with SparkThrowable {
+  with SparkThrowable {
 
   def getCondition: String = condition
 
-  override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
+  override def getSqlState: String = sqlState
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }
@@ -52,19 +52,19 @@ class SqlScriptingRuntimeException (
 private object SqlScriptingRuntimeException {
 
   private def errorMessageWithLineNumber(
-      origin: Option[Origin],
+      origin: Origin,
       condition: String,
-      sqlState: Option[String],
+      sqlState: String,
       message: String,
       messageParameters: Map[String, String],
       isBuiltinError: Boolean): String = {
 
-    val prefix = origin.flatMap(o => o.line.map(l => s"{LINE:$l} ")).getOrElse("")
+    val lineNumberPrefix = origin.line.map(l => s"{LINE:$l} ").getOrElse("")
     val msgString = if (isBuiltinError) {
       SparkThrowableHelper.getMessage(condition, messageParameters)
     } else {
-      s"[$condition] " + message + sqlState.map(s => s" SQLSTATE: $s").getOrElse("")
+      s"[$condition] " + message + s" SQLSTATE: $sqlState"
     }
-    prefix + msgString
+    lineNumberPrefix + msgString
   }
 }
