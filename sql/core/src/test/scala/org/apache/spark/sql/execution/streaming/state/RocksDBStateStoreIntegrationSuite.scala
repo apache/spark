@@ -391,8 +391,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               // Two metrics published are -1, the remainder should all be 1 as they
               // uploaded properly.
               assert(
-                instanceMetrics.count(_._2 == 1) ==
-                q.sparkSession.sessionState.conf.numStateStoreInstanceMetricsToReport - 2
+                instanceMetrics.count(_._2 == 1) == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2
               )
             }
           },
@@ -403,7 +403,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   }
 
   testWithChangelogCheckpointingEnabled(
-    "SPARK-51097: Verify snapshot lag metric is updated correctly for join queries with " +
+    "SPARK-51097: Verify snapshot lag metrics are updated correctly for join queries with " +
     "RocksDBStateStoreProvider"
   ) {
     withSQLConf(
@@ -457,7 +457,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   }
 
   testWithChangelogCheckpointingEnabled(
-    "SPARK-51097: Verify snapshot lag metric is updated correctly for join queries with " +
+    "SPARK-51097: Verify snapshot lag metrics are updated correctly for join queries with " +
     "SkipMaintenanceOnCertainPartitionsProvider"
   ) {
     withSQLConf(
