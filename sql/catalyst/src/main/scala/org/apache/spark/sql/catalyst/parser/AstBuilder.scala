@@ -377,25 +377,31 @@ class AstBuilder extends DataTypeAstBuilder
           }
           conditions += condition.conditionName -> condition.sqlState
         case signalStatement: SignalStatement if signalStatement.sqlState.isEmpty =>
+          // Set the CurrentOrigin to origin of SIGNAL statement so we can copy it properly.
+          CurrentOrigin.withOrigin(signalStatement.origin) {
+            // If SQLSTATE is not already resolved, we need to resolve sqlState for the given
+            // error condition. First try to get sqlState if condition is user defined.
+            val (sqlState, isBuiltinError) = conditions.get(signalStatement.errorCondition.get)
+              .map(state => (Some(state), false))
+              // If condition is not user defined, check if it is a spark defined error condition,
+              // and get appropriate SQLSTATE.
+              .getOrElse {
+                if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition.get)) {
+                  (Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition.get)), true)
+                } else {
+                  throw SqlScriptingErrors
+                    .conditionNotFound(CurrentOrigin.get, signalStatement.errorCondition.get)
+                }
+              }
 
-          // If SQLSTATE is not already resolved, we need to resolve sqlState for the given
-          // error condition. First try to get sqlState if condition is user defined.
-          signalStatement.sqlState = conditions.get(signalStatement.errorCondition.get)
+            // Create new instance of SignalStatement with resolved isBuiltinError, and sqlState.
+            val resolvedSignalStatement = signalStatement.copy(
+              isBuiltinError = isBuiltinError,
+              sqlState = sqlState)
 
-          // If condition is not user defined, check if it is a spark defined error condition,
-          // and get appropriate SQLSTATE.
-          if (signalStatement.sqlState.isEmpty) {
-            if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition.get)) {
-              signalStatement.sqlState =
-                Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition.get))
-              signalStatement.isBuiltinError = true
-            } else {
-              throw SqlScriptingErrors
-                .conditionNotFound(CurrentOrigin.get, signalStatement.errorCondition.get)
-            }
+            scriptingParserContext.statement()
+            buff += resolvedSignalStatement
           }
-          scriptingParserContext.statement()
-          buff += signalStatement
         case statement =>
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
