@@ -1927,9 +1927,7 @@ def listagg(col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None) 
 
 
 @_try_remote_functions
-def listagg_distinct(
-    col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None
-) -> Column:
+def listagg_distinct(col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None) -> Column:
     """
     Aggregate function: returns the concatenation of distinct non-null input values,
     separated by the delimiter.
@@ -2004,9 +2002,7 @@ def listagg_distinct(
 
 
 @_try_remote_functions
-def string_agg(
-    col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None
-) -> Column:
+def string_agg(col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None) -> Column:
     """
     Aggregate function: returns the concatenation of non-null input values,
     separated by the delimiter.
