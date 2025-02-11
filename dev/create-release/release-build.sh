@@ -276,6 +276,10 @@ if [[ "$1" == "package" ]]; then
     if [[ $BUILD_PACKAGE == *"withr"* ]]; then
       R_FLAG="--r"
     fi
+    SPARK_CONNECT_FLAG=""
+    if [[ $BUILD_PACKAGE == *"withconnect"* ]]; then
+      SPARK_CONNECT_FLAG="--connect"
+    fi
 
     echo "Building binary dist $NAME"
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
@@ -295,7 +299,7 @@ if [[ "$1" == "package" ]]; then
 
     echo "Creating distribution"
     ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz \
-      $PIP_FLAG $R_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
+      $PIP_FLAG $R_FLAG $SPARK_CONNECT_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
     if [[ -n $R_FLAG ]]; then
@@ -353,7 +357,12 @@ if [[ "$1" == "package" ]]; then
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
+  if [[ $SPARK_VERSION > "3.5.99" ]]; then
+    # Since 4.0, we publish a new distribution with Spark Connect enable.
+    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr,withconnect"
+  else
+    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
+  fi
 
   # This is dead code as Scala 2.12 is no longer supported, but we keep it as a template for
   # adding new Scala version support in the future. This secondary Scala version only has one
