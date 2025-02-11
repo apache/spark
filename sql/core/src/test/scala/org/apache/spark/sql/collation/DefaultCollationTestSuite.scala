@@ -79,30 +79,46 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
 
   test("create/alter table with table level collation") {
     withTable(testTable) {
-      // create table with default table level collation
-      sql(s"CREATE TABLE $testTable (c1 STRING) USING $dataSource DEFAULT COLLATION UTF8_LCASE")
+      // create table with default table level collation and explicit collation for some columns
+      sql(s"CREATE TABLE $testTable " +
+        s"(c1 STRING, c2 STRING COLLATE SR, c3 STRING COLLATE UTF8_BINARY, c4 STRING, id INT) " +
+        s"USING $dataSource DEFAULT COLLATION UTF8_LCASE")
       assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c2", "SR")
+      assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
+      assertTableColumnCollation(testTable, "c4", "UTF8_LCASE")
 
       // alter table add column
-      sql(s"ALTER TABLE $testTable ADD COLUMN c2 STRING")
-      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+      sql(s"ALTER TABLE $testTable ADD COLUMN c5 STRING")
+      assertTableColumnCollation(testTable, "c5", "UTF8_LCASE")
 
-      // alter table default collation should not affect existing colums
+      // alter table default collation should not affect existing columns
       sql(s"ALTER TABLE $testTable DEFAULT COLLATION UNICODE")
       assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
-      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c2", "SR")
+      assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
+      assertTableColumnCollation(testTable, "c4", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c5", "UTF8_LCASE")
 
       // alter table add column, where the new column should pick up new collation
-      sql(s"ALTER TABLE $testTable ADD COLUMN c3 STRING")
-      assertTableColumnCollation(testTable, "c1", "UTF8_LCASE")
-      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
-      assertTableColumnCollation(testTable, "c3", "UNICODE")
+      sql(s"ALTER TABLE $testTable ADD COLUMN c6 STRING")
+      assertTableColumnCollation(testTable, "c6", "UNICODE")
 
       // alter table alter column with explicit collation change
       sql(s"ALTER TABLE $testTable ALTER COLUMN c1 TYPE STRING COLLATE UNICODE_CI")
       assertTableColumnCollation(testTable, "c1", "UNICODE_CI")
-      assertTableColumnCollation(testTable, "c2", "UTF8_LCASE")
-      assertTableColumnCollation(testTable, "c3", "UNICODE")
+
+      // alter table add columns with explicit collation, check collation for each column
+      sql(s"ALTER TABLE $testTable ADD COLUMN c7 STRING COLLATE SR_CI_AI")
+      sql(s"ALTER TABLE $testTable ADD COLUMN c8 STRING COLLATE UTF8_BINARY")
+      assertTableColumnCollation(testTable, "c1", "UNICODE_CI")
+      assertTableColumnCollation(testTable, "c2", "SR")
+      assertTableColumnCollation(testTable, "c3", "UTF8_BINARY")
+      assertTableColumnCollation(testTable, "c4", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c5", "UTF8_LCASE")
+      assertTableColumnCollation(testTable, "c6", "UNICODE")
+      assertTableColumnCollation(testTable, "c7", "SR_CI_AI")
+      assertTableColumnCollation(testTable, "c8", "UTF8_BINARY")
     }
   }
 

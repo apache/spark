@@ -37,8 +37,8 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
     }
   }
 
-  /** Default string type used, if object level collation is not provided */
-  private def defaultStringType: StringType = StringType("UTF8_BINARY")
+  /** Default collation used, if object level collation is not provided */
+  private def defaultCollation: String = "UTF8_BINARY"
 
   /** Returns the string type that should be used in a given DDL command */
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType = {
@@ -54,9 +54,9 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
         if (collation.isDefined) {
           StringType(collation.get)
         } else {
-          defaultStringType
+          StringType(defaultCollation)
         }
-      case _ => defaultStringType
+      case _ => StringType(defaultCollation)
     }
   }
 
@@ -123,13 +123,19 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
     dataType.existsRecursively(isDefaultStringType)
 
   private def isDefaultStringType(dataType: DataType): Boolean = {
+    // STRING (without explicit collation) is considered default string type.
+    // STRING COLLATE <collation_name> (with explicit collation) is not considered
+    // default string type even when explicit collation is UTF8_BINARY (default collation).
     dataType match {
+      // should only return true for StringType object and not for StringType("UTF8_BINARY")
       case st: StringType => st.eq(StringType)
       case _ => false
     }
   }
 
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
+    // Should replace STRING with the new type.
+    // Should not replace STRING COLLATE UTF8_BINARY, as that is explicit collation.
     dataType.transformRecursively {
       case currentType: StringType if isDefaultStringType(currentType) =>
         newType
