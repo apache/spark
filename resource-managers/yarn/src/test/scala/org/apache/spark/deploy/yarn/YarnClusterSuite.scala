@@ -62,6 +62,16 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
+  private var pyConnectDepChecker: PyConnectDepChecker = _
+
+  private def getOrCreatePyConnectDepChecker(
+      python: String, libPath: Seq[String]): PyConnectDepChecker = {
+    if (pyConnectDepChecker == null) {
+      pyConnectDepChecker = new PyConnectDepChecker(python, libPath)
+    }
+    pyConnectDepChecker
+  }
+
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
   private val TEST_PYFILE = """
@@ -266,13 +276,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application with Spark Connect in yarn-client mode") {
-    assume(sys.env.contains("GITHUB_ACTIONS"))
     testPySpark(
       true, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }
 
   test("run Python application with Spark Connect in yarn-cluster mode") {
-    assume(sys.env.contains("GITHUB_ACTIONS"))
     testPySpark(
       false, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }
@@ -429,6 +437,12 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       "PYSPARK_DRIVER_PYTHON" -> pythonExecutablePath,
       "PYSPARK_PYTHON" -> pythonExecutablePath
     ) ++ extraEnv
+
+    if (extraConf.getOrElse(SPARK_API_MODE.key, SPARK_API_MODE.defaultValueString) == "connect") {
+      val checker = getOrCreatePyConnectDepChecker(pythonExecutablePath, pythonPath)
+      assume(checker.isSparkConnectJarAvailable)
+      assume(checker.isConnectPythonPackagesAvailable)
+    }
 
     val moduleDir = {
       val subdir = new File(tempDir, "pyModules")
@@ -868,4 +882,45 @@ private object ExecutorEnvTestApp {
     sc.stop()
   }
 
+}
+
+private class PyConnectDepChecker(python: String, libPath: Seq[String]) {
+
+  import scala.sys.process.Process
+  import scala.util.Try
+  import scala.util.Properties.versionNumberString
+
+  lazy val isSparkConnectJarAvailable: Boolean = {
+    val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +
+      s"spark-connect_$scalaVersion-$SPARK_VERSION.jar"
+    java.nio.file.Files.exists(Paths.get(filePath))
+  }
+
+  lazy val isConnectPythonPackagesAvailable: Boolean = Try {
+    Process(
+      Seq(
+        python,
+        "-c",
+        "from pyspark.sql.connect.utils import check_dependencies;" +
+          "check_dependencies('pyspark.sql.connect.fake_module')"),
+      None,
+      "PYTHONPATH" -> libPath.mkString(File.pathSeparator)).!!
+    true
+  }.getOrElse(false)
+
+  private lazy val scalaVersion = {
+    versionNumberString.split('.') match {
+      case Array(major, minor, _*) => major + "." + minor
+      case _ => versionNumberString
+    }
+  }
+
+  private lazy val scalaDir = s"scala-$scalaVersion"
+
+  private lazy val sparkHome: String = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+  }
 }
