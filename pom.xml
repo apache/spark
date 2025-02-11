@@ -571,7 +571,7 @@
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.4.8</version>
+        <version>1.7.1</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
@@ -599,31 +599,23 @@
       <dependency>
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
-        <version>2.3.2</version>
+        <version>4.0.5</version>
         <scope>compile</scope>
         <exclusions>
-          <!-- for now, we only write XML in PMML export, and these can be excluded -->
-          <exclusion>
-            <groupId>com.sun.xml.fastinfoset</groupId>
-            <artifactId>FastInfoset</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.glassfish.jaxb</groupId>
             <artifactId>txw2</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.jvnet.staxex</groupId>
-            <artifactId>stax-ex</artifactId>
-          </exclusion>
-          <!--
-            SPARK-27611: Exclude redundant javax.activation implementation, which
-            conflicts with the existing javax.activation:activation:1.1.1 dependency.
-            -->
-          <exclusion>
-            <groupId>jakarta.activation</groupId>
-            <artifactId>jakarta.activation-api</artifactId>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-activation</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.xml.bind</groupId>
+        <artifactId>jakarta.xml.bind-api</artifactId>
+        <version>4.0.2</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -1061,13 +1053,6 @@
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
-        <!-- SPARK-28765 Unused JDK11-specific dependency -->
-        <exclusions>
-          <exclusion>
-            <groupId>jakarta.xml.bind</groupId>
-            <artifactId>jakarta.xml.bind-api</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
