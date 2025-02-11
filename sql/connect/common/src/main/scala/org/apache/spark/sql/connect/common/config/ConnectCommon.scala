@@ -21,4 +21,15 @@ private[sql] object ConnectCommon {
   val CONNECT_GRPC_PORT_MAX_RETRIES: Int = 0
   val CONNECT_GRPC_MAX_MESSAGE_SIZE: Int = 128 * 1024 * 1024
   val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT: Int = 1024
+
+  val CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME = "local_token"
+  val CONNECT_LOCAL_AUTH_TOKEN_ENV_NAME = "SPARK_CONNECT_LOCAL_AUTH_TOKEN"
+  private var CONNECT_LOCAL_AUTH_TOKEN: Option[String] = Option(
+    System.getenv(CONNECT_LOCAL_AUTH_TOKEN_ENV_NAME))
+  def setLocalAuthToken(token: String): Unit = CONNECT_LOCAL_AUTH_TOKEN = Option(token)
+  def getLocalAuthToken: Option[String] = CONNECT_LOCAL_AUTH_TOKEN
+  def assertLocalAuthToken(token: Option[String]): Unit = token.foreach { t =>
+    assert(CONNECT_LOCAL_AUTH_TOKEN.isDefined)
+    assert(t.substring("Bearer ".length) == CONNECT_LOCAL_AUTH_TOKEN.get)
+  }
 }
