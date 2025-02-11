@@ -2584,28 +2584,29 @@ class TransformWithStateInPandas(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
-        plan.transform_with_state_in_pandas.input.CopyFrom(self._child.plan(session))
-        plan.transform_with_state_in_pandas.grouping_expressions.extend(
+        plan.group_map.input.CopyFrom(self._child.plan(session))
+        plan.group_map.grouping_expressions.extend(
             [c.to_plan(session) for c in self._grouping_cols]
         )
         # fill in initial state related fields
         if self._initial_state_plan is not None:
-            plan.transform_with_state_in_pandas.initial_input.CopyFrom(
-                self._initial_state_plan.plan(session)
-            )
+            plan.group_map.initial_input.CopyFrom(self._initial_state_plan.plan(session))
             assert self._initial_state_grouping_cols is not None
-            plan.transform_with_state_in_pandas.initial_grouping_expressions.extend(
+            plan.group_map.initial_grouping_expressions.extend(
                 [c.to_plan(session) for c in self._initial_state_grouping_cols]
             )
 
-        plan.transform_with_state_in_pandas.output_schema = self._output_schema
-        plan.transform_with_state_in_pandas.output_mode = self._output_mode
-        plan.transform_with_state_in_pandas.time_mode = self._time_mode
-        plan.transform_with_state_in_pandas.event_time_col_name = self._event_time_col_name
+        # fill in transformWithStateInPandas related fields
+        tws_info = proto.TransformWithStateInfo()
+        tws_info.time_mode = self._time_mode
+        tws_info.output_mode = self._output_mode
+        tws_info.output_schema = self._output_schema
+        tws_info.event_time_column_name = self._event_time_col_name
+
+        plan.group_map.transform_with_state_info.CopyFrom(tws_info)
+
         # wrap transformWithStateInPandasUdf in a function
-        plan.transform_with_state_in_pandas.transform_with_state_udf.CopyFrom(
-            self._function.to_plan_udf(session)
-        )
+        plan.group_map.func.CopyFrom(self._function.to_plan_udf(session))
 
         return self._with_relations(plan, session)
 

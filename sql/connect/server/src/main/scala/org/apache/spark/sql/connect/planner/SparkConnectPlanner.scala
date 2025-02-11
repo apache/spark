@@ -212,8 +212,6 @@ class SparkConnectPlanner(
           transformCoGroupMap(rel.getCoGroupMap)
         case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
           transformApplyInPandasWithState(rel.getApplyInPandasWithState)
-        case proto.Relation.RelTypeCase.TRANSFORM_WITH_STATE_IN_PANDAS =>
-          transformTransformWithStateInPandas(rel.getTransformWithStateInPandas)
         case proto.Relation.RelTypeCase.COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION =>
           transformCommonInlineUserDefinedTableFunction(
             rel.getCommonInlineUserDefinedTableFunction)
@@ -661,6 +659,10 @@ class SparkConnectPlanner(
           case PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF =>
             group.flatMapGroupsInArrow(Column(pythonUdf)).logicalPlan
 
+          case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
+               | PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
+            transformTransformWithStateInPandas(pythonUdf, group, rel)
+
           case _ =>
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
@@ -1037,15 +1039,11 @@ class SparkConnectPlanner(
   }
 
   private def transformTransformWithStateInPandas(
-      rel: proto.TransformWithStateInPandas): LogicalPlan = {
-    val pythonUdf = transformPythonUDF(rel.getTransformWithStateUdf)
-    val cols =
-      rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
-    val input = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .groupBy(cols: _*)
-
-    val outputSchema = parseSchema(rel.getOutputSchema)
+      pythonUdf: PythonUDF,
+      groupedDs: RelationalGroupedDataset,
+      rel: proto.GroupMap): LogicalPlan = {
+    val twsInfo = rel.getTransformWithStateInfo
+    val outputSchema = parseSchema(twsInfo.getOutputSchema)
 
     if (rel.hasInitialInput) {
       val initialGroupingCols = rel.getInitialGroupingExpressionsList.asScala.toSeq.map(expr =>
@@ -1057,28 +1055,28 @@ class SparkConnectPlanner(
 
       // Explicitly creating UDF on resolved column to avoid ambiguity of analysis on initial state
       // columns and the input columns
-      val resolvedPythonUDF = createUserDefinedPythonFunction(rel.getTransformWithStateUdf)
-        .builder(input.df.logicalPlan.output)
+      val resolvedPythonUDF = createUserDefinedPythonFunction(rel.getFunc)
+        .builder(groupedDs.df.logicalPlan.output)
         .asInstanceOf[PythonUDF]
 
-      input
+      groupedDs
         .transformWithStateInPandas(
           Column(resolvedPythonUDF),
           outputSchema,
-          rel.getOutputMode,
-          rel.getTimeMode,
+          twsInfo.getOutputMode,
+          twsInfo.getTimeMode,
           initialStateDs,
-          rel.getEventTimeColName)
+          twsInfo.getEventTimeColumnName)
         .logicalPlan
     } else {
-      input
+      groupedDs
         .transformWithStateInPandas(
           Column(pythonUdf),
           outputSchema,
-          rel.getOutputMode,
-          rel.getTimeMode,
+          twsInfo.getOutputMode,
+          twsInfo.getTimeMode,
           null,
-          rel.getEventTimeColName)
+          twsInfo.getEventTimeColumnName)
         .logicalPlan
     }
   }

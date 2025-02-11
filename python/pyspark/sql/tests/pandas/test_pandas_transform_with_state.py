@@ -1417,25 +1417,25 @@ class TransformWithStateInPandasTestsMixin:
                     result = batch_df.collect()[0]
                     assert result.value["id"] == 0  # First ID from test data
                     assert result.value["name"] == "name-0"
-                  
-                try:
-                  self._run_evolution_test(
-                    BasicProcessorNotNullable(),
-                    checkpoint_dir,
-                    check_basic_state,
-                    df,
-                  )
-                except Exception as e:
-                  # we are expecting an exception, verify it's the right one
-                  from pyspark.errors.exceptions.captured import StreamingQueryException
 
-                  if not isinstance(e, StreamingQueryException):
-                      return False
-                  error_msg = str(e)
-                  assert (
-                      "[TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
-                      and "column family state must be nullable" in error_msg
-                  )
+                try:
+                    self._run_evolution_test(
+                        BasicProcessorNotNullable(),
+                        checkpoint_dir,
+                        check_basic_state,
+                        df,
+                    )
+                except Exception as e:
+                    # we are expecting an exception, verify it's the right one
+                    from pyspark.errors.exceptions.captured import StreamingQueryException
+
+                    if not isinstance(e, StreamingQueryException):
+                        return False
+                    error_msg = str(e)
+                    assert (
+                        "[TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
+                        and "column family state must be nullable" in error_msg
+                    )
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
