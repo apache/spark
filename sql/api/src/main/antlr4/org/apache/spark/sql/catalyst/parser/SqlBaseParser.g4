@@ -476,6 +476,10 @@ commentSpec
     : COMMENT stringLit
     ;
 
+singleQuery
+    : query EOF
+    ;
+
 query
     : ctes? queryTerm queryOrganization
     ;

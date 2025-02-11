@@ -670,6 +670,10 @@ class AstBuilder extends DataTypeAstBuilder
    * ******************************************************************************************** */
   protected def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
 
+  override def visitSingleQuery(ctx: SingleQueryContext): LogicalPlan = withOrigin(ctx) {
+    visitQuery(ctx.query())
+  }
+
   /**
    * Create a top-level plan with Common Table Expressions.
    */
