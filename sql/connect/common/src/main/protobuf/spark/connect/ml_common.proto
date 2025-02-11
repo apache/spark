@@ -59,6 +59,6 @@ message MlOperator {
 // or summary evaluated by a model
 message ObjectRef {
   // (Required) The ID is used to lookup the object on the server side.
-  // Note that this 'id' is not the same as the 'uid' of a ML object.
+  // Note it is different from the 'uid' of a ML object.
   string id = 1;
 }

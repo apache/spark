@@ -43,7 +43,7 @@ message MlCommand {
     // (Required) Estimator information (its type should be OPERATOR_TYPE_ESTIMATOR)
     MlOperator estimator = 1;
     // (Optional) parameters of the Estimator
-    MlParams params = 2;
+    optional MlParams params = 2;
     // (Required) the training dataset
     Relation dataset = 3;
   }
@@ -64,7 +64,7 @@ message MlCommand {
       ObjectRef obj_ref = 2;
     }
     // (Optional) The parameters of operator which could be estimator/evaluator or a cached model
-    MlParams params = 3;
+    optional MlParams params = 3;
     // (Required) Save the ML instance to the path
     string path = 4;
     // (Optional) Overwrites if the output path already exists.
@@ -86,7 +86,7 @@ message MlCommand {
     // (Required) Evaluator information (its type should be OPERATOR_TYPE_EVALUATOR)
     MlOperator evaluator = 1;
     // (Optional) parameters of the Evaluator
-    MlParams params = 2;
+    optional MlParams params = 2;
     // (Required) the evaluating dataset
     Relation dataset = 3;
   }
@@ -112,9 +112,9 @@ message MlCommandResult {
       string name = 2;
     }
     // (Optional) the 'uid' of a ML object
-    // Note it is not the same as the 'id' of a cached object.
+    // Note it is different from the 'id' of a cached object.
     optional string uid = 3;
     // (Optional) parameters
-    MlParams params = 4;
+    optional MlParams params = 4;
   }
 }

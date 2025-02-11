@@ -83,15 +83,32 @@ class MlCommand(google.protobuf.message.Message):
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "dataset", b"dataset", "estimator", b"estimator", "params", b"params"
+                "_params",
+                b"_params",
+                "dataset",
+                b"dataset",
+                "estimator",
+                b"estimator",
+                "params",
+                b"params",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "dataset", b"dataset", "estimator", b"estimator", "params", b"params"
+                "_params",
+                b"_params",
+                "dataset",
+                b"dataset",
+                "estimator",
+                b"estimator",
+                "params",
+                b"params",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
+        ) -> typing_extensions.Literal["params"] | None: ...
 
     class Delete(google.protobuf.message.Message):
         """Command to delete the cached object which could be a model
@@ -174,6 +191,8 @@ class MlCommand(google.protobuf.message.Message):
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_params",
+                b"_params",
                 "_should_overwrite",
                 b"_should_overwrite",
                 "obj_ref",
@@ -191,6 +210,8 @@ class MlCommand(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_params",
+                b"_params",
                 "_should_overwrite",
                 b"_should_overwrite",
                 "obj_ref",
@@ -209,6 +230,10 @@ class MlCommand(google.protobuf.message.Message):
                 b"type",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
+        ) -> typing_extensions.Literal["params"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_should_overwrite", b"_should_overwrite"]
@@ -270,15 +295,32 @@ class MlCommand(google.protobuf.message.Message):
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "dataset", b"dataset", "evaluator", b"evaluator", "params", b"params"
+                "_params",
+                b"_params",
+                "dataset",
+                b"dataset",
+                "evaluator",
+                b"evaluator",
+                "params",
+                b"params",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "dataset", b"dataset", "evaluator", b"evaluator", "params", b"params"
+                "_params",
+                b"_params",
+                "dataset",
+                b"dataset",
+                "evaluator",
+                b"evaluator",
+                "params",
+                b"params",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
+        ) -> typing_extensions.Literal["params"] | None: ...
 
     FIT_FIELD_NUMBER: builtins.int
     FETCH_FIELD_NUMBER: builtins.int
@@ -375,7 +417,7 @@ class MlCommandResult(google.protobuf.message.Message):
         """Operator name"""
         uid: builtins.str
         """(Optional) the 'uid' of a ML object
-        Note it is not the same as the 'id' of a cached object.
+        Note it is different from the 'id' of a cached object.
         """
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
@@ -391,6 +433,8 @@ class MlCommandResult(google.protobuf.message.Message):
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_params",
+                b"_params",
                 "_uid",
                 b"_uid",
                 "name",
@@ -408,6 +452,8 @@ class MlCommandResult(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_params",
+                b"_params",
                 "_uid",
                 b"_uid",
                 "name",
@@ -422,6 +468,10 @@ class MlCommandResult(google.protobuf.message.Message):
                 b"uid",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
+        ) -> typing_extensions.Literal["params"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_uid", b"_uid"]

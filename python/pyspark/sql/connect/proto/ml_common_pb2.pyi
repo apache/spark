@@ -165,7 +165,7 @@ class ObjectRef(google.protobuf.message.Message):
     ID_FIELD_NUMBER: builtins.int
     id: builtins.str
     """(Required) The ID is used to lookup the object on the server side.
-    Note that this 'id' is not the same as the 'uid' of a ML object.
+    Note it is different from the 'uid' of a ML object.
     """
     def __init__(
         self,
