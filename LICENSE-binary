@@ -501,7 +501,6 @@ core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 
 Common Development and Distribution License (CDDL) 1.0
 ------------------------------------------------------
-javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.transaction:transaction-api
 
 
