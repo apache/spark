@@ -317,9 +317,13 @@ if [ "$MAKE_TGZ" == "true" ]; then
     TARDIR="$SPARK_HOME/$TARDIR_NAME"
     rm -rf "$TARDIR"
     cp -r "$DISTDIR" "$TARDIR"
-    sed -i -e '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/pyspark"
-    sed -i -e '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-shell"
-    sed -i -e '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-submit"
+    SED_I="sed -i"
+    if [ "$(uname -s)" = "Darwin" ]; then
+      SED_I="sed -i ''"
+    fi
+    $SED_I '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/pyspark"
+    $SED_I '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-shell"
+    $SED_I '$s/.*/export SPARK_CONNECT_MODE=1\n&/' "$TARDIR/bin/spark-submit"
     $TAR -czf "$TARDIR_NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
     rm -rf "$TARDIR"
   fi
