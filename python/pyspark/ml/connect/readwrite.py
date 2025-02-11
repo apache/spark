@@ -118,13 +118,13 @@ class RemoteMLWriter(MLWriter):
         elif isinstance(instance, (JavaEstimator, JavaTransformer, JavaEvaluator)):
             operator: Union[JavaEstimator, JavaTransformer, JavaEvaluator]
             if isinstance(instance, JavaEstimator):
-                ml_type = pb2.MlOperator.ESTIMATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
                 operator = cast("JavaEstimator", instance)
             elif isinstance(instance, JavaEvaluator):
-                ml_type = pb2.MlOperator.EVALUATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
                 operator = cast("JavaEvaluator", instance)
             else:
-                ml_type = pb2.MlOperator.TRANSFORMER
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
                 operator = cast("JavaTransformer", instance)
 
             params = serialize_ml_params(operator, session.client)
@@ -249,13 +249,13 @@ class RemoteMLReader(MLReader[RL]):
             or issubclass(clazz, JavaTransformer)
         ):
             if issubclass(clazz, JavaModel):
-                ml_type = pb2.MlOperator.MODEL
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_MODEL
             elif issubclass(clazz, JavaEstimator):
-                ml_type = pb2.MlOperator.ESTIMATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
             elif issubclass(clazz, JavaEvaluator):
-                ml_type = pb2.MlOperator.EVALUATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
             else:
-                ml_type = pb2.MlOperator.TRANSFORMER
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
 
             # to get the java corresponding qualified class name
             java_qualified_class_name = (
@@ -281,7 +281,7 @@ class RemoteMLReader(MLReader[RL]):
             py_type = _get_class()
             # It must be JavaWrapper, since we're passing the string to the _java_obj
             if issubclass(py_type, JavaWrapper):
-                if ml_type == pb2.MlOperator.MODEL:
+                if ml_type == pb2.MlOperator.OPERATOR_TYPE_MODEL:
                     session.client.add_ml_cache(result.obj_ref.id)
                     instance = py_type(result.obj_ref.id)
                 else:
@@ -358,7 +358,8 @@ class RemoteMLReader(MLReader[RL]):
             command.ml_command.read.CopyFrom(
                 pb2.MlCommand.Read(
                     operator=pb2.MlOperator(
-                        name=java_qualified_class_name, type=pb2.MlOperator.TRANSFORMER
+                        name=java_qualified_class_name,
+                        type=pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER,
                     ),
                     path=path,
                 )
