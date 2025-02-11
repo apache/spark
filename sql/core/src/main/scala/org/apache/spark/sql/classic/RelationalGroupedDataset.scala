@@ -554,7 +554,7 @@ class RelationalGroupedDataset protected[sql](
     Dataset.ofRows(df.sparkSession,
       UpdateEventTimeWatermarkColumn(
         UnresolvedAttribute(eventTimeColumnName),
-        None,
+        scala.None,
         transformWithStateDataset.logicalPlan))
   }
 
@@ -606,7 +606,7 @@ private[sql] object RelationalGroupedDataset {
   private def alias(expr: Expression): NamedExpression = expr match {
     case expr: NamedExpression => expr
     case a: AggregateExpression => UnresolvedAlias(a, Some(generateAlias))
-    case _ if !expr.resolved => UnresolvedAlias(expr, None)
+    case _ if !expr.resolved => UnresolvedAlias(expr, scala.None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
