@@ -22,7 +22,7 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.streaming.TimeMode
 
 /** TimeMode types used in transformWithState operator */
-case object NoTime extends TimeMode
+case object None extends TimeMode
 
 case object ProcessingTime extends TimeMode
 
@@ -32,7 +32,7 @@ object TimeModes {
   def apply(timeMode: String): TimeMode = {
     timeMode.toLowerCase(Locale.ROOT) match {
       case "none" =>
-        NoTime
+        None
       case "processingtime" =>
         ProcessingTime
       case "eventtime" =>

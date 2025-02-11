@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.plans.logical.EventTime$;
-import org.apache.spark.sql.catalyst.plans.logical.NoTime$;
+import org.apache.spark.sql.catalyst.plans.logical.None$;
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime$;
 
 /**
@@ -32,7 +32,7 @@ public class TimeMode {
     /**
      * Neither timers nor ttl is supported in this mode.
      */
-    public static final TimeMode None() { return NoTime$.MODULE$; }
+    public static final TimeMode None() { return None$.MODULE$; }
 
     /**
      * Stateful processor that uses query processing time to register timers and

@@ -1495,7 +1495,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
         )
         val operatorPropsJson = df.select("operatorProperties").collect().head.getString(0)
         val operatorProperties = TransformWithStateOperatorProperties.fromJson(operatorPropsJson)
-        assert(operatorProperties.timeMode == "NoTime")
+        assert(operatorProperties.timeMode == "None")
         assert(operatorProperties.outputMode == "Update")
         assert(operatorProperties.stateVariables.length == 1)
         assert(operatorProperties.stateVariables.head.stateName == "countState")
@@ -1626,7 +1626,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
               condition = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
               parameters = Map(
                 "configName" -> "timeMode",
-                "oldConfig" -> "NoTime",
+                "oldConfig" -> "None",
                 "newConfig" -> "ProcessingTime")
             )
           }
