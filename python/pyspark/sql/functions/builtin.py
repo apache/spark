@@ -1853,7 +1853,7 @@ def sum_distinct(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
+def listagg(col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None) -> Column:
     """
     Aggregate function: returns the concatenation of non-null input values,
     separated by the delimiter.
@@ -1864,7 +1864,7 @@ def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] 
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+    delimiter : literal string or bytes, optional
         the delimiter to separate the values. The default value is None.
 
     Returns
@@ -1923,12 +1923,12 @@ def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] 
     if delimiter is None:
         return _invoke_function_over_columns("listagg", col)
     else:
-        return _invoke_function_over_columns("listagg", col, lit(delimiter))
+        return _invoke_function("listagg", col, delimiter)
 
 
 @_try_remote_functions
 def listagg_distinct(
-    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+    col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None
 ) -> Column:
     """
     Aggregate function: returns the concatenation of distinct non-null input values,
@@ -1940,7 +1940,7 @@ def listagg_distinct(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+    delimiter : literal string or bytes, optional
         the delimiter to separate the values. The default value is None.
 
     Returns
@@ -2000,12 +2000,12 @@ def listagg_distinct(
     if delimiter is None:
         return _invoke_function_over_columns("listagg_distinct", col)
     else:
-        return _invoke_function_over_columns("listagg_distinct", col, lit(delimiter))
+        return _invoke_function("listagg_distinct", col, delimiter)
 
 
 @_try_remote_functions
 def string_agg(
-    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+    col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None
 ) -> Column:
     """
     Aggregate function: returns the concatenation of non-null input values,
@@ -2019,7 +2019,7 @@ def string_agg(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+    delimiter : literal string or bytes, optional
         the delimiter to separate the values. The default value is None.
 
     Returns
@@ -2078,12 +2078,12 @@ def string_agg(
     if delimiter is None:
         return _invoke_function_over_columns("string_agg", col)
     else:
-        return _invoke_function_over_columns("string_agg", col, lit(delimiter))
+        return _invoke_function("string_agg", col, delimiter)
 
 
 @_try_remote_functions
 def string_agg_distinct(
-    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+    col: "ColumnOrName", delimiter: Optional[Union[str, bytes]] = None
 ) -> Column:
     """
     Aggregate function: returns the concatenation of distinct non-null input values,
@@ -2097,7 +2097,7 @@ def string_agg_distinct(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-    delimiter : :class:`~pyspark.sql.Column`, literal string or bytes, optional
+    delimiter : literal string or bytes, optional
         the delimiter to separate the values. The default value is None.
 
     Returns
@@ -2157,7 +2157,7 @@ def string_agg_distinct(
     if delimiter is None:
         return _invoke_function_over_columns("string_agg_distinct", col)
     else:
-        return _invoke_function_over_columns("string_agg_distinct", col, lit(delimiter))
+        return _invoke_function("string_agg_distinct", col, delimiter)
 
 
 @_try_remote_functions
