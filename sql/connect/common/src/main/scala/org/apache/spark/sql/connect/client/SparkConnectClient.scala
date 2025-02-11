@@ -620,6 +620,9 @@ object SparkConnectClient {
      * Configure the builder using the env SPARK_REMOTE environment variable.
      */
     def loadFromEnvironment(): Builder = {
+      option(
+        ConnectCommon.CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME,
+        ConnectCommon.CONNECT_LOCAL_AUTH_TOKEN)
       lazy val isAPIModeConnect =
         Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
           .getOrElse("classic")

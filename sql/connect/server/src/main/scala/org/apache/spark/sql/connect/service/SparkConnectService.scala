@@ -39,6 +39,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
+import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
@@ -369,7 +370,9 @@ object SparkConnectService extends Logging {
     val sparkConnectService = new SparkConnectService(debugMode)
     val protoReflectionService =
       if (debugMode) Some(ProtoReflectionService.newInstance()) else None
-    val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
+    val configuredInterceptors =
+      SparkConnectInterceptorRegistry.createConfiguredInterceptors() ++
+        ConnectCommon.localAuthToken.map(new LocalAuthInterceptor(_))
 
     val startServiceFn = (port: Int) => {
       val sb = bindAddress match {

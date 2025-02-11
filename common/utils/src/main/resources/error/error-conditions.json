@@ -9304,6 +9304,11 @@
       "No enough memory for aggregation"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3303" : {
+    "message" : [
+      "Invalid token."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

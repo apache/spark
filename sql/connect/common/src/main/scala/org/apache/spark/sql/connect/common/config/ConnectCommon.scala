@@ -21,4 +21,10 @@ private[sql] object ConnectCommon {
   val CONNECT_GRPC_PORT_MAX_RETRIES: Int = 0
   val CONNECT_GRPC_MAX_MESSAGE_SIZE: Int = 128 * 1024 * 1024
   val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT: Int = 1024
+
+  val CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME = "local_token"
+  val CONNECT_LOCAL_AUTH_TOKEN_ENV_NAME = "SPARK_CONNECT_LOCAL_AUTH_TOKEN"
+  val CONNECT_LOCAL_AUTH_TOKEN: String =
+    Option(System.getenv(CONNECT_LOCAL_AUTH_TOKEN_ENV_NAME))
+      .getOrElse(java.util.UUID.randomUUID().toString())
 }
