@@ -440,28 +440,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // day-time interval to variant
     assert(!resolver.resolveTimeZones(Cast(Cast(Literal(0L), DayTimeIntervalType(0, 0)),
       VariantType)).resolved)
-
-    // Remove test when overriding type ID 19: old variant year-month interval type ID (19) to int
-    checkErrorInExpression[SparkRuntimeException](
-      VariantGet(
-        Literal(new VariantVal(Array(primitiveHeader(19), 0, 0, 0, 0, 0),
-          emptyMetadata)), Literal("$"), IntegerType, failOnError = true
-      ),
-      "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
-      Map("id" -> "19")
-    )
-
-    // Remove test when overriding type ID 20: old variant day-time interval type ID (20) to int
-    checkErrorInExpression[SparkRuntimeException](
-      VariantGet(
-        Literal(
-          new VariantVal(Array(primitiveHeader(20), 0, 0, 0, 0, 0, 0, 0, 0, 0),
-            emptyMetadata)
-        ), Literal("$"), IntegerType, failOnError = true
-      ),
-      "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
-      Map("id" -> "20")
-    )
   }
 
   test("variant_get path extraction") {
@@ -782,10 +760,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkToJsonFail(Array(primitiveHeader(25)), 25)
-    // Remove these test cases when overriding type IDs 19 and 20.
-    // SPARK-49985: Disable support for interval types in the variant spec.
-    checkToJsonFail(Array(primitiveHeader(19)), 19)
-    checkToJsonFail(Array(primitiveHeader(20)), 20)
 
     def littleEndianLong(value: Long): Array[Byte] =
       BigInt(value).toByteArray.reverse.padTo(8, 0.toByte)
@@ -986,11 +960,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     }
     checkErrorInSchemaOf(Array(primitiveHeader(25)), 25)
-
-    // SPARK-49985: Disable support for interval types in the variant spec.
-    // Remove these test cases when overriding type ids 19 and 20
-    checkErrorInSchemaOf(Array(primitiveHeader(19)), 19)
-    checkErrorInSchemaOf(Array(primitiveHeader(20)), 20)
   }
 
   test("schema_of_variant - schema merge") {
