@@ -686,7 +686,7 @@ class SparkConnectPlanner(
       val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
       val outputAttr = udf.outputObjAttr
 
-      val timeMode = TimeModes(twsInfo.getTimeMode, isScala = true)
+      val timeMode = TimeModes(twsInfo.getTimeMode)
       val outputMode = InternalOutputModes(twsInfo.getOutputMode)
 
       val twsNode = if (hasInitialState) {
