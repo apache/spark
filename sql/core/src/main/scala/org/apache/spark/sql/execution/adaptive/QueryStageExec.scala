@@ -340,7 +340,7 @@ case class ResultQueryStageExec(
   }
 
   // Result stage could be any SparkPlan, so we don't have a specific runtime statistics for it.
-  override def getRuntimeStatistics: Statistics = Statistics(sizeInBytes = 0, rowCount = None)
+  override def getRuntimeStatistics: Statistics = Statistics.DUMMY
 }
 
 object ResultQueryStageExec {
