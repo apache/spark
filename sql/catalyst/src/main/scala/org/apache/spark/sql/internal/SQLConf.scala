@@ -4103,7 +4103,7 @@ object SQLConf {
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN =
-    buildConf("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
+    buildConf("spark.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
       .internal()
       .doc("Allow PruneFilters to remove streaming subplans when we encounter a false filter. " +
         "This flag is to restore prior buggy behavior for broken pipelines.")
