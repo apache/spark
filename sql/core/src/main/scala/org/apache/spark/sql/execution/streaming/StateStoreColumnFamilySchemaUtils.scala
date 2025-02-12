@@ -47,7 +47,7 @@ object StateStoreColumnFamilySchemaUtils {
         // Byte type is converted to Int in Avro, which doesn't work for us as Avro
         // uses zig-zag encoding as opposed to big-endian for Ints
         Seq(
-          StructField(s"${field.name}_marker", BinaryType, nullable = false),
+          StructField(s"${field.name}_marker", BinaryType, nullable = true),
           field.copy(name = s"${field.name}_value", BinaryType)
         )
       } else {
@@ -117,7 +117,7 @@ object StateStoreColumnFamilySchemaUtils {
       getRowCounterCFName(stateName), keySchemaId = 0,
       keyEncoder.schema,
       valueSchemaId = 0,
-      StructType(Seq(StructField("count", LongType, nullable = false))),
+      StructType(Seq(StructField("count", LongType, nullable = true))),
       Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
     schemas.put(counterSchema.colFamilyName, counterSchema)
 
@@ -149,7 +149,7 @@ object StateStoreColumnFamilySchemaUtils {
         keySchemaId = 0,
         keyEncoder.schema,
         valueSchemaId = 0,
-        StructType(Seq(StructField("count", LongType, nullable = false))),
+        StructType(Seq(StructField("count", LongType, nullable = true))),
         Some(NoPrefixKeyStateEncoderSpec(keyEncoder.schema)))
       schemas.put(countSchema.colFamilyName, countSchema)
     }

@@ -42,6 +42,9 @@ class DataFrameCollectionParityTests(
     def test_to_pandas_from_mixed_dataframe(self):
         self.check_to_pandas_from_mixed_dataframe()
 
+    def test_to_pandas_for_empty_df_with_nested_array_columns(self):
+        self.check_to_pandas_for_empty_df_with_nested_array_columns()
+
 
 if __name__ == "__main__":
     import unittest

@@ -222,8 +222,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
-      val selectStmt = s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
-        s" $whereClause $groupByClause $orderByClause"
+      val selectStmt = s"SELECT $hintClause$columnList FROM ${options.tableOrQuery}" +
+        s" $tableSampleClause $whereClause $groupByClause $orderByClause"
       val finalSelectStmt = if (limit > 0) {
         if (offset > 0) {
           // Because the rownum is calculated when the value is returned,
@@ -255,22 +255,24 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def supportsOffset: Boolean = true
 
+  override def supportsHint: Boolean = true
+
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
-          case 955 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+          case 955 if condition == "FAILED_JDBC.RENAME_TABLE" =>
             val newTable = messageParameters("newName")
             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ =>
-            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 }

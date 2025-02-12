@@ -36,9 +36,10 @@ import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -147,13 +148,11 @@ private[ml] object MLUtils {
       val value = literal.getLiteralTypeCase match {
         case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
           val s = literal.getStruct
-          val schema = DataTypeProtoConverter.toCatalystType(s.getStructType)
-          if (schema == VectorUDT.sqlType) {
-            deserializeVector(s)
-          } else if (schema == MatrixUDT.sqlType) {
-            deserializeMatrix(s)
-          } else {
-            throw MlUnsupportedException(s"Unsupported parameter struct ${schema} for ${name}")
+          s.getStructType.getUdt.getJvmClass match {
+            case "org.apache.spark.ml.linalg.VectorUDT" => deserializeVector(s)
+            case "org.apache.spark.ml.linalg.MatrixUDT" => deserializeMatrix(s)
+            case _ =>
+              throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct} for ${name}")
           }
 
         case _ =>
@@ -189,6 +188,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[Double])
     } else if (elementType == classOf[String]) {
       array.map(_.asInstanceOf[String])
+    } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +
@@ -230,14 +231,10 @@ private[ml] object MLUtils {
       value.asInstanceOf[String]
     } else if (paramType.isArray) {
       val compType = paramType.getComponentType
-      if (compType.isArray) {
-        throw MlUnsupportedException(s"Array of array unsupported")
-      } else {
-        val array = value.asInstanceOf[Array[_]].map { e =>
-          reconcileParam(compType, e)
-        }
-        reconcileArray(compType, array)
+      val array = value.asInstanceOf[Array[_]].map { e =>
+        reconcileParam(compType, e)
       }
+      reconcileArray(compType, array)
     } else {
       throw MlUnsupportedException(s"Unsupported parameter type, found ${paramType.getName}")
     }
@@ -461,6 +458,7 @@ private[ml] object MLUtils {
     (classOf[PredictionModel[_, _]], Set("predict", "numFeatures")),
     (classOf[ClassificationModel[_, _]], Set("predictRaw", "numClasses")),
     (classOf[ProbabilisticClassificationModel[_, _]], Set("predictProbability")),
+    (classOf[LSHModel[_]], Set("approxNearestNeighbors", "approxSimilarityJoin")),
 
     // Summary Traits
     (classOf[HasTrainingSummary[_]], Set("hasSummary", "summary")),
@@ -526,13 +524,51 @@ private[ml] object MLUtils {
     (classOf[GBTRegressionModel], Set("featureImportances", "evaluateEachIteration")),
 
     // Classification Models
+    (classOf[NaiveBayesModel], Set("pi", "theta", "sigma")),
+    (classOf[LinearSVCModel], Set("intercept", "coefficients", "evaluate")),
     (
       classOf[LogisticRegressionModel],
       Set("intercept", "coefficients", "interceptVector", "coefficientMatrix", "evaluate")),
     (classOf[LogisticRegressionSummary], Set("probabilityCol", "featuresCol")),
     (classOf[BinaryLogisticRegressionSummary], Set("scoreCol")),
+    (classOf[FMClassificationModel], Set("intercept", "linear", "factors", "evaluate")),
+    (classOf[MultilayerPerceptronClassificationModel], Set("weights", "evaluate")),
 
     // Regression Models
+    (
+      classOf[AFTSurvivalRegressionModel],
+      Set("intercept", "coefficients", "scale", "predictQuantiles")),
+    (
+      classOf[IsotonicRegressionModel],
+      Set("boundaries", "predictions", "numFeatures", "predict")),
+    (
+      classOf[GeneralizedLinearRegressionModel],
+      Set("intercept", "coefficients", "numFeatures", "evaluate")),
+    (
+      classOf[GeneralizedLinearRegressionSummary],
+      Set(
+        "aic",
+        "degreesOfFreedom",
+        "deviance",
+        "dispersion",
+        "nullDeviance",
+        "numInstances",
+        "predictionCol",
+        "predictions",
+        "rank",
+        "residualDegreeOfFreedom",
+        "residualDegreeOfFreedomNull",
+        "residuals")),
+    (
+      classOf[GeneralizedLinearRegressionTrainingSummary],
+      Set(
+        "numIterations",
+        "solver",
+        "tValues",
+        "pValues",
+        "coefficientStandardErrors",
+        "coefficientsWithStatistics",
+        "toString")),
     (classOf[LinearRegressionModel], Set("intercept", "coefficients", "scale", "evaluate")),
     (
       classOf[LinearRegressionSummary],
@@ -555,14 +591,32 @@ private[ml] object MLUtils {
         "tValues",
         "pValues")),
     (classOf[LinearRegressionTrainingSummary], Set("objectiveHistory", "totalIterations")),
+    (classOf[FMRegressionModel], Set("intercept", "linear", "factors")),
 
     // Clustering Models
-    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenters")),
+    (classOf[KMeansModel], Set("predict", "numFeatures", "clusterCenterMatrix")),
     (classOf[KMeansSummary], Set("trainingCost")),
     (
       classOf[BisectingKMeansModel],
-      Set("predict", "numFeatures", "clusterCenters", "computeCost")),
+      Set("predict", "numFeatures", "clusterCenterMatrix", "computeCost")),
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
+    (
+      classOf[GaussianMixtureModel],
+      Set("predict", "numFeatures", "weights", "predictProbability", "gaussiansDF")),
+    (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
+    (
+      classOf[LDAModel],
+      Set(
+        "estimatedDocConcentration",
+        "topicsMatrix",
+        "isDistributed",
+        "logLikelihood",
+        "logPerplexity",
+        "describeTopics")),
+    (classOf[LocalLDAModel], Set("vocabSize")),
+    (
+      classOf[DistributedLDAModel],
+      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),
 
     // Recommendation Models
     (
@@ -580,12 +634,39 @@ private[ml] object MLUtils {
     (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
     // Feature Models
+    (classOf[Bucketizer], Set("getSplits", "getSplitsArray")),
+    (classOf[ImputerModel], Set("surrogateDF")),
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
+    (classOf[VectorIndexerModel], Set("numFeatures", "categoryMapsDF")),
+    (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
+    (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
+    (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
     (classOf[PCAModel], Set("pc", "explainedVariance")),
-    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")))
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms")),
+    (classOf[CountVectorizerModel], Set("vocabulary")),
+    (classOf[OneHotEncoderModel], Set("categorySizes")),
+    (classOf[StringIndexerModel], Set("labels", "labelsArray")),
+    (classOf[RFormulaModel], Set("resolvedFormulaString")),
+    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")),
+
+    // Utils
+    (
+      classOf[ConnectHelper],
+      Set(
+        "handleOverwrite",
+        "stringIndexerModelFromLabels",
+        "stringIndexerModelFromLabelsArray",
+        "countVectorizerModelFromVocabulary",
+        "stopWordsRemoverLoadDefaultStopWords",
+        "stopWordsRemoverGetDefaultOrUS",
+        "chiSquareTest",
+        "correlation",
+        "kolmogorovSmirnovTest",
+        "powerIterationClusteringAssignClusters",
+        "prefixSpanFindFrequentSequentialPatterns")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)
@@ -593,7 +674,7 @@ private[ml] object MLUtils {
       cls.isInstance(obj) && methods.contains(method)
     }
     if (!valid) {
-      throw MLAttributeNotAllowedException(method)
+      throw MLAttributeNotAllowedException(obj.getClass.getName, method)
     }
   }
 
@@ -612,7 +693,7 @@ private[ml] object MLUtils {
   }
 
   def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {
-    val writer = if (writeProto.getShouldOverwrite) {
+    val writer = if (writeProto.hasShouldOverwrite && writeProto.getShouldOverwrite) {
       instance.write.overwrite()
     } else {
       instance.write

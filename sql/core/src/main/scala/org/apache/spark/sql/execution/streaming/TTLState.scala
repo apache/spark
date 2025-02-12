@@ -357,7 +357,7 @@ abstract class OneToManyTTLState(
   // Schema of the entry count index: elementKey -> count
   private val COUNT_INDEX = "$count_" + stateName
   private val COUNT_INDEX_VALUE_SCHEMA: StructType =
-    StructType(Seq(StructField("count", LongType, nullable = false)))
+    StructType(Seq(StructField("count", LongType)))
   private val countIndexValueProjector = UnsafeProjection.create(COUNT_INDEX_VALUE_SCHEMA)
 
   // Reused internal row that we use to create an UnsafeRow with the schema of

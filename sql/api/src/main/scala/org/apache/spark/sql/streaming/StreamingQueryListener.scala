@@ -31,8 +31,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
- * Interface for listening to events related to
- * [[org.apache.spark.sql.api.StreamingQuery StreamingQueries]].
+ * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
  *
  * @note
  *   The methods are not thread-safe as they may be called from different threads.
@@ -49,8 +48,7 @@ abstract class StreamingQueryListener extends Serializable {
    * @note
    *   This is called synchronously with `DataStreamWriter.start()`, that is, `onQueryStart` will
    *   be called on all listeners before `DataStreamWriter.start()` returns the corresponding
-   *   [[org.apache.spark.sql.api.StreamingQuery]]. Please don't block this method as it will
-   *   block your query.
+   *   [[StreamingQuery]]. Please don't block this method as it will block your query.
    * @since 2.0.0
    */
   def onQueryStarted(event: QueryStartedEvent): Unit
@@ -59,11 +57,10 @@ abstract class StreamingQueryListener extends Serializable {
    * Called when there is some status update (ingestion rate updated, etc.)
    *
    * @note
-   *   This method is asynchronous. The status in [[org.apache.spark.sql.api.StreamingQuery]] will
-   *   always be latest no matter when this method is called. Therefore, the status of
-   *   [[org.apache.spark.sql.api.StreamingQuery]] may be changed before/when you process the
-   *   event. E.g., you may find [[org.apache.spark.sql.api.StreamingQuery]] is terminated when
-   *   you are processing `QueryProgressEvent`.
+   *   This method is asynchronous. The status in [[StreamingQuery]] will always be latest no
+   *   matter when this method is called. Therefore, the status of [[StreamingQuery]] may be
+   *   changed before/when you process the event. E.g., you may find [[StreamingQuery]] is
+   *   terminated when you are processing `QueryProgressEvent`.
    * @since 2.0.0
    */
   def onQueryProgress(event: QueryProgressEvent): Unit
