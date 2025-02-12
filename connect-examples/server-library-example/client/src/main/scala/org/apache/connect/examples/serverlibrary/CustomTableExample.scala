@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{StructType, StructField, StringType, IntegerT
 import org.apache.connect.examples.serverlibrary.proto
 import org.apache.connect.examples.serverlibrary.proto.CreateTable.Column.{DataType => ProtoDataType}
 
-object Main {
+object CustomTableExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder().remote("sc://localhost").build()
 
