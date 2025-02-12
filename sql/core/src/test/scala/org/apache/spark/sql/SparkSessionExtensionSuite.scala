@@ -244,7 +244,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
           columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
         plan match {
           case a: AdaptiveSparkPlanExec =>
-            findColumnStats(a.executedPlan, columnStats)
+            findColumnStats(stripAQEPlan(a), columnStats)
           case qs: ShuffleQueryStageExec =>
             columnStats += qs.computeStats().get.attributeStats
             findColumnStats(qs.plan, columnStats)
@@ -489,7 +489,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
     def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      stripAQEPlan(df.queryExecution.executedPlan)
     }
     val extensions = create { extensions =>
       extensions.injectRuntimeOptimizerRule(_ => AddLimit)
