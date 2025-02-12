@@ -691,7 +691,7 @@ class SparkConnectPlanner(
 
       val twsNode = if (hasInitialState) {
         val statefulProcessor = unpackedUdf.function
-            .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
+          .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
         val initDs = UntypedKeyValueGroupedDataset(
           rel.getInitialInput,
           rel.getInitialGroupingExpressionsList,
@@ -713,7 +713,8 @@ class SparkConnectPlanner(
           initDs.valueDeserializer,
           initDs.analyzed)
       } else {
-        val statefulProcessor = unpackedUdf.function.asInstanceOf[StatefulProcessor[Any, Any, Any]]
+        val statefulProcessor =
+          unpackedUdf.function.asInstanceOf[StatefulProcessor[Any, Any, Any]]
         new TransformWithState(
           keyDeserializer,
           ds.valueDeserializer,
@@ -737,8 +738,7 @@ class SparkConnectPlanner(
         val eventTimeWrappedPlan = UpdateEventTimeWatermarkColumn(
           UnresolvedAttribute(twsInfo.getEventTimeColumnName),
           None,
-          serializedPlan
-        )
+          serializedPlan)
         eventTimeWrappedPlan
       } else {
         serializedPlan

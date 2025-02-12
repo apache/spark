@@ -149,11 +149,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
-    transformWithStateHelper(
-      statefulProcessor,
-      timeMode,
-      outputMode,
-      Some(initialState))
+    transformWithStateHelper(statefulProcessor, timeMode, outputMode, Some(initialState))
 
   /** @inheritdoc */
   override private[sql] def transformWithState[U: Encoder](
@@ -693,8 +689,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
             .setOutputMode(outputMode.toString)
             // we pass time mode as string here and deterministically restored on server
             .setTimeMode(timeMode.toString)
-            .build()
-        )
+            .build())
       if (initialStateImpl != null) {
         twsBuilder
           .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)

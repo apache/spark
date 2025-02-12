@@ -55,7 +55,9 @@ class BasicCountStatefulProcessor
       inputRows: Iterator[InputRowForConnectTest],
       timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
     val count =
-      Option(_countState.get()).getOrElse(StateRowForConnectTest(0L)).count + inputRows.toSeq.length
+      Option(_countState.get())
+        .getOrElse(StateRowForConnectTest(0L))
+        .count + inputRows.toSeq.length
     _countState.update(StateRowForConnectTest(count))
     Iterator(OutputRowForConnectTest(key, count.toString))
   }
@@ -477,7 +479,9 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
     sparkSession.readStream
       .format("csv")
       .schema(
-        new StructType().add(StructField("key", StringType)).add(StructField("value", StringType)))
+        new StructType()
+          .add(StructField("key", StringType))
+          .add(StructField("value", StringType)))
       .option("maxFilesPerTrigger", 1)
       .load(inputPath)
       .select(col("key").as("key"), col("value").cast("integer"))
