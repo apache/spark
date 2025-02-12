@@ -90,7 +90,7 @@ private[spark] object Python {
     .doc("Whether Spark should terminate the Python worker process when the idle timeout " +
       s"(as defined by $PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY) is reached. If enabled, " +
       "Spark will terminate the Python worker process in addition to logging the status.")
-    .version("4.0.0")
+    .version("4.1.0")
     .booleanConf
     .createWithDefault(false)
 }
