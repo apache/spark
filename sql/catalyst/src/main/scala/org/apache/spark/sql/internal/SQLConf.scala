@@ -5554,18 +5554,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val LEGACY_PARSE_QUERY_WITHOUT_EOF = buildConf("spark.sql.legacy.parseQueryWithoutEof")
-    .internal()
-    .doc(
-      "When set to true, ParserInterface#parseQuery(...) is going to use base `query` grammar " +
-      "term without EOF resulting in some queries (like `SELECT 1 UNION SELECT 2`) to be parsed " +
-      "incorrectly - `UNION` will be treated as an alias, and the rest of SQL input will be " +
-      "thrown away."
-    )
-    .version("4.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
   /**
    * Holds information about keys that have been deprecated.
    *
