@@ -529,14 +529,14 @@ case class AdaptiveSparkPlanExec(
    *   stages are materialized.
    */
   private def createQueryStages(
-    resultHandler: SparkPlan => Any,
-    plan: SparkPlan,
-    firstRun: Boolean): CreateStageResult = {
+      resultHandler: SparkPlan => Any,
+      plan: SparkPlan,
+      firstRun: Boolean): CreateStageResult = {
     // 1. Early return if ResultQueryStageExec is already created
     plan match {
-      case resultStage@ResultQueryStageExec(_, optimizedPlan, _) =>
+      case resultStage @ ResultQueryStageExec(_, optimizedPlan, _) =>
         assertStageNotFailed(resultStage)
-        return if (firstRun) {
+        if (firstRun) {
           // There is already an existing ResultQueryStage created in previous `withFinalPlanUpdate`
           // e.g, when we do `df.collect` multiple times. Here we create a new result stage to
           // execute it again, as the handler function can be different.
@@ -554,23 +554,23 @@ case class AdaptiveSparkPlanExec(
             newStages = Seq.empty)
         }
       case _ =>
+        // 2. Create non result query stage
+        val result = createNonResultQueryStages(plan)
+        var allNewStages = result.newStages
+        var newPlan = result.newPlan
+        var allChildStagesMaterialized = result.allChildStagesMaterialized
+        // 3. Create result stage
+        if (allNewStages.isEmpty && allChildStagesMaterialized) {
+          val resultStage = newResultQueryStage(resultHandler, newPlan)
+          newPlan = resultStage
+          allChildStagesMaterialized = false
+          allNewStages :+= resultStage
+        }
+        CreateStageResult(
+          newPlan = newPlan,
+          allChildStagesMaterialized = allChildStagesMaterialized,
+          newStages = allNewStages)
     }
-    // 2. Create non result query stage
-    val result = createNonResultQueryStages(plan)
-    var allNewStages = result.newStages
-    var newPlan = result.newPlan
-    var allChildStagesMaterialized = result.allChildStagesMaterialized
-    // 3. Create result stage
-    if (allNewStages.isEmpty && allChildStagesMaterialized) {
-      val resultStage = newResultQueryStage(resultHandler, newPlan)
-      newPlan = resultStage
-      allChildStagesMaterialized = false
-      allNewStages :+= resultStage
-    }
-    CreateStageResult(
-      newPlan = newPlan,
-      allChildStagesMaterialized = allChildStagesMaterialized,
-      newStages = allNewStages)
   }
 
   /**
