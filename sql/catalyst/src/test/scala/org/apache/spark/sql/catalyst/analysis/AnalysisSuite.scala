@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, VariableDefinition}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -1500,12 +1500,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("Execute Immediate plan transformation") {
     try {
+    val varDef1 = VariableDefinition(Identifier.of(Array("res"), "res"), "1", Literal(1))
     SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      Seq("res", "res"), "1", Literal(1), overrideIfExists = true,
-      Identifier.of(Array("res"), "res"))
+      Seq("res", "res"), varDef1, overrideIfExists = true)
+
+    val varDef2 = VariableDefinition(Identifier.of(Array("res2"), "res2"), "1", Literal(1))
     SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      Seq("res2", "res2"), "1", Literal(1), overrideIfExists = true,
-      Identifier.of(Array("res2"), "res2"))
+      Seq("res2", "res2"), varDef2, overrideIfExists = true)
     val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
     val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
     comparePlans(actual1, expected1)

@@ -23,7 +23,7 @@ import java.util.Locale
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation, VariableDefinition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
@@ -88,11 +88,15 @@ trait AnalysisTest extends PlanTest {
       overrideIfExists = true)
     new Analyzer(catalog) {
       catalogManager.tempVariableManager.create(
-        Seq("testA", "testVarA"), "1", Literal(1),
-        overrideIfExists = true, Identifier.of(Array("testA"), "testVarA"))
+        Seq("testA", "testVarA"),
+        VariableDefinition(Identifier.of(Array("testA"), "testVarA"), "1", Literal(1)),
+        overrideIfExists = true)
+
       catalogManager.tempVariableManager.create(
-        Seq("testVarNull", "testVarNull"), null, Literal(null, StringType),
-        overrideIfExists = true, Identifier.of(Array("testVarNull"), "testVarNull"))
+        Seq("testVarNull", "testVarNull"),
+        VariableDefinition(
+          Identifier.of(Array("testVarNull"), "testVarNull"), null, Literal(null, StringType)),
+        overrideIfExists = true)
       override val extendedResolutionRules = extendedAnalysisRules
     }
   }

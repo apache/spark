@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingLocalVariableManager}
 import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, ResolvedIdentifier}
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionsEvaluator, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.DefaultValueExpression
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -49,6 +50,7 @@ case class CreateVariableExec(
         resolvedIdentifier.identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
         resolvedIdentifier.identifier.name().toLowerCase(Locale.ROOT))
     }
+    val varDef = VariableDefinition(normalizedIdentifier, defaultExpr.originalSQL, initValue)
 
     // create local variable if we are in a script, otherwise create session variable
     scriptingVariableManager
@@ -58,10 +60,8 @@ case class CreateVariableExec(
       .getOrElse(tempVariableManager)
       .create(
         normalizedIdentifier.namespace().toSeq :+ normalizedIdentifier.name(),
-        defaultExpr.originalSQL,
-        initValue,
-        replace,
-        normalizedIdentifier)
+        varDef,
+        replace)
 
     Nil
   }

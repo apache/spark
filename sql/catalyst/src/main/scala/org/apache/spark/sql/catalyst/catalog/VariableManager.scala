@@ -37,32 +37,20 @@ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableErro
 trait VariableManager {
   /**
    * Create a variable.
-   * @param identifier Identifier of the variable.
-   * @param defaultValueSQL SQL text of the variable's DEFAULT expression.
-   * @param initValue Initial value of the variable.
+   * @param nameParts NameParts of the variable.
+   * @param varDef The VariableDefinition of the variable.
    * @param overrideIfExists If true, the new variable will replace an existing one
    *                         with the same identifier, if it exists.
    */
-  def create(
-      nameParts: Seq[String],
-      defaultValueSQL: String,
-      initValue: Literal,
-      overrideIfExists: Boolean,
-      identifier: Identifier): Unit
+  def create(nameParts: Seq[String], varDef: VariableDefinition, overrideIfExists: Boolean): Unit
 
   /**
    * Set an existing variable to a new value.
  *
    * @param nameParts Name parts of the variable.
-   * @param defaultValueSQL SQL text of the variable's DEFAULT expression.
-   * @param initValue Initial value of the variable.
-   * @param identifier Identifier of the variable.
+   * @param varDef The new VariableDefinition of the variable.
    */
-  def set(
-      nameParts: Seq[String],
-      defaultValueSQL: String,
-      initValue: Literal,
-      identifier: Identifier): Unit
+  def set(nameParts: Seq[String], varDef: VariableDefinition): Unit
 
 /**
  * Get an existing variable.
@@ -95,10 +83,15 @@ trait VariableManager {
   def isEmpty: Boolean
 }
 
+/**
+ * @param identifier Identifier of the variable.
+ * @param defaultValueSQL SQL text of the variable's DEFAULT expression.
+ * @param currentValue Current value of the variable.
+ */
 case class VariableDefinition(
-  identifier: Identifier,
-  defaultValueSQL: String,
-  currentValue: Literal)
+    identifier: Identifier,
+    defaultValueSQL: String,
+    currentValue: Literal)
 
 /**
  * A thread-safe manager for temporary SQL variables (that live in the schema `SYSTEM.SESSION`),
@@ -114,10 +107,8 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
 
   override def create(
       nameParts: Seq[String],
-      defaultValueSQL: String,
-      initValue: Literal,
-      overrideIfExists: Boolean,
-      identifier: Identifier): Unit = synchronized {
+      varDef: VariableDefinition,
+      overrideIfExists: Boolean): Unit = synchronized {
     val name = nameParts.last
     if (!overrideIfExists && variables.contains(name)) {
       throw new AnalysisException(
@@ -125,20 +116,16 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
         messageParameters = Map(
           "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, name))))
     }
-    variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
+    variables.put(name, varDef)
   }
 
-  override def set(
-      nameParts: Seq[String],
-      defaultValueSQL: String,
-      initValue: Literal,
-      identifier: Identifier): Unit = synchronized {
+  override def set(nameParts: Seq[String], varDef: VariableDefinition): Unit = synchronized {
     val name = nameParts.last
     // Sanity check as this is already checked in ResolveSetVariable.
     if (!variables.contains(name)) {
       throw unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
     }
-    variables.put(name, VariableDefinition(identifier, defaultValueSQL, initValue))
+    variables.put(name, varDef)
   }
 
   override def get(nameParts: Seq[String]): Option[VariableDefinition] = synchronized {

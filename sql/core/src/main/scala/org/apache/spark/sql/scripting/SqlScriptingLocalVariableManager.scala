@@ -21,7 +21,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, ResolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -31,10 +30,8 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
 
   override def create(
       nameParts: Seq[String],
-      defaultValueSQL: String,
-      initValue: Literal,
-      overrideIfExists: Boolean,
-      identifier: Identifier): Unit = {
+      varDef: VariableDefinition,
+      overrideIfExists: Boolean): Unit = {
     val name = nameParts.last
 
     // overrideIfExists should not be supported because local variables don't support
@@ -47,26 +44,16 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
         messageParameters = Map(
           "variableName" -> toSQLId(Seq(context.currentScope.label, name))))
     }
-    context.currentScope.variables.put(
-      name,
-      VariableDefinition(
-        identifier,
-        defaultValueSQL,
-        initValue
-      ))
+    context.currentScope.variables.put(name, varDef)
   }
 
-  override def set(
-      nameParts: Seq[String],
-      defaultValueSQL: String,
-      initValue: Literal,
-      identifier: Identifier): Unit = {
-    def varDef = VariableDefinition(identifier, defaultValueSQL, initValue)
+  override def set(nameParts: Seq[String], varDef: VariableDefinition): Unit = {
     val scope = findScopeOfVariable(nameParts)
-      .getOrElse(throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq))
+      .getOrElse(
+        throw unresolvedVariableError(nameParts, varDef.identifier.namespace().toIndexedSeq))
 
     if (!scope.variables.contains(nameParts.last)) {
-      throw unresolvedVariableError(nameParts, identifier.namespace().toIndexedSeq)
+      throw unresolvedVariableError(nameParts, varDef.identifier.namespace().toIndexedSeq)
     }
 
     scope.variables.put(nameParts.last, varDef)

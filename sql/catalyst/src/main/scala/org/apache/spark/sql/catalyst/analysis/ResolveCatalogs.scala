@@ -70,7 +70,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       c.copy(name = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
       if (withinSqlScript) {
-        throw SparkException.internalError("erro")
+        throw new AnalysisException(
+          "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
       assertValidSessionVariableNameParts(nameParts, resolved)

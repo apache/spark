@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingLocalVariableManager}
 import org.apache.spark.sql.catalyst.analysis.FakeLocalCatalog
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -88,11 +89,10 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
         throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
       )
 
-    variableManager.set(
-      namePartsCaseAdjusted,
-      variable.varDef.defaultValueSQL,
-      Literal(value, variable.dataType),
-      variable.identifier)
+    val varDef = VariableDefinition(
+      variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
+
+    variableManager.set(namePartsCaseAdjusted, varDef)
   }
 
   override def output: Seq[Attribute] = Seq.empty

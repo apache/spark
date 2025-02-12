@@ -2004,7 +2004,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  // Local variables cannot be dropped.
+  // Variables cannot be dropped within SQL scripts.
   test("local variable - drop") {
     val sqlScript =
       """
@@ -2019,8 +2019,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      condition = "VARIABLE_NOT_FOUND",
-      parameters = Map("variableName" -> toSQLId("system.session.localVar"))
+      condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE",
+      parameters = Map.empty
     )
   }
 
@@ -2040,33 +2040,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      condition = "UNRESOLVED_VARIABLE",
-      parameters = Map(
-        "variableName" -> toSQLId("a.b.c.d"),
-        "searchPath" -> toSQLId("system.session"))
+      condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE",
+      parameters = Map.empty
     )
   }
 
-  test("local variable - drop - session variable") {
-    withSessionVariable("localVar") {
-      spark.sql("DECLARE VARIABLE localVar = 0")
-
-      val sqlScript =
-      """
-        |BEGIN
-        |  DECLARE localVar = 1;
-        |  SELECT localVar;
-        |  DROP TEMPORARY VARIABLE localVar;
-        |END
-        |""".stripMargin
-      val expected = Seq(
-        Seq(Row(1)) // select localVar
-      )
-      verifySqlScriptResult(sqlScript, expected)
-    }
-  }
-
-  test("local variable - drop session variable successfully") {
+  test("local variable - drop session variable with EXECUTE IMMEDIATE") {
     withSessionVariable("localVar") {
       spark.sql("DECLARE VARIABLE localVar = 0")
 
@@ -2075,7 +2054,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         |  DECLARE localVar = 1;
         |  SELECT system.session.localVar;
-        |  DROP TEMPORARY VARIABLE localVar;
+        |  EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE localVar';
         |  SELECT system.session.localVar;
         |END
         |""".stripMargin
@@ -2089,8 +2068,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         parameters = Map("objectName" -> toSQLId("system.session.localVar")),
         context = ExpectedContext(
           fragment = "system.session.localVar",
-          start = 110,
-          stop = 132)
+          start = 130,
+          stop = 152)
       )
     }
   }

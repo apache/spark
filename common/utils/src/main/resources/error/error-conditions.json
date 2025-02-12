@@ -5819,6 +5819,11 @@
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
         ]
       },
+      "SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE" : {
+        "message" : [
+          "DROP TEMPORARY VARIABLE is not supported within SQL scripts. To bypass this, use `EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE ...'` ."
+        ]
+      },
       "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
         "message" : [
           "Positional parameters are not supported with SQL Scripting."
