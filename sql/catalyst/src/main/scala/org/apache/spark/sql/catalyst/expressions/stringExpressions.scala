@@ -3732,7 +3732,7 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
       > SELECT _FUNC_('Don\'t');
        'Don\'t'
   """,
-  since = "4.0.0",
+  since = "4.1.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Quote(input: Expression)

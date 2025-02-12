@@ -5087,7 +5087,7 @@ object functions {
    * by a backslash.
    *
    * @group string_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def quote(str: Column): Column = Column.fn("quote", str)
 
