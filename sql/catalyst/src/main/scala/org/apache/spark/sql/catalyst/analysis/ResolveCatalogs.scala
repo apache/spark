@@ -115,7 +115,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],
       resolvedIdentifier: ResolvedIdentifier): Unit = {
-    if (!validVariableNameParts(nameParts)) {
+    if (!validSessionVariableName(nameParts)) {
       throw QueryCompilationErrors.unresolvedVariableError(
         nameParts,
         Seq(
@@ -124,7 +124,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       )
     }
 
-    def validVariableNameParts(nameParts: Seq[String]): Boolean = nameParts.length match {
+    def validSessionVariableName(nameParts: Seq[String]): Boolean = nameParts.length match {
       case 1 => true
 
       // On declare variable, local variables support only unqualified names.

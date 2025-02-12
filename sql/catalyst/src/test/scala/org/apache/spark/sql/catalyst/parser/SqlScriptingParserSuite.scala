@@ -291,6 +291,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(3))
   }
 
+  test("compound: forbidden label - starting with sys") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  sysXYZ: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_NAME_FORBIDDEN",
+      parameters = Map("label" -> toSQLId("sysxyz")))
+    assert(exception.origin.line.contains(3))
+  }
+
   test("compound: forbidden label - session") {
     val sqlScriptText =
       """
@@ -310,6 +332,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = exception,
       condition = "LABEL_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("session")))
+    assert(exception.origin.line.contains(3))
+  }
+
+  test("compound: forbidden label - builtin") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  builtin: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_NAME_FORBIDDEN",
+      parameters = Map("label" -> toSQLId("builtin")))
     assert(exception.origin.line.contains(3))
   }
 

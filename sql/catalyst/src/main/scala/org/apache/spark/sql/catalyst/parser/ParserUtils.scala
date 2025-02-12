@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.immutable
 import scala.collection.mutable
+import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -338,7 +339,7 @@ class SqlScriptingLabelContext {
       // Do not add the label to the seenLabels set if it is not defined.
       java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
     }
-    if (SqlScriptingLabelContext.forbiddenLabelNames.contains(labelText.toLowerCase(Locale.ROOT))) {
+    if (SqlScriptingLabelContext.isForbiddenLabelName(labelText)) {
       withOrigin(beginLabelCtx.get) {
         throw SqlScriptingErrors.labelNameForbidden(CurrentOrigin.get, labelText)
       }
@@ -358,5 +359,10 @@ class SqlScriptingLabelContext {
 }
 
 object SqlScriptingLabelContext {
-  val forbiddenLabelNames: immutable.Set[String] = immutable.Set("system", "session")
+  private val forbiddenLabelNames: immutable.Set[Regex] =
+    immutable.Set("builtin".r, "session".r, "sys.*".r)
+
+  def isForbiddenLabelName(labelName: String): Boolean = {
+    forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
+  }
 }
