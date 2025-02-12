@@ -1973,7 +1973,7 @@ package object config {
   private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
     .version("1.3.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
     .doc("Specifies the host of the Master REST API endpoint")
