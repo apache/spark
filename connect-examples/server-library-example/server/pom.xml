@@ -22,7 +22,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>org.example</groupId>
+    <groupId>org.apache.connect.examples.serverlibrary</groupId>
     <artifactId>spark-server-library-example</artifactId>
     <version>1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
@@ -34,7 +34,7 @@
   <dependencies>
     <!-- Custom Proto definitions are in the common module -->
     <dependency>
-      <groupId>org.example</groupId>
+      <groupId>org.apache.connect.examples.serverlibrary</groupId>
       <artifactId>spark-server-library-example-common</artifactId>
       <version>1.0-SNAPSHOT</version>
     </dependency>

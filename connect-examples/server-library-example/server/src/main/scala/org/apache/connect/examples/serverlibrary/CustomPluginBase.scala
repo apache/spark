@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package org.example
+package org.apache.connect.examples.serverlibrary
 
+import org.apache.connect.examples.serverlibrary.proto
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.example.proto
 
 trait CustomPluginBase {
   protected def getCustomTable(table: proto.CustomTable): CustomTable = {

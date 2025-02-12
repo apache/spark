@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-package org.example
+package org.apache.connect.examples.serverlibrary
 
-import org.apache.spark.sql.SparkSession
-import org.example.CustomTable
 import com.google.protobuf.Any
 import org.apache.spark.connect.proto.Command
+import org.apache.spark.sql.SparkSession
+
+import org.apache.connect.examples.serverlibrary.CustomTable
 
 /**
  * Builder class for constructing a `CustomTable` instance.
  *
  * @param spark The Spark session.
  */
-class CustomTableBuilder private[example] (spark: SparkSession) {
+class CustomTableBuilder private[serverlibrary] (spark: SparkSession) {
   import CustomTableBuilder._
 
   private var name: String = _

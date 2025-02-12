@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.example
+package org.apache.connect.examples.serverlibrary
 
 import java.util.UUID
+
 import com.github.mrpowers.spark.daria.sql.DariaWriters
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 
 /**
  * Represents a custom table with an identifier and a DataFrame.
@@ -74,7 +75,7 @@ object CustomTable {
    * @param schema The schema of the table.
    * @return The created CustomTable instance.
    */
-  private[example] def createTable(
+  private[serverlibrary] def createTable(
       name: String,
       path: String,
       spark: SparkSession,
@@ -98,7 +99,7 @@ object CustomTable {
    * @param replace Whether to replace the existing table if it exists.
    * @return The cloned CustomTable instance.
    */
-  private[example] def cloneTable(
+  private[serverlibrary] def cloneTable(
       sourceTable: CustomTable,
       newName: String,
       newPath: String,

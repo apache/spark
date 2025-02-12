@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-package org.example
+package org.apache.connect.examples.serverlibrary
+
+import scala.collection.JavaConverters._
 
 import com.google.protobuf.Any
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.CommandPlugin
 import org.apache.spark.sql.types.{StringType, IntegerType, FloatType, DoubleType, BooleanType, LongType, StructType, StructField, DataType}
-import org.example.CustomTable
-import org.example.proto
-import org.example.proto.CreateTable.Column.{DataType => ProtoDataType}
 
-import scala.collection.JavaConverters._
+import org.apache.connect.examples.serverlibrary.CustomTable
+import org.apache.connect.examples.serverlibrary.proto
+import org.apache.connect.examples.serverlibrary.proto.CreateTable.Column.{DataType => ProtoDataType}
 
 /**
- * Commands are distinct actions that can be  executed. Unlike relations, which focus on the
+ * Commands are distinct actions that can be executed. Unlike relations, which focus on the
  * transformation and nesting of output data, commands represent singular operations that perform
  * specific tasks on the data.
  * In this example, the `CustomCommandPlugin` handles operations related to creating and duplicating

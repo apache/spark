@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.example
+package org.apache.connect.examples.serverlibrary
 
 import com.google.protobuf.Any
 import org.apache.spark.connect.proto.Command
-import org.example.proto
-import org.example.proto.CreateTable.Column.{DataType => ProtoDataType}
 import org.apache.spark.sql.{functions, Column, DataFrame, Dataset, Row, SparkSession}
+
+import org.apache.connect.examples.serverlibrary.proto
+import org.apache.connect.examples.serverlibrary.proto.CreateTable.Column.{DataType => ProtoDataType}
 
 /**
  * Represents a custom table with associated DataFrame and metadata.

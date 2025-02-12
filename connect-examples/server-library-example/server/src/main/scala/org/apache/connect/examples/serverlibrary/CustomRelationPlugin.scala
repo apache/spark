@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.example
+package org.apache.connect.examples.serverlibrary
 
 import java.util.Optional
 
@@ -23,8 +23,9 @@ import com.google.protobuf.Any
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.RelationPlugin
-import org.example.{CustomPluginBase, CustomTable}
-import org.example.proto
+
+import org.apache.connect.examples.serverlibrary.{CustomPluginBase, CustomTable}
+import org.apache.connect.examples.serverlibrary.proto
 
 /**
  * Relations are fundamental to dataset transformations, acting as the mechanism through which an

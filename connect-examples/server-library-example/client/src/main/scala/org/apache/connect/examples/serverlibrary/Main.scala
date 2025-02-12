@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 
-package org.example
+package org.apache.connect.examples.serverlibrary
 
 import java.nio.file.{Path, Paths}
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{StructType, StructField, StringType, IntegerType}
-import org.example.proto
-import org.example.proto.CreateTable.Column.{DataType => ProtoDataType}
+
 import com.google.protobuf.Any
 import org.apache.spark.connect.proto.Command
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.{StructType, StructField, StringType, IntegerType}
+
+import org.apache.connect.examples.serverlibrary.proto
+import org.apache.connect.examples.serverlibrary.proto.CreateTable.Column.{DataType => ProtoDataType}
 
 object Main {
   def main(args: Array[String]): Unit = {
@@ -34,7 +36,7 @@ object Main {
     val fileName = "dummy_data.custom"
 
     val workingDirectory = System.getProperty("user.dir")
-    val fullPath = Paths.get(workingDirectory, s"../resources/$fileName")
+    val fullPath = Paths.get(workingDirectory, s"resources/$fileName")
     val customTable = CustomTable
       .create(spark)
       .name(tableName)

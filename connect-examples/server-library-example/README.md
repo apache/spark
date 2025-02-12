@@ -93,13 +93,13 @@ reading, writing and processing data in the custom format. The plugins (`CustomC
 5. **Start the Spark Connect Server with the relevant JARs**:
    ```bash
     bin/spark-connect-shell \
-   --jars spark-server-library-example-server-extension,spark-server-library-example-common-1.0-SNAPSHOT.jar,spark-daria_2.13-1.2.3.jar \
-   --conf spark.connect.extensions.relation.classes=org.example.CustomRelationPlugin \
-   --conf spark.connect.extensions.command.classes=org.example.CustomCommandPlugin
+   --jars spark-server-library-example-server-extension-1.0-SNAPSHOT.jar,spark-server-library-example-common-1.0-SNAPSHOT.jar,spark-daria_2.13-1.2.3.jar \
+   --conf spark.connect.extensions.relation.classes=org.apache.connect.examples.serverlibrary.CustomRelationPlugin \
+   --conf spark.connect.extensions.command.classes=org.apache.connect.examples.serverlibrary.CustomCommandPlugin
    ```
 6. **In a different terminal, navigate back to the root of the sample project and start the client**:
    ```bash
-   java -cp client/target/spark-server-library-client-package-scala-1.0-SNAPSHOT.jar org.example.Main
+   java -cp client/target/spark-server-library-client-package-scala-1.0-SNAPSHOT.jar org.apache.connect.examples.serverlibrary.Main
    ```
 7. **Notice the printed output in the client terminal as well as the creation of the cloned table**:
 ```protobuf

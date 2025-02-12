@@ -18,7 +18,7 @@
 syntax = 'proto3';
 
 option java_multiple_files = true;
-option java_package = "org.example.proto";
+option java_package = "org.apache.connect.examples.serverlibrary.proto";
 
 message CustomTable {
     // Path to the custom table.
