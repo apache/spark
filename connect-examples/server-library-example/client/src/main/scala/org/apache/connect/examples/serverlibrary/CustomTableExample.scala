@@ -33,7 +33,7 @@ object CustomTableExample {
 
     // Step 1: Create a custom table from existing data
     val tableName = "sample_table"
-    val fileName = "dummy_data.custom"
+    val fileName = "dummy_data.data"
 
     val workingDirectory = System.getProperty("user.dir")
     val fullPath = Paths.get(workingDirectory, s"resources/$fileName")
@@ -49,7 +49,7 @@ object CustomTableExample {
     customTable.explain()
 
     // Step 3: Clone the custom table
-    val clonedPath = fullPath.getParent.resolve("cloned_data.custom")
+    val clonedPath = fullPath.getParent.resolve("cloned_data.data")
     val clonedName = "cloned_table"
     val clonedTable =
       customTable.clone(target = clonedPath.toString, newName = clonedName, replace = true)

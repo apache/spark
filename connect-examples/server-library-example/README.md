@@ -117,7 +117,7 @@ Relation [id#2,name#3] csv
 == Physical Plan ==
 FileScan csv [id#2,name#3] Batched: false, DataFilters: [], Format: CSV, Location: InMemoryFileIndex(1 paths)[file:/Users/venkata.gudesa/spark/connect-examples/server-library-example/resou..., PartitionFilters: [], PushedFilters: [], ReadSchema: struct<id:int,name:string>
 
-Explaining plan for custom table: cloned_table with path: <SPARK_HOME>/connect-examples/server-library-example/client/../resources/cloned_data.custom
+Explaining plan for custom table: cloned_table with path: <SPARK_HOME>/connect-examples/server-library-example/client/../resources/cloned_data.data
 == Parsed Logical Plan ==
 Relation [id#2,name#3] csv
 
