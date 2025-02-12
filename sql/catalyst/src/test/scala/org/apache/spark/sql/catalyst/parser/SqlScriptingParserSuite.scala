@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, Expression, In, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ExceptionHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SetVariable, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, ExceptionHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SetVariable, SignalStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
@@ -2426,6 +2426,57 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "INVALID_SQLSTATE",
       parameters = Map("sqlState" -> "123456"))
+  }
+
+  test("signal statement: builtin condition") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SIGNAL DIVIDE_BY_ZERO;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.size == 1)
+    assert(tree.collection.head.isInstanceOf[SignalStatement])
+
+    val signalStatement = tree.collection.head.asInstanceOf[SignalStatement]
+    assert(signalStatement.isBuiltinError)
+    assert(signalStatement.sqlState.get.equals("22012"))
+    assert(signalStatement.errorCondition.get.equals("DIVIDE_BY_ZERO"))
+    assert(signalStatement.messageArguments.isEmpty)
+  }
+
+  test("signal statement: user defined condition") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12000';
+        |  SIGNAL TEST_CONDITION SET MESSAGE_TEXT = 'Test message';
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.size == 1)
+    assert(tree.collection.head.isInstanceOf[SignalStatement])
+
+    val signalStatement = tree.collection.head.asInstanceOf[SignalStatement]
+    assert(!signalStatement.isBuiltinError)
+    assert(signalStatement.sqlState.get.equals("12000"))
+    assert(signalStatement.errorCondition.get.equals("TEST_CONDITION"))
+    assert(signalStatement.messageArguments.isEmpty)
+  }
+
+  test("signal statement: sqlstate") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SIGNAL SQLSTATE '12345';
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.size == 1)
+    assert(tree.collection.head.isInstanceOf[SignalStatement])
+
+    val signalStatement = tree.collection.head.asInstanceOf[SignalStatement]
+    assert(!signalStatement.isBuiltinError)
+    assert(signalStatement.sqlState.get.equals("12345"))
+    assert(signalStatement.errorCondition.get.equals("USER_RAISED_EXCEPTION"))
   }
 
   test("declare condition: custom sqlstate") {
