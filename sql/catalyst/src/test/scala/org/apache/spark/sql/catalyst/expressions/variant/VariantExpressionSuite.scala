@@ -962,6 +962,23 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInSchemaOf(Array(primitiveHeader(25)), 25)
   }
 
+  test("schema_of_variant - non-spark types") {
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+    // UUID
+    val uuidVal = Array(primitiveHeader(UUID)) ++ Array.fill(16)(1.toByte)
+    val uuid = Literal(new VariantVal(uuidVal, emptyMetadata))
+    checkEvaluation(SchemaOfVariant(uuid), s"UUID")
+    // Merge with variantNull retains type.
+    val variantNull = Literal(new VariantVal(Array(primitiveHeader(NULL)), emptyMetadata))
+    val array = Cast(CreateArray(Seq(uuid, variantNull)), VariantType)
+    checkEvaluation(SchemaOfVariant(array), s"ARRAY<UUID>")
+    // Merge with another type results in VARIANT.
+    val variantString = Literal(new VariantVal(Array(shortStrHeader(1), 'x'), emptyMetadata))
+    val array2 = Cast(CreateArray(Seq(uuid, variantString)), VariantType)
+    checkEvaluation(SchemaOfVariant(array2), s"ARRAY<VARIANT>")
+  }
+
   test("schema_of_variant - schema merge") {
     val nul = Literal(null, StringType)
     val boolean = Literal.default(BooleanType)
