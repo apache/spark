@@ -82,7 +82,7 @@ trait VariableManager {
    * Create an identifier for the provided variable name. Could be context dependent.
    * @param name Name for which an identifier is created.
    */
-  def resolveIdentifier(name: String): ResolvedIdentifier
+  def qualify(name: String): ResolvedIdentifier
 
   /**
    * Delete all variables.
@@ -149,7 +149,7 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     variables.remove(nameParts.last).isDefined
   }
 
-  override def resolveIdentifier(name: String): ResolvedIdentifier =
+  override def qualify(name: String): ResolvedIdentifier =
     ResolvedIdentifier(
       FakeSystemCatalog,
       Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), name)

@@ -124,7 +124,7 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     None
   }
 
-  override def resolveIdentifier(name: String): ResolvedIdentifier =
+  override def qualify(name: String): ResolvedIdentifier =
     ResolvedIdentifier(FakeLocalCatalog, Identifier.of(Array(context.currentScope.label), name))
 
   override def remove(nameParts: Seq[String]): Boolean = {

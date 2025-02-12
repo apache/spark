@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.jdk.CollectionConverters._
+import org.apache.spark.SparkException
 
+import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -40,8 +41,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _) =>
       // From scripts we can only create local variables, which must be unqualified,
       // and must not be DECLARE OR REPLACE.
-      if (SqlScriptingLocalVariableManager.get().isDefined &&
-        !AnalysisContext.get.isExecuteImmediate) {
+      val resolved = if (withinSqlScript) {
         // TODO [SPARK-50785]: Uncomment this when For Statement starts properly using local vars.
 //        if (c.replace) {
 //          throw new AnalysisException(
@@ -55,12 +55,25 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
             Map("varName" -> toSQLId(nameParts)))
         }
+
+        SqlScriptingLocalVariableManager.get()
+          .getOrElse(throw SparkException.internalError(
+              "Scripting local variable manager should be present in SQL script."))
+          .qualify(nameParts.last)
+      } else {
+        val resolvedIdentifier = catalogManager.tempVariableManager.qualify(nameParts.last)
+
+        assertValidSessionVariableNameParts(nameParts, resolvedIdentifier)
+        resolvedIdentifier
       }
 
-      val resolved = resolveCreateVariableName(nameParts)
       c.copy(name = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
-      val resolved = resolveDropVariableName(nameParts)
+      if (withinSqlScript) {
+        throw SparkException.internalError("erro")
+      }
+      val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
+      assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
 
     case UnresolvedIdentifier(nameParts, allowTemp) =>
@@ -95,25 +108,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
-  private def resolveCreateVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    val resolvedIdentifier = SqlScriptingLocalVariableManager.get()
-      .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
-      .getOrElse(catalogManager.tempVariableManager)
-      .resolveIdentifier(nameParts.last)
+  private def withinSqlScript: Boolean =
+    SqlScriptingLocalVariableManager.get().isDefined && !AnalysisContext.get.isExecuteImmediate
 
-    assertValidVariableNameParts(nameParts, resolvedIdentifier)
-    resolvedIdentifier
-  }
-
-  private def resolveDropVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    // Only session variables can be dropped, so catalogManager.scriptingLocalVariableManager
-    // is not checked in the case of DropVariable.
-    val resolvedIdentifier = catalogManager.tempVariableManager.resolveIdentifier(nameParts.last)
-    assertValidVariableNameParts(nameParts, resolvedIdentifier)
-    resolvedIdentifier
-  }
-
-  private def assertValidVariableNameParts(
+  private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],
       resolvedIdentifier: ResolvedIdentifier): Unit = {
     if (!validVariableNameParts(nameParts)) {
