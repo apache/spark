@@ -189,19 +189,11 @@
               <goal>exec</goal>
             </goals>
             <configuration>
-              <executable>bash</executable>
+              <executable>cp</executable>
               <arguments>
-                <argument>-c</argument>
-                <argument>
-                  <![CDATA[
-                    mkdir -p ${basedir}/target/scala-${scala.binary.version}/jars/connect-repl
-                    for file in ${basedir}/../sql/connect/client/jvm/target/connect-repl/*; do
-                      if [ ! -f ${basedir}/target/scala-${scala.binary.version}/jars/$(basename $file) ]; then
-                        cp $file ${basedir}/target/scala-${scala.binary.version}/jars/connect-repl/
-                      fi
-                    done
-                  ]]>
-                </argument>
+                <argument>-r</argument>
+                <argument>${basedir}/../sql/connect/client/jvm/target/connect-repl</argument>
+                <argument>${basedir}/target/scala-${scala.binary.version}/jars/</argument>
               </arguments>
             </configuration>
           </execution>

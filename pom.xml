@@ -1136,7 +1136,7 @@
         <exclusions>
           <exclusion>
             <groupId>org.scala-lang.modules</groupId>
-            <artifactId>scala-xml_2.13</artifactId>
+            <artifactId>scala-xml_${scala.binary.version}</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
