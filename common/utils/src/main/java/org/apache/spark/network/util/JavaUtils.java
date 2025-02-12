@@ -184,7 +184,9 @@ public class JavaUtils {
 
       exitCode = process.waitFor();
     } catch (InterruptedException e) {
-      throw e; // Specifically rethrow InterruptedException
+      // SPARK-51083: Specifically rethrow InterruptedException if it occurs, since swallowing
+      // it will lead to tasks missing cancellation.
+      throw e;
     } catch (Exception e) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
     } finally {
