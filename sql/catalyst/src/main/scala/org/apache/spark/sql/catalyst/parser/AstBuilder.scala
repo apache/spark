@@ -300,12 +300,16 @@ class AstBuilder extends DataTypeAstBuilder
     val messageArguments = Option(ctx.argVar)
       .map(mpi => UnresolvedAttribute(visitMultipartIdentifier(mpi)))
 
+    // Parse error condition identifier to get string value.
+    val errorCondition = visitMultipartIdentifier(ctx.conditionName)
+      .mkString(".").toUpperCase(Locale.ROOT)
+
     // isBuiltinError is false because we need to resolve it based on the value of errorCondition.
     // sqlState is None because we need to resolve it based on the value of errorCondition.
     // This is done in visitCompoundBodyImpl once all conditions have been resolved.
     SignalStatement(
       isBuiltinError = false,
-      errorCondition = Some(ctx.conditionName.getText.toUpperCase(Locale.ROOT)),
+      errorCondition = errorCondition,
       sqlState = None,
       message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
       messageArguments = messageArguments

@@ -19,7 +19,7 @@ package org.apache.spark.sql.exceptions
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.exceptions.SqlScriptingRuntimeException.errorMessageWithLineNumber
 
@@ -31,7 +31,7 @@ class SqlScriptingRuntimeException (
     val origin: Origin,
     messageParameters: Map[String, String] = Map.empty,
     isBuiltinError: Boolean = false)
-  extends Exception(
+  extends RuntimeException(
     errorMessageWithLineNumber(
       origin,
       condition,
@@ -47,6 +47,8 @@ class SqlScriptingRuntimeException (
   override def getSqlState: String = sqlState
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getQueryContext: Array[QueryContext] = origin.getQueryContext
 }
 
 private object SqlScriptingRuntimeException {
