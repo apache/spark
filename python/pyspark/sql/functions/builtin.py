@@ -20124,13 +20124,15 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
 
     Example 2: Extracts a json object from json array
-    data = [("1", '''[{"f1": "value1", "f2": "value2"},{"f1": "value3", "f2": "value4"}]'''), \\
+
+    >>> data = [("1", '''[{"f1": "value1", "f2": "value2"},{"f1": "value3", "f2": "value4"}]'''), \\
     ...                   ("2", '''[{"f1": "value12"},{"f1": "value13"}]''')]
-    df = spark.createDataFrame(data, ("key", "jarray"))
-    df.select(df.key, get_json_object(df.jarray, '$[0].f1').alias("c0"), \\
+    >>> df = spark.createDataFrame(data, ("key", "jarray"))
+    >>> df.select(df.key, get_json_object(df.jarray, '$[0].f1').alias("c0"), \\
     ...                   get_json_object(df.jarray, '$[0].f2').alias("c1") ).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
-    df.select(df.key, get_json_object(df.jarray, '$[*].f1').alias("c0"), \\
+
+    >>> df.select(df.key, get_json_object(df.jarray, '$[*].f1').alias("c0"), \\
     ...                   get_json_object(df.jarray, '$[*].f2').alias("c1") ).collect()
     [Row(key='1', c0='["value1","value3"]', c1='["value2","value4"]'), \\
     ...                   Row(key='2', c0='["value12","value13"]', c1=None)]
