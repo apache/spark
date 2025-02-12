@@ -347,13 +347,15 @@ trait StateStoreWriter
         case (_, metrics) =>
           // Select at most N metrics based on the metric's defined ordering
           // to report to the driver. For example, ascending order would be taking the N smallest.
+          val metricConf = instanceMetricConfiguration(metrics.head._1)
           metrics
             .map {
               case (name, metric) =>
-                (name, (if (longMetric(name).isZero) -1L else longMetric(name).value))
+                name -> (if (longMetric(name).isZero) metricConf.initValue
+                         else longMetric(name).value)
             }
             .toSeq
-            .sortBy(_._2)(instanceMetricConfiguration(metrics.head._1).ordering)
+            .sortBy(_._2)(metricConf.ordering)
             .take(conf.numStateStoreInstanceMetricsToReport)
             .toMap
       }

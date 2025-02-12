@@ -326,6 +326,7 @@ case class StateStoreInstanceMetric(
     descPrefix: String,
     partitionId: Option[Int] = None,
     storeName: String = StateStoreId.DEFAULT_STORE_NAME,
+    initValue: Long = -1,
     ordering: Ordering[Long] = Ordering.Long,
     ignoreIfUnchanged: Boolean = true)
   extends StateStoreCustomMetric {
@@ -342,7 +343,7 @@ case class StateStoreInstanceMetric(
   override def withNewDesc(desc: String): StateStoreInstanceMetric = copy(descPrefix = desc)
 
   override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
-    SQLMetrics.createSizeMetric(sparkContext, desc)
+    SQLMetrics.createSizeMetric(sparkContext, desc, initValue)
 
   def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric = {
     copy(partitionId = Some(partitionId), storeName = storeName)
