@@ -325,22 +325,18 @@ case class StateStoreInstanceMetric(
     metricPrefix: String,
     descPrefix: String,
     partitionId: Option[Int] = None,
-    storeName: String = StateStoreId.DEFAULT_STORE_NAME)
-    extends StateStoreCustomMetric {
+    storeName: String = StateStoreId.DEFAULT_STORE_NAME,
+    ordering: Ordering[Long] = Ordering.Long,
+    ignoreIfUnchanged: Boolean = true)
+  extends StateStoreCustomMetric {
   override def name: String = {
-    partitionId
-      .map { id =>
-        s"$metricPrefix.partition_${id}_${storeName}"
-      }
-      .getOrElse(metricPrefix)
+    assert(partitionId.isDefined, "Partition ID must be defined for instance metric name")
+    s"$metricPrefix.partition_${partitionId.get}_${storeName}"
   }
 
   override def desc: String = {
-    partitionId
-      .map { id =>
-        s"$descPrefix (partitionId = $id, storeName = ${storeName})"
-      }
-      .getOrElse(descPrefix)
+    assert(partitionId.isDefined, "Partition ID must be defined for instance metric description")
+    s"$descPrefix (partitionId = ${partitionId.get}, storeName = ${storeName})"
   }
 
   override def withNewDesc(desc: String): StateStoreInstanceMetric = copy(descPrefix = desc)

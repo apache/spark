@@ -2255,13 +2255,14 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
       .internal()
       .doc(
-        "Number of state store instance metrics to include in streaming progress reporting." +
-        "This is used to reduce noise in the progress report."
+        "Number of state store instance metrics included in streaming query progress messages " +
+        "per stateful operator. Instance metrics are selected based on metric-specific ordering " +
+        "to minimize noise in the progress report."
       )
       .version("4.0.0")
       .intConf
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
-      .createWithDefault(10)
+      .createWithDefault(5)
 
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")

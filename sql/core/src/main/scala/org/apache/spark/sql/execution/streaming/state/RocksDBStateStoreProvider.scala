@@ -330,7 +330,7 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
           CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED
-            .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedVersion
+            .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -845,7 +845,8 @@ object RocksDBStateStoreProvider {
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreInstanceMetric(
     "rocksdbSnapshotLastUploaded",
-    "RocksDB: the last uploaded version of the snapshot for a specific state store instance"
+    "RocksDB: the last uploaded version of the snapshot for a specific state store instance",
+    ignoreIfUnchanged = false
   )
 
   val ALL_INSTANCE_METRICS = Seq(CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED)
