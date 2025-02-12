@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedFunction, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -376,7 +376,8 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
     percentile.checkInputDataTypes()
   }
 
-  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+  override def withOrderingWithinGroup(
+      orderingWithinGroup: Seq[SortOrder], u: UnresolvedFunction): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
       throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
         nodeName, 1, orderingWithinGroup.length)
@@ -434,7 +435,8 @@ case class PercentileDisc(
     s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
 
-  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+  override def withOrderingWithinGroup(
+      orderingWithinGroup: Seq[SortOrder], u: UnresolvedFunction): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
       throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
         nodeName, 1, orderingWithinGroup.length)

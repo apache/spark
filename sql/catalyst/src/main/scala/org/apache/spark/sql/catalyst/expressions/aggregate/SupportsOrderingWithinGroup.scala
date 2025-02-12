@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 
 /**
  * The trait used to set the [[SortOrder]] for supporting functions.
  */
 trait SupportsOrderingWithinGroup { self: AggregateFunction =>
-  def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction
+  def withOrderingWithinGroup(
+      orderingWithinGroup: Seq[SortOrder], u: UnresolvedFunction): AggregateFunction
 
   /** Indicator that ordering was set. */
   def orderingFilled: Boolean

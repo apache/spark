@@ -199,7 +199,7 @@ class FunctionResolution(
         val newAgg = agg match {
           case owg: SupportsOrderingWithinGroup
               if !owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
-            owg.withOrderingWithinGroup(u.orderingWithinGroup)
+            owg.withOrderingWithinGroup(u.orderingWithinGroup, u)
           case _ =>
             agg
         }

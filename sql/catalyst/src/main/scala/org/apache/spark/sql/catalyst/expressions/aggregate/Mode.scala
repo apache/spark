@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedFunction, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLExpr
 import org.apache.spark.sql.catalyst.trees.UnaryLike
@@ -188,7 +188,8 @@ case class Mode(
 
   assert(orderingFilled || (!orderingFilled && reverseOpt.isEmpty))
 
-  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+  override def withOrderingWithinGroup(
+      orderingWithinGroup: Seq[SortOrder], u: UnresolvedFunction): AggregateFunction = {
     child match {
       case UnresolvedWithinGroup =>
         if (orderingWithinGroup.length != 1) {
