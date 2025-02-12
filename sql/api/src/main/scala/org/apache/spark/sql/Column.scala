@@ -79,6 +79,8 @@ private[spark] object Column {
         isDistinct = isDistinct,
         isInternal = isInternal))
   }
+
+  def unapply(col: Column): Option[ColumnNode] = Some(col.node)
 }
 
 /**

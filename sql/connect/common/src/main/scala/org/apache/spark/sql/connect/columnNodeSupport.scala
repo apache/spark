@@ -164,41 +164,19 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunction(apply(function, e, additionalTransformation))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
-      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
-      case InvokeInlineUserDefinedFunction(
-            a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
-            Nil,
-            isDistinct,
-            _) =>
-        // TODO we should probably 'just' detect this particular scenario
-        //  in the planner instead of wrapping it in a separate method.
-        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get), Nil, isDistinct)
-        builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
-
-      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
-      case f @ InvokeInlineUserDefinedFunction(
-            a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
-            args,
-            false,
-            _) if args.nonEmpty =>
-        // Translate Aggregator (UserDefinedFunctionLike) into UserDefinedFunction, and
-        // send it over to the next "match" to process.
-        builder.mergeFrom(
-          apply(f.copy(function = UserDefinedAggregator(a, e.get)), e, additionalTransformation))
-
-      case InvokeInlineUserDefinedFunction(
-            udaf: UserDefinedAggregateFunction,
-            arguments,
-            isDistinct,
-            _) =>
-        val wrapped = UserDefinedAggregator(
-          aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
-          inputEncoder = RowEncoder.encoderFor(udaf.inputSchema),
-          deterministic = udaf.deterministic)
-        builder.setCommonInlineUserDefinedFunction(
-          UdfToProtoUtils.toProto(wrapped, arguments.map(apply(_, e)), isDistinct))
-
-      case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, isDistinct, _) =>
+      case InvokeInlineUserDefinedFunction(f, args, isDistinct, _) =>
+        val udf = f match {
+          case f: UserDefinedFunction => f
+          case a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked] =>
+            UserDefinedAggregator(a, e.get)
+          case udaf: UserDefinedAggregateFunction =>
+            UserDefinedAggregator(
+              aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
+              inputEncoder = RowEncoder.encoderFor(udaf.inputSchema),
+              deterministic = udaf.deterministic)
+          case _ =>
+            throw SparkException.internalError("Unsupported UDF type: " + f)
+        }
         builder.setCommonInlineUserDefinedFunction(
           UdfToProtoUtils
             .toProto(udf, args.map(apply(_, e, additionalTransformation)), isDistinct))

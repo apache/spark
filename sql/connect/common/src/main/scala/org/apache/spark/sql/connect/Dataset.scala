@@ -443,7 +443,7 @@ class Dataset[T] private[sql] (
         .addAllParameters(parameters.map(p => toLiteral(p)).asJava)
     }
 
-  private def getPlanId: Option[Long] =
+  private[sql] def getPlanId: Option[Long] =
     if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
       Option(plan.getRoot.getCommon.getPlanId)
     } else {

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, Metadata, StructType}
+import org.apache.spark.sql.types.{DataType, Metadata, NullType, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1024,6 +1024,7 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
   with Unevaluable with NonSQLExpression {
+  def this(ordinal: Expression) = this(IntegerLiteral.unapply(ordinal).get, NullType)
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 }
