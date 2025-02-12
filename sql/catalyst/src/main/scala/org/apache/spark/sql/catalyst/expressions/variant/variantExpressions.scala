@@ -434,6 +434,14 @@ case object VariantGet {
     }
     val variantType = v.getType
     if (variantType == Type.NULL) return null
+    if (variantType == Type.UUID) {
+      // There's no UUID type in Spark. We only allow it to be cast to string.
+      if (dataType == StringType) {
+        return UTF8String.fromString(v.getUuid.toString)
+      } else {
+        return invalidCast()
+      }
+    }
     dataType match {
       case _: AtomicType =>
         val input = variantType match {
@@ -822,6 +830,14 @@ object SchemaOfVariant {
     case _ => dataType.sql
   }
 
+  // Dummy class to use for UUID, which doesn't currently exist in Spark.
+  private class UuidType extends DataType {
+    override def defaultSize: Int = 16
+    override def typeName: String = "uuid"
+    private[spark] override def asNullable: UuidType = this
+  }
+  private case object UuidType extends UuidType
+
   /**
    * Return the schema of a variant. Struct fields are guaranteed to be sorted alphabetically.
    */
@@ -860,6 +876,7 @@ object SchemaOfVariant {
     case Type.TIMESTAMP_NTZ => TimestampNTZType
     case Type.FLOAT => FloatType
     case Type.BINARY => BinaryType
+    case Type.UUID => UuidType
   }
 
   /**

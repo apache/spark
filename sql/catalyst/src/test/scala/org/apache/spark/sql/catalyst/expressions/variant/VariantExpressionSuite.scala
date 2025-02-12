@@ -868,6 +868,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "\u0001\u0002\u0003")
     checkCast(Array(primitiveHeader(BINARY), 5, 0, 0, 0, 72, 101, 108, 108, 111), StringType,
       "Hello")
+
+    // UUID
+    checkToJson(Array(primitiveHeader(UUID),
+      0, 17, 34, 51, 68, 85, 102, 119, -120, -103, -86, -69, -52, -35, -18, -1),
+      "\"00112233-4455-6677-8899-aabbccddeeff\"")
+    checkCast(Array(primitiveHeader(UUID),
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16), StringType,
+      "01020304-0506-0708-090a-0b0c0d0e0f10")
   }
 
   test("SPARK-48150: ParseJson expression nullability") {
