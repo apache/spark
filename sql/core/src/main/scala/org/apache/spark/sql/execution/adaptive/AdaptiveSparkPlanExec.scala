@@ -532,8 +532,8 @@ case class AdaptiveSparkPlanExec(
       resultHandler: SparkPlan => Any,
       plan: SparkPlan,
       firstRun: Boolean): CreateStageResult = {
-    // 1. Early return if ResultQueryStageExec is already created
     plan match {
+      // 1. ResultQueryStageExec is already created, no need to create non-result stages
       case resultStage @ ResultQueryStageExec(_, optimizedPlan, _) =>
         assertStageNotFailed(resultStage)
         if (firstRun) {
