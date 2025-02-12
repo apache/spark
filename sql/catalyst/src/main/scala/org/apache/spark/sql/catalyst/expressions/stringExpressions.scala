@@ -3719,3 +3719,46 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = copy(newChildren(0))
 }
+
+/**
+ * A function that prepends a backslash to each instance of single quote
+ * in the given string and encloses the result by single quotes.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Don\'t');
+       'Don\'t'
+  """,
+  since = "4.1.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class Quote(input: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    dataType,
+    "quote",
+    Seq(input),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  }
+
+  override def nodeName: String = "quote"
+
+  override def nullable: Boolean = true
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): Quote = {
+    copy(input = newChild)
+  }
+}
