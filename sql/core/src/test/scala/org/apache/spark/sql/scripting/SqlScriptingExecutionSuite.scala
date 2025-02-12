@@ -2045,6 +2045,30 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("local variable - drop session variable without EXECUTE IMMEDIATE") {
+    withSessionVariable("localVar") {
+      spark.sql("DECLARE VARIABLE localVar = 0")
+
+      val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE localVar = 1;
+        |  SELECT system.session.localVar;
+        |  DROP TEMPORARY VARIABLE system.session.localVar;
+        |  SELECT system.session.localVar;
+        |END
+        |""".stripMargin
+      val e = intercept[AnalysisException] {
+        verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+      }
+      checkError(
+        exception = e,
+        condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE",
+        parameters = Map.empty
+      )
+    }
+  }
+
   test("local variable - drop session variable with EXECUTE IMMEDIATE") {
     withSessionVariable("localVar") {
       spark.sql("DECLARE VARIABLE localVar = 0")

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkException
-
 import scala.jdk.CollectionConverters._
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.plans.logical._
