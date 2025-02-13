@@ -480,7 +480,15 @@ class SparkSession(SparkConversionMixin):
             from pyspark.core.context import SparkContext
 
             with self._lock:
-                is_api_mode_connect = opts.get("spark.api.mode", "classic").lower() == "connect"
+                api_mode = opts.get("spark.api.mode")
+                if api_mode is None:
+                    try:
+                        import pyspark_connect  # noqa: F401
+
+                        api_mode = "connect"
+                    except ImportError:
+                        api_mode = "classic"
+                is_api_mode_connect = api_mode.lower() == "connect"
 
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ

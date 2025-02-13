@@ -30,7 +30,7 @@ import glob
 from pathlib import Path
 
 if (
-    # When we package, the parent diectory 'client' dir
+    # When we package, the parent directory 'client' dir
     # (as we pip install -e python/packaging/client)
     os.getcwd() == str(Path(__file__).parent.absolute())
     and str(Path(__file__).parent.name) == "client"
@@ -119,7 +119,7 @@ try:
         # 1. `setup.py` has to be located with the same directory with the package.
         #    Therefore, we copy the current file, and place it at `spark/python` directory.
         #    After that, we remove it in the end.
-        # 2. Here it renames `lib` to `lib.ack` so MANIFEST.in does not pick `py4j` up.
+        # 2. Here it renames `lib` to `lib.back` so MANIFEST.in does not pick `py4j` up.
         #    We rename it back in the end.
         move("lib", "lib.back")
         copyfile("packaging/client/setup.py", "setup.py")
@@ -128,8 +128,8 @@ try:
     # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
     # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
     # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
-    # Also don't forget to update python/docs/source/getting_started/install.rst, and
-    # python/packaging/classic/setup.py
+    # Also don't forget to update python/docs/source/getting_started/install.rst,
+    # python/packaging/classic/setup.py, and python/packaging/connect/setup.py
     _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "11.0.0"
