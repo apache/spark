@@ -17,12 +17,18 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.locks.{Lock, ReentrantReadWriteLock}
+
+import scala.collection.mutable
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
+
+
+
 
 /**
  * A stage is a set of parallel tasks all computing the same function that need to run as part
@@ -63,6 +69,10 @@ private[scheduler] abstract class Stage(
     val resourceProfileId: Int)
   extends Logging {
 
+  private val allPartitionsAsMissing: mutable.Set[Int] = mutable.Set.empty
+
+  private  val stageReattemptLock = new ReentrantReadWriteLock()
+
   val numPartitions = rdd.partitions.length
 
   /** Set of jobs that this stage belongs to. */
@@ -100,12 +110,19 @@ private[scheduler] abstract class Stage(
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
-    val metrics = new TaskMetrics
-    metrics.register(rdd.sparkContext)
-    _latestInfo = StageInfo.fromStage(
-      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
-      resourceProfileId = resourceProfileId)
-    nextAttemptId += 1
+    val lock = this.acquireStageWriteLock()
+    try {
+      val metrics = new TaskMetrics
+      metrics.register(rdd.sparkContext)
+      _latestInfo = StageInfo.fromStage(
+        this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
+        resourceProfileId = resourceProfileId)
+      nextAttemptId += 1
+      // clear the entry in the allPartitionsAsMissing set
+      allPartitionsAsMissing.clear()
+    } finally {
+      lock.unlock()
+    }
   }
 
   /** Forward the nextAttemptId if skipped and get visited for the first time. */
@@ -130,5 +147,23 @@ private[scheduler] abstract class Stage(
 
   def isIndeterminate: Boolean = {
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+  }
+
+  def treatAllPartitionsMissing(attemptId: Int): Boolean =
+    allPartitionsAsMissing.contains(attemptId)
+
+  def markAttemptIdForAllPartitionsMissing(attemptId: Int): Unit =
+    this.allPartitionsAsMissing.add(attemptId)
+
+  def acquireStageReadLock(): Lock = {
+    val rlock = this.stageReattemptLock.readLock()
+    rlock.lockInterruptibly()
+    rlock
+  }
+
+  def acquireStageWriteLock(): Lock = {
+    val wlock = this.stageReattemptLock.writeLock()
+    wlock.lockInterruptibly()
+    wlock
   }
 }
