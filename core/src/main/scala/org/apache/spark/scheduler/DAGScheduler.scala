@@ -2080,7 +2080,7 @@ private[spark] class DAGScheduler(
 
           val shouldAbortStage =
             failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
-              disallowStageRetryForTest
+            disallowStageRetryForTest
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
           // multiple tasks running concurrently on different executors). In that case, it is
@@ -2337,8 +2337,8 @@ private[spark] class DAGScheduler(
           // TODO Refactor the failure handling logic to combine similar code with that of
           // FetchFailed.
           val shouldAbortStage =
-          failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
-            disallowStageRetryForTest
+            failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts ||
+              disallowStageRetryForTest
 
           if (shouldAbortStage) {
             val abortMessage = if (disallowStageRetryForTest) {
@@ -2381,17 +2381,17 @@ private[spark] class DAGScheduler(
         handleResubmittedFailure(task, stage)
 
       case _: TaskCommitDenied =>
-      // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
+        // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case _: ExceptionFailure | _: TaskKilled =>
-      // Nothing left to do, already handled above for accumulator updates.
+        // Nothing left to do, already handled above for accumulator updates.
 
       case TaskResultLost =>
-      // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
+        // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
       case _: ExecutorLostFailure | UnknownReason =>
-      // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
-      // will abort the job.
+        // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
+        // will abort the job.
     }
   }
 
