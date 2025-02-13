@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 
 from pyspark.ml.linalg import Vectors
-from pyspark.sql import SparkSession
 from pyspark.ml.regression import (
     AFTSurvivalRegression,
     AFTSurvivalRegressionModel,
@@ -44,6 +43,7 @@ from pyspark.ml.regression import (
     GBTRegressor,
     GBTRegressionModel,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class RegressionTestsMixin:
@@ -643,12 +643,8 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
 
-class RegressionTests(RegressionTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class RegressionTests(RegressionTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
