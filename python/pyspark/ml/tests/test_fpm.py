@@ -18,13 +18,14 @@
 import tempfile
 import unittest
 
-from pyspark.sql import SparkSession, Row
+from pyspark.sql import Row
 import pyspark.sql.functions as sf
 from pyspark.ml.fpm import (
     FPGrowth,
     FPGrowthModel,
     PrefixSpan,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class FPMTestsMixin:
@@ -99,12 +100,8 @@ class FPMTestsMixin:
         self.assertEqual(head.freq, 3)
 
 
-class FPMTests(FPMTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class FPMTests(FPMTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
