@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+import scala.concurrent.Promise
 
 import org.apache.spark.{MapOutputStatistics, SparkException}
 import org.apache.spark.broadcast.Broadcast
@@ -32,7 +34,10 @@ import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A query stage is an independent subgraph of the query plan. AQE framework will materialize its
@@ -302,4 +307,44 @@ case class TableCacheQueryStageExec(
   override protected def doMaterialize(): Future[Any] = future
 
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.runtimeStatistics
+}
+
+case class ResultQueryStageExec(
+    override val id: Int,
+    override val plan: SparkPlan,
+    resultHandler: SparkPlan => Any) extends QueryStageExec {
+
+  override def resetMetrics(): Unit = {
+    plan.resetMetrics()
+  }
+
+  override protected def doMaterialize(): Future[Any] = {
+    val javaFuture = SQLExecution.withThreadLocalCaptured(
+      session,
+      ResultQueryStageExec.executionContext) {
+      resultHandler(plan)
+    }
+    val scalaPromise: Promise[Any] = Promise()
+    javaFuture.whenComplete { (result: Any, exception: Throwable) =>
+      if (exception != null) {
+        scalaPromise.failure(exception match {
+          case completionException: java.util.concurrent.CompletionException =>
+            completionException.getCause
+          case ex => ex
+        })
+      } else {
+        scalaPromise.success(result)
+      }
+    }
+    scalaPromise.future
+  }
+
+  // Result stage could be any SparkPlan, so we don't have a specific runtime statistics for it.
+  override def getRuntimeStatistics: Statistics = Statistics.DUMMY
+}
+
+object ResultQueryStageExec {
+  private[execution] val executionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("ResultQueryStageExecution",
+      SQLConf.get.getConf(StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD)))
 }

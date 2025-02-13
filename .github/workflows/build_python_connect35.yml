@@ -75,6 +75,8 @@ jobs:
 
           # Add torch as a testing dependency for TorchDistributor
           pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
+      - name: List Python packages
+        run: python -m pip list
       - name: Run tests
         env:
           SPARK_TESTING: 1

@@ -26,7 +26,11 @@ if should_test_connect:
 
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
     from pyspark.sql.connect.functions import lit, udtf
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException, PythonException
+    from pyspark.errors.exceptions.connect import (
+        SparkConnectGrpcException,
+        PythonException,
+        InvalidPlanInput,
+    )
 
 
 class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
@@ -54,7 +58,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
                 yield a + 1,
 
         with self.assertRaisesRegex(
-            SparkConnectGrpcException, "Invalid Python user-defined table function return type."
+            InvalidPlanInput, "Invalid Python user-defined table function return type."
         ):
             TestUDTF(lit(1)).collect()
 

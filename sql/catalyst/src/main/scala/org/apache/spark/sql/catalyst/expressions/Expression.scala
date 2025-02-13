@@ -1467,5 +1467,5 @@ case class MultiCommutativeOp(
  * Trait for expressions whose data type should be a default string type.
  */
 trait DefaultStringProducingExpression extends Expression {
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
 }

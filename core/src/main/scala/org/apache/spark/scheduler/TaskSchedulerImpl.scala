@@ -786,30 +786,13 @@ private[spark] class TaskSchedulerImpl(
       try {
         Option(taskIdToTaskSetManager.get(tid)) match {
           case Some(taskSet) =>
-            if (state == TaskState.LOST) {
-              // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
-              // where each executor corresponds to a single task, so mark the executor as failed.
-              val execId = taskIdToExecutorId.getOrElse(tid, {
-                val errorMsg =
-                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
-                taskSet.abort(errorMsg)
-                throw new SparkException(
-                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
-              })
-              if (executorIdToRunningTaskIds.contains(execId)) {
-                reason = Some(
-                  ExecutorProcessLost(
-                    s"Task $tid was lost, so marking the executor as lost as well."))
-                removeExecutor(execId, reason.get)
-                failedExecutor = Some(execId)
-              }
-            }
+            assert(state != TaskState.LOST)
             if (TaskState.isFinished(state)) {
               cleanupTaskState(tid)
               taskSet.removeRunningTask(tid)
               if (state == TaskState.FINISHED) {
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+              } else if (Set(TaskState.FAILED, TaskState.KILLED).contains(state)) {
                 taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
               }
             }

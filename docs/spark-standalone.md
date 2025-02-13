@@ -237,7 +237,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.master.rest.enabled</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     Whether to use the Master REST API endpoint or not.
   </td>

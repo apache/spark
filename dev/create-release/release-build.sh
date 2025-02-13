@@ -338,6 +338,16 @@ if [[ "$1" == "package" ]]; then
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
     shasum -a 512 spark-$SPARK_VERSION-bin-$NAME.tgz > spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
+
+    if [[ -n $SPARK_CONNECT_FLAG ]]; then
+      echo "Copying and signing Spark Connect binary distribution"
+      SPARK_CONNECT_DIST_NAME=spark-$SPARK_VERSION-bin-$NAME-spark-connect.tgz
+      cp spark-$SPARK_VERSION-bin-$NAME/$SPARK_CONNECT_DIST_NAME .
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $SPARK_CONNECT_DIST_NAME.asc \
+        --detach-sig $SPARK_CONNECT_DIST_NAME
+      shasum -a 512 $SPARK_CONNECT_DIST_NAME > $SPARK_CONNECT_DIST_NAME.sha512
+    fi
   }
 
   # List of binary packages built. Populates two associative arrays, where the key is the "name" of

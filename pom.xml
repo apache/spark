@@ -214,8 +214,8 @@
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.117.Final</netty.version>
-    <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
+    <netty.version>4.1.118.Final</netty.version>
+    <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.4</junit-jupiter.version>
     <junit-platform.version>1.11.4</junit-platform.version>
@@ -229,13 +229,13 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
     and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.1.0</arrow.version>
+    <arrow.version>18.2.0</arrow.version>
     <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.0.1</kubernetes-client.version>
+    <kubernetes-client.version>7.1.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -2821,6 +2821,7 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <spark.hadoop.hadoop.caller.context.enabled>true</spark.hadoop.hadoop.caller.context.enabled>
               <spark.memory.debugFill>true</spark.memory.debugFill>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
@@ -2868,6 +2869,7 @@
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
+              <spark.hadoop.hadoop.caller.context.enabled>true</spark.hadoop.hadoop.caller.context.enabled>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
@@ -3199,7 +3201,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.20.2</version>
+            <version>10.21.2</version>
           </dependency>
         </dependencies>
         <executions>

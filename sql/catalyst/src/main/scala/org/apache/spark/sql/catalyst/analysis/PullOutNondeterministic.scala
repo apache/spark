@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -34,10 +36,11 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     case f: Filter => f
 
     case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
-      val nondeterToAttr = getNondeterToAttr(a.groupingExpressions)
-      val newChild = Project(a.child.output ++ nondeterToAttr.values, a.child)
+      val nondeterToAttr =
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(a.groupingExpressions)
+      val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
       a.transformExpressions { case e =>
-        nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
       }.copy(child = newChild)
 
     // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
@@ -51,27 +54,12 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     // from LogicalPlan, currently we only do it for UnaryNode which has same output
     // schema with its child.
     case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
-      val nondeterToAttr = getNondeterToAttr(p.expressions)
+      val nondeterToAttr =
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions)
       val newPlan = p.transformExpressions { case e =>
-        nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
       }
-      val newChild = Project(p.child.output ++ nondeterToAttr.values, p.child)
+      val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
-  }
-
-  private def getNondeterToAttr(exprs: Seq[Expression]): Map[Expression, NamedExpression] = {
-    exprs.filterNot(_.deterministic).flatMap { expr =>
-      val leafNondeterministic = expr.collect {
-        case n: Nondeterministic => n
-        case udf: UserDefinedExpression if !udf.deterministic => udf
-      }
-      leafNondeterministic.distinct.map { e =>
-        val ne = e match {
-          case n: NamedExpression => n
-          case _ => Alias(e, "_nondeterministic")()
-        }
-        e -> ne
-      }
-    }.toMap
   }
 }

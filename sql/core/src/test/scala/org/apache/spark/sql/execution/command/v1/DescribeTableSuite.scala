@@ -669,7 +669,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
       QueryTest.checkAnswer(
         descriptionDf.filter("!(col_name in ('Created Time', 'Created By'))"),
         Seq(
-          Row("data", "string", null),
+          Row("data", "string collate UNICODE", null),
           Row("id", "bigint", null),
           Row("# Partition Information", "", ""),
           Row("# col_name", "data_type", "comment"),

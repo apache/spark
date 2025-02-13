@@ -1005,9 +1005,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("Set Spark CallerContext") {
     val context = "test"
     new CallerContext(context).setCurrentContext()
-    if (CallerContext.callerContextEnabled) {
-      assert(s"SPARK_$context" === HadoopCallerContext.getCurrent.toString)
-    }
+    assert(s"SPARK_$context" === HadoopCallerContext.getCurrent.toString)
   }
 
   test("encodeFileNameToURIRawPath") {

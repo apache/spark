@@ -154,7 +154,7 @@ SELECT listagg(c1) FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
 -- !query schema
 struct<listagg(c1, NULL):binary>
 -- !query output
-ޭ��
+DEADBEEF
 
 
 -- !query
@@ -162,7 +162,7 @@ SELECT listagg(c1, NULL) FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
 -- !query schema
 struct<listagg(c1, NULL):binary>
 -- !query output
-ޭ��
+DEADBEEF
 
 
 -- !query
@@ -170,7 +170,7 @@ SELECT listagg(c1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
 -- !query schema
 struct<listagg(c1, X'42'):binary>
 -- !query output
-ޭB��
+DEAD42BEEF
 
 
 -- !query

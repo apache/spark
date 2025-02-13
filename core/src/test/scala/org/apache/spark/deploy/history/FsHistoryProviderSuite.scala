@@ -29,6 +29,7 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.security.AccessControlException
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
@@ -1774,6 +1775,18 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     assert(!log1.exists())
     assert(!log3.exists())
     assert(log2.exists())
+  }
+
+  test("SPARK-51136: FsHistoryProvider start should set Hadoop CallerContext") {
+    val provider = new FsHistoryProvider(createTestConf())
+    provider.start()
+
+    try {
+      val hadoopCallerContext = HadoopCallerContext.getCurrent()
+      assert(hadoopCallerContext.getContext() === "SPARK_HISTORY")
+    } finally {
+      provider.stop()
+    }
   }
 
   /**

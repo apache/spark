@@ -1,3 +1,5 @@
+--SET spark.sql.binaryOutputStyle=HEX
+
 -- Create temporary views
 CREATE TEMP VIEW df AS
 SELECT * FROM (VALUES ('a', 'b'), ('a', 'c'), ('b', 'c'), ('b', 'd'), (NULL, NULL)) AS t(a, b);

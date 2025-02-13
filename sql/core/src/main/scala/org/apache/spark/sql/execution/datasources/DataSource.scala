@@ -120,6 +120,11 @@ case class DataSource(
   private def newHadoopConfiguration(): Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(options)
 
+  private def makeQualified(path: Path): Path = {
+    val fs = path.getFileSystem(newHadoopConfiguration())
+    path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+  }
+
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
@@ -319,9 +324,9 @@ case class DataSource(
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = makeQualified(new Path(caseInsensitiveOptions.getOrElse("path", {
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
-        })
+        }))).toString
         if (outputMode != OutputMode.Append) {
           throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
         }
@@ -456,9 +461,7 @@ case class DataSource(
     //  3. It's OK that the output path doesn't exist yet;
     val allPaths = paths ++ caseInsensitiveOptions.get("path")
     val outputPath = if (allPaths.length == 1) {
-      val path = new Path(allPaths.head)
-      val fs = path.getFileSystem(newHadoopConfiguration())
-      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      makeQualified(new Path(allPaths.head))
     } else {
       throw QueryExecutionErrors.multiplePathsSpecifiedError(allPaths)
     }

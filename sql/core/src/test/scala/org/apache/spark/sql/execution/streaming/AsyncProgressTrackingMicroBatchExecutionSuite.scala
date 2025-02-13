@@ -1101,7 +1101,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
         .start("/tmp")
     }
 
-    e.getMessage should equal("Sink FileSink[/tmp] does not support async progress tracking")
+    e.getMessage should equal("Sink FileSink[file:/tmp] does not support async progress tracking")
   }
 
   test("with log purging") {

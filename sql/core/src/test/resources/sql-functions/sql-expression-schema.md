@@ -258,6 +258,7 @@
 | org.apache.spark.sql.catalyst.expressions.Pow | pow | SELECT pow(2, 3) | struct<pow(2, 3):double> |
 | org.apache.spark.sql.catalyst.expressions.Pow | power | SELECT power(2, 3) | struct<POWER(2, 3):double> |
 | org.apache.spark.sql.catalyst.expressions.Quarter | quarter | SELECT quarter('2016-08-31') | struct<quarter(2016-08-31):int> |
+| org.apache.spark.sql.catalyst.expressions.Quote | quote | SELECT quote('Don\'t') | struct<quote(Don't):string> |
 | org.apache.spark.sql.catalyst.expressions.RLike | regexp | SELECT regexp('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RLike | regexp_like | SELECT regexp_like('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP_LIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RLike | rlike | SELECT rlike('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<RLIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |

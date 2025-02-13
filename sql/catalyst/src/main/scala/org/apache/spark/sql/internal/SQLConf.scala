@@ -43,10 +43,10 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
-import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationNames, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{AtomicType, StringType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{Utils, VersionUtils}
@@ -879,40 +879,6 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
-
-  lazy val DEFAULT_COLLATION_ENABLED =
-    buildConf("spark.sql.sessionDefaultCollation.enabled")
-      .internal()
-      .doc("Session default collation feature is under development and its use should be done " +
-        "under this feature flag.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(Utils.isTesting)
-
-  val DEFAULT_COLLATION =
-    buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
-      .internal()
-      .doc("Sets default collation to use for string literals, parameter markers or the string" +
-        " produced by a builtin function such as to_char or CAST")
-      .version("4.0.0")
-      .stringConf
-      .checkValue(
-        value => value == CollationNames.UTF8_BINARY || get.getConf(DEFAULT_COLLATION_ENABLED),
-        errorClass = "DEFAULT_COLLATION_NOT_SUPPORTED",
-        parameters = _ => Map.empty)
-      .checkValue(
-        collationName => {
-          try {
-            CollationFactory.fetchCollation(collationName)
-            true
-          } catch {
-            case e: SparkException if e.getCondition == "COLLATION_INVALID_NAME" => false
-          }
-        },
-        "DEFAULT_COLLATION",
-        collationName => Map(
-          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
-      .createWithDefault("UTF8_BINARY")
 
   val ICU_CASE_MAPPINGS_ENABLED =
     buildConf("spark.sql.icu.caseMappings.enabled")
@@ -3372,7 +3338,7 @@ object SQLConf {
       .doc(
         s"Same as ${Python.PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT.key} for Python execution with " +
           "DataFrame and SQL. It can change during runtime.")
-      .version("4.0.0")
+      .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
 
   val PYSPARK_PLOT_MAX_ROWS =
@@ -4110,7 +4076,7 @@ object SQLConf {
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN =
-    buildConf("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
+    buildConf("spark.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
       .internal()
       .doc("Allow PruneFilters to remove streaming subplans when we encounter a false filter. " +
         "This flag is to restore prior buggy behavior for broken pipelines.")
@@ -4755,7 +4721,7 @@ object SQLConf {
         "When false, it only reads unshredded variant.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PUSH_VARIANT_INTO_SCAN =
     buildConf("spark.sql.variant.pushVariantIntoScan")
@@ -5856,14 +5822,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
 
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
-
-  override def defaultStringType: StringType = {
-    if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == CollationNames.UTF8_BINARY) {
-      StringType
-    } else {
-      StringType(getConf(DEFAULT_COLLATION))
-    }
-  }
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 

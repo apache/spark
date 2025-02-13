@@ -2950,4 +2950,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("option" -> option)
     )
   }
+
+  def notAbsolutePathError(path: Path): SparkException = {
+    SparkException.internalError(s"$path is not absolute path.")
+  }
 }
