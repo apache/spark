@@ -77,6 +77,7 @@ private[spark] class BarrierCoordinator(
       states.forEachValue(1, clearStateConsumer)
       states.clear()
       listenerBus.removeListener(listener)
+      timer.cancel()
     } finally {
       super.onStop()
     }
