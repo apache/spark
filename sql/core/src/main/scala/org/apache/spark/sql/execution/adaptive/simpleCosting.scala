@@ -46,12 +46,14 @@ case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEva
     }.size
 
     if (forceOptimizeSkewedJoin) {
-      val numSkewJoins = plan.collect {
-        case j: ShuffledJoin if j.isSkewJoin => j
-      }.size
-      // We put `-numSkewJoins` in the first 32 bits of the long value, so that it's compared first
-      // when comparing the cost, and larger `numSkewJoins` means lower cost.
-      SimpleCost(-numSkewJoins.toLong << 32 | numShuffles)
+      val numSkewJoinsSalt = plan.map {
+        case j: ShuffledJoin if j.isSkewJoin => 2
+        case j: ShuffledJoin if j.maybeSkewJoin => 1
+        case _ => 0
+      }.sum
+      // We put `-numSkewJoinsSalt` in the first 32 bits of the long value, so that it's compared
+      // first when comparing the cost, and larger `numSkewJoinsSalt` means lower cost.
+      SimpleCost(-numSkewJoinsSalt.toLong << 32 | numShuffles)
     } else {
       SimpleCost(numShuffles)
     }

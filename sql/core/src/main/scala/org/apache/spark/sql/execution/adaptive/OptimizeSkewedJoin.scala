@@ -18,13 +18,12 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
@@ -197,10 +196,30 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
   }
 
-  def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
+  private def hasSkewedQueryStage(
+      plan: Either[SparkPlan, SparkPlan], joinType: JoinType): Boolean = {
+    val canSplit = if (plan.isLeft) {
+      canSplitLeftSide(joinType)
+    } else {
+      canSplitRightSide(joinType)
+    }
+    if (!canSplit) return false
+
+    plan.merge.exists {
+      case ShuffleStage(stage: ShuffleQueryStageExec) =>
+        val sizes = stage.mapStats.get.bytesByPartitionId
+        val medSize = Utils.median(sizes, false)
+        val skewThreshold = getSkewThreshold(medSize)
+        sizes.exists(_ > skewThreshold)
+      case _ => false
+    }
+  }
+
+  def optimizeSkewJoin(plan: SparkPlan,
+                       forceOptimizeSkewedJoin: Boolean): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
         s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
-        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
+        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false, _) =>
       tryOptimizeJoinChildren(left, right, joinType).map {
         case (newLeft, newRight) =>
           smj.copy(
@@ -209,11 +228,35 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
     case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
         ShuffleStage(left: ShuffleQueryStageExec),
-        ShuffleStage(right: ShuffleQueryStageExec), false) =>
+        ShuffleStage(right: ShuffleQueryStageExec), false, _) =>
       tryOptimizeJoinChildren(left, right, joinType).map {
         case (newLeft, newRight) =>
           shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
       }.getOrElse(shj)
+
+    case smj @ SortMergeJoinExec(_, _, joinType, _,
+        s1 @ SortExec(_, _, left, _),
+        s2 @ SortExec(_, _, NotSkewJoinChildForForceWrapper(right), _), false, false)
+      if forceOptimizeSkewedJoin && hasSkewedQueryStage(Left(left), joinType) =>
+      smj.copy(right = s2.copy(child = SkewJoinChildForForceWrapper(right)), maybeSkewJoin = true)
+
+    case smj @ SortMergeJoinExec(_, _, joinType, _,
+        s1 @ SortExec(_, _, NotSkewJoinChildForForceWrapper(left), _),
+        s2 @ SortExec(_, _, right, _), false, false)
+      if forceOptimizeSkewedJoin && hasSkewedQueryStage(Right(right), joinType) =>
+      smj.copy(left = s1.copy(child = SkewJoinChildForForceWrapper(left)), maybeSkewJoin = true)
+
+    case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
+        left,
+        NotSkewJoinChildForForceWrapper(right), false, false)
+      if forceOptimizeSkewedJoin && hasSkewedQueryStage(Left(left), joinType) =>
+      shj.copy(right = SkewJoinChildForForceWrapper(right), maybeSkewJoin = true)
+
+    case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
+        NotSkewJoinChildForForceWrapper(left),
+        right, false, false)
+      if forceOptimizeSkewedJoin && hasSkewedQueryStage(Right(right), joinType) =>
+      shj.copy(left = SkewJoinChildForForceWrapper(left), maybeSkewJoin = true)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -221,12 +264,14 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       return plan
     }
 
+    val forceOptimizeSkewedJoin = conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN)
+
     // We try to optimize every skewed sort-merge/shuffle-hash joins in the query plan. If this
     // introduces extra shuffles, we give up the optimization and return the original query plan, or
     // accept the extra shuffles if the force-apply config is true.
     // TODO: It's possible that only one skewed join in the query plan leads to extra shuffles and
     //       we only need to skip optimizing that join. We should make the strategy smarter here.
-    val optimized = optimizeSkewJoin(plan)
+    val optimized = optimizeSkewJoin(plan, forceOptimizeSkewedJoin)
     val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
       ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
     } else {
@@ -235,10 +280,12 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     if (requirementSatisfied) {
       optimized.transform {
         case SkewJoinChildWrapper(child) => child
+        case SkewJoinChildForForceWrapper(child) => child
       }
-    } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN)) {
+    } else if (forceOptimizeSkewedJoin) {
       ensureRequirements.apply(optimized).transform {
         case SkewJoinChildWrapper(child) => child
+        case SkewJoinChildForForceWrapper(child) => child
       }
     } else {
       plan
@@ -253,6 +300,13 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       case _ => None
     }
   }
+
+  object NotSkewJoinChildForForceWrapper {
+    def unapply(plan: SparkPlan): Option[SparkPlan] = plan match {
+      case SkewJoinChildForForceWrapper(_) => None
+      case _ => Some(plan)
+    }
+  }
 }
 
 // After optimizing skew joins, we need to run EnsureRequirements again to add necessary shuffles
@@ -262,5 +316,13 @@ case class SkewJoinChildWrapper(plan: SparkPlan) extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
+}
+
+case class SkewJoinChildForForceWrapper(plan: SparkPlan) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
+  override def output: Seq[Attribute] = plan.output
+  // set an unknown partition for force add shuffle when the join is skewed
+  override def outputPartitioning: Partitioning = UnknownPartitioning(-1)
   override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
 }
