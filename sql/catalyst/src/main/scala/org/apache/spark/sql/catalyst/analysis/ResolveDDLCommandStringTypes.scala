@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -66,7 +66,9 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
-    case _: V1CreateTablePlan | _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
+    // For CREATE TABLE, only v2 CREATE TABLE command is supported.
+    // Also, table DEFAULT COLLATION cannot be specified through CREATE TABLE AS SELECT command.
+    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
     case _ => false
   }
 
