@@ -184,6 +184,7 @@ object ResolveHints {
         case _ => (None, hint.parameters)
       }
     }
+
     private def validateParameters(hint: String, parms: Seq[Any]): Unit = {
       val invalidParams = parms.filter(!_.isInstanceOf[UnresolvedAttribute])
       if (invalidParams.nonEmpty) {
