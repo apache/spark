@@ -175,18 +175,21 @@ object ResolveHints {
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
     private def getNumOfPartitions(hint: UnresolvedHint): (Option[Int], Seq[Any]) = {
-      val (numOfPartitions, partitionExprs) = hint.parameters match {
-        case Seq(ByteLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
-        case Seq(ShortLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
+      hint.parameters match {
+        case Seq(ByteLiteral(numPartitions), _*) =>
+          (Some(numPartitions.toInt), hint.parameters.tail)
+        case Seq(ShortLiteral(numPartitions), _*) =>
+          (Some(numPartitions.toInt), hint.parameters.tail)
         case Seq(IntegerLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
         case _ => (None, hint.parameters)
       }
-      val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+    }
+    private def validateParameters(hint: String, parms: Seq[Any]): Unit = {
+      val invalidParams = parms.filter(!_.isInstanceOf[UnresolvedAttribute])
       if (invalidParams.nonEmpty) {
-        val hintName = hint.name.toUpperCase(Locale.ROOT)
+        val hintName = hint.toUpperCase(Locale.ROOT)
         throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
       }
-      (numOfPartitions, partitionExprs)
     }
 
     /**
@@ -203,6 +206,7 @@ object ResolveHints {
         if (sortOrders.nonEmpty) {
           throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
         }
+        validateParameters(hint.name, partitionExprs)
         RepartitionByExpression(
           partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
       }
@@ -214,9 +218,9 @@ object ResolveHints {
         case _ if !shuffle =>
           throw QueryCompilationErrors.invalidCoalesceHintParameterError(
             hint.name.toUpperCase(Locale.ROOT))
-        case (Some(numPartitions), partitionExprs) if shuffle =>
+        case (Some(numPartitions), partitionExprs) =>
           createRepartitionByExpression(Some(numPartitions), partitionExprs)
-        case (None, partitionExprs) if shuffle =>
+        case (None, partitionExprs) =>
           createRepartitionByExpression(None, partitionExprs)
       }
     }
@@ -228,6 +232,7 @@ object ResolveHints {
     private def createRepartitionByRange(hint: UnresolvedHint): RepartitionByExpression = {
       def createRepartitionByExpression(
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
+        validateParameters(hint.name, partitionExprs)
         val sortOrder = partitionExprs.map {
           case expr: SortOrder => expr
           case expr: Expression => SortOrder(expr, Ascending)
@@ -246,6 +251,7 @@ object ResolveHints {
     private def createRebalance(hint: UnresolvedHint): LogicalPlan = {
       def createRebalancePartitions(
           partitionExprs: Seq[Any], initialNumPartitions: Option[Int]): RebalancePartitions = {
+        validateParameters(hint.name, partitionExprs)
         RebalancePartitions(
           partitionExprs.map(_.asInstanceOf[Expression]),
           hint.child,
