@@ -1468,8 +1468,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     testRead(spark.read.schema(fileSchema).csv(s"$harPath/test.csv"), data, fileSchema)
   }
 
-  test("SPARK-51182: Throw a dataPathNotSpecifiedError instead of multiplePathsSpecifiedError when " +
-    "saving a DataFrame to a path without specifying the path") {
+  test("SPARK-51182: Throw a dataPathNotSpecifiedError instead of multiplePathsSpecifiedError " +
+    "when saving a DataFrame to a path without specifying the path") {
     val e = intercept[SparkIllegalArgumentException] {
       Seq(1).toDF().write.format("csv").save()
     }
