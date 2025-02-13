@@ -1471,6 +1471,69 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
+  test("SPARK-51187 validate that the incorrect config introduced in SPARK-49699 still takes " +
+    "effect when restarting from Spark 3.5.4") {
+    // Spark 3.5.4 is the only release we accidentally introduced the incorrect config.
+    // We just need to confirm that current Spark version will apply the fix of SPARK-49699 when
+    // the streaming query started from Spark 3.5.4. We should consistently apply the fix, instead
+    // of "on and off", because that may expose more possibility to break.
+
+    withTempDir { dir =>
+      val input = getClass.getResource("/structured-streaming/checkpoint-version-3.5.4")
+      assert(input != null, "cannot find test resource")
+      val inputDir = new File(input.toURI)
+
+      // Copy test files to tempDir so that we won't modify the original data.
+      FileUtils.copyDirectory(inputDir, dir)
+
+      // Below is the code we extract checkpoint from Spark 3.5.4. We need to make sure the offset
+      // advancement continues from the last run.
+      val inputData = MemoryStream[Int]
+      val df = inputData.toDF()
+
+      inputData.addData(1, 2, 3, 4)
+      inputData.addData(5, 6, 7, 8)
+
+      testStream(df)(
+        StartStream(checkpointLocation = dir.getCanonicalPath),
+        AddData(inputData, 9, 10, 11, 12),
+        ProcessAllAvailable(),
+        AssertOnQuery { q =>
+          val confValue = q.lastExecution.sparkSession.conf.get(
+            SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN)
+          assert(confValue === false,
+            "The value for the incorrect config in offset metadata should be respected as the " +
+              "value of the fixed config")
+
+          val offsetLog = new OffsetSeqLog(spark, new File(dir, "offsets").getCanonicalPath)
+          def checkConfigFromMetadata(batchId: Long, expectCorrectConfig: Boolean): Unit = {
+            val offsetLogForBatch = offsetLog.get(batchId).get
+            val confInMetadata = offsetLogForBatch.metadata.get.conf
+            if (expectCorrectConfig) {
+              assert(confInMetadata.get(SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key) ===
+                Some("false"),
+                "The new offset log should have the fixed config instead of the incorrect one."
+              )
+            } else {
+              assert(
+                confInMetadata.get(
+                  "spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
+                  === Some("false"),
+                "The offset in test resource should have the incorrect config to test properly."
+              )
+            }
+          }
+
+          assert(offsetLog.getLatestBatchId() === Some(2))
+          checkConfigFromMetadata(0, expectCorrectConfig = false)
+          checkConfigFromMetadata(1, expectCorrectConfig = false)
+          checkConfigFromMetadata(2, expectCorrectConfig = true)
+          true
+        }
+      )
+    }
+  }
+
   private def checkAppendOutputModeException(df: DataFrame): Unit = {
     withTempDir { outputDir =>
       withTempDir { checkpointDir =>
