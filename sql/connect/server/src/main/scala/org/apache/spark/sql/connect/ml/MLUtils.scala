@@ -512,7 +512,6 @@ private[ml] object MLUtils {
         "predictLeaf",
         "trees",
         "treeWeights",
-        "javaTreeWeights",
         "getNumTrees",
         "totalNumNodes",
         "toDebugString")),
