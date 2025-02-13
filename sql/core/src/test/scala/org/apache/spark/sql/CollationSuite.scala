@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -132,20 +132,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       StringType("UTF8_LCASE"))
     assert(sql(s"select collate('aaa', 'utf8_lcase_rtrim')").schema(0).dataType ==
       StringType("UTF8_LCASE_RTRIM"))
-  }
-
-  test("collate function syntax with default collation set") {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-      assert(
-        sql(s"select collate('aaa', 'utf8_lcase')").schema(0).dataType ==
-        StringType("UTF8_LCASE")
-      )
-      assert(sql(s"select collate('aaa', 'UNICODE')").schema(0).dataType == StringType("UNICODE"))
-      assert(
-        sql(s"select collate('aaa', 'UNICODE_RTRIM')").schema(0).dataType ==
-        StringType("UNICODE_RTRIM")
-      )
-    }
   }
 
   test("collate function syntax invalid arg count") {
@@ -822,31 +808,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       Seq(Row(fullyQualifiedPrefix + "UTF8_BINARY"))
     )
 
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(
-          """EXECUTE IMMEDIATE stmtStr1 USING
-            | 'a' AS var1,
-            | 'b' AS var2;""".stripMargin),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE"))
-      )
-    }
-
     checkAnswer(
       sql(
         """EXECUTE IMMEDIATE stmtStr2 USING
           | 'a' AS var1;""".stripMargin),
       Seq(Row(fullyQualifiedPrefix + "UNICODE"))
     )
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(
-          """EXECUTE IMMEDIATE stmtStr2 USING
-            | 'a' AS var1;""".stripMargin),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE"))
-      )
-    }
   }
 
   test("SPARK-47210: Cast of default collated strings in IN expression") {
@@ -1009,12 +976,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           "generation expression cannot contain non utf8 binary collated string type"))
   }
 
-  test("SPARK-47431: Default collation set to UNICODE, literal test") {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row(fullyQualifiedPrefix + "UNICODE")))
-    }
-  }
-
   test("Cast expression for collations") {
     checkAnswer(
       sql(s"SELECT collation(cast('a' as string collate utf8_lcase))"),
@@ -1026,15 +987,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
     checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(s"SELECT collation(cast(1 as string collate unicode))"),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE")))
-      checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
-      checkAnswer(sql(s"SELECT collation(cast(1 as string))"),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE")))
-    }
   }
 
   test("cast using the dataframe api") {
@@ -1922,12 +1874,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       HllSketchAggTestCase("UNICODE_CI_RTRIM", 3)
     )
     testCases.foreach(t => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.c) {
-        val q = "SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM " +
-          "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
-        val df = sql(q)
-        checkAnswer(df, Seq(Row(t.result)))
-      }
+      val q = s"SELECT hll_sketch_estimate(hll_sketch_agg(col collate ${t.c})) FROM " +
+        "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
+      val df = sql(q)
+      checkAnswer(df, Seq(Row(t.result)))
     })
   }
 
@@ -1957,10 +1907,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withTable("tbl") {
         checkCacheTable(s"'a' COLLATE $collation")
       }
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        withTable("tbl") {
-          checkCacheTable("'a'")
-        }
+      withTable("tbl") {
+        checkCacheTable("'a'")
       }
     }
   }
@@ -2112,30 +2060,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // Make sure DDLs can use fully qualified names.
     withTable("t") {
       sql(s"CREATE TABLE t (c STRING COLLATE system.builtin.UTF8_LCASE)")
-    }
-  }
-
-  test("flag for enabling session default collation") {
-    withSQLConf(SQLConf.DEFAULT_COLLATION_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[SparkThrowable] {
-          sql("SET COLLATION UNICODE_CI")
-        },
-        condition = "INVALID_CONF_VALUE.DEFAULT_COLLATION_NOT_SUPPORTED",
-        sqlState = "22022",
-        parameters = Map("confValue" -> "UNICODE_CI",
-          "confName" -> "spark.sql.session.collation.default"))
-
-      checkAnswer(
-        sql("SELECT 'a' = 'A'"),
-        Row(false))
-    }
-
-    withSQLConf(SQLConf.DEFAULT_COLLATION_ENABLED.key -> "true") {
-      sql("SET COLLATION UNICODE_CI")
-      checkAnswer(
-        sql("SELECT 'a' = 'A'"),
-        Row(true))
     }
   }
 }
