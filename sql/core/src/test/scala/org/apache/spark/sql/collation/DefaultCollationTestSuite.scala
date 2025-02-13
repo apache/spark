@@ -31,6 +31,13 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   def testView: String = "test_view"
   protected val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
 
+  val defaultStringProducingExpressions: Seq[String] = Seq(
+    "current_timezone()", "current_database()", "md5('Spark' collate unicode)",
+    "soundex('Spark' collate unicode)", "url_encode('https://spark.apache.org' collate unicode)",
+    "url_decode('https%3A%2F%2Fspark.apache.org')", "uuid()", "chr(65)", "collation('UNICODE')",
+    "version()", "space(5)", "randstr(5, 123)"
+  )
+
   def withSessionCollationAndTable(collation: String, testTables: String*)(f: => Unit): Unit = {
     withTable(testTables: _*) {
       withSessionCollation(collation) {
@@ -233,6 +240,25 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  test("expressions that have default string result in DDL should have object collation") {
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+
+      val columns = defaultStringProducingExpressions.zipWithIndex.map {
+        case (expr, index) => s"$expr AS c${index + 1}"
+      }.mkString(", ")
+
+      sql(s"""
+        |CREATE TABLE $testTable
+        |USING $dataSource AS
+        |SELECT $columns
+        |""".stripMargin)
+
+      (1 to defaultStringProducingExpressions.length).foreach { index =>
+        assertTableColumnCollation(testTable, s"c$index", "UTF8_BINARY")
+      }
+    }
+  }
+
   // endregion
 
   // region DML tests
@@ -386,6 +412,17 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
       sql(s"INSERT INTO $testTable VALUES (CONCAT(X'68656C6C6F', 'world') = 'HELLOWORLD')")
 
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1"), Seq(Row(3)))
+    }
+  }
+
+  test("expressions that have default string result in DML should have session collation") {
+    withSessionCollation("UTF8_LCASE") {
+      defaultStringProducingExpressions.foreach { expr =>
+        checkAnswer(
+          sql(s"SELECT COLLATION($expr)"),
+          Seq(Row(fullyQualifiedPrefix + "UTF8_LCASE"))
+        )
+      }
     }
   }
 
