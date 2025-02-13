@@ -19,18 +19,13 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Literal}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.IntegerType
 
 class LimitExpressionResolverSuite extends SparkFunSuite with QueryErrorsBase {
 
-  private class IdentityExpressionResolver extends TreeNodeResolver[Expression, Expression] {
-    override def resolve(expression: Expression): Expression = expression
-  }
-
-  private val expressionResolver = new IdentityExpressionResolver
-  private val limitExpressionResolver = new LimitExpressionResolver(expressionResolver)
+  private val limitExpressionResolver = new LimitExpressionResolver
 
   test("Basic LIMIT without errors") {
     val expr = Literal(42, IntegerType)

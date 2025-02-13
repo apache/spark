@@ -25,8 +25,8 @@ private[spark] case class MlUnsupportedException(message: String)
       messageParameters = Map("message" -> message),
       cause = null)
 
-private[spark] case class MLAttributeNotAllowedException(attribute: String)
+private[spark] case class MLAttributeNotAllowedException(className: String, attribute: String)
     extends SparkException(
       errorClass = "CONNECT_ML.ATTRIBUTE_NOT_ALLOWED",
-      messageParameters = Map("attribute" -> attribute),
+      messageParameters = Map("className" -> className, "attribute" -> attribute),
       cause = null)

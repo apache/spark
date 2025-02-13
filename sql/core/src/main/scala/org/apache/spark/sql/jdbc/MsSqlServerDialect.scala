@@ -220,7 +220,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
@@ -232,13 +232,13 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-           case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+           case 15335 if condition == "FAILED_JDBC.RENAME_TABLE" =>
              val newTable = messageParameters("newName")
              throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ =>
-            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
@@ -250,7 +250,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
       options.prepareQuery +
         s"SELECT $limitClause $columnList FROM ${options.tableOrQuery}" +
-        s" $tableSampleClause $whereClause $groupByClause $orderByClause"
+        s" $whereClause $groupByClause $orderByClause"
     }
   }
 

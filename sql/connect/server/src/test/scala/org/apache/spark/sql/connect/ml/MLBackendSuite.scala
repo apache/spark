@@ -42,7 +42,7 @@ class MLBackendSuite extends MLHelper {
       .newBuilder()
       .setName(name)
       .setUid(name)
-      .setType(proto.MlOperator.OperatorType.ESTIMATOR)
+      .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
   }
 
   private def getMaxIterBuilder: proto.MlParams.Builder = {

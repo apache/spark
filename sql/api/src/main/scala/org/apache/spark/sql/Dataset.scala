@@ -21,7 +21,7 @@ import java.util
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
+import org.apache.spark.annotation.{ClassicOnly, DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.rdd.RDD
@@ -128,7 +128,7 @@ abstract class Dataset[T] extends Serializable {
 
   val encoder: Encoder[T]
 
-  @DeveloperApi @Unstable def queryExecution: QueryExecution
+  @ClassicOnly @DeveloperApi @Unstable def queryExecution: QueryExecution
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe. In contrast to the
@@ -2699,7 +2699,8 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this.asInstanceOf[Dataset[T]])
+  def transform[U, DSO[_] <: Dataset[_]](t: this.type => DSO[U]): DSO[U] =
+    t(this)
 
   /**
    * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
@@ -3239,29 +3240,32 @@ abstract class Dataset[T] extends Serializable {
    * Represents the content of the Dataset as an `RDD` of `T`.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @group basic
    * @since 1.6.0
    */
+  @ClassicOnly
   def rdd: RDD[T]
 
   /**
    * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @group basic
    * @since 1.6.0
    */
+  @ClassicOnly
   def toJavaRDD: JavaRDD[T]
 
   /**
    * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @group basic
    * @since 1.6.0
    */
+  @ClassicOnly
   def javaRDD: JavaRDD[T] = toJavaRDD
 }

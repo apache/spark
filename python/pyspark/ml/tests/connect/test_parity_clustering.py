@@ -15,26 +15,14 @@
 # limitations under the License.
 #
 
-import os
 import unittest
 
 from pyspark.ml.tests.test_clustering import ClusteringTestsMixin
-from pyspark.sql import SparkSession
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class ClusteringParityTests(ClusteringTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote(
-            os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-        ).getOrCreate()
-
-    def test_assert_remote_mode(self):
-        from pyspark.sql import is_remote
-
-        self.assertTrue(is_remote())
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class ClusteringParityTests(ClusteringTestsMixin, ReusedConnectTestCase):
+    pass
 
 
 if __name__ == "__main__":
