@@ -220,7 +220,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             .format("statestore")
             .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
             .option(StateSourceOptions.STATE_VAR_NAME, "valueState")
-            .option(StateSourceOptions.READ_CHANGE_FEED, true)
+            .option(StateSourceOptions.READ_CHANGE_LOG, true)
             .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
             .load()
 
@@ -333,7 +333,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "countState")
-          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .load()
 
@@ -455,7 +455,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
-          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .load()
 
@@ -595,7 +595,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "groupsListWithTTL")
-          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .load()
 
@@ -727,7 +727,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "sessionState")
-          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .load()
 
@@ -890,7 +890,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           .format("statestore")
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
-          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.READ_CHANGE_LOG, true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .load()
 

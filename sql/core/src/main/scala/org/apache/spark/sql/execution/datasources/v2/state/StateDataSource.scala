@@ -315,23 +315,23 @@ case class FromSnapshotOptions(
     snapshotStartBatchId: Long,
     snapshotPartitionId: Int)
 
-case class ReadChangeFeedOptions(
+case class ReadChangeLogOptions(
     changeStartBatchId: Long,
     changeEndBatchId: Long
 )
 
 case class StateSourceOptions(
-    resolvedCpLocation: String,
-    batchId: Long,
-    operatorId: Int,
-    storeName: String,
-    joinSide: JoinSideValues,
-    readChangeFeed: Boolean,
-    fromSnapshotOptions: Option[FromSnapshotOptions],
-    readChangeFeedOptions: Option[ReadChangeFeedOptions],
-    stateVarName: Option[String],
-    readRegisteredTimers: Boolean,
-    flattenCollectionTypes: Boolean) {
+                               resolvedCpLocation: String,
+                               batchId: Long,
+                               operatorId: Int,
+                               storeName: String,
+                               joinSide: JoinSideValues,
+                               readChangeLog: Boolean,
+                               fromSnapshotOptions: Option[FromSnapshotOptions],
+                               readChangeLogOptions: Option[ReadChangeLogOptions],
+                               stateVarName: Option[String],
+                               readRegisteredTimers: Boolean,
+                               flattenCollectionTypes: Boolean) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -343,9 +343,9 @@ case class StateSourceOptions(
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
       desc += s", snapshotPartitionId=${fromSnapshotOptions.get.snapshotPartitionId}"
     }
-    if (readChangeFeedOptions.isDefined) {
-      desc += s", changeStartBatchId=${readChangeFeedOptions.get.changeStartBatchId}"
-      desc += s", changeEndBatchId=${readChangeFeedOptions.get.changeEndBatchId}"
+    if (readChangeLogOptions.isDefined) {
+      desc += s", changeStartBatchId=${readChangeLogOptions.get.changeStartBatchId}"
+      desc += s", changeEndBatchId=${readChangeLogOptions.get.changeEndBatchId}"
     }
     desc + ")"
   }
@@ -359,7 +359,7 @@ object StateSourceOptions extends DataSourceOptions {
   val JOIN_SIDE = newOption("joinSide")
   val SNAPSHOT_START_BATCH_ID = newOption("snapshotStartBatchId")
   val SNAPSHOT_PARTITION_ID = newOption("snapshotPartitionId")
-  val READ_CHANGE_FEED = newOption("readChangeFeed")
+  val READ_CHANGE_LOG = newOption("readChangeLog")
   val CHANGE_START_BATCH_ID = newOption("changeStartBatchId")
   val CHANGE_END_BATCH_ID = newOption("changeEndBatchId")
   val STATE_VAR_NAME = newOption("stateVarName")
@@ -447,26 +447,26 @@ object StateSourceOptions extends DataSourceOptions {
     val snapshotStartBatchId = Option(options.get(SNAPSHOT_START_BATCH_ID)).map(_.toLong)
     val snapshotPartitionId = Option(options.get(SNAPSHOT_PARTITION_ID)).map(_.toInt)
 
-    val readChangeFeed = Option(options.get(READ_CHANGE_FEED)).exists(_.toBoolean)
+    val readChangeLog = Option(options.get(READ_CHANGE_LOG)).exists(_.toBoolean)
 
     val changeStartBatchId = Option(options.get(CHANGE_START_BATCH_ID)).map(_.toLong)
     var changeEndBatchId = Option(options.get(CHANGE_END_BATCH_ID)).map(_.toLong)
 
     var fromSnapshotOptions: Option[FromSnapshotOptions] = None
-    var readChangeFeedOptions: Option[ReadChangeFeedOptions] = None
+    var readChangeLogOptions: Option[ReadChangeLogOptions] = None
 
-    if (readChangeFeed) {
+    if (readChangeLog) {
       if (joinSide != JoinSideValues.none) {
-        throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, READ_CHANGE_FEED))
+        throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, READ_CHANGE_LOG))
       }
       if (batchId.isDefined) {
-        throw StateDataSourceErrors.conflictOptions(Seq(BATCH_ID, READ_CHANGE_FEED))
+        throw StateDataSourceErrors.conflictOptions(Seq(BATCH_ID, READ_CHANGE_LOG))
       }
       if (snapshotStartBatchId.isDefined) {
-        throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_START_BATCH_ID, READ_CHANGE_FEED))
+        throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_START_BATCH_ID, READ_CHANGE_LOG))
       }
       if (snapshotPartitionId.isDefined) {
-        throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_PARTITION_ID, READ_CHANGE_FEED))
+        throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_PARTITION_ID, READ_CHANGE_LOG))
       }
 
       if (changeStartBatchId.isEmpty) {
@@ -488,16 +488,16 @@ object StateSourceOptions extends DataSourceOptions {
 
       batchId = Some(changeEndBatchId.get)
 
-      readChangeFeedOptions = Option(
-        ReadChangeFeedOptions(changeStartBatchId.get, changeEndBatchId.get))
+      readChangeLogOptions = Option(
+        ReadChangeLogOptions(changeStartBatchId.get, changeEndBatchId.get))
     } else {
       if (changeStartBatchId.isDefined) {
         throw StateDataSourceErrors.invalidOptionValue(CHANGE_START_BATCH_ID,
-            s"Only specify this option when $READ_CHANGE_FEED is set to true.")
+            s"Only specify this option when $READ_CHANGE_LOG is set to true.")
       }
       if (changeEndBatchId.isDefined) {
         throw StateDataSourceErrors.invalidOptionValue(CHANGE_END_BATCH_ID,
-          s"Only specify this option when $READ_CHANGE_FEED is set to true.")
+          s"Only specify this option when $READ_CHANGE_LOG is set to true.")
       }
 
       batchId = Some(batchId.getOrElse(getLastCommittedBatch(sparkSession, resolvedCpLocation)))
@@ -530,7 +530,7 @@ object StateSourceOptions extends DataSourceOptions {
 
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
-      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
+      readChangeLog, fromSnapshotOptions, readChangeLogOptions,
       stateVarName, readRegisteredTimers, flattenCollectionTypes)
   }
 
