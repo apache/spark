@@ -2441,7 +2441,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val signalStatement = tree.collection.head.asInstanceOf[SignalStatement]
     assert(signalStatement.isBuiltinError)
     assert(signalStatement.sqlState.get.equals("22012"))
-    assert(signalStatement.errorCondition.get.equals("DIVIDE_BY_ZERO"))
+    assert(signalStatement.errorCondition.equals("DIVIDE_BY_ZERO"))
     assert(signalStatement.messageArguments.isEmpty)
   }
 
@@ -2459,7 +2459,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val signalStatement = tree.collection.head.asInstanceOf[SignalStatement]
     assert(!signalStatement.isBuiltinError)
     assert(signalStatement.sqlState.get.equals("12000"))
-    assert(signalStatement.errorCondition.get.equals("TEST_CONDITION"))
+    assert(signalStatement.errorCondition.equals("TEST_CONDITION"))
     assert(signalStatement.messageArguments.isEmpty)
   }
 
@@ -2476,7 +2476,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val signalStatement = tree.collection.head.asInstanceOf[SignalStatement]
     assert(!signalStatement.isBuiltinError)
     assert(signalStatement.sqlState.get.equals("12345"))
-    assert(signalStatement.errorCondition.get.equals("USER_RAISED_EXCEPTION"))
+    assert(signalStatement.errorCondition.equals("USER_RAISED_EXCEPTION"))
   }
 
   test("declare condition: custom sqlstate") {
@@ -2491,7 +2491,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.conditions("TEST").equals("12000"))
   }
 
-  ignore("declare condition: default sqlstate") {
+  test("declare condition: default sqlstate") {
     val sqlScriptText =
       """
         |BEGIN

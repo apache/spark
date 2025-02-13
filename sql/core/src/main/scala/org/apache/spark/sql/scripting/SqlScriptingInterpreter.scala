@@ -275,10 +275,9 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         new IterateStatementExec(iterateStatement.label)
 
       case signalStatement: SignalStatement =>
-        assert(signalStatement.errorCondition.isDefined)
         assert(signalStatement.sqlState.isDefined)
         new SignalStatementExec(
-          errorCondition = signalStatement.errorCondition.get,
+          errorCondition = signalStatement.errorCondition,
           sqlState = signalStatement.sqlState.get,
           message = signalStatement.message,
           msgArguments = signalStatement.messageArguments,

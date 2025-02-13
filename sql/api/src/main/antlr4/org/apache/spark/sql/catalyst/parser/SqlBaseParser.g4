@@ -60,10 +60,10 @@ compoundBody
     ;
 
 compoundStatement
-    : statement
+    : declareConditionStatement
+    | statement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
-    | declareConditionStatement
     | declareHandlerStatement
     | signalStatement
     | ifElseStatement

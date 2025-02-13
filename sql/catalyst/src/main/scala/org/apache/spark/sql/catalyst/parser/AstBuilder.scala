@@ -332,7 +332,7 @@ class AstBuilder extends DataTypeAstBuilder
     // predefined USER_RAISED_EXCEPTION.
     SignalStatement(
       isBuiltinError = false,
-      errorCondition = Some("USER_RAISED_EXCEPTION"),
+      errorCondition = "USER_RAISED_EXCEPTION",
       sqlState = Some(sqlState.toUpperCase(Locale.ROOT)),
       message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
       messageArguments = None
@@ -385,16 +385,16 @@ class AstBuilder extends DataTypeAstBuilder
           CurrentOrigin.withOrigin(signalStatement.origin) {
             // If SQLSTATE is not already resolved, we need to resolve sqlState for the given
             // error condition. First try to get sqlState if condition is user defined.
-            val (sqlState, isBuiltinError) = conditions.get(signalStatement.errorCondition.get)
+            val (sqlState, isBuiltinError) = conditions.get(signalStatement.errorCondition)
               .map(state => (Some(state), false))
               // If condition is not user defined, check if it is a spark defined error condition,
               // and get appropriate SQLSTATE.
               .getOrElse {
-                if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition.get)) {
-                  (Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition.get)), true)
+                if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition)) {
+                  (Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition)), true)
                 } else {
                   throw SqlScriptingErrors
-                    .conditionNotFound(CurrentOrigin.get, signalStatement.errorCondition.get)
+                    .conditionNotFound(CurrentOrigin.get, signalStatement.errorCondition)
                 }
               }
 

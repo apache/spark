@@ -417,7 +417,7 @@ case class ExceptionHandler(
  */
 case class SignalStatement(
     var isBuiltinError: Boolean = false,
-    errorCondition: Option[String] = None,
+    errorCondition: String,
     var sqlState: Option[String] = None,
     message: Either[String, UnresolvedAttribute],
     messageArguments: Option[UnresolvedAttribute] = None) extends CompoundPlanStatement {
