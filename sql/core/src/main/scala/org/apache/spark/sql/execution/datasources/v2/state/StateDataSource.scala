@@ -321,17 +321,17 @@ case class ReadChangeLogOptions(
 )
 
 case class StateSourceOptions(
-                               resolvedCpLocation: String,
-                               batchId: Long,
-                               operatorId: Int,
-                               storeName: String,
-                               joinSide: JoinSideValues,
-                               readChangeLog: Boolean,
-                               fromSnapshotOptions: Option[FromSnapshotOptions],
-                               readChangeLogOptions: Option[ReadChangeLogOptions],
-                               stateVarName: Option[String],
-                               readRegisteredTimers: Boolean,
-                               flattenCollectionTypes: Boolean) {
+    resolvedCpLocation: String,
+    batchId: Long,
+    operatorId: Int,
+    storeName: String,
+    joinSide: JoinSideValues,
+    readChangeLog: Boolean,
+    fromSnapshotOptions: Option[FromSnapshotOptions],
+    readChangeLogOptions: Option[ReadChangeLogOptions],
+    stateVarName: Option[String],
+    readRegisteredTimers: Boolean,
+    flattenCollectionTypes: Boolean) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
