@@ -462,6 +462,8 @@ case class DataSource(
     val allPaths = paths ++ caseInsensitiveOptions.get("path")
     val outputPath = if (allPaths.length == 1) {
       makeQualified(new Path(allPaths.head))
+    } else if (allPaths.length < 1) {
+      throw QueryExecutionErrors.dataPathNotSpecifiedError()
     } else {
       throw QueryExecutionErrors.multiplePathsSpecifiedError(allPaths)
     }
