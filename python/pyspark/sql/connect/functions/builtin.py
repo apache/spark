@@ -3106,6 +3106,13 @@ def collation(col: "ColumnOrName") -> Column:
 collation.__doc__ = pysparkfuncs.collation.__doc__
 
 
+def quote(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("quote", col)
+
+
+quote.__doc__ = pysparkfuncs.quote.__doc__
+
+
 # Date/Timestamp functions
 
 

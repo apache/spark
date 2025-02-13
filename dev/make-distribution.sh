@@ -35,6 +35,7 @@ DISTDIR="$SPARK_HOME/dist"
 MAKE_TGZ=false
 MAKE_PIP=false
 MAKE_R=false
+MAKE_SPARK_CONNECT=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
@@ -43,7 +44,7 @@ function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--pip] [--r] [--mvn <mvn-command>]"
+  cl_options="[--name] [--tgz] [--pip] [--r] [--connect] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
@@ -61,6 +62,9 @@ while (( "$#" )); do
       ;;
     --r)
       MAKE_R=true
+      ;;
+    --connect)
+      MAKE_SPARK_CONNECT=true
       ;;
     --mvn)
       MVN="$2"
@@ -308,4 +312,20 @@ if [ "$MAKE_TGZ" == "true" ]; then
   fi
   $TAR -czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
+  if [[ "$MAKE_SPARK_CONNECT" == "true" ]]; then
+    TARDIR_NAME=spark-$VERSION-bin-$NAME-spark-connect
+    TARDIR="$SPARK_HOME/$TARDIR_NAME"
+    rm -rf "$TARDIR"
+    cp -r "$DISTDIR" "$TARDIR"
+    # Set the Spark Connect system variable in these scripts to enable it by default.
+    awk 'NR==1{print; print "export SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/pyspark" > tmp && cat tmp > "$TARDIR/bin/pyspark"
+    awk 'NR==1{print; print "export SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/spark-shell" > tmp && cat tmp > "$TARDIR/bin/spark-shell"
+    awk 'NR==1{print; print "export SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/spark-submit" > tmp && cat tmp > "$TARDIR/bin/spark-submit"
+    awk 'NR==1{print; print "set SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/pyspark2.cmd" > tmp && cat tmp > "$TARDIR/bin/pyspark2.cmd"
+    awk 'NR==1{print; print "set SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/spark-shell2.cmd" > tmp && cat tmp > "$TARDIR/bin/spark-shell2.cmd"
+    awk 'NR==1{print; print "set SPARK_CONNECT_MODE=1"; next} {print}' "$TARDIR/bin/spark-submit2.cmd" > tmp && cat tmp > "$TARDIR/bin/spark-submit2.cmd"
+    rm tmp
+    $TAR -czf "$TARDIR_NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
+    rm -rf "$TARDIR"
+  fi
 fi

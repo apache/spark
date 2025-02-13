@@ -15,16 +15,10 @@
 # limitations under the License.
 #
 
-from typing import cast, Type, TYPE_CHECKING, Union, Dict, Any, Optional
+from typing import cast, Type, TYPE_CHECKING, Union, Dict, Any
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
-from pyspark.ml.tuning import (
-    CrossValidatorModelWriter,
-    CrossValidatorModel,
-    TrainValidationSplitModel,
-    TrainValidationSplitModelWriter,
-)
 from pyspark.ml.util import MLWriter, MLReader, RL
 from pyspark.ml.wrapper import JavaWrapper
 
@@ -32,32 +26,6 @@ if TYPE_CHECKING:
     from pyspark.core.context import SparkContext
     from pyspark.sql.connect.session import SparkSession
     from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-
-
-class RemoteCrossValidatorModelWriter(CrossValidatorModelWriter):
-    def __init__(
-        self,
-        instance: "CrossValidatorModel",
-        optionMap: Dict[str, Any] = {},
-        session: Optional["SparkSession"] = None,
-    ):
-        super(RemoteCrossValidatorModelWriter, self).__init__(instance)
-        self.instance = instance
-        self.optionMap = optionMap
-        self.session(session)  # type: ignore[arg-type]
-
-
-class RemoteTrainValidationSplitModelWriter(TrainValidationSplitModelWriter):
-    def __init__(
-        self,
-        instance: "TrainValidationSplitModel",
-        optionMap: Dict[str, Any] = {},
-        session: Optional["SparkSession"] = None,
-    ):
-        super(RemoteTrainValidationSplitModelWriter, self).__init__(instance)
-        self.instance = instance
-        self.optionMap = optionMap
-        self.session(session)  # type: ignore[arg-type]
 
 
 class RemoteMLWriter(MLWriter):
@@ -94,9 +62,14 @@ class RemoteMLWriter(MLWriter):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
         from pyspark.ml.clustering import PowerIterationClustering
+        from pyspark.ml.tuning import (
+            CrossValidator,
+            CrossValidatorModel,
+            TrainValidationSplit,
+            TrainValidationSplitModel,
+        )
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -118,13 +91,13 @@ class RemoteMLWriter(MLWriter):
         elif isinstance(instance, (JavaEstimator, JavaTransformer, JavaEvaluator)):
             operator: Union[JavaEstimator, JavaTransformer, JavaEvaluator]
             if isinstance(instance, JavaEstimator):
-                ml_type = pb2.MlOperator.ESTIMATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
                 operator = cast("JavaEstimator", instance)
             elif isinstance(instance, JavaEvaluator):
-                ml_type = pb2.MlOperator.EVALUATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
                 operator = cast("JavaEvaluator", instance)
             else:
-                ml_type = pb2.MlOperator.TRANSFORMER
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
                 operator = cast("JavaTransformer", instance)
 
             params = serialize_ml_params(operator, session.client)
@@ -162,8 +135,12 @@ class RemoteMLWriter(MLWriter):
             cv_writer.session(session)  # type: ignore[arg-type]
             cv_writer.save(path)
         elif isinstance(instance, CrossValidatorModel):
+            from pyspark.ml.tuning import CrossValidatorModelWriter
+
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
-            cvm_writer = RemoteCrossValidatorModelWriter(instance, optionMap, session)
+            cvm_writer = CrossValidatorModelWriter(instance)
+            cvm_writer.optionMap = optionMap
+            cvm_writer.session(session)  # type: ignore[arg-type]
             cvm_writer.save(path)
         elif isinstance(instance, TrainValidationSplit):
             from pyspark.ml.tuning import TrainValidationSplitWriter
@@ -172,8 +149,12 @@ class RemoteMLWriter(MLWriter):
             tvs_writer = TrainValidationSplitWriter(instance)
             tvs_writer.save(path)
         elif isinstance(instance, TrainValidationSplitModel):
+            from pyspark.ml.tuning import TrainValidationSplitModelWriter
+
             RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
-            tvsm_writer = RemoteTrainValidationSplitModelWriter(instance, optionMap, session)
+            tvsm_writer = TrainValidationSplitModelWriter(instance)
+            tvsm_writer.optionMap = optionMap
+            tvsm_writer.session(session)  # type: ignore[arg-type]
             tvsm_writer.save(path)
         elif isinstance(instance, OneVsRest):
             from pyspark.ml.classification import OneVsRestWriter
@@ -238,9 +219,14 @@ class RemoteMLReader(MLReader[RL]):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
         from pyspark.ml.clustering import PowerIterationClustering
+        from pyspark.ml.tuning import (
+            CrossValidator,
+            CrossValidatorModel,
+            TrainValidationSplit,
+            TrainValidationSplitModel,
+        )
 
         if (
             issubclass(clazz, JavaModel)
@@ -249,13 +235,13 @@ class RemoteMLReader(MLReader[RL]):
             or issubclass(clazz, JavaTransformer)
         ):
             if issubclass(clazz, JavaModel):
-                ml_type = pb2.MlOperator.MODEL
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_MODEL
             elif issubclass(clazz, JavaEstimator):
-                ml_type = pb2.MlOperator.ESTIMATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
             elif issubclass(clazz, JavaEvaluator):
-                ml_type = pb2.MlOperator.EVALUATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
             else:
-                ml_type = pb2.MlOperator.TRANSFORMER
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
 
             # to get the java corresponding qualified class name
             java_qualified_class_name = (
@@ -281,7 +267,7 @@ class RemoteMLReader(MLReader[RL]):
             py_type = _get_class()
             # It must be JavaWrapper, since we're passing the string to the _java_obj
             if issubclass(py_type, JavaWrapper):
-                if ml_type == pb2.MlOperator.MODEL:
+                if ml_type == pb2.MlOperator.OPERATOR_TYPE_MODEL:
                     session.client.add_ml_cache(result.obj_ref.id)
                     instance = py_type(result.obj_ref.id)
                 else:
@@ -358,7 +344,8 @@ class RemoteMLReader(MLReader[RL]):
             command.ml_command.read.CopyFrom(
                 pb2.MlCommand.Read(
                     operator=pb2.MlOperator(
-                        name=java_qualified_class_name, type=pb2.MlOperator.TRANSFORMER
+                        name=java_qualified_class_name,
+                        type=pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER,
                     ),
                     path=path,
                 )

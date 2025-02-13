@@ -284,7 +284,7 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
       OneVsRestParams.saveImpl(path, instance, sparkSession, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model_$idx").toString
-        model.save(modelPath)
+        model.write.session(sparkSession).save(modelPath)
       }
     }
   }

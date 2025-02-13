@@ -295,6 +295,12 @@ class SparkNoSuchElementException(SparkConnectGrpcException, BaseNoSuchElementEx
     """
 
 
+class InvalidPlanInput(SparkConnectGrpcException):
+    """
+    Error thrown when a connect plan is not valid.
+    """
+
+
 # Update EXCEPTION_CLASS_MAPPING here when adding a new exception
 EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.sql.catalyst.parser.ParseException": ParseException,
@@ -312,6 +318,7 @@ EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.api.python.PythonException": PythonException,
     "org.apache.spark.SparkNoSuchElementException": SparkNoSuchElementException,
     "org.apache.spark.SparkException": SparkException,
+    "org.apache.spark.sql.connect.common.InvalidPlanInput": InvalidPlanInput,
 }
 
 

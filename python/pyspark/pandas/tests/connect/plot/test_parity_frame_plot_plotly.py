@@ -24,9 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class DataFramePlotPlotlyParityTests(
     DataFramePlotPlotlyTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("SPARK-51137: Should be reenabled")
-    def test_area_plot(self):
-        self.test_area_plot()
+    pass
 
 
 if __name__ == "__main__":

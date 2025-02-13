@@ -1046,6 +1046,9 @@ class ClientE2ETestSuite
     assert(spark.conf.get(entryWithDefault.key) === "12")
     assert(spark.conf.get(entryWithDefault) === 12)
     assert(spark.conf.get(entryWithDefault, 11) === 12)
+
+    assert(spark.conf.contains(entryWithDefault.key))
+    assert(!spark.conf.contains("nope"))
   }
 
   test("SparkVersion") {

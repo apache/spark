@@ -15,17 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.catalyst.analysis
 
-class MySQLDatabaseOnDocker extends DatabaseOnDocker {
-  override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:9.2.0")
-  override val env = Map(
-    "MYSQL_ROOT_PASSWORD" -> "rootpass"
-  )
-  override val usesIpc = false
-  override val jdbcPort: Int = 3306
+import org.apache.spark.sql.catalyst.expressions._
 
-  override def getJdbcUrl(ip: String, port: Int): String =
-    s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-      s"&useSSL=false&disableMariaDbDriver"
+object NondeterministicExpressionCollection {
+  def getNondeterministicToAttributes(
+      expressions: Seq[Expression]): Map[Expression, NamedExpression] = {
+    expressions
+      .filterNot(_.deterministic)
+      .flatMap { expr =>
+        val leafNondeterministic = expr.collect {
+          case n: Nondeterministic => n
+          case udf: UserDefinedExpression if !udf.deterministic => udf
+        }
+        leafNondeterministic.distinct.map { e =>
+          val ne = e match {
+            case n: NamedExpression => n
+            case _ => Alias(e, "_nondeterministic")()
+          }
+          e -> ne
+        }
+      }
+      .toMap
+  }
 }
