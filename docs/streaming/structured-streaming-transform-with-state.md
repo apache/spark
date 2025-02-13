@@ -134,17 +134,62 @@ When providing initial state via `StatefulProcessorWithInitialState`:
 * Processed via `handleInitialState()` method
 * Useful for migrating state from existing queries
 
-### Schema Evolution
-Supported schema changes between query versions:
-* Adding fields (new fields get null defaults)
-* Removing fields
-* Upcasting fields (e.g., Int to Long)
-* Reordering fields
+### State Store Encoding
 
-Schema evolution rules:
-* Changes validated at query start
-* Fields matched by name, not position
-* Must be compatible with all previous versions
-* Null defaults for all fields
+The TransformWithState API supports two encoding formats for storing state information: UnsafeRow and Avro. This can be configured using the `spark.sql.streaming.stateStore.encodingFormat` configuration option.
 
-[Example usage...]
+#### Encoding Configuration
+
+Set the encoding format using:
+
+```scala
+spark.conf.set("spark.sql.streaming.stateStore.encodingFormat", "avro")  // or "unsaferow"
+```
+
+The default value is "unsaferow".
+
+#### Encoding Options
+
+##### UnsafeRow Encoding
+- Default encoding format
+- Optimized for performance with minimal serialization overhead
+- Best choice when schema evolution is not required
+- More memory-efficient for simple data types
+
+##### Avro Encoding
+- Added in Spark 4.0.0
+- Provides robust schema evolution capabilities
+- Supports all schema evolution operations:
+  - Adding fields
+  - Removing fields
+  - Changing field orders
+  - Type promotion (e.g., Int to Long)
+- Better suited for complex data types and nested structures
+- Recommended when schema flexibility is important
+
+#### Best Practices
+
+1. Use UnsafeRow encoding when:
+  - Performance is the top priority
+  - Schema is stable and unlikely to change
+  - Working primarily with simple data types
+  - Memory efficiency is crucial
+
+2. Use Avro encoding when:
+  - Schema evolution is needed
+  - Working with complex or nested data structures
+  - Long-term maintainability is prioritized over raw performance
+  - Planning to modify state schemas over time
+
+3. Consider the tradeoffs:
+  - UnsafeRow provides better performance but limited schema evolution
+  - Avro offers more flexibility but with some performance overhead
+
+#### Schema Evolution with Avro
+
+When using Avro encoding, you can evolve your schemas following standard Avro compatibility rules:
+
+1. Adding Fields: New fields must have default values
+2. Removing Fields: Existing data will retain removed fields
+3. Type Promotion: Must follow valid Avro type promotion rules
+4. Reordering: Fields can be reordered freely
