@@ -696,7 +696,9 @@ class SparkSession:
                         errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
 
-            from pyspark.sql.connect.conversion import LocalDataToArrowConversion
+            from pyspark.sql.conversion import (
+                LocalDataToArrowConversion,
+            )
 
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
