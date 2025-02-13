@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for showing tables.
@@ -48,9 +49,6 @@ case class ShowTablesExec(
   }
 
   private def isTempView(ident: Identifier): Boolean = {
-    catalog match {
-      case s: V2SessionCatalog => s.isTempView(ident)
-      case _ => false
-    }
+    session.sessionState.catalog.isTempView((ident.namespace() :+ ident.name()).toImmutableArraySeq)
   }
 }
