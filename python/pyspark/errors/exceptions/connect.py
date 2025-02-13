@@ -36,6 +36,7 @@ from pyspark.errors.exceptions.base import (
     SparkUpgradeException as BaseSparkUpgradeException,
     QueryContext as BaseQueryContext,
     QueryContextType,
+    UnknownException as BaseUnknownException,
 )
 
 if TYPE_CHECKING:
@@ -104,8 +105,8 @@ def convert_exception(
                 contexts=contexts,
             )
 
-    # Return SparkConnectGrpcException if there is no matched exception class
-    return SparkConnectGrpcException(
+    # Return UnknownException if there is no matched exception class
+    return UnknownException(
         message,
         reason=info.reason,
         messageParameters=message_parameters,
@@ -205,6 +206,36 @@ class SparkConnectGrpcException(SparkConnectException):
 
     def __str__(self) -> str:
         return self.getMessage()
+
+
+class UnknownException(SparkConnectGrpcException, BaseUnknownException):
+    """
+    Exception for unmapped errors in Spark Connect.
+    This class is functionally identical to SparkConnectGrpcException but has a different name
+    for consistency.
+    """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        errorClass: Optional[str] = None,
+        messageParameters: Optional[Dict[str, str]] = None,
+        reason: Optional[str] = None,
+        sql_state: Optional[str] = None,
+        server_stacktrace: Optional[str] = None,
+        display_server_stacktrace: bool = False,
+        contexts: Optional[List[BaseQueryContext]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            errorClass=errorClass,
+            messageParameters=messageParameters,
+            reason=reason,
+            sql_state=sql_state,
+            server_stacktrace=server_stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+            contexts=contexts,
+        )
 
 
 class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):
