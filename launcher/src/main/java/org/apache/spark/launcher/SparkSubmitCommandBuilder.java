@@ -384,11 +384,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
-    } else if (conf.getOrDefault(
-        SparkLauncher.SPARK_API_MODE, "classic").toLowerCase(Locale.ROOT).equals("connect") &&
-        masterStr != null) {
-      env.put("SPARK_REMOTE", masterStr);
-      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
+    } else {
+      String defaultApiMode = "1".equals(System.getenv("SPARK_CONNECT_MODE")) ? "connect" : "classic";
+      String apiMode = conf.getOrDefault(SparkLauncher.SPARK_API_MODE, defaultApiMode).toLowerCase(Locale.ROOT);
+      if (apiMode.equals("connect")) {
+        env.put("SPARK_CONNECT_MODE_ENABLED", "1");
+      }
     }
 
     if (!isEmpty(pyOpts)) {
