@@ -1209,10 +1209,9 @@ class CollationSQLExpressionsSuite
           condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
           sqlState = Some("42K09"),
           parameters = Map(
-            "sqlExpr" -> ("\"str_to_map('a:1,b:2,c:3' collate " + s"${t.collation}, " +
-              "'?' collate " + s"${t.collation}, '?' collate ${t.collation})" + "\""),
+            "sqlExpr" -> "\"str_to_map(a:1,b:2,c:3, ?, ?)\"",
             "paramIndex" -> "first",
-            "inputSql" -> ("\"'a:1,b:2,c:3' collate " + s"${t.collation}" + "\""),
+            "inputSql" -> "\"a:1,b:2,c:3\"",
             "inputType" -> ("\"STRING COLLATE " + s"${t.collation}" + "\""),
             "requiredType" -> "\"STRING\""),
           context = ExpectedContext(

@@ -95,6 +95,9 @@ package object util extends Logging {
   // generated column names don't contain back-ticks or double-quotes.
   def usePrettyExpression(e: Expression): Expression = e transform {
     case a: Attribute => new PrettyAttribute(a)
+    case Literal(s: UTF8String, collationStringType: StringType)
+        if collationStringType.collationId != 0 =>
+      PrettyAttribute(s.toString, StringType)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
     case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
