@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -216,7 +217,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   }
 
   def optimizeSkewJoin(plan: SparkPlan,
-                       forceOptimizeSkewedJoin: Boolean): SparkPlan = plan.transformUp {
+      forceOptimizeSkewedJoin: Boolean): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
         s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
         s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false, _) =>
