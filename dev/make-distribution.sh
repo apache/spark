@@ -47,6 +47,7 @@ function exit_with_usage {
   cl_options="[--name] [--tgz] [--pip] [--r] [--connect] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
+  echo "SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version."
   echo ""
   exit 1
 }
