@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 
 from pyspark.ml.linalg import Vectors, SparseVector
-from pyspark.sql import SparkSession
 from pyspark.ml.clustering import (
     KMeans,
     KMeansModel,
@@ -38,6 +37,7 @@ from pyspark.ml.clustering import (
     DistributedLDAModel,
     PowerIterationClustering,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ClusteringTestsMixin:
@@ -506,12 +506,8 @@ class ClusteringTestsMixin:
             self.assertEqual(pic.getWeightCol(), pic2.getWeightCol())
 
 
-class ClusteringTests(ClusteringTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class ClusteringTests(ClusteringTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
