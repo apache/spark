@@ -1900,7 +1900,7 @@ private[spark] class DAGScheduler(
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
     // only updated in certain cases.
-    val (readLockOpt, isIndeterministicZombie) = event.reason match {
+    val (readLockOptTemp, isIndeterministicZombie) = event.reason match {
       case Success =>
         val readLock = stage.acquireStageReadLock()
         val isZombieIndeterminate =
@@ -1930,6 +1930,13 @@ private[spark] class DAGScheduler(
 
       case _ => (None, false)
     }
+    val readLockOpt = if (isIndeterministicZombie) {
+      readLockOptTemp
+    } else {
+      readLockOptTemp.foreach(_.unlock())
+      None
+    }
+
     try {
       handleTaskCompletionInOptionalReadLock(event, task, stageId, stage, isIndeterministicZombie)
     } finally {
