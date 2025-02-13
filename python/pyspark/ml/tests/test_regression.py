@@ -47,22 +47,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class RegressionTestsMixin:
-    @property
-    def df(self):
-        return (
-            self.spark.createDataFrame(
-                [
-                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
-                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
-                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
-                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
-                ],
-                ["label", "weight", "features"],
-            )
-            .coalesce(1)
-            .sortWithinPartitions("weight")
-        )
-
     def test_aft_survival(self):
         spark = self.spark
         df = spark.createDataFrame(
@@ -162,7 +146,21 @@ class RegressionTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_linear_regression(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
         lr = LinearRegression(
             regParam=0.0,
             maxIter=2,
@@ -434,7 +432,20 @@ class RegressionTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_decision_tree_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         dt = DecisionTreeRegressor(
             maxDepth=2,
@@ -490,7 +501,20 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
     def test_gbt_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         gbt = GBTRegressor(
             maxIter=3,
@@ -575,7 +599,20 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
     def test_random_forest_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         rf = RandomForestRegressor(
             numTrees=3,
