@@ -449,17 +449,24 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    *   The logical plan and a flag indicating that the plan cache was hit.
    */
   private[connect] def usePlanCache(rel: proto.Relation)(
-      transform: proto.Relation => LogicalPlan): (LogicalPlan, Boolean) =
+      transform: proto.Relation => LogicalPlan): (LogicalPlan, Boolean) = {
     planCache match {
       case Some(cache) if canCachePlan(rel) =>
         Option(cache.getIfPresent(rel)) match {
           case Some(plan) =>
-            logDebug(s"Using cached plan for relation '$rel': $plan")
-            (plan, true)
-          case None => (transform(rel), false)
+            if (plan.isOutdated) {
+              // The plan is outdated, therefore remove it from the cache.
+              cache.invalidate(rel)
+            } else {
+              logDebug(s"Using cached plan for relation '$rel': $plan")
+              return (plan, true)
+            }
+          case None => ()
         }
-      case _ => (transform(rel), false)
+      case _ => ()
     }
+    (transform(rel), false)
+  }
 
   /**
    * Create a data frame from the supplied relation, and update the plan cache.
