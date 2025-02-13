@@ -30,18 +30,18 @@ import glob
 from pathlib import Path
 
 if (
-    # When we package, the parent diectory 'connect' dir
-    # (as we pip install -e python/packaging/connect)
+    # When we package, the parent diectory 'client' dir
+    # (as we pip install -e python/packaging/client)
     os.getcwd() == str(Path(__file__).parent.absolute())
-    and str(Path(__file__).parent.name) == "connect"
+    and str(Path(__file__).parent.name) == "client"
 ):
     # For:
-    # - pip install -e python/packaging/connect
-    #     It moves the current working directory to 'connect'
-    # - cd python/packaging/connect; python setup.py sdist
+    # - pip install -e python/packaging/client
+    #     It moves the current working directory to 'client'
+    # - cd python/packaging/client; python setup.py sdist
     #
     # For:
-    # - python packaging/connect/setup.py sdist, it does not
+    # - python packaging/client/setup.py sdist, it does not
     #     execute this branch.
     #
     # Move to spark/python
@@ -122,8 +122,8 @@ try:
         # 2. Here it renames `lib` to `lib.ack` so MANIFEST.in does not pick `py4j` up.
         #    We rename it back in the end.
         move("lib", "lib.back")
-        copyfile("packaging/connect/setup.py", "setup.py")
-        copyfile("packaging/connect/setup.cfg", "setup.cfg")
+        copyfile("packaging/client/setup.py", "setup.py")
+        copyfile("packaging/client/setup.cfg", "setup.cfg")
 
     # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
     # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
@@ -186,7 +186,7 @@ try:
     ]
 
     setup(
-        name="pyspark-connect",
+        name="pyspark-client",
         version=VERSION,
         description="Python Spark Connect client for Apache Spark",
         long_description=long_description,

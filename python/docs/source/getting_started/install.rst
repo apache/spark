@@ -88,11 +88,11 @@ Python Spark Connect Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The Python Spark Connect client is a pure Python library that does not rely on any non-Python dependencies such as jars and JRE in your environment.
-To install the Python Spark Connect client via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_, execute the following command:
+To install the Python Spark Connect client via `PyPI (pyspark-client) <https://pypi.org/project/pyspark-client/>`_, execute the following command:
 
 .. code-block:: bash
 
-    pip install pyspark-connect
+    pip install pyspark-client
 
 See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
 

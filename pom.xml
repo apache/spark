@@ -227,7 +227,7 @@
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
-    and ./python/packaging/connect/setup.py too.
+    and ./python/packaging/client/setup.py too.
     -->
     <arrow.version>18.2.0</arrow.version>
     <ammonite.version>3.0.1</ammonite.version>

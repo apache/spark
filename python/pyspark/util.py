@@ -797,7 +797,7 @@ _is_remote_only = None
 def is_remote_only() -> bool:
     """
     Returns if the current running environment is only for Spark Connect.
-    If users install pyspark-connect alone, RDD API does not exist.
+    If users install pyspark-client alone, RDD API does not exist.
 
     .. versionadded:: 4.0.0
 
