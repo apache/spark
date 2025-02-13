@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, Expression, IntegerLiteral, ShortLiteral, SortOrder, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -174,9 +174,20 @@ object ResolveHints {
    * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITION_BY_RANGE".
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
-
-    val COALESCE_HINT_NAMES: Set[String] =
-      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "REBALANCE")
+    private def getNumOfPartitions(hint: UnresolvedHint): (Option[Int], Seq[Any]) = {
+      val (numOfPartitions, partitionExprs) = hint.parameters match {
+        case Seq(ByteLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
+        case Seq(ShortLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
+        case Seq(IntegerLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
+        case _ => (None, hint.parameters)
+      }
+      val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+      if (invalidParams.nonEmpty) {
+        val hintName = hint.name.toUpperCase(Locale.ROOT)
+        throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
+      }
+      (numOfPartitions, partitionExprs)
+    }
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -185,7 +196,6 @@ object ResolveHints {
      */
     private def createRepartition(
         shuffle: Boolean, hint: UnresolvedHint): LogicalPlan = {
-      val hintName = hint.name.toUpperCase(Locale.ROOT)
 
       def createRepartitionByExpression(
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
@@ -193,25 +203,21 @@ object ResolveHints {
         if (sortOrders.nonEmpty) {
           throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
         }
-        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
-        if (invalidParams.nonEmpty) {
-          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
-        }
         RepartitionByExpression(
           partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
       }
 
-      hint.parameters match {
-        case Seq(IntegerLiteral(numPartitions)) =>
+      getNumOfPartitions(hint) match {
+        case (Some(numPartitions), partitionExprs) if partitionExprs.isEmpty =>
           Repartition(numPartitions, shuffle, hint.child)
         // The "COALESCE" hint (shuffle = false) must have a partition number only
         case _ if !shuffle =>
-          throw QueryCompilationErrors.invalidCoalesceHintParameterError(hintName)
-
-        case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
-        case param @ Seq(_*) if shuffle =>
-          createRepartitionByExpression(None, param)
+          throw QueryCompilationErrors.invalidCoalesceHintParameterError(
+            hint.name.toUpperCase(Locale.ROOT))
+        case (Some(numPartitions), partitionExprs) if shuffle =>
+          createRepartitionByExpression(Some(numPartitions), partitionExprs)
+        case (None, partitionExprs) if shuffle =>
+          createRepartitionByExpression(None, partitionExprs)
       }
     }
 
@@ -220,14 +226,8 @@ object ResolveHints {
      * The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional.
      */
     private def createRepartitionByRange(hint: UnresolvedHint): RepartitionByExpression = {
-      val hintName = hint.name.toUpperCase(Locale.ROOT)
-
       def createRepartitionByExpression(
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
-        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
-        if (invalidParams.nonEmpty) {
-          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
-        }
         val sortOrder = partitionExprs.map {
           case expr: SortOrder => expr
           case expr: Expression => SortOrder(expr, Ascending)
@@ -235,32 +235,27 @@ object ResolveHints {
         RepartitionByExpression(sortOrder, hint.child, numPartitions)
       }
 
-      hint.parameters match {
-        case param @ Seq(IntegerLiteral(numPartitions), _*) =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
-        case param @ Seq(_*) =>
-          createRepartitionByExpression(None, param)
+      getNumOfPartitions(hint) match {
+        case (Some(numPartitions), partitionExprs) =>
+          createRepartitionByExpression(Some(numPartitions), partitionExprs)
+        case (None, partitionExprs) =>
+          createRepartitionByExpression(None, partitionExprs)
       }
     }
 
     private def createRebalance(hint: UnresolvedHint): LogicalPlan = {
       def createRebalancePartitions(
           partitionExprs: Seq[Any], initialNumPartitions: Option[Int]): RebalancePartitions = {
-        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
-        if (invalidParams.nonEmpty) {
-          val hintName = hint.name.toUpperCase(Locale.ROOT)
-          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
-        }
         RebalancePartitions(
           partitionExprs.map(_.asInstanceOf[Expression]),
           hint.child,
           initialNumPartitions)
       }
 
-      hint.parameters match {
-        case param @ Seq(IntegerLiteral(numPartitions), _*) =>
-          createRebalancePartitions(param.tail, Some(numPartitions))
-        case partitionExprs @ Seq(_*) =>
+      getNumOfPartitions(hint) match {
+        case (Some(numPartitions), partitionExprs) =>
+          createRebalancePartitions(partitionExprs, Some(numPartitions))
+        case (None, partitionExprs) =>
           createRebalancePartitions(partitionExprs, None)
       }
     }
