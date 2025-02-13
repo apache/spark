@@ -244,6 +244,12 @@ class StreamingQueryException(PySparkException):
     """
 
 
+class StreamingPythonRunnerInitializationException(PySparkException):
+    """
+    Failed to initialize a streaming Python runner.
+    """
+
+
 class QueryExecutionException(PySparkException):
     """
     Failed to execute a query.
