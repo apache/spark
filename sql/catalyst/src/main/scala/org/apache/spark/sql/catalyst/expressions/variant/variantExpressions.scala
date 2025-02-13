@@ -446,7 +446,7 @@ case object VariantGet {
           case Type.BOOLEAN => Literal(v.getBoolean, BooleanType)
           case Type.LONG => Literal(v.getLong, LongType)
           case Type.STRING => Literal(UTF8String.fromString(v.getString),
-            SQLConf.get.defaultStringType)
+            StringType)
           case Type.DOUBLE => Literal(v.getDouble, DoubleType)
           case Type.DECIMAL =>
             val d = Decimal(v.getDecimal)
@@ -679,7 +679,7 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
   override def elementSchema: StructType = {
     new StructType()
       .add("pos", IntegerType, nullable = false)
-      .add("key", SQLConf.get.defaultStringType, nullable = true)
+      .add("key", StringType, nullable = true)
       .add("value", VariantType, nullable = false)
   }
 }
@@ -850,7 +850,7 @@ object SchemaOfVariant {
     case Type.NULL => NullType
     case Type.BOOLEAN => BooleanType
     case Type.LONG => LongType
-    case Type.STRING => SQLConf.get.defaultStringType
+    case Type.STRING => StringType
     case Type.DOUBLE => DoubleType
     case Type.DECIMAL =>
       val d = Decimal(v.getDecimal)
