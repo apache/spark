@@ -28,6 +28,9 @@ class RegressionParityTests(RegressionTestsMixin, unittest.TestCase):
             os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
         ).getOrCreate()
 
+    def test_pass(self):
+        pass
+
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote
 
