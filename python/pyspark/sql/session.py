@@ -40,7 +40,7 @@ from typing import (
 )
 
 from pyspark.conf import SparkConf
-from pyspark.util import is_remote_only
+from pyspark.util import default_api_mode, is_remote_only
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
@@ -486,15 +486,9 @@ class SparkSession(SparkConversionMixin):
             from pyspark.core.context import SparkContext
 
             with self._lock:
-                api_mode = opts.get("spark.api.mode")
-                if api_mode is None:
-                    try:
-                        import pyspark_connect  # noqa: F401
-
-                        api_mode = "connect"
-                    except ImportError:
-                        api_mode = "classic"
-                is_api_mode_connect = api_mode.lower() == "connect"
+                is_api_mode_connect = (
+                    opts.get("spark.api.mode", default_api_mode()).lower() == "connect"
+                )
 
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ

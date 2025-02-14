@@ -83,6 +83,8 @@ export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH"
 export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"
 export PYTHONSTARTUP="${SPARK_HOME}/python/pyspark/shell.py"
 
+export PYSPARK_DEFAULT_API_MODE=$($PYSPARK_DRIVER_PYTHON -c "from pyspark.util import default_api_mode; print(default_api_mode())")
+
 # For pyspark tests
 if [[ -n "$SPARK_TESTING" ]]; then
   unset YARN_CONF_DIR

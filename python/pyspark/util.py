@@ -835,6 +835,21 @@ def is_remote_only() -> bool:
         return _is_remote_only
 
 
+def default_api_mode():
+    """
+    Return the default API mode.
+    """
+    default_api_mode = os.environ.get("PYSPARK_DEFAULT_API_MODE")
+    if default_api_mode is not None:
+        return default_api_mode
+    try:
+        import pyspark_connect
+
+        return "connect"
+    except ImportError:
+        return "classic"
+
+
 if __name__ == "__main__":
     if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 9):
         import doctest

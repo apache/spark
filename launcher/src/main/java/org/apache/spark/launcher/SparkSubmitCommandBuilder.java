@@ -385,9 +385,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       env.put("SPARK_REMOTE", remoteStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     } else if (conf.getOrDefault(
-        SparkLauncher.SPARK_API_MODE, "classic").toLowerCase(Locale.ROOT).equals("connect") &&
+        SparkLauncher.SPARK_API_MODE,
+            System.getenv().getOrDefault("PYSPARK_DEFAULT_API_MODE", "classic"))
+            .toLowerCase(Locale.ROOT).equals("connect") &&
         masterStr != null) {
-      env.put("SPARK_REMOTE", masterStr);
+      env.put("MASTER", masterStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
