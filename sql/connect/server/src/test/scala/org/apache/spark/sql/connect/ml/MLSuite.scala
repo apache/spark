@@ -277,11 +277,12 @@ class MLSuite extends MLHelper {
     // Remove the model from cache
     sessionHolder.mlCache.clear()
 
+    // No longer able to retrieve the model from cache
     val e = intercept[MLCacheInvalidException] {
       MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
     }
     val msg = e.getMessage
-    assert(msg.contains(s"$modelId from the ML cache."))
+    assert(msg.contains(s"$modelId from the ML cache"))
   }
 
   test("access the attribute which is not in allowed list") {
