@@ -14,19 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+# Arrow is required for arrow conversion.
+require_minimum_pyarrow_version()
+
+
 import array
 import datetime
 import decimal
 from typing import Any, Callable, List, Sequence
 
 import pyarrow as pa
-
 from pyspark.errors import PySparkValueError
-from pyspark.sql.pandas.types import (
-    _dedup_names,
-    _deduplicate_field_names,
-    to_arrow_schema,
-)
+from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -50,7 +51,6 @@ from pyspark.sql.types import (
 class LocalDataToArrowConversion:
     """
     Conversion from local data (except pandas DataFrame and numpy ndarray) to Arrow.
-    Currently, only :class:`SparkSession` in Spark Connect can use this class.
     """
 
     @staticmethod
@@ -375,7 +375,6 @@ class LocalDataToArrowConversion:
 class ArrowTableToRowsConversion:
     """
     Conversion from Arrow Table to Rows.
-    Currently, only :class:`DataFrame` in Spark Connect can use this class.
     """
 
     @staticmethod
