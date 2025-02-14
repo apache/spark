@@ -2212,6 +2212,21 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     checkJsonRoundtrip(
       RocksDBCheckpointMetadata(sstFiles, logFiles, 12345678901234L),
       """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234,"numInternalKeys":0}""")
+
+    // verify format without including column family type
+    val cfMapping: Option[scala.collection.Map[String, Short]] = Some(Map("cf1" -> 1, "cf2" -> 2))
+    var cfTypeMap: Option[scala.collection.Map[String, Boolean]] = None
+    val maxCfId: Option[Short] = Some(2)
+    checkJsonRoundtrip(
+      RocksDBCheckpointMetadata(Seq.empty, 5L, 0L, cfMapping, cfTypeMap, maxCfId),
+      """{"sstFiles":[],"numKeys":5,"numInternalKeys":0,"columnFamilyMapping":{"cf1":1,"cf2":2},"maxColumnFamilyId":2}""")
+
+    // verify format including column family type and non-zero internal keys
+    cfTypeMap = Some(Map("cf1" -> true, "cf2" -> false))
+    checkJsonRoundtrip(
+      RocksDBCheckpointMetadata(Seq.empty, 3L, 2L, cfMapping, cfTypeMap, maxCfId),
+      """{"sstFiles":[],"numKeys":3,"numInternalKeys":2,"columnFamilyMapping":{"cf1":1,"cf2":2},"columnFamilyTypeMap":{"cf1":true,"cf2":false},"maxColumnFamilyId":2}""")
+
     // scalastyle:on line.size.limit
   }
 
