@@ -391,6 +391,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     } else if (isRemote) {
       // If `removeStr` is not specified but isRemote is true, it means the api mode is connect.
+      env.put("SPARK_REMOTE", masterStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
