@@ -2440,7 +2440,7 @@ private[spark] object Utils
   /**
    * Returns the current user name. This is the currently logged in user, unless that's been
    * overridden by the `SPARK_USER` environment variable. In case of exceptions, returns the value
-   * of System.getProperty("user.name", "spark").
+   * of System.getProperty("user.name", "<unknown>").
    */
   def getCurrentUserName(): String = {
     try {
@@ -2449,7 +2449,7 @@ private[spark] object Utils
     } catch {
       // JEP 486: Permanently Disable the Security Manager
       case e: UnsupportedOperationException if e.getMessage().contains("getSubject") =>
-        System.getProperty("user.name", "spark")
+        System.getProperty("user.name", "<unknown>")
     }
   }
 
