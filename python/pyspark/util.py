@@ -835,18 +835,31 @@ def is_remote_only() -> bool:
         return _is_remote_only
 
 
-def default_api_mode():
+# This function will be called in `pyspark` script as well,
+# so this should be available without a running Spark.
+# If move or rename, please update the script too.
+def spark_connect_mode() -> str:
     """
-    Return the default API mode.
+    Return the env var SPARK_CONNECT_MODE; otherwise "1" if `pyspark_connect` is available.
     """
-    default_api_mode = os.environ.get("PYSPARK_DEFAULT_API_MODE")
-    if default_api_mode is not None:
-        return default_api_mode
+    connect_by_default = os.environ.get("SPARK_CONNECT_MODE")
+    if connect_by_default is not None:
+        return connect_by_default
     try:
         import pyspark_connect
 
-        return "connect"
+        return "1"
     except ImportError:
+        return "0"
+
+
+def default_api_mode() -> str:
+    """
+    Return the default API mode.
+    """
+    if spark_connect_mode() == "1":
+        return "connect"
+    else:
         return "classic"
 
 
