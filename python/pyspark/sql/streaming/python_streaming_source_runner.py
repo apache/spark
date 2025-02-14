@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
 )
+from pyspark.sql.worker.internal.data_source_reader_info import DataSourceReaderInfo
 from pyspark.sql.worker.plan_data_source_read import records_to_arrow_batches
 from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
@@ -69,7 +70,7 @@ def latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
 
 def partitions_func(
     reader: DataSourceStreamReader,
-    data_source: DataSource,
+    data_source_name: str,
     schema: StructType,
     max_arrow_batch_size: int,
     infile: IO,
@@ -87,7 +88,7 @@ def partitions_func(
         if it is None:
             write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
         else:
-            send_batch_func(it, outfile, schema, max_arrow_batch_size, data_source)
+            send_batch_func(it, outfile, schema, max_arrow_batch_size, data_source_name)
     else:
         write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
 
@@ -103,9 +104,9 @@ def send_batch_func(
     outfile: IO,
     schema: StructType,
     max_arrow_batch_size: int,
-    data_source: DataSource,
+    data_source_name: str,
 ) -> None:
-    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source))
+    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source_name))
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
@@ -125,15 +126,26 @@ def main(infile: IO, outfile: IO) -> None:
 
         _accumulatorRegistry.clear()
 
-        # Receive the data source instance.
-        data_source = read_command(pickleSer, infile)
-
-        if not isinstance(data_source, DataSource):
+        # Receive the data source reader.
+        reader_info = read_command(pickleSer, infile)
+        if not isinstance(reader_info, DataSourceReaderInfo):
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
                 messageParameters={
-                    "expected": "a Python data source instance of type 'DataSource'",
-                    "actual": f"'{type(data_source).__name__}'",
+                    "expected": "a Python data source reader info of type 'DataSourceReaderInfo'",
+                    "actual": f"'{type(reader_info).__name__}'",
+                },
+            )
+
+        reader = reader_info.reader
+        data_source_name = reader_info.data_source_name
+
+        if not isinstance(reader, DataSourceStreamReader):
+            raise PySparkAssertionError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "a Python data source reader of type 'DataSourceStreamReader'",
+                    "actual": f"'{type(reader).__name__}'",
                 },
             )
 
@@ -155,9 +167,7 @@ def main(infile: IO, outfile: IO) -> None:
             f"'{max_arrow_batch_size}'"
         )
 
-        # Instantiate data source reader.
         try:
-            reader = _streamReader(data_source, schema)
             # Initialization succeed.
             write_int(0, outfile)
             outfile.flush()
@@ -171,7 +181,12 @@ def main(infile: IO, outfile: IO) -> None:
                     latest_offset_func(reader, outfile)
                 elif func_id == PARTITIONS_FUNC_ID:
                     partitions_func(
-                        reader, data_source, schema, max_arrow_batch_size, infile, outfile
+                        reader,
+                        data_source_name,
+                        schema,
+                        max_arrow_batch_size,
+                        infile,
+                        outfile,
                     )
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
@@ -184,7 +199,7 @@ def main(infile: IO, outfile: IO) -> None:
                     )
                 outfile.flush()
         except Exception as e:
-            error_msg = "data source {} throw exception: {}".format(data_source.name, e)
+            error_msg = "data source {} throw exception: {}".format(data_source_name, e)
             raise PySparkRuntimeError(
                 errorClass="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
                 messageParameters={"msg": error_msg},

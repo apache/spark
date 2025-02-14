@@ -52,6 +52,34 @@ class PythonDataSourceV2 extends TableProvider {
     dataSourceInPython
   }
 
+  private var readerInPython: PythonDataSourceReader = _
+
+  def getOrCreateReaderInPython(
+      shortName: String,
+      outputSchema: StructType,
+      options: CaseInsensitiveStringMap,
+      isStreaming: Boolean): PythonDataSourceReader = {
+    if (readerInPython == null) {
+      readerInPython = source.createReaderInPython(
+        getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
+        outputSchema,
+        isStreaming
+      )
+    }
+    assert(
+      isStreaming == readerInPython.isStreaming,
+      s"Attempted to create a ${if (isStreaming) "streaming" else "batch"} reader, but the " +
+      s"existing reader is a ${if (readerInPython.isStreaming) "streaming" else "batch"} reader. " +
+      "We may have attempted to perform pushdown for a Python streaming scan, which currently " +
+      "doesn't support pushdown."
+    )
+    readerInPython
+  }
+
+  def setReaderInPython(readerInPython: PythonDataSourceReader): Unit = {
+    this.readerInPython = readerInPython
+  }
+
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     getOrCreateDataSourceInPython(shortName, options, None).schema
   }
