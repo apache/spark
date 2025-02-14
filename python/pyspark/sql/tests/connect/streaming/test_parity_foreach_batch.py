@@ -98,7 +98,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
         with self.assertRaises(StreamingPythonRunnerInitializationException) as error:
             df.select("value").writeStream.foreachBatch(fcn).start()
 
-        # Assert that the error message contains the expected error condition
+        # Assert that the error message contains the expected string
         self.assertIn(
             "Streaming Runner initialization failed",
             str(error.exception),
