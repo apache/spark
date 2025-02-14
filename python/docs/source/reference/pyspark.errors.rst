@@ -56,6 +56,7 @@ Classes
     SparkUpgradeException
     SparkNoSuchElementException
     StreamingQueryException
+    StreamingPythonRunnerInitializationException
     TempTableAlreadyExistsException
     UnknownException
     UnsupportedOperationException
