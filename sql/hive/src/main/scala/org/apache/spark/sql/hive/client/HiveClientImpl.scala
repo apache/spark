@@ -172,11 +172,6 @@ private[hive] class HiveClientImpl(
   private def newState(): SessionState = {
     val hiveConf = newHiveConf(sparkConf, hadoopConf, extraConfig, Some(initClassLoader))
     val state = new SessionState(hiveConf)
-    // When SessionState is initialized, the caller context is overridden by hive
-    // so we need to reset it back to the DRIVER
-    new CallerContext("DRIVER",
-      sparkConf.get(APP_CALLER_CONTEXT),
-      Some(sparkConf.getAppId)).setCurrentContext()
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
