@@ -846,7 +846,7 @@ def spark_connect_mode() -> str:
     if connect_by_default is not None:
         return connect_by_default
     try:
-        import pyspark_connect
+        import pyspark_connect  # noqa: F401
 
         return "1"
     except ImportError:
