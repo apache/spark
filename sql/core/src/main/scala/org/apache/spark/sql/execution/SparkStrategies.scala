@@ -1032,7 +1032,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case union: logical.Union =>
         execution.UnionExec(union.children.map(planLater)) :: Nil
       case u @ logical.UnionLoop(id, anchor, recursion, limit) =>
-        execution.UnionLoopExec(id, anchor, recursion, u.output, limit):: Nil
+        execution.UnionLoopExec(id, anchor, recursion, u.output, limit) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,
