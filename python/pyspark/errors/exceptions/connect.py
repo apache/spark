@@ -302,6 +302,12 @@ class InvalidPlanInput(SparkConnectGrpcException):
     """
 
 
+class InvalidCommandInput(SparkConnectGrpcException):
+    """
+    Error thrown when a connect command is not valid.
+    """
+
+
 class StreamingPythonRunnerInitializationException(
     SparkConnectGrpcException, BaseStreamingPythonRunnerInitException
 ):
@@ -328,6 +334,7 @@ EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.SparkNoSuchElementException": SparkNoSuchElementException,
     "org.apache.spark.SparkException": SparkException,
     "org.apache.spark.sql.connect.common.InvalidPlanInput": InvalidPlanInput,
+    "org.apache.spark.sql.connect.common.InvalidCommandInput": InvalidCommandInput,
     "org.apache.spark.api.python.StreamingPythonRunner"
     "$StreamingPythonRunnerInitializationException": StreamingPythonRunnerInitializationException,
 }
