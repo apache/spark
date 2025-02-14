@@ -84,6 +84,23 @@ Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
 
+Making Spark Connect by default
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you want to make Spark Connect default, you can install and additional library via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_, execute the following command:
+
+.. code-block:: bash
+
+    pip install pyspark-connect
+
+It will automatically install ``pyspark`` library as well as dependencies that are necessary for Spark Connect.
+If you want to customize ``pyspark``, you need to install ``pyspark`` with the instructions above in advance.
+
+Note that ``pyspark`` command will use ``--master`` option for Spark Connect remote URL instead of ``--remote`` option.
+
+See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
+
+
 Python Spark Connect Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
