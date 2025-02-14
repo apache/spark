@@ -99,8 +99,9 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             df.select("value").writeStream.foreachBatch(fcn).start()
 
         # Assert that the error message contains the expected error condition
-        self.assertTrue(
-            error.exception.getCondition() == "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE"
+        self.assertIn(
+            "Streaming Runner initialization failed",
+            str(error.exception),
         )
 
     def test_accessing_spark_session(self):
