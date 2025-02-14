@@ -49,7 +49,6 @@ import org.apache.spark.{SparkConf, SparkException, SparkThrowable}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
