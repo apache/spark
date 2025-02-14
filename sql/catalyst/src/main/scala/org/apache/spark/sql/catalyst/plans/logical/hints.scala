@@ -213,7 +213,7 @@ trait HintErrorHandler {
    * @param name the unrecognized hint name
    * @param parameters the hint parameters
    */
-  def hintNotRecognized(name: String, parameters: Seq[Any]): Unit
+  def hintNotRecognized(name: String, parameters: Seq[Expression]): Unit
 
   /**
    * Callback for relation names specified in a hint that cannot be associated with any relation

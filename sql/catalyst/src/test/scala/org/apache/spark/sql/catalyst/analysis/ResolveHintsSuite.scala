@@ -347,7 +347,7 @@ class ResolveHintsSuite extends AnalysisTest {
     }
 
     val msg = "REBALANCE Hint parameters should include an optional integral partitionNum " +
-      "and/or columns, but 1 can not be recognized as either partitionNum or columns."
+      "and/or columns, but \"1\" can not be recognized as either partitionNum or columns."
     assertAnalysisError(
       UnresolvedHint("REBALANCE", Seq(Literal(1), Literal(1)), table("TaBlE")),
       Seq(msg))
@@ -355,6 +355,10 @@ class ResolveHintsSuite extends AnalysisTest {
     assertAnalysisError(
       UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")),
       Seq(msg))
+
+    assertAnalysisError(
+      UnresolvedHint("REBALANCE", Seq(1, Literal(Array[Byte](0, 1, 3))), table("TaBlE")),
+      Seq("X'000103'"))
   }
 
   test("SPARK-38410: Support specify initial partition number for rebalance") {
