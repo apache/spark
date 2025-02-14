@@ -281,9 +281,13 @@ def try_remote_del(f: FuncT) -> FuncT:
             #
             # Above codes delete the model from the ml cache eagerly, and may cause
             # NPE in the server side in the case of 'fit_transform':
+            #
             # def fit_transform(df):
-            #     model = model.fit(df)
+            #     model = estimator.fit(df)
             #     return model.transform(df)
+            #
+            # output = fit_transform(df)
+            # output.show()
             return
         else:
             return f(self)
