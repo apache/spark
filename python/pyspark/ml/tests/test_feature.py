@@ -83,7 +83,7 @@ from pyspark.ml.feature import (
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
-from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class FeatureTestsMixin:
@@ -1772,7 +1772,7 @@ class FeatureTestsMixin:
             self.assertEqual(str(model), str(model2))
 
 
-class FeatureTests(FeatureTestsMixin, SparkSessionTestCase):
+class FeatureTests(FeatureTestsMixin, ReusedSQLTestCase):
     pass
 
 

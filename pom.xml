@@ -214,8 +214,8 @@
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.117.Final</netty.version>
-    <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
+    <netty.version>4.1.118.Final</netty.version>
+    <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.4</junit-jupiter.version>
     <junit-platform.version>1.11.4</junit-platform.version>
@@ -235,7 +235,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.0.1</kubernetes-client.version>
+    <kubernetes-client.version>7.1.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -327,6 +327,7 @@
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
       -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
+      --enable-native-access=ALL-UNNAMED
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>9.2.0</mysql.connector.version>
@@ -1199,13 +1200,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.17</version>
+        <version>1.17.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.17</version>
+        <version>1.17.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -36,9 +38,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(a.groupingExpressions)
-      val newChild = Project(a.child.output ++ nondeterToAttr.values, a.child)
+      val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
       a.transformExpressions { case e =>
-        nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
       }.copy(child = newChild)
 
     // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
@@ -55,9 +57,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions)
       val newPlan = p.transformExpressions { case e =>
-        nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
       }
-      val newChild = Project(p.child.output ++ nondeterToAttr.values, p.child)
+      val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
   }
 }

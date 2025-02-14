@@ -28,7 +28,8 @@ from pyspark.ml.evaluation import (
     RankingEvaluator,
 )
 from pyspark.ml.linalg import Vectors
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import Row
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class EvaluatorTestsMixin:
@@ -355,13 +356,7 @@ class EvaluatorTestsMixin:
             self.assertTrue(evaluator.isLargerBetter())
 
 
-class EvaluatorTests(EvaluatorTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
-
+class EvaluatorTests(EvaluatorTestsMixin, ReusedSQLTestCase):
     def test_evaluate_invalid_type(self):
         evaluator = RegressionEvaluator(metricName="r2")
         df = self.spark.createDataFrame([Row(label=1.0, prediction=1.1)])

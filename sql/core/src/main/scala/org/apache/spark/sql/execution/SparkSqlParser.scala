@@ -161,22 +161,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[SetCommand]] logical plan to set [[SQLConf.DEFAULT_COLLATION]]
-   * Example SQL :
-   * {{{
-   *   SET COLLATION UNICODE;
-   * }}}
-   */
-  override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
-    val collationName = ctx.collationName.getText
-    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
-      throw QueryCompilationErrors.trimCollationNotEnabledError()
-    }
-    val key = SQLConf.DEFAULT_COLLATION.key
-    SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
-  }
-
-  /**
    * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
    * Example SQL :
    * {{{
