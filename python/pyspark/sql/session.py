@@ -473,6 +473,12 @@ class SparkSession(SparkConversionMixin):
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
+                if url is None:
+                    raise PySparkRuntimeError(
+                        errorClass="CONNECT_URL_NOT_SET",
+                        messageParameters={},
+                    )
+
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
                 return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
