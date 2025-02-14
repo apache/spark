@@ -1045,6 +1045,8 @@ class SparkSession:
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master
             overwrite_conf["spark.local.connect"] = "1"
+            # Always use an ephemeral port for local connect server
+            overwrite_conf["spark.connect.grpc.binding.port"] = "0"
             os.environ["SPARK_LOCAL_CONNECT"] = "1"
 
             # Configurations to be set if unset.
@@ -1053,11 +1055,6 @@ class SparkSession:
                 "spark.sql.artifact.isolation.enabled": "true",
                 "spark.sql.artifact.isolation.alwaysApplyClassloader": "true",
             }
-
-            if "SPARK_TESTING" in os.environ:
-                # For testing, we use 0 to use an ephemeral port to allow parallel testing.
-                # See also SPARK-42272.
-                overwrite_conf["spark.connect.grpc.binding.port"] = "0"
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
             try:
