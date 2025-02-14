@@ -2315,16 +2315,6 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
-      "DEFAULT_COLLATION" : {
-        "message" : [
-          "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
-        ]
-      },
-      "DEFAULT_COLLATION_NOT_SUPPORTED" : {
-        "message" : [
-          "Setting default session collation other than UTF8_BINARY is currently not supported."
-        ]
-      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -6640,7 +6630,7 @@
   },
   "_LEGACY_ERROR_TEMP_1047" : {
     "message" : [
-      "<hintName> Hint parameter should include columns, but <invalidParams> found."
+      "<hintName> Hint parameters should include an optional integral partitionNum and/or columns, but <invalidParams> can not be recognized as either partitionNum or columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1048" : {

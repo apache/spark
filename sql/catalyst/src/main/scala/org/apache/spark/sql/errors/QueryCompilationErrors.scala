@@ -949,21 +949,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def joinStrategyHintParameterNotSupportedError(unsupported: Any): Throwable = {
+  def joinStrategyHintParameterNotSupportedError(unsupported: Expression): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1046",
       messageParameters = Map(
-        "unsupported" -> unsupported.toString,
+        "unsupported" -> toSQLExpr(unsupported),
         "class" -> unsupported.getClass.toString))
   }
 
   def invalidHintParameterError(
-      hintName: String, invalidParams: Seq[Any]): Throwable = {
+      hintName: String, invalidParams: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1047",
       messageParameters = Map(
         "hintName" -> hintName,
-        "invalidParams" -> invalidParams.mkString(", ")))
+        "invalidParams" -> invalidParams.map(toSQLExpr).mkString(", ")))
   }
 
   def invalidCoalesceHintParameterError(hintName: String): Throwable = {
