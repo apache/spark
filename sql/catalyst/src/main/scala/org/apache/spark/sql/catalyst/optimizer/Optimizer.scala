@@ -848,6 +848,15 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(exp, u: Union) =>
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
 
+    // If limit node is present, we should propagate it down to UnionLoop, so that it is later
+    // propagated to UnionLoopExec.
+    // Limit node is constructed by placing GlobalLimit over LocalLimit (look at Limit apply method)
+    // that is the reason why we match it this way.
+    case g @ GlobalLimit(IntegerLiteral(limit), l @ LocalLimit(_, p @ Project(_, ul: UnionLoop))) =>
+      g.copy(child = l.copy(child = p.copy(child = ul.copy(limit = Some(limit)))))
+    case g @ GlobalLimit(IntegerLiteral(limit), l @ LocalLimit(_, u: UnionLoop)) =>
+      g.copy(child = l.copy(child = u.copy(limit = Some(limit))))
+
     // Add extra limits below JOIN:
     // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides
     //    respectively if join condition is not empty.
@@ -1031,6 +1040,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p
       }
+    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
+    //  `UnionLoopRef` nodes.
+    case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>

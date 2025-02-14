@@ -4421,6 +4421,12 @@
     ],
     "sqlState" : "38000"
   },
+  "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing CTE_RECURSION_LEVEL_LIMIT"
+    ],
+    "sqlState" : "42836"
+  },
   "RECURSIVE_CTE_IN_LEGACY_MODE" : {
     "message" : [
       "Recursive definitions cannot be used in legacy CTE precedence mode (spark.sql.legacy.ctePrecedencePolicy=LEGACY)."
@@ -5179,6 +5185,12 @@
       "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
     ],
     "sqlState" : "42846"
+  },
+  "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE" : {
+    "message" : [
+      "The UNION operator is not yet supported within recursive common table expressions (WITH clauses that refer to themselves, directly or indirectly). Please use UNION ALL instead."
+    ],
+    "sqlState" : "42836"
   },
   "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
     "message" : [
