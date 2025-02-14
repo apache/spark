@@ -493,13 +493,35 @@ class RocksDB(
   }
 
   /**
+   * Function to check if col family is internal or not based on information recorded in
+   * checkpoint metadata.
+   * @param cfName - column family name
+   * @param metadata - checkpoint metadata
+   * @return - type of column family (internal or otherwise)
+   */
+  private def checkColFamilyType(
+      cfName: String,
+      metadata: RocksDBCheckpointMetadata): Boolean = {
+    if (metadata.columnFamilyTypeMap.isEmpty) {
+      false
+    } else {
+      metadata.columnFamilyTypeMap.get.get(cfName) match {
+        case Some(cfType) =>
+          cfType
+        case None =>
+          false
+      }
+    }
+  }
+
+  /**
    * Initialize key metrics based on the metadata loaded from DFS and open local RocksDB.
    */
   private def openLocalRocksDB(metadata: RocksDBCheckpointMetadata): Unit = {
     setInitialCFInfo()
     metadata.columnFamilyMapping.foreach { mapping =>
-      mapping.foreach { case (colFamilyName, colFamilyInfo) =>
-        addToColFamilyMaps(colFamilyName, colFamilyInfo.cfId, colFamilyInfo.isInternal)
+      mapping.foreach { case (colFamilyName, cfId) =>
+        addToColFamilyMaps(colFamilyName, cfId, checkColFamilyType(colFamilyName, metadata))
       }
     }
 
