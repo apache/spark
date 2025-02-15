@@ -250,8 +250,15 @@ private[spark] object HadoopFSUtils extends Logging {
             "method" -> u.getStackTrace.head.getMethodName))
     }
 
-    val filteredStatuses =
-      statuses.filterNot(status => shouldFilterOutPathName(status.getPath.getName))
+    val filteredStatuses = {
+      try {
+        statuses.filterNot(status => shouldFilterOutPathName(status.getPath.getName))
+      } catch {
+        case e: Exception =>
+          logError(log"Failed to filter out path names from ${MDC(PATH, path)}", e)
+          throw SparkException.internalError(s"Unexpected statuses for path ${path.toString}", e)
+      }
+    }
 
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
