@@ -151,7 +151,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       OptionParser parser = new OptionParser(true);
       parser.parse(submitArgs);
       this.isSpecialCommand = parser.isSpecialCommand;
-      boolean connectByDefault = "1".equals(System.getenv("SPARK_CONNECT_MODE"))
+      boolean connectByDefault = "1".equals(System.getenv("SPARK_CONNECT_MODE"));
       String defaultApiMode = connectByDefault ? "connect" : "classic";
       String apiMode = conf.getOrDefault(SparkLauncher.SPARK_API_MODE, defaultApiMode);
       if (conf.containsKey("spark.remote") || "connect".equalsIgnoreCase(apiMode)) {
