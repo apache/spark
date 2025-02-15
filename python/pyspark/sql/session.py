@@ -515,7 +515,9 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local") or url == "yarn":
+                            if url.startswith("local") or (
+                                is_api_mode_connect and not url.startswith("sc://")
+                            ):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
                                 RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
