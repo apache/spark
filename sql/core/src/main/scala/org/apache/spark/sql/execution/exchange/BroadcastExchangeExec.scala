@@ -254,7 +254,12 @@ case class BroadcastExchangeExec(
       relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
       case ex: TimeoutException =>
-        logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
+        val tables = child.collect { case f: FileSourceScanExec => f.tableIdentifier }.flatten
+        val detailMessage = if (tables.nonEmpty) {
+          tables.map(t => s"The table that timed out is: $t ;").mkString(" ")
+        }
+        logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs." +
+          log" $detailMessage", ex)
         if (!relationFuture.isDone) {
           sparkContext.cancelJobsWithTag(jobTag, "The corresponding broadcast query has failed.")
           relationFuture.cancel(true)
