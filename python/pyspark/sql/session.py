@@ -484,7 +484,9 @@ class SparkSession(SparkConversionMixin):
                 if os.environ.get("SPARK_CONNECT_MODE", "") == "1":
                     default_api_mode = "connect"
 
-                is_api_mode_connect = opts.get("spark.api.mode", default_api_mode).lower() == "connect"
+                is_api_mode_connect = (
+                    opts.get("spark.api.mode", default_api_mode).lower() == "connect"
+                )
 
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
