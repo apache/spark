@@ -232,6 +232,32 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
   }
 
+  def checkNoUnresolvedOuterReferencesInMainQuery(plan: LogicalPlan): Unit = {
+    plan.expressions.foreach {
+      case subExpr: SubqueryExpression if subExpr.getUnresolvedOuterAttrs.nonEmpty =>
+        subExpr.failAnalysis(
+            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_NOT_FOUND",
+            messageParameters = Map.empty)
+      case in: InSubquery if in.query.getUnresolvedOuterAttrs.nonEmpty =>
+        in.query.failAnalysis(
+            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_NOT_FOUND",
+            messageParameters = Map.empty)
+      case expr if expr.containsPattern(PLAN_EXPRESSION) =>
+        expr.collect {
+            case subExpr: SubqueryExpression if subExpr.getUnresolvedOuterAttrs.nonEmpty =>
+              subExpr.failAnalysis(
+                  errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_NOT_FOUND",
+                  messageParameters = Map.empty)
+          }
+      case _ =>
+      }
+    plan.children.foreach {
+      case p: LogicalPlan if p.containsPattern(PLAN_EXPRESSION) =>
+        checkNoUnresolvedOuterReferencesInMainQuery(p)
+      case _ =>
+      }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -245,6 +271,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
     preemptedError.clear()
     try {
+      checkNoUnresolvedOuterReferencesInMainQuery(inlinedPlan)
       checkAnalysis0(inlinedPlan)
       preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
@@ -1145,6 +1172,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case _ =>
     }
 
+    def checkUnresolvedOuterReferences(expr: SubqueryExpression): Unit = {
+      if ((!SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) &&
+          expr.getUnresolvedOuterAttrs.nonEmpty) {
+        expr.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NESTED_CORRELATED_SUBQUERIES_NOT_SUPPORTED",
+          messageParameters = Map.empty)
+      }
+    }
+
+      // Check if there are nested correlated subqueries in the plan.
+    checkUnresolvedOuterReferences(expr)
+
+
     // Validate the subquery plan.
     checkAnalysis0(expr.plan)
 
@@ -1152,7 +1193,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,
