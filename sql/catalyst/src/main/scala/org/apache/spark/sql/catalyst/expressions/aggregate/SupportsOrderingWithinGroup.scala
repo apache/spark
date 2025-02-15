@@ -26,20 +26,20 @@ trait SupportsOrderingWithinGroup { self: AggregateFunction =>
   def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction
 
   /** Indicator that ordering was set. */
-  def orderingFilled: Boolean
+  def orderingFilled: Boolean = false
 
   /**
    * Tells Analyzer that WITHIN GROUP (ORDER BY ...) is mandatory for function.
    *
    * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
    */
-  def isOrderingMandatory: Boolean
+  def isOrderingMandatory: Boolean = true
 
   /**
    * Tells Analyzer that DISTINCT is supported.
    * The DISTINCT can conflict with order so some functions can ban it.
    *
-   * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
+   * @see [[QueryCompilationErrors.distinctWithOrderingFunctionUnsupportedError]]
    */
-  def isDistinctSupported: Boolean
+  def isDistinctSupported: Boolean = false
 }
