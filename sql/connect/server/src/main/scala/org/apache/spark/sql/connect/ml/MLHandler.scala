@@ -41,7 +41,13 @@ private class AttributeHelper(
     val sessionHolder: SessionHolder,
     val objRef: String,
     val methods: Array[Method]) {
-  protected lazy val instance = sessionHolder.mlCache.get(objRef)
+  protected lazy val instance = {
+    val obj = sessionHolder.mlCache.get(objRef)
+    if (obj == null) {
+      throw MLCacheInvalidException(s"object $objRef")
+    }
+    obj
+  }
   // Get the attribute by reflection
   def getAttribute: Any = {
     assert(methods.length >= 1)
@@ -181,6 +187,9 @@ private[connect] object MLHandler extends Logging {
           case proto.MlCommand.Write.TypeCase.OBJ_REF => // save a model
             val objId = mlCommand.getWrite.getObjRef.getId
             val model = mlCache.get(objId).asInstanceOf[Model[_]]
+            if (model == null) {
+              throw MLCacheInvalidException(s"model $objId")
+            }
             val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
             MLUtils.setInstanceParams(copiedModel, mlCommand.getWrite.getParams)
 
