@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -25,6 +26,27 @@ class PythonScanBuilder(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
-    options: CaseInsensitiveStringMap) extends ScanBuilder {
-  override def build(): Scan = new PythonScan(ds, shortName, outputSchema, options)
+    options: CaseInsensitiveStringMap)
+    extends ScanBuilder
+    with SupportsPushDownFilters {
+  private def batchReader =
+    ds.getOrCreateReaderInPython(shortName, outputSchema, options, isStreaming = false)
+
+  private var supported: Array[Filter] = Array.empty
+
+  override def build(): Scan =
+    new PythonScan(ds, shortName, outputSchema, options)
+
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    val result = ds.source.pushdownFiltersInPython(batchReader, filters)
+    ds.setReaderInPython(result.reader)
+
+    // Partition the filters into supported and unsupported ones.
+    val isPushed = result.isFilterPushed.zip(filters)
+    supported = isPushed.collect { case (true, filter) => filter }.toArray
+    val unsupported = isPushed.collect { case (false, filter) => filter }.toArray
+    unsupported
+  }
+
+  override def pushedFilters(): Array[Filter] = supported
 }

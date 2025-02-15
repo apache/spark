@@ -34,18 +34,16 @@ from pyspark.serializers import (
 from pyspark.sql import Row
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
 from pyspark.sql.datasource import (
-    DataSource,
-    DataSourceReader,
     DataSourceStreamReader,
     InputPartition,
 )
-from pyspark.sql.datasource_internal import _streamReader
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     BinaryType,
     StructType,
 )
+from pyspark.sql.worker.internal.data_source_reader_info import DataSourceReaderInfo
 from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
@@ -63,7 +61,7 @@ def records_to_arrow_batches(
     output_iter: Union[Iterator[Tuple], Iterator[pa.RecordBatch]],
     max_arrow_batch_size: int,
     return_type: StructType,
-    data_source: DataSource,
+    data_source_name: str,
 ) -> Iterable[pa.RecordBatch]:
     """
     First check if the iterator yields PyArrow's `pyarrow.RecordBatch`, if so, yield
@@ -139,7 +137,7 @@ def records_to_arrow_batches(
                     errorClass="DATA_SOURCE_INVALID_RETURN_TYPE",
                     messageParameters={
                         "type": type(result).__name__,
-                        "name": data_source.name(),
+                        "name": data_source_name,
                         "supported_types": "tuple, list, `pyspark.sql.types.Row`,"
                         " `pyarrow.RecordBatch`",
                     },
@@ -205,16 +203,19 @@ def main(infile: IO, outfile: IO) -> None:
 
         _accumulatorRegistry.clear()
 
-        # Receive the data source instance.
-        data_source = read_command(pickleSer, infile)
-        if not isinstance(data_source, DataSource):
+        # Receive the data source reader instance.
+        reader_info = read_command(pickleSer, infile)
+        if not isinstance(reader_info, DataSourceReaderInfo):
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
                 messageParameters={
-                    "expected": "a Python data source instance of type 'DataSource'",
-                    "actual": f"'{type(data_source).__name__}'",
+                    "expected": "a Python data source reader info of type 'DataSourceReaderInfo'",
+                    "actual": f"'{type(reader_info).__name__}'",
                 },
             )
+
+        reader = reader_info.reader
+        data_source_name = reader_info.data_source_name
 
         # Receive the output schema from its child plan.
         input_schema_json = utf8_deserializer.loads(infile)
@@ -252,23 +253,14 @@ def main(infile: IO, outfile: IO) -> None:
         )
 
         is_streaming = read_bool(infile)
-
-        # Instantiate data source reader.
-        if is_streaming:
-            reader: Union[DataSourceReader, DataSourceStreamReader] = _streamReader(
-                data_source, schema
+        if is_streaming != isinstance(reader, DataSourceStreamReader):
+            raise PySparkAssertionError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": f"a Python {'streaming' if is_streaming else 'batch'} data source reader",
+                    "actual": f"'{type(reader).__name__}'",
+                },
             )
-        else:
-            reader = data_source.reader(schema=schema)
-            # Validate the reader.
-            if not isinstance(reader, DataSourceReader):
-                raise PySparkAssertionError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "an instance of DataSourceReader",
-                        "actual": f"'{type(reader).__name__}'",
-                    },
-                )
 
         # Create input converter.
         converter = ArrowTableToRowsConversion._create_converter(BinaryType())
@@ -309,13 +301,13 @@ def main(infile: IO, outfile: IO) -> None:
                     errorClass="DATA_SOURCE_INVALID_RETURN_TYPE",
                     messageParameters={
                         "type": type(output_iter).__name__,
-                        "name": data_source.name(),
+                        "name": data_source_name,
                         "supported_types": "iterator",
                     },
                 )
 
             return records_to_arrow_batches(
-                output_iter, max_arrow_batch_size, return_type, data_source
+                output_iter, max_arrow_batch_size, return_type, data_source_name
             )
 
         command = (data_source_read_func, return_type)

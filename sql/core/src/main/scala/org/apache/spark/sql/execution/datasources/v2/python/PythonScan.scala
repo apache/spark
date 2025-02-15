@@ -23,14 +23,16 @@ import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-
 class PythonScan(
-     ds: PythonDataSourceV2,
-     shortName: String,
-     outputSchema: StructType,
-     options: CaseInsensitiveStringMap) extends Scan {
+    ds: PythonDataSourceV2,
+    shortName: String,
+    outputSchema: StructType,
+    options: CaseInsensitiveStringMap)
+    extends Scan {
+  private def batchReader =
+    ds.getOrCreateReaderInPython(shortName, outputSchema, options, isStreaming = false)
 
-  override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
+  override def toBatch: Batch = new PythonBatch(ds, batchReader, outputSchema)
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
     new PythonMicroBatchStream(ds, shortName, outputSchema, options)
@@ -48,16 +50,13 @@ class PythonScan(
 
 class PythonBatch(
     ds: PythonDataSourceV2,
-    shortName: String,
-    outputSchema: StructType,
-    options: CaseInsensitiveStringMap) extends Batch {
+    reader: PythonDataSourceReader,
+    outputSchema: StructType)
+    extends Batch {
   private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   private lazy val infoInPython: PythonDataSourceReadInfo = {
-    ds.source.createReadInfoInPython(
-      ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
-      outputSchema,
-      isStreaming = false)
+    ds.source.createReadInfoInPython(reader, outputSchema, isStreaming = false)
   }
 
   override def planInputPartitions(): Array[InputPartition] =

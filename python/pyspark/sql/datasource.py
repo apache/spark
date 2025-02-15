@@ -16,7 +16,20 @@
 #
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    TYPE_CHECKING,
+)
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
@@ -38,6 +51,8 @@ __all__ = [
     "InputPartition",
     "SimpleDataSourceStreamReader",
     "WriterCommitMessage",
+    "Filter",
+    "EqualTo",
 ]
 
 
@@ -234,6 +249,17 @@ class DataSource(ABC):
         )
 
 
+@dataclass(frozen=True)
+class Filter(ABC):
+    pass
+
+
+@dataclass(frozen=True)
+class EqualTo(Filter):
+    columnPath: Tuple[str]
+    value: Any
+
+
 class InputPartition:
     """
     A base class representing an input partition returned by the `partitions()`
@@ -279,6 +305,9 @@ class DataSourceReader(ABC):
 
     .. versionadded: 4.0.0
     """
+
+    def pushdownFilters(self, filters: List["Filter"]) -> Iterable["Filter"]:
+        return filters
 
     def partitions(self) -> Sequence[InputPartition]:
         """
