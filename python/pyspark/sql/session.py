@@ -466,8 +466,6 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
-            self._validate_startup_urls()
-
             opts = dict(self._options)
 
             if is_remote_only():
@@ -506,10 +504,10 @@ class SparkSession(SparkConversionMixin):
                             SparkContext._active_spark_context is None
                             and SparkSession._instantiatedSession is None
                         ):
-                            if is_api_mode_connect:
-                                url = opts.get("spark.master", os.environ.get("MASTER"))
-                            else:
-                                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                            if url is None and is_api_mode_connect:
+                                url = opts.get("spark.master", os.environ.get("MASTER", "local"))
 
                             if url is None:
                                 raise PySparkRuntimeError(

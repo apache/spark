@@ -398,15 +398,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     String apiMode = getApiMode(conf);
     env.put("SPARK_API_MODE", apiMode);
-    if ("connect".equalsIgnoreCase(apiMode)) {
-      env.put("MASTER", firstNonEmpty(masterStr, "local"));
-      if (remoteStr != null) {
-        // Put `remoteStr` to validate startup url in Python.
-        env.put("SPARK_REMOTE", remoteStr);
-      }
-      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
-    } else if (remoteStr != null) {
+    if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
+      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
+    } else if ("connect".equalsIgnoreCase(apiMode)) {
+      env.put("MASTER", firstNonEmpty(masterStr, "local"));
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
