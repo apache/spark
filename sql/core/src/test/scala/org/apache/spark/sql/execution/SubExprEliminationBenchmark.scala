@@ -82,7 +82,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
 
     withTempPath { path =>
       prepareDataInfo(benchmark)
-      val numCols = 500
+      val numCols = 300
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val jsonValue = from_json($"value", schema)
