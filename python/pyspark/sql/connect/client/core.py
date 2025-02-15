@@ -125,6 +125,7 @@ class ChannelBuilder:
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
     PARAM_SESSION_ID = "session_id"
+    CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME = "local_token"
 
     GRPC_MAX_MESSAGE_LENGTH_DEFAULT = 128 * 1024 * 1024
 
@@ -591,6 +592,8 @@ class SparkConnectClient(object):
     Conceptually the remote spark session that communicates with the server
     """
 
+    _local_auth_token = os.environ.get("SPARK_CONNECT_LOCAL_AUTH_TOKEN")
+
     def __init__(
         self,
         connection: Union[str, ChannelBuilder],
@@ -637,6 +640,10 @@ class SparkConnectClient(object):
             if isinstance(connection, ChannelBuilder)
             else DefaultChannelBuilder(connection, channel_options)
         )
+        if SparkConnectClient._local_auth_token is not None:
+            self._builder.set(
+                ChannelBuilder.CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME,
+                SparkConnectClient._local_auth_token)
         self._user_id = None
         self._retry_policies: List[RetryPolicy] = []
 

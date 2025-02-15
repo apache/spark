@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.io.ByteArrayInputStream
 import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
@@ -25,10 +27,11 @@ import scala.jdk.CollectionConverters._
 import com.google.protobuf.Message
 import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
 import io.grpc.MethodDescriptor.PrototypeMarshaller
-import io.grpc.netty.NettyServerBuilder
+import io.grpc.netty.{GrpcSslContexts, NettyServerBuilder}
 import io.grpc.protobuf.ProtoUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
+import io.netty.handler.ssl.SslContext
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkContext, SparkEnv}
@@ -39,7 +42,8 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
+import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.sql.connect.config.Connect._
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -366,10 +370,14 @@ object SparkConnectService extends Logging {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
+    val localAuthToken = System.getenv(ConnectCommon.CONNECT_LOCAL_AUTH_TOKEN_ENV_NAME)
+    ConnectCommon.setLocalAuthToken(localAuthToken)
     val sparkConnectService = new SparkConnectService(debugMode)
     val protoReflectionService =
       if (debugMode) Some(ProtoReflectionService.newInstance()) else None
-    val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
+    val configuredInterceptors =
+      SparkConnectInterceptorRegistry.createConfiguredInterceptors() ++
+        (if (localAuthToken != null) Seq(new LocalAuthInterceptor()) else Nil)
 
     val startServiceFn = (port: Int) => {
       val sb = bindAddress match {
@@ -387,6 +395,11 @@ object SparkConnectService extends Logging {
       // If debug mode is configured, load the ProtoReflection service so that tools like
       // grpcurl can introspect the API for debugging.
       protoReflectionService.foreach(service => sb.addService(service))
+
+      Option(localAuthToken).foreach { t =>
+        val token = new ByteArrayInputStream(t.getBytes(StandardCharsets.UTF_8))
+        sb.sslContext(GrpcSslContexts.forServer(token, token).build())
+      }
 
       server = sb.build
       server.start()

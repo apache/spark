@@ -40,6 +40,7 @@ from typing import (
     TYPE_CHECKING,
     ClassVar,
 )
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -893,6 +894,9 @@ class SparkSession:
             if self is getattr(SparkSession._active_session, "session", None):
                 SparkSession._active_session.session = None
 
+            # It should be `None` always on stop.
+            SparkConnectClient._local_auth_token = None
+
             if "SPARK_LOCAL_REMOTE" in os.environ:
                 # When local mode is in use, follow the regular Spark session's
                 # behavior by terminating the Spark Connect server,
@@ -900,6 +904,10 @@ class SparkSession:
                 # client with a different remote address.
                 if PySparkSession._activeSession is not None:
                     try:
+                        getattr(
+                            PySparkSession._activeSession._jvm,
+                            "org.apache.spark.sql.connect.common.config.ConnectCommon",
+                        ).setLocalAuthToken(None)
                         PySparkSession._activeSession.stop()
                     except Exception as e:
                         logger.warn(
@@ -1060,6 +1068,9 @@ class SparkSession:
                 overwrite_conf["spark.connect.grpc.binding.port"] = "0"
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
+            local_auth_token = str(uuid.uuid4())
+            SparkConnectClient._local_auth_token = local_auth_token
+            os.environ["SPARK_CONNECT_LOCAL_AUTH_TOKEN"] = local_auth_token
             try:
                 if origin_remote is not None:
                     # So SparkSubmit thinks no remote is set in order to
@@ -1071,6 +1082,13 @@ class SparkSession:
                 conf = SparkConf(loadDefaults=True)
                 conf.setAll(list(overwrite_conf.items())).setAll(list(default_conf.items()))
                 PySparkSession(SparkContext.getOrCreate(conf))
+
+                # In Python local mode, session.stop does not terminate JVM itself
+                # so we can't control it via environment variable.
+                getattr(
+                    SparkContext._jvm,
+                    "org.apache.spark.sql.connect.common.config.ConnectCommon",
+                ).setLocalAuthToken(local_auth_token)
 
                 # Lastly only keep runtime configurations because other configurations are
                 # disallowed to set in the regular Spark Connect session.
@@ -1084,6 +1102,7 @@ class SparkSession:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
                 del os.environ["SPARK_LOCAL_CONNECT"]
+                del os.environ["SPARK_CONNECT_LOCAL_AUTH_TOKEN"]
         else:
             raise PySparkRuntimeError(
                 errorClass="SESSION_OR_CONTEXT_EXISTS",
