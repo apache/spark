@@ -549,10 +549,20 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(reattachableIter.resultComplete)
   }
 
+  private val INVALID_HOST = "host.invalid"
+
+  private def createUnresolvableHostChannel = {
+    SparkConnectClient.Configuration(host = INVALID_HOST).createChannel()
+  }
+
+  private def assertContainsUnavailable(t: Throwable) = {
+    assert(t.getMessage.contains("UNAVAILABLE: Unable to resolve host " + INVALID_HOST))
+  }
+
   test("GRPC stub unary call throws error immediately") {
     // Spark Connect error retry handling depends on the error being returned from the unary
     // call immediately.
-    val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
+    val channel = createUnresolvableHostChannel
     val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
     // The request is invalid, but it shouldn't even reach the server.
     val request = proto.AnalyzePlanRequest.newBuilder().build()
@@ -561,13 +571,13 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val ex = intercept[StatusRuntimeException] {
       stub.analyzePlan(request)
     }
-    assert(ex.getMessage.contains("UNAVAILABLE: Unable to resolve host ABC"))
+    assertContainsUnavailable(ex)
   }
 
   test("GRPC stub server streaming call throws error on first next() / hasNext()") {
     // Spark Connect error retry handling depends on the error being returned from the response
     // iterator and not immediately upon iterator creation.
-    val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
+    val channel = createUnresolvableHostChannel
     val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
     // The request is invalid, but it shouldn't even reach the server.
     val request = proto.ExecutePlanRequest.newBuilder().build()
@@ -578,13 +588,13 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val ex = intercept[StatusRuntimeException] {
       iter.hasNext()
     }
-    assert(ex.getMessage.contains("UNAVAILABLE: Unable to resolve host ABC"))
+    assertContainsUnavailable(ex)
   }
 
   test("GRPC stub client streaming call throws error on first client request sent") {
     // Spark Connect error retry handling depends on the error being returned from the response
     // iterator and not immediately upon iterator creation or request being sent.
-    val channel = SparkConnectClient.Configuration(host = "ABC").createChannel()
+    val channel = createUnresolvableHostChannel
     val stub = proto.SparkConnectServiceGrpc.newStub(channel)
 
     var onNextResponse: Option[proto.AddArtifactsResponse] = None
@@ -612,7 +622,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     Eventually.eventually(timeout(30.seconds)) {
       assert(onNextResponse == None)
       assert(onErrorThrowable.isDefined)
-      assert(onErrorThrowable.get.getMessage.contains("UNAVAILABLE: Unable to resolve host ABC"))
+      assertContainsUnavailable(onErrorThrowable.get)
       assert(onCompletedCalled == false)
     }
 
