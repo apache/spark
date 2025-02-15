@@ -212,8 +212,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     for (Map.Entry<String, String> e : conf.entrySet()) {
+      String key = e.getKey();
+      String value = e.getValue();
+      if ("spark.executor.extraJavaOptions".equals(key)
+              || "spark.driver.extraJavaOptions".equals(key)) {
+        value = sanitizeExtraJavaOptions(value);
+      }
       args.add(parser.CONF);
-      args.add(String.format("%s=%s", e.getKey(), e.getValue()));
+      args.add(String.format("%s=%s", key, value));
     }
 
     if (propertiesFile != null) {
@@ -337,6 +343,22 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         }
       }
     }
+  }
+
+  /**
+   * Sanitizes the configuration value to prevent command injection vulnerabilities.
+   * Removes shell metacharacters that could be used to manipulate shell commands.
+   *
+   * References:
+   * - OWASP Command Injection Prevention Cheat Sheet
+   * (https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html)
+   */
+  private String sanitizeExtraJavaOptions(String value) {
+    if (value != null) {
+      String regex = "`|\\$\\(|\\)|&|\\||<|;|>|\\*|\\?";
+      value = value.replaceAll(regex, "");
+    }
+    return value;
   }
 
   private List<String> buildPySparkShellCommand(Map<String, String> env) throws IOException {
