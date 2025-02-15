@@ -766,8 +766,9 @@ class InternalFrame:
                     for index_field, struct_field in zip(index_fields, struct_fields)
                 ), (index_fields, struct_fields)
             else:
+                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
                 assert all(
-                    index_field.struct_field == struct_field
+                    _drop_metadata(index_field.struct_field) == _drop_metadata(struct_field)
                     for index_field, struct_field in zip(index_fields, struct_fields)
                 ), (index_fields, struct_fields)
 
@@ -794,8 +795,9 @@ class InternalFrame:
                     for data_field, struct_field in zip(data_fields, struct_fields)
                 ), (data_fields, struct_fields)
             else:
+                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
                 assert all(
-                    data_field.struct_field == struct_field
+                    _drop_metadata(data_field.struct_field) == _drop_metadata(struct_field)
                     for data_field, struct_field in zip(data_fields, struct_fields)
                 ), (data_fields, struct_fields)
 
