@@ -1503,24 +1503,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           .map(resolveExpressionByPlanOutput(_, planForResolve).asInstanceOf[SortOrder])
         mg.copy(dataOrder = resolvedOrder)
 
-      // Left and right sort expression have to be resolved against the respective child plan only
-      case cg: CoGroup if cg.leftOrder.exists(!_.resolved) || cg.rightOrder.exists(!_.resolved) =>
+      // Sort expression have to be resolved against the respective child plan only
+      case cg: CoGroup if cg.orders.exists(_.exists(!_.resolved)) =>
         // Resolve against `AppendColumns`'s children, instead of `AppendColumns`,
         // because `AppendColumns`'s serializer might produce conflict attribute
         // names leading to ambiguous references exception.
-        val (leftPlanForResolve, rightPlanForResolve) = Seq(cg.left, cg.right).map {
+        val plansForResolve = cg.children.map {
           case appendColumns: AppendColumns => appendColumns.child
           case plan => plan
-        } match {
-          case Seq(left, right) => (left, right)
         }
 
-        val resolvedLeftOrder = cg.leftOrder
-          .map(resolveExpressionByPlanOutput(_, leftPlanForResolve).asInstanceOf[SortOrder])
-        val resolvedRightOrder = cg.rightOrder
-          .map(resolveExpressionByPlanOutput(_, rightPlanForResolve).asInstanceOf[SortOrder])
+        val resolvedOrders = cg.orders.zip(plansForResolve).map {
+          case (orders, planForResolve) =>
+            orders.map(resolveExpressionByPlanOutput(_, planForResolve).asInstanceOf[SortOrder])
+        }
 
-        cg.copy(leftOrder = resolvedLeftOrder, rightOrder = resolvedRightOrder)
+        cg.copy(orders = resolvedOrders)
 
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.

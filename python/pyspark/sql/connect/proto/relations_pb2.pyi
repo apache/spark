@@ -108,6 +108,7 @@ class Relation(google.protobuf.message.Message):
     TRANSPOSE_FIELD_NUMBER: builtins.int
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
+    CO_GROUP_MAP_V2_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -216,6 +217,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def lateral_join(self) -> global___LateralJoin: ...
     @property
+    def co_group_map_v2(self) -> global___CoGroupMapV2: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -301,6 +304,7 @@ class Relation(google.protobuf.message.Message):
         transpose: global___Transpose | None = ...,
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         lateral_join: global___LateralJoin | None = ...,
+        co_group_map_v2: global___CoGroupMapV2 | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -336,6 +340,8 @@ class Relation(google.protobuf.message.Message):
             b"catalog",
             "co_group_map",
             b"co_group_map",
+            "co_group_map_v2",
+            b"co_group_map_v2",
             "collect_metrics",
             b"collect_metrics",
             "common",
@@ -461,6 +467,8 @@ class Relation(google.protobuf.message.Message):
             b"catalog",
             "co_group_map",
             b"co_group_map",
+            "co_group_map_v2",
+            b"co_group_map_v2",
             "collect_metrics",
             b"collect_metrics",
             "common",
@@ -614,6 +622,7 @@ class Relation(google.protobuf.message.Message):
             "transpose",
             "unresolved_table_valued_function",
             "lateral_join",
+            "co_group_map_v2",
             "fill_na",
             "drop_na",
             "replace",
@@ -3858,6 +3867,67 @@ class CoGroupMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CoGroupMap = CoGroupMap
+
+class CoGroupMapV2(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELATIONS_FIELD_NUMBER: builtins.int
+    GROUPING_EXPRESSION_SETS_FIELD_NUMBER: builtins.int
+    FUNC_FIELD_NUMBER: builtins.int
+    SORTING_EXPRESSION_SETS_FIELD_NUMBER: builtins.int
+    @property
+    def relations(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Relation]:
+        """(Required) Input relations for cogroup, cogroupSorted, applyInPandas, and applyInArrow."""
+    @property
+    def grouping_expression_sets(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.ExpressionSet
+    ]:
+        """Expressions sets for grouping keys of the input relations."""
+    @property
+    def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
+        """(Required) Input user-defined function."""
+    @property
+    def sorting_expression_sets(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.ExpressionSet
+    ]:
+        """(Optional) Expressions sets for sorting (cogroupSorted)."""
+    def __init__(
+        self,
+        *,
+        relations: collections.abc.Iterable[global___Relation] | None = ...,
+        grouping_expression_sets: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.ExpressionSet
+        ]
+        | None = ...,
+        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
+        sorting_expression_sets: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.ExpressionSet
+        ]
+        | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["func", b"func"]) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "func",
+            b"func",
+            "grouping_expression_sets",
+            b"grouping_expression_sets",
+            "relations",
+            b"relations",
+            "sorting_expression_sets",
+            b"sorting_expression_sets",
+        ],
+    ) -> None: ...
+
+global___CoGroupMapV2 = CoGroupMapV2
 
 class ApplyInPandasWithState(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

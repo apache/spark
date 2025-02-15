@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExpressionSet
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -78,6 +79,78 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       thisSortExprs: Column*)(otherSortExprs: Column*)(
       f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] =
     unsupported()
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2]) => IterableOnce[R]): Dataset[R] =
+    unsupported()
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2], Iterator[U3]) => IterableOnce[R])
+      : Dataset[R] =
+    unsupported()
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, U4, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      other4SortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2], Iterator[U3], Iterator[U4]) => IterableOnce[
+        R]): Dataset[R] =
+    unsupported()
+
+  // scalastyle:off argcount
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, U4, U5, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      other4SortExprs: Column*)(other5SortExprs: Column*)(
+      f: (
+          K,
+          Iterator[V],
+          Iterator[U1],
+          Iterator[U2],
+          Iterator[U3],
+          Iterator[U4],
+          Iterator[U5]) => IterableOnce[R]): Dataset[R] =
+    unsupported()
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, U4, U5, U6, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5],
+      other6: sql.KeyValueGroupedDataset[K, U6])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      other4SortExprs: Column*)(other5SortExprs: Column*)(other6SortExprs: Column*)(
+      f: (
+          K,
+          Iterator[V],
+          Iterator[U1],
+          Iterator[U2],
+          Iterator[U3],
+          Iterator[U4],
+          Iterator[U5],
+          Iterator[U6]) => IterableOnce[R]): Dataset[R] =
+    unsupported()
+  // scalastyle:on argcount
 
   protected[sql] def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
       outputMode: Option[OutputMode],
@@ -367,6 +440,118 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       encoder: Encoder[R]): Dataset[R] = super.cogroup(other, f, encoder)
 
   /** @inheritdoc */
+  override def cogroup[U1, U2, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2])(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2]) => IterableOnce[R]): Dataset[R] =
+    super.cogroup(other1, other2)(f)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      f: CoGroupFunction3[K, V, U1, U2, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroup(other1, other2, f, encoder)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3])(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2], Iterator[U3]) => IterableOnce[R])
+      : Dataset[R] =
+    super.cogroup(other1, other2, other3)(f)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      f: CoGroupFunction4[K, V, U1, U2, U3, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroup(other1, other2, other3, f, encoder)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, U4, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4])(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2], Iterator[U3], Iterator[U4]) => IterableOnce[
+        R]): Dataset[R] =
+    super.cogroup(other1, other2, other3, other4)(f)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, U4, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      f: CoGroupFunction5[K, V, U1, U2, U3, U4, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroup(other1, other2, other3, other4, f, encoder)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, U4, U5, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5])(
+      f: (
+          K,
+          Iterator[V],
+          Iterator[U1],
+          Iterator[U2],
+          Iterator[U3],
+          Iterator[U4],
+          Iterator[U5]) => IterableOnce[R]): Dataset[R] =
+    super.cogroup(other1, other2, other3, other4, other5)(f)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, U4, U5, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5],
+      f: CoGroupFunction6[K, V, U1, U2, U3, U4, U5, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroup(other1, other2, other3, other4, other5, f, encoder)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, U4, U5, U6, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5],
+      other6: sql.KeyValueGroupedDataset[K, U6])(
+      f: (
+          K,
+          Iterator[V],
+          Iterator[U1],
+          Iterator[U2],
+          Iterator[U3],
+          Iterator[U4],
+          Iterator[U5],
+          Iterator[U6]) => IterableOnce[R]): Dataset[R] =
+    super.cogroup(other1, other2, other3, other4, other5, other6)(f)
+
+  /** @inheritdoc */
+  override def cogroup[U1, U2, U3, U4, U5, U6, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5],
+      other6: sql.KeyValueGroupedDataset[K, U6],
+      f: CoGroupFunction7[K, V, U1, U2, U3, U4, U5, U6, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroup(other1, other2, other3, other4, other5, other6, f, encoder)
+
+  /** @inheritdoc */
   override def cogroupSorted[U, R](
       other: sql.KeyValueGroupedDataset[K, U],
       thisSortExprs: Array[Column],
@@ -374,6 +559,138 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] =
     super.cogroupSorted(other, thisSortExprs, otherSortExprs, f, encoder)
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      thisSortExprs: Array[Column],
+      other1SortExprs: Array[Column],
+      other2SortExprs: Array[Column],
+      f: CoGroupFunction3[K, V, U1, U2, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroupSorted(
+      other1,
+      other2,
+      thisSortExprs,
+      other1SortExprs,
+      other2SortExprs,
+      f,
+      encoder)
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      thisSortExprs: Array[Column],
+      other1SortExprs: Array[Column],
+      other2SortExprs: Array[Column],
+      other3SortExprs: Array[Column],
+      f: CoGroupFunction4[K, V, U1, U2, U3, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroupSorted(
+      other1,
+      other2,
+      other3,
+      thisSortExprs,
+      other1SortExprs,
+      other2SortExprs,
+      other3SortExprs,
+      f,
+      encoder)
+
+  // scalastyle:off argcount
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, U4, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      thisSortExprs: Array[Column],
+      other1SortExprs: Array[Column],
+      other2SortExprs: Array[Column],
+      other3SortExprs: Array[Column],
+      other4SortExprs: Array[Column],
+      f: CoGroupFunction5[K, V, U1, U2, U3, U4, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroupSorted(
+      other1,
+      other2,
+      other3,
+      other4,
+      thisSortExprs,
+      other1SortExprs,
+      other2SortExprs,
+      other3SortExprs,
+      other4SortExprs,
+      f,
+      encoder)
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, U4, U5, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5],
+      thisSortExprs: Array[Column],
+      other1SortExprs: Array[Column],
+      other2SortExprs: Array[Column],
+      other3SortExprs: Array[Column],
+      other4SortExprs: Array[Column],
+      other5SortExprs: Array[Column],
+      f: CoGroupFunction6[K, V, U1, U2, U3, U4, U5, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroupSorted(
+      other1,
+      other2,
+      other3,
+      other4,
+      other5,
+      thisSortExprs,
+      other1SortExprs,
+      other2SortExprs,
+      other3SortExprs,
+      other4SortExprs,
+      other5SortExprs,
+      f,
+      encoder)
+
+  /** @inheritdoc */
+  override def cogroupSorted[U1, U2, U3, U4, U5, U6, R](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5],
+      other6: sql.KeyValueGroupedDataset[K, U6],
+      thisSortExprs: Array[Column],
+      other1SortExprs: Array[Column],
+      other2SortExprs: Array[Column],
+      other3SortExprs: Array[Column],
+      other4SortExprs: Array[Column],
+      other5SortExprs: Array[Column],
+      other6SortExprs: Array[Column],
+      f: CoGroupFunction7[K, V, U1, U2, U3, U4, U5, U6, R],
+      encoder: Encoder[R]): Dataset[R] =
+    super.cogroupSorted(
+      other1,
+      other2,
+      other3,
+      other4,
+      other5,
+      other6,
+      thisSortExprs,
+      other1SortExprs,
+      other2SortExprs,
+      other3SortExprs,
+      other4SortExprs,
+      other5SortExprs,
+      other6SortExprs,
+      f,
+      encoder)
+  // scalastyle:on argcount
 }
 
 /**
@@ -447,19 +764,353 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     val otherImpl = other.asInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, Any]]
     // Apply mapValues changes to the udf
-    val nf = UDFAdaptors.coGroupWithMappedValues(f, valueMapFunc, otherImpl.valueMapFunc)
+    val nf = UDFAdaptors.coGroupWithMappedValues(
+      f,
+      valueMapFunc.asInstanceOf[Option[Any => V]],
+      otherImpl.valueMapFunc)
     val outputEncoder = agnosticEncoderFor[R]
     sparkSession.newDataset[R](outputEncoder) { builder =>
-      builder.getCoGroupMapBuilder
-        .setInput(plan.getRoot)
-        .addAllInputGroupingExpressions(groupingExprs)
-        .addAllInputSortingExpressions(thisSortExprs.map(toExpr).asJava)
-        .setOther(otherImpl.plan.getRoot)
-        .addAllOtherGroupingExpressions(otherImpl.groupingExprs)
-        .addAllOtherSortingExpressions(otherSortExprs.map(toExpr).asJava)
+      builder.getCoGroupMapV2Builder
+        .addRelations(plan.getRoot)
+        .addRelations(otherImpl.plan.getRoot)
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(otherImpl.groupingExprs).build())
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder, otherImpl.ivEncoder))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(thisSortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(otherSortExprs.map(toExpr).asJava))
     }
   }
+
+  override def cogroupSorted[U1, U2, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2]) => IterableOnce[R]): Dataset[R] = {
+    val other1Impl = other1.asInstanceOf[KeyValueGroupedDatasetImpl[K, U1, _, Any]]
+    val other2Impl = other2.asInstanceOf[KeyValueGroupedDatasetImpl[K, U2, _, Any]]
+    // Apply mapValues changes to the udf
+    val nf = UDFAdaptors.coGroupWithMappedValues(
+      f,
+      valueMapFunc.asInstanceOf[Option[Any => V]],
+      other1Impl.valueMapFunc,
+      other2Impl.valueMapFunc)
+    val outputEncoder = agnosticEncoderFor[R]
+    sparkSession.newDataset[R](outputEncoder) { builder =>
+      builder.getCoGroupMapV2Builder
+        .addRelations(plan.getRoot)
+        .addRelations(other1Impl.plan.getRoot)
+        .addRelations(other2Impl.plan.getRoot)
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other1Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other2Impl.groupingExprs).build())
+        .setFunc(getUdf(nf, outputEncoder)(ivEncoder, other1Impl.ivEncoder, other2Impl.ivEncoder))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(thisSortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other1SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other2SortExprs.map(toExpr).asJava))
+    }
+  }
+
+  override def cogroupSorted[U1, U2, U3, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2], Iterator[U3]) => IterableOnce[R])
+      : Dataset[R] = {
+    val other1Impl = other1.asInstanceOf[KeyValueGroupedDatasetImpl[K, U1, _, Any]]
+    val other2Impl = other2.asInstanceOf[KeyValueGroupedDatasetImpl[K, U2, _, Any]]
+    val other3Impl = other3.asInstanceOf[KeyValueGroupedDatasetImpl[K, U3, _, Any]]
+    // Apply mapValues changes to the udf
+    val nf = UDFAdaptors.coGroupWithMappedValues(
+      f,
+      valueMapFunc.asInstanceOf[Option[Any => V]],
+      other1Impl.valueMapFunc,
+      other2Impl.valueMapFunc,
+      other3Impl.valueMapFunc)
+    val outputEncoder = agnosticEncoderFor[R]
+    sparkSession.newDataset[R](outputEncoder) { builder =>
+      builder.getCoGroupMapV2Builder
+        .addRelations(plan.getRoot)
+        .addRelations(other1Impl.plan.getRoot)
+        .addRelations(other2Impl.plan.getRoot)
+        .addRelations(other3Impl.plan.getRoot)
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other1Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other2Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other3Impl.groupingExprs).build())
+        .setFunc(getUdf(nf, outputEncoder)(
+          ivEncoder,
+          other1Impl.ivEncoder,
+          other2Impl.ivEncoder,
+          other3Impl.ivEncoder))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(thisSortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other1SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other2SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other3SortExprs.map(toExpr).asJava))
+    }
+  }
+
+  override def cogroupSorted[U1, U2, U3, U4, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      other4SortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U1], Iterator[U2], Iterator[U3], Iterator[U4]) => IterableOnce[
+        R]): Dataset[R] = {
+    val other1Impl = other1.asInstanceOf[KeyValueGroupedDatasetImpl[K, U1, _, Any]]
+    val other2Impl = other2.asInstanceOf[KeyValueGroupedDatasetImpl[K, U2, _, Any]]
+    val other3Impl = other3.asInstanceOf[KeyValueGroupedDatasetImpl[K, U3, _, Any]]
+    val other4Impl = other4.asInstanceOf[KeyValueGroupedDatasetImpl[K, U4, _, Any]]
+    // Apply mapValues changes to the udf
+    val nf = UDFAdaptors.coGroupWithMappedValues(
+      f,
+      valueMapFunc.asInstanceOf[Option[Any => V]],
+      other1Impl.valueMapFunc,
+      other2Impl.valueMapFunc,
+      other3Impl.valueMapFunc,
+      other4Impl.valueMapFunc)
+    val outputEncoder = agnosticEncoderFor[R]
+    sparkSession.newDataset[R](outputEncoder) { builder =>
+      builder.getCoGroupMapV2Builder
+        .addRelations(plan.getRoot)
+        .addRelations(other1Impl.plan.getRoot)
+        .addRelations(other2Impl.plan.getRoot)
+        .addRelations(other3Impl.plan.getRoot)
+        .addRelations(other4Impl.plan.getRoot)
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other1Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other2Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other3Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other4Impl.groupingExprs).build())
+        .setFunc(getUdf(nf, outputEncoder)(
+          ivEncoder,
+          other1Impl.ivEncoder,
+          other2Impl.ivEncoder,
+          other3Impl.ivEncoder,
+          other4Impl.ivEncoder))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(thisSortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other1SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other2SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other3SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other4SortExprs.map(toExpr).asJava))
+    }
+  }
+
+  // scalastyle:off argcount
+  override def cogroupSorted[U1, U2, U3, U4, U5, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      other4SortExprs: Column*)(other5SortExprs: Column*)(
+      f: (
+          K,
+          Iterator[V],
+          Iterator[U1],
+          Iterator[U2],
+          Iterator[U3],
+          Iterator[U4],
+          Iterator[U5]) => IterableOnce[R]): Dataset[R] = {
+    val other1Impl = other1.asInstanceOf[KeyValueGroupedDatasetImpl[K, U1, _, Any]]
+    val other2Impl = other2.asInstanceOf[KeyValueGroupedDatasetImpl[K, U2, _, Any]]
+    val other3Impl = other3.asInstanceOf[KeyValueGroupedDatasetImpl[K, U3, _, Any]]
+    val other4Impl = other4.asInstanceOf[KeyValueGroupedDatasetImpl[K, U4, _, Any]]
+    val other5Impl = other5.asInstanceOf[KeyValueGroupedDatasetImpl[K, U5, _, Any]]
+    // Apply mapValues changes to the udf
+    val nf = UDFAdaptors.coGroupWithMappedValues(
+      f,
+      valueMapFunc.asInstanceOf[Option[Any => V]],
+      other1Impl.valueMapFunc,
+      other2Impl.valueMapFunc,
+      other3Impl.valueMapFunc,
+      other4Impl.valueMapFunc,
+      other5Impl.valueMapFunc)
+    val outputEncoder = agnosticEncoderFor[R]
+    sparkSession.newDataset[R](outputEncoder) { builder =>
+      builder.getCoGroupMapV2Builder
+        .addRelations(plan.getRoot)
+        .addRelations(other1Impl.plan.getRoot)
+        .addRelations(other2Impl.plan.getRoot)
+        .addRelations(other3Impl.plan.getRoot)
+        .addRelations(other4Impl.plan.getRoot)
+        .addRelations(other5Impl.plan.getRoot)
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other1Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other2Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other3Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other4Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other5Impl.groupingExprs).build())
+        .setFunc(
+          getUdf(nf, outputEncoder)(
+            ivEncoder,
+            other1Impl.ivEncoder,
+            other2Impl.ivEncoder,
+            other3Impl.ivEncoder,
+            other4Impl.ivEncoder,
+            other5Impl.ivEncoder))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(thisSortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other1SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other2SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other3SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other4SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other5SortExprs.map(toExpr).asJava))
+    }
+  }
+
+  // scalastyle:off argcount
+  override def cogroupSorted[U1, U2, U3, U4, U5, U6, R: Encoder](
+      other1: sql.KeyValueGroupedDataset[K, U1],
+      other2: sql.KeyValueGroupedDataset[K, U2],
+      other3: sql.KeyValueGroupedDataset[K, U3],
+      other4: sql.KeyValueGroupedDataset[K, U4],
+      other5: sql.KeyValueGroupedDataset[K, U5],
+      other6: sql.KeyValueGroupedDataset[K, U6])(thisSortExprs: Column*)(
+      other1SortExprs: Column*)(other2SortExprs: Column*)(other3SortExprs: Column*)(
+      other4SortExprs: Column*)(other5SortExprs: Column*)(other6SortExprs: Column*)(
+      f: (
+          K,
+          Iterator[V],
+          Iterator[U1],
+          Iterator[U2],
+          Iterator[U3],
+          Iterator[U4],
+          Iterator[U5],
+          Iterator[U6]) => IterableOnce[R]): Dataset[R] = {
+    val other1Impl = other1.asInstanceOf[KeyValueGroupedDatasetImpl[K, U1, _, Any]]
+    val other2Impl = other2.asInstanceOf[KeyValueGroupedDatasetImpl[K, U2, _, Any]]
+    val other3Impl = other3.asInstanceOf[KeyValueGroupedDatasetImpl[K, U3, _, Any]]
+    val other4Impl = other4.asInstanceOf[KeyValueGroupedDatasetImpl[K, U4, _, Any]]
+    val other5Impl = other5.asInstanceOf[KeyValueGroupedDatasetImpl[K, U5, _, Any]]
+    val other6Impl = other6.asInstanceOf[KeyValueGroupedDatasetImpl[K, U6, _, Any]]
+    // Apply mapValues changes to the udf
+    val nf = UDFAdaptors.coGroupWithMappedValues(
+      f,
+      valueMapFunc.asInstanceOf[Option[Any => V]],
+      other1Impl.valueMapFunc,
+      other2Impl.valueMapFunc,
+      other3Impl.valueMapFunc,
+      other4Impl.valueMapFunc,
+      other5Impl.valueMapFunc,
+      other6Impl.valueMapFunc)
+    val outputEncoder = agnosticEncoderFor[R]
+    sparkSession.newDataset[R](outputEncoder) { builder =>
+      builder.getCoGroupMapV2Builder
+        .addRelations(plan.getRoot)
+        .addRelations(other1Impl.plan.getRoot)
+        .addRelations(other2Impl.plan.getRoot)
+        .addRelations(other3Impl.plan.getRoot)
+        .addRelations(other4Impl.plan.getRoot)
+        .addRelations(other5Impl.plan.getRoot)
+        .addRelations(other6Impl.plan.getRoot)
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other1Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other2Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other3Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other4Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other5Impl.groupingExprs).build())
+        .addGroupingExpressionSets(
+          ExpressionSet.newBuilder().addAllExpressions(other6Impl.groupingExprs).build())
+        .setFunc(getUdf(nf, outputEncoder)(
+          ivEncoder,
+          other1Impl.ivEncoder,
+          other2Impl.ivEncoder,
+          other3Impl.ivEncoder,
+          other4Impl.ivEncoder,
+          other5Impl.ivEncoder))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(thisSortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other1SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other2SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other3SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other4SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other5SortExprs.map(toExpr).asJava))
+        .addSortingExpressionSets(ExpressionSet
+          .newBuilder()
+          .addAllExpressions(other6SortExprs.map(toExpr).asJava))
+    }
+  }
+  // scalastyle:on argcount
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     // The proto Aggregate message does not support passing in a value map function, so we need to

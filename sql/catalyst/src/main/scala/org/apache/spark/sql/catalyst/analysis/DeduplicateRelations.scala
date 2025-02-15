@@ -253,30 +253,36 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 // SPARK-43781: CoGroup is a special case, `rewriteAttrs` will incorrectly update
                 // some fields that do not need to be updated. We need to update the output
                 // attributes of CoGroup manually.
-                val leftAttrMap = attrMap.filter(a => c.left.output.contains(a._2))
-                val rightAttrMap = attrMap.filter(a => c.right.output.contains(a._2))
-                val newLeftAttr = rewriteAttrs(c.leftAttr, leftAttrMap)
-                val newRightAttr = rewriteAttrs(c.rightAttr, rightAttrMap)
-                val newLeftGroup = rewriteAttrs(c.leftGroup, leftAttrMap)
-                val newRightGroup = rewriteAttrs(c.rightGroup, rightAttrMap)
-                val newLeftOrder = rewriteAttrs(c.leftOrder, leftAttrMap)
-                val newRightOrder = rewriteAttrs(c.rightOrder, rightAttrMap)
-                val newKeyDes = c.keyDeserializer match {
-                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newLeftGroup)
-                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, leftAttrMap))
+                val attrMaps = c.children.map { child =>
+                  attrMap.filter { a => child.output.contains(a._2) }
                 }
-                val newLeftDes = c.leftDeserializer match {
-                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newLeftAttr)
-                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, leftAttrMap))
+                val newAttributes = c.attributes.zip(attrMaps).map { case (attr, attrMap) =>
+                  rewriteAttrs(attr, attrMap)
                 }
-                val newRightDes = c.rightDeserializer match {
-                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newRightAttr)
-                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, rightAttrMap))
+                val newGroups = c.groups.zip(attrMaps).map { case (group, attrMap) =>
+                  rewriteAttrs(group, attrMap)
                 }
-                c.copy(keyDeserializer = newKeyDes, leftDeserializer = newLeftDes,
-                  rightDeserializer = newRightDes, leftGroup = newLeftGroup,
-                  rightGroup = newRightGroup, leftAttr = newLeftAttr, rightAttr = newRightAttr,
-                  leftOrder = newLeftOrder, rightOrder = newRightOrder)
+                val newOrders = c.orders.zip(attrMaps).map { case (order, attrMap) =>
+                  rewriteAttrs(order, attrMap)
+                }
+                val newKeyDeserializer = c.keyDeserializer match {
+                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newGroups.head)
+                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, attrMaps.head))
+                }
+                val newValueDeserializers = c.valueDeserializers.zip(newAttributes).zip(attrMaps)
+                  .map {
+                    case ((valueDeserializer, attribute), attrMap) =>
+                      valueDeserializer match {
+                        case u: UnresolvedDeserializer => u.copy(inputAttributes = attribute)
+                        case e: Expression => e.withNewChildren(rewriteAttrs(e.children, attrMap))
+                      }
+                  }
+                c.copy(
+                  keyDeserializer = newKeyDeserializer,
+                  valueDeserializers = newValueDeserializers,
+                  groups = newGroups,
+                  attributes = newAttributes,
+                  orders = newOrders)
               case _ => planWithNewChildren.rewriteAttrs(attrMap)
             }
           }

@@ -1604,15 +1604,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // assert sort order reference only their respective plan
     assert(cg.isDefined)
     cg.foreach { cg =>
-      assert(cg.leftOrder != cg.rightOrder)
+      val Seq(leftOrder, rightOrder) = cg.orders
+      val Seq(left, right) = cg.children
+      assert(leftOrder != rightOrder)
 
-      assert(cg.leftOrder.flatMap(_.references).nonEmpty)
-      assert(cg.leftOrder.flatMap(_.references).forall(cg.left.output.contains))
-      assert(!cg.leftOrder.flatMap(_.references).exists(cg.right.output.contains))
+      assert(leftOrder.flatMap(_.references).nonEmpty)
+      assert(leftOrder.flatMap(_.references).forall(left.output.contains))
+      assert(!leftOrder.flatMap(_.references).exists(right.output.contains))
 
-      assert(cg.rightOrder.flatMap(_.references).nonEmpty)
-      assert(cg.rightOrder.flatMap(_.references).forall(cg.right.output.contains))
-      assert(!cg.rightOrder.flatMap(_.references).exists(cg.left.output.contains))
+      assert(rightOrder.flatMap(_.references).nonEmpty)
+      assert(rightOrder.flatMap(_.references).forall(right.output.contains))
+      assert(!rightOrder.flatMap(_.references).exists(left.output.contains))
     }
   }
 

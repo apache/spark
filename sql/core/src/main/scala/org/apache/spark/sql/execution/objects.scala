@@ -615,49 +615,45 @@ case class FlatMapGroupsInRWithArrowExec(
  * The result of this function is flattened before being output.
  */
 case class CoGroupExec(
-    func: (Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any],
+    func: (Any, Seq[Iterator[Any]]) => IterableOnce[Any],
     keyDeserializer: Expression,
-    leftDeserializer: Expression,
-    rightDeserializer: Expression,
-    leftGroup: Seq[Attribute],
-    rightGroup: Seq[Attribute],
-    leftAttr: Seq[Attribute],
-    rightAttr: Seq[Attribute],
-    leftOrder: Seq[SortOrder],
-    rightOrder: Seq[SortOrder],
+    valueDeserializers: Seq[Expression],
+    groups: Seq[Seq[Attribute]],
+    attributes: Seq[Seq[Attribute]],
+    orders: Seq[Seq[SortOrder]],
     outputObjAttr: Attribute,
-    left: SparkPlan,
-    right: SparkPlan) extends BinaryExecNode with ObjectProducerExec {
+    children: Seq[SparkPlan]) extends NaryExecNode with ObjectProducerExec {
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
+    groups.map(ClusteredDistribution(_))
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    (leftGroup.map(SortOrder(_, Ascending)) ++ leftOrder) ::
-      (rightGroup.map(SortOrder(_, Ascending)) ++ rightOrder) ::
-      Nil
+    groups.zip(orders).map { case (group, order) =>
+      group.map(SortOrder(_, Ascending)) ++ order
+    }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
-      val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
-      val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
+    children.head.execute().zipPartitions(children.tail.map(_.execute()): _*) { iterators =>
+      val groupedIterators =
+        iterators.zip(groups).zip(children).map { case ((iterator, group), child) =>
+          GroupedIterator(iterator.asInstanceOf[Iterator[InternalRow]], group, child.output)
+        }
+      val getValues = valueDeserializers.zip(attributes).map { case (deserializer, attribute) =>
+        ObjectOperator.deserializeRowToObject(deserializer, attribute)
+      }
 
-      val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, leftGroup)
-      val getLeft = ObjectOperator.deserializeRowToObject(leftDeserializer, leftAttr)
-      val getRight = ObjectOperator.deserializeRowToObject(rightDeserializer, rightAttr)
+      val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groups.head)
       val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
-
-      new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
-        case (key, leftResult, rightResult) =>
-          val result = func(
-            getKey(key),
-            leftResult.map(getLeft),
-            rightResult.map(getRight))
-          result.iterator.map(outputObject)
+      new CoGroupedIterator(groupedIterators, groups.head).flatMap { case (key, results) =>
+        val deserializedResults = results.zip(getValues).map { case (result, getValue) =>
+          result.map(getValue)
+        }
+        val result = func(getKey(key), deserializedResults)
+        result.iterator.map(outputObject)
       }
     }
   }
 
-  override protected def withNewChildrenInternal(
-    newLeft: SparkPlan, newRight: SparkPlan): CoGroupExec = copy(left = newLeft, right = newRight)
+  def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): CoGroupExec =
+    copy(children = newChildren)
 }

@@ -831,16 +831,277 @@ class DatasetSuite extends QueryTest
       ("c", 1L, 2L, 1L, 1.0, 1L, 1L, 1L, 1.0))
   }
 
-  test("cogroup") {
-    val ds1 = Seq(1 -> "a", 3 -> "abc", 5 -> "hello", 3 -> "foo").toDS()
-    val ds2 = Seq(2 -> "q", 3 -> "w", 5 -> "e", 5 -> "r").toDS()
-    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) { case (key, data1, data2) =>
-      Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
+  test("cogroup2") {
+    val ds1 = Seq(1 -> "a", 3 -> "b", 5 -> "c", 3 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 3 -> "f", 5 -> "g", 5 -> "h").toDS()
+    val cogrouped =
+      ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) { case (key, data1, data2) =>
+        Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
+      }
+
+    checkDatasetUnorderly(cogrouped, 1 -> "a#", 2 -> "#e", 3 -> "bd#f", 5 -> "c#gh")
+  }
+
+  test("cogroup3") {
+    val ds1 = Seq(1 -> "a", 3 -> "b", 5 -> "c", 3 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 3 -> "f", 5 -> "g", 5 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 4 -> "j", 5 -> "k", 2 -> "l").toDS()
+    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1), ds3.groupByKey(_._1)) {
+      case (key, data1, data2, data3) =>
+        Iterator(
+          key -> (data1.map(_._2).mkString + "#"
+            + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString))
     }
 
     checkDatasetUnorderly(
       cogrouped,
-      1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
+      1 -> "a##i",
+      2 -> "#e#l",
+      3 -> "bd#f#",
+      4 -> "##j",
+      5 -> "c#gh#k")
+  }
+
+  test("cogroup4") {
+    val ds1 = Seq(1 -> "a", 3 -> "b", 5 -> "c", 3 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 3 -> "f", 5 -> "g", 5 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 4 -> "j", 5 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 1 -> "n", 5 -> "o", 2 -> "p").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroup(ds2.groupByKey(_._1), ds3.groupByKey(_._1), ds4.groupByKey(_._1)) {
+        case (key, data1, data2, data3, data4) =>
+          Iterator(
+            key -> (data1.map(_._2).mkString + "#"
+              + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+              + "#" + data4.map(_._2).mkString))
+      }
+
+    checkDatasetUnorderly(
+      cogrouped,
+      1 -> "a##i#n",
+      2 -> "#e#l#mp",
+      3 -> "bd#f##",
+      4 -> "##j#",
+      5 -> "c#gh#k#o")
+  }
+
+  test("cogroup5") {
+    val ds1 = Seq(1 -> "a", 3 -> "b", 5 -> "c", 3 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 3 -> "f", 5 -> "g", 5 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 4 -> "j", 5 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 1 -> "n", 5 -> "o", 2 -> "p").toDS()
+    val ds5 = Seq(4 -> "q", 2 -> "r", 4 -> "s", 3 -> "t").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroup(
+        ds2.groupByKey(_._1),
+        ds3.groupByKey(_._1),
+        ds4.groupByKey(_._1),
+        ds5.groupByKey(_._1)) { case (key, data1, data2, data3, data4, data5) =>
+        Iterator(
+          key -> (data1.map(_._2).mkString + "#"
+            + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+            + "#" + data4.map(_._2).mkString + "#" + data5.map(_._2).mkString))
+      }
+
+    checkDatasetUnorderly(
+      cogrouped,
+      1 -> "a##i#n#",
+      2 -> "#e#l#mp#r",
+      3 -> "bd#f###t",
+      4 -> "##j##qs",
+      5 -> "c#gh#k#o#")
+  }
+
+  test("cogroup6") {
+    val ds1 = Seq(1 -> "a", 3 -> "b", 5 -> "c", 3 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 3 -> "f", 5 -> "g", 5 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 4 -> "j", 5 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 1 -> "n", 5 -> "o", 2 -> "p").toDS()
+    val ds5 = Seq(4 -> "q", 2 -> "r", 4 -> "s", 3 -> "t").toDS()
+    val ds6 = Seq(5 -> "u", 1 -> "v", 2 -> "w", 3 -> "x").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroup(
+        ds2.groupByKey(_._1),
+        ds3.groupByKey(_._1),
+        ds4.groupByKey(_._1),
+        ds5.groupByKey(_._1),
+        ds6.groupByKey(_._1)) { case (key, data1, data2, data3, data4, data5, data6) =>
+        Iterator(
+          key -> (data1.map(_._2).mkString + "#"
+            + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+            + "#" + data4.map(_._2).mkString + "#" + data5.map(_._2).mkString
+            + "#" + data6.map(_._2).mkString))
+      }
+
+    checkDatasetUnorderly(
+      cogrouped,
+      1 -> "a##i#n##v",
+      2 -> "#e#l#mp#r#w",
+      3 -> "bd#f###t#x",
+      4 -> "##j##qs#",
+      5 -> "c#gh#k#o##u")
+  }
+
+  test("cogroup7") {
+    val ds1 = Seq(1 -> "a", 3 -> "b", 5 -> "c", 3 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 3 -> "f", 5 -> "g", 5 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 4 -> "j", 5 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 1 -> "n", 5 -> "o", 2 -> "p").toDS()
+    val ds5 = Seq(4 -> "q", 2 -> "r", 4 -> "s", 3 -> "t").toDS()
+    val ds6 = Seq(5 -> "u", 1 -> "v", 2 -> "w", 3 -> "x").toDS()
+    val ds7 = Seq(3 -> "y", 2 -> "z", 3 -> "A", 5 -> "B").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroup(
+        ds2.groupByKey(_._1),
+        ds3.groupByKey(_._1),
+        ds4.groupByKey(_._1),
+        ds5.groupByKey(_._1),
+        ds6.groupByKey(_._1),
+        ds7.groupByKey(_._1)) { case (key, data1, data2, data3, data4, data5, data6, data7) =>
+        Iterator(
+          key -> (data1.map(_._2).mkString + "#"
+            + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+            + "#" + data4.map(_._2).mkString + "#" + data5.map(_._2).mkString
+            + "#" + data6.map(_._2).mkString + "#" + data7.map(_._2).mkString))
+      }
+
+    checkDatasetUnorderly(
+      cogrouped,
+      1 -> "a##i#n##v#",
+      2 -> "#e#l#mp#r#w#z",
+      3 -> "bd#f###t#x#yA",
+      4 -> "##j##qs##",
+      5 -> "c#gh#k#o##u#B")
+  }
+
+  test("cogroupSorted2") {
+    val ds1 = Seq(1 -> "a", 2 -> "b", 2 -> "c", 1 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 1 -> "f", 1 -> "g", 1 -> "h").toDS()
+    val cogrouped =
+      ds1.groupByKey(_._1).cogroupSorted(ds2.groupByKey(_._1))($"_2".desc)($"_2".desc) {
+        case (key, data1, data2) =>
+          Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
+        }
+
+    checkDatasetUnorderly(cogrouped, 1 -> "da#hgf", 2 -> "cb#e")
+  }
+
+  test("cogroupSorted3") {
+    val ds1 = Seq(1 -> "a", 2 -> "b", 2 -> "c", 1 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 1 -> "f", 1 -> "g", 1 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 1 -> "j", 2 -> "k", 2 -> "l").toDS()
+    val cogrouped = ds1.groupByKey(_._1).cogroupSorted(ds2.groupByKey(_._1), ds3.groupByKey(_._1))(
+      $"_2".desc)($"_2".desc)($"_2".desc) {
+        case (key, data1, data2, data3) =>
+          Iterator(
+            key -> (data1.map(_._2).mkString + "#"
+              + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString))
+      }
+
+    checkDatasetUnorderly(cogrouped, 1 -> "da#hgf#ji", 2 -> "cb#e#lk")
+  }
+
+  test("cogroupSorted4") {
+    val ds1 = Seq(1 -> "a", 2 -> "b", 2 -> "c", 1 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 1 -> "f", 1 -> "g", 1 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 1 -> "j", 2 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 2 -> "n", 2 -> "o", 2 -> "p").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroupSorted(ds2.groupByKey(_._1), ds3.groupByKey(_._1), ds4.groupByKey(_._1))(
+        $"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc) {
+          case (key, data1, data2, data3, data4) =>
+            Iterator(
+              key -> (data1.map(_._2).mkString + "#"
+                + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+                + "#" + data4.map(_._2).mkString))
+        }
+
+    checkDatasetUnorderly(cogrouped, 1 -> "da#hgf#ji#", 2 -> "cb#e#lk#ponm")
+  }
+
+  test("cogroupSorted5") {
+    val ds1 = Seq(1 -> "a", 2 -> "b", 2 -> "c", 1 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 1 -> "f", 1 -> "g", 1 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 1 -> "j", 2 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 2 -> "n", 2 -> "o", 2 -> "p").toDS()
+    val ds5 = Seq(2 -> "q", 1 -> "r", 1 -> "s", 2 -> "t").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroupSorted(
+        ds2.groupByKey(_._1),
+        ds3.groupByKey(_._1),
+        ds4.groupByKey(_._1),
+        ds5.groupByKey(_._1))(
+        $"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc) {
+          case (key, data1, data2, data3, data4, data5) =>
+            Iterator(
+              key -> (data1.map(_._2).mkString + "#"
+                + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+                + "#" + data4.map(_._2).mkString + "#" + data5.map(_._2).mkString))
+        }
+
+    checkDatasetUnorderly(cogrouped, 1 -> "da#hgf#ji##sr", 2 -> "cb#e#lk#ponm#tq")
+  }
+
+  test("cogroupSorted6") {
+    val ds1 = Seq(1 -> "a", 2 -> "b", 2 -> "c", 1 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 1 -> "f", 1 -> "g", 1 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 1 -> "j", 2 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 2 -> "n", 2 -> "o", 2 -> "p").toDS()
+    val ds5 = Seq(2 -> "q", 1 -> "r", 1 -> "s", 2 -> "t").toDS()
+    val ds6 = Seq(1 -> "u", 1 -> "v", 1 -> "w", 2 -> "x").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroupSorted(
+        ds2.groupByKey(_._1),
+        ds3.groupByKey(_._1),
+        ds4.groupByKey(_._1),
+        ds5.groupByKey(_._1),
+        ds6.groupByKey(_._1))(
+        $"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc) {
+          case (key, data1, data2, data3, data4, data5, data6) =>
+            Iterator(
+              key -> (data1.map(_._2).mkString + "#"
+                + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+                + "#" + data4.map(_._2).mkString + "#" + data5.map(_._2).mkString
+                + "#" + data6.map(_._2).mkString))
+        }
+
+    checkDatasetUnorderly(cogrouped, 1 -> "da#hgf#ji##sr#wvu", 2 -> "cb#e#lk#ponm#tq#x")
+  }
+
+  test("cogroupSorted7") {
+    val ds1 = Seq(1 -> "a", 2 -> "b", 2 -> "c", 1 -> "d").toDS()
+    val ds2 = Seq(2 -> "e", 1 -> "f", 1 -> "g", 1 -> "h").toDS()
+    val ds3 = Seq(1 -> "i", 1 -> "j", 2 -> "k", 2 -> "l").toDS()
+    val ds4 = Seq(2 -> "m", 2 -> "n", 2 -> "o", 2 -> "p").toDS()
+    val ds5 = Seq(2 -> "q", 1 -> "r", 1 -> "s", 2 -> "t").toDS()
+    val ds6 = Seq(1 -> "u", 1 -> "v", 1 -> "w", 2 -> "x").toDS()
+    val ds7 = Seq(1 -> "y", 1 -> "z", 2 -> "A", 2 -> "B").toDS()
+    val cogrouped = ds1
+      .groupByKey(_._1)
+      .cogroupSorted(
+        ds2.groupByKey(_._1),
+        ds3.groupByKey(_._1),
+        ds4.groupByKey(_._1),
+        ds5.groupByKey(_._1),
+        ds6.groupByKey(_._1),
+        ds7.groupByKey(_._1))(
+        $"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc)($"_2".desc) {
+          case (key, data1, data2, data3, data4, data5, data6, data7) =>
+            Iterator(
+              key -> (data1.map(_._2).mkString + "#"
+                + data2.map(_._2).mkString + "#" + data3.map(_._2).mkString
+                + "#" + data4.map(_._2).mkString + "#" + data5.map(_._2).mkString
+                + "#" + data6.map(_._2).mkString + "#" + data7.map(_._2).mkString))
+        }
+
+    checkDatasetUnorderly(cogrouped, 1 -> "da#hgf#ji##sr#wvu#zy", 2 -> "cb#e#lk#ponm#tq#x#BA")
   }
 
   test("cogroup with complex data") {
