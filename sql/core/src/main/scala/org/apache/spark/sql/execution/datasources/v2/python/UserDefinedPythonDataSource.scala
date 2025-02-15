@@ -43,8 +43,7 @@ import org.apache.spark.util.ArrayImplicits._
  * A user-defined Python data source. This is used by the Python API.
  * Defines the interation between Python and JVM.
  *
- * @param dataSourceCls
- *   The Python data source class.
+ * @param dataSourceCls The Python data source class.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
@@ -95,7 +94,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       pythonResult: PythonDataSourceReader,
       outputSchema: StructType,
       isStreaming: Boolean): PythonDataSourceReadInfo = {
-    new PartitionRunner(
+    new UserDefinedPythonDataSourcePartitionRunner(
       createPythonFunction(pythonResult.reader),
       UserDefinedPythonDataSource.readInputSchema,
       outputSchema,
@@ -327,10 +326,64 @@ private class UserDefinedPythonDataSourceRunner(
   }
 }
 
+case class PythonDataSourceReader(reader: Array[Byte], isStreaming: Boolean)
+
+/**
+ * Instantiate the reader of a Python data source.
+ *
+ * @param func
+ *   a Python data source instance
+ * @param outputSchema
+ *   output schema of the Python data source
+ * @param isStreaming
+ *   whether it is a streaming read
+ */
+private class UserDefinedPythonDataSourceReaderRunner(
+    func: PythonFunction,
+    outputSchema: StructType,
+    isStreaming: Boolean)
+    extends PythonPlannerRunner[PythonDataSourceReader](func) {
+
+  // See the logic in `pyspark.sql.worker.data_source_get_reader.py`.
+  override val workerModule = "pyspark.sql.worker.data_source_get_reader"
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send Python data source
+    PythonWorkerUtils.writePythonFunction(func, dataOut)
+
+    // Send output schema
+    PythonWorkerUtils.writeUTF(outputSchema.json, dataOut)
+
+    dataOut.writeBoolean(isStreaming)
+  }
+
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReader = {
+    // Receive the picked reader or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
+    }
+
+    // Receive the pickled reader.
+    val pickledFunction: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+
+    PythonDataSourceReader(reader = pickledFunction, isStreaming = isStreaming)
+  }
+}
+
 case class PythonFilterPushdownResult(
     reader: PythonDataSourceReader,
     isFilterPushed: collection.Seq[Boolean])
 
+/**
+ * Push down filters to a Python data source.
+ *
+ * @param reader
+ *   a Python data source reader instance
+ * @param filters
+ *   all filters to be pushed down
+ */
 private class UserDefinedPythonDataSourceFilterPushdownRunner(
     reader: PythonFunction,
     filters: collection.Seq[Filter])
@@ -346,7 +399,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     case (filter, i) =>
       filter match {
         case filter @ org.apache.spark.sql.sources.EqualTo(_, value: Int) =>
-        val columnPath = filter.v2references.head
+          val columnPath = filter.v2references.head
           Some(SerializedFilter("EqualTo", columnPath, value, i))
         case _ =>
           None
@@ -381,7 +434,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
     }
 
-    // Receive the pickled 'reader'.
+    // Receive the pickled reader.
     val pickledReader: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
 
     // Receive the pushed filters as a list of indices.
@@ -396,50 +449,6 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       reader = PythonDataSourceReader(pickledReader, isStreaming = false),
       isFilterPushed = isFilterPushed
     )
-  }
-}
-
-case class PythonDataSourceReader(reader: Array[Byte], isStreaming: Boolean)
-
-/**
- * Send information to a Python process to plan a Python data source read.
- *
- * @param func
- *   an Python data source instance
- * @param outputSchema
- *   output schema of the Python data source
- */
-private class UserDefinedPythonDataSourceReaderRunner(
-    func: PythonFunction,
-    outputSchema: StructType,
-    isStreaming: Boolean)
-    extends PythonPlannerRunner[PythonDataSourceReader](func) {
-
-  // See the logic in `pyspark.sql.worker.data_source_get_reader.py`.
-  override val workerModule = "pyspark.sql.worker.data_source_get_reader"
-
-  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
-    // Send Python data source
-    PythonWorkerUtils.writePythonFunction(func, dataOut)
-
-    // Send output schema
-    PythonWorkerUtils.writeUTF(outputSchema.json, dataOut)
-
-    dataOut.writeBoolean(isStreaming)
-  }
-
-  override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReader = {
-    // Receive the picked reader or an exception raised in Python worker.
-    val length = dataIn.readInt()
-    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
-    }
-
-    // Receive the pickled 'read' function.
-    val pickledFunction: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
-
-    PythonDataSourceReader(reader = pickledFunction, isStreaming = isStreaming)
   }
 }
 
@@ -459,7 +468,7 @@ case class PythonDataSourceReadInfo(
  * @param isStreaming
  *   whether it is a streaming read
  */
-private class PartitionRunner(
+private class UserDefinedPythonDataSourcePartitionRunner(
     reader: PythonFunction,
     inputSchema: StructType,
     outputSchema: StructType,
