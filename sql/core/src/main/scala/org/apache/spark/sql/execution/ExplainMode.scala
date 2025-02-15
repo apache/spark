@@ -27,6 +27,12 @@ sealed trait ExplainMode {
 }
 
 /**
+ * Off mode means that when printing explain for a DataFrame, an empty string is expected
+ * to be printed to the console.
+ */
+case object OffMode extends ExplainMode { val name = "off" }
+
+/**
  * Simple mode means that when printing explain for a DataFrame, only a physical plan is
  * expected to be printed to the console.
  */
@@ -61,12 +67,13 @@ object ExplainMode {
    * Returns the explain mode from the given string.
    */
   def fromString(mode: String): ExplainMode = mode.toLowerCase(Locale.ROOT) match {
+    case OffMode.name => OffMode
     case SimpleMode.name => SimpleMode
     case ExtendedMode.name => ExtendedMode
     case CodegenMode.name => CodegenMode
     case CostMode.name => CostMode
     case FormattedMode.name => FormattedMode
     case _ => throw new IllegalArgumentException(s"Unknown explain mode: $mode. Accepted " +
-      "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
+      "explain modes are 'off', 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
   }
 }
