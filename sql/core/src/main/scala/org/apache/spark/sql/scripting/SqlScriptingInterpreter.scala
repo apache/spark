@@ -22,7 +22,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SignalStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -273,6 +273,17 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
       case iterateStatement: IterateStatement =>
         new IterateStatementExec(iterateStatement.label)
+
+      case signalStatement: SignalStatement =>
+        assert(signalStatement.sqlState.isDefined)
+        new SignalStatementExec(
+          errorCondition = signalStatement.errorCondition,
+          sqlState = signalStatement.sqlState.get,
+          message = signalStatement.message,
+          msgArguments = signalStatement.messageArguments,
+          isBuiltinError = signalStatement.isBuiltinError,
+          session = session,
+          origin = signalStatement.origin)
 
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
