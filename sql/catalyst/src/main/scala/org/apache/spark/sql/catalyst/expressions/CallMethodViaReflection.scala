@@ -67,6 +67,9 @@ case class CallMethodViaReflection(
   with CodegenFallback
   with QueryErrorsBase {
 
+  // Pretty UDF-like
+  override protected[spark] val _expectedCost = 200
+
   def this(children: Seq[Expression]) =
     this(children, true)
 
