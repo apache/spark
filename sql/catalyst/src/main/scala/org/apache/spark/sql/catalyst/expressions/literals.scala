@@ -335,6 +335,26 @@ object IntegerLiteral {
 }
 
 /**
+ * Extractor for retrieving Short literals.
+ */
+object ShortLiteral {
+  def unapply(a: Any): Option[Short] = a match {
+    case Literal(a: Short, ShortType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Byte literals.
+ */
+object ByteLiteral {
+  def unapply(a: Any): Option[Byte] = a match {
+    case Literal(a: Byte, ByteType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for retrieving Long literals.
  */
 object LongLiteral {
