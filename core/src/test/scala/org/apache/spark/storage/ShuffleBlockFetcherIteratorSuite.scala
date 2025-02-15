@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io._
 import java.nio.ByteBuffer
 import java.util.UUID
-import java.util.concurrent.{CompletableFuture, Semaphore}
+import java.util.concurrent.{CompletableFuture, ExecutionException, Semaphore}
 import java.util.zip.CheckedInputStream
 
 import scala.collection.mutable
@@ -28,6 +28,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
@@ -43,8 +44,11 @@ import org.apache.spark.{MapOutputTracker, SparkFunSuite, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient, TransportClientFactory}
+import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalBlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
-import org.apache.spark.network.util.LimitedInputStream
+import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors
+import org.apache.spark.network.util.{LimitedInputStream, MapConfigProvider, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
 import org.apache.spark.storage.ShuffleBlockFetcherIterator._
@@ -362,6 +366,75 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // 2 remote blocks are read from the same block manager
     verifyFetchBlocksInvocationCount(1)
     assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs.size === 1)
+  }
+
+  test("BlockStoreClient getHostLocalDirs RPC supports IOException retry") {
+    val mockClientFactory = mock(classOf[TransportClientFactory])
+    val mockTransportClient = mock(classOf[TransportClient])
+    val execToDirs = Map("exec-1" ->
+      Array("loc2.1", "loc2.2"))
+
+    var sendRpcThrowIOExceptionIdx = 0
+    var sendRpcThrowIOExceptionMaxCnt = 0
+    when(mockClientFactory.createClient(any(), any())).thenAnswer(_ => {
+      mockTransportClient
+    })
+    when(mockTransportClient.sendRpc(any(), any())).thenAnswer(invocationOnMock => {
+      if (sendRpcThrowIOExceptionIdx < sendRpcThrowIOExceptionMaxCnt) {
+        sendRpcThrowIOExceptionIdx += 1
+        throw new IOException("sendRpc failed " + sendRpcThrowIOExceptionIdx + " times")
+      }
+      val callback = invocationOnMock.getArgument(1).asInstanceOf[RpcResponseCallback]
+      callback.onSuccess(new LocalDirsForExecutors(execToDirs.asJava).toByteBuffer)
+      null
+    })
+
+    class TestExternalBlockStoreClient(
+      conf: TransportConf,
+      secretKeyHolder: SecretKeyHolder,
+      authEnabled: Boolean,
+      registrationTimeoutMs: Long) extends ExternalBlockStoreClient(
+      conf, secretKeyHolder, authEnabled, registrationTimeoutMs) {
+      override def init(appId: String): Unit = {
+        super.init(appId)
+        this.clientFactory = mockClientFactory
+      }
+    }
+
+    val config = new java.util.HashMap[String, String]
+    val maxRetries = 3
+    config.put("spark.shuffle.io.maxRetries", maxRetries.toString)
+    val clientConf: TransportConf = new TransportConf("shuffle", new MapConfigProvider(config))
+    val testExternalBlockStoreClient = new TestExternalBlockStoreClient(
+      clientConf, null, false, 5000)
+    try {
+      testExternalBlockStoreClient.init("APP_ID")
+      ((0 to maxRetries).map((_, true)) ++ Seq((maxRetries + 1, false))).foreach {
+        case (maxCnt, success) =>
+        sendRpcThrowIOExceptionIdx = 0
+        sendRpcThrowIOExceptionMaxCnt = maxCnt
+        val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
+        testExternalBlockStoreClient.getHostLocalDirs("exec-1", 1,
+          Array("exec-1"), hostLocalDirsCompletable)
+        try {
+          val result = hostLocalDirsCompletable.get()
+          assert(success)
+          assert(result.size() == 1)
+          assert(result.keySet() == execToDirs.asJava.keySet())
+          assert(result.values().iterator().next() sameElements
+            execToDirs.asJava.values().iterator().next())
+        } catch {
+          case e: ExecutionException =>
+            assert(e.getCause.isInstanceOf[IOException])
+            assert(!success)
+            assert(sendRpcThrowIOExceptionIdx == sendRpcThrowIOExceptionMaxCnt)
+        }
+      }
+    } finally {
+      if (testExternalBlockStoreClient != null) {
+        testExternalBlockStoreClient.close()
+      }
+    }
   }
 
   test("error during accessing host local dirs for executors") {
