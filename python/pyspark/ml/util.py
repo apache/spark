@@ -78,6 +78,13 @@ def try_remote_intermediate_result(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def invoke_helper_attr(method: str, *args: Any) -> Any:
+    from pyspark.ml.wrapper import JavaWrapper
+
+    helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+    return helper._call_java(method, *args)
+
+
 def invoke_helper_relation(method: str, *args: Any) -> "ConnectDataFrame":
     from pyspark.ml.wrapper import JavaWrapper
 
