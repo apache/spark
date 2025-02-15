@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, ExecutorService}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
@@ -301,7 +301,7 @@ object SQLExecution extends Logging {
    * SparkContext local properties are forwarded to execution thread
    */
   def withThreadLocalCaptured[T](
-      sparkSession: SparkSession, exec: ExecutorService) (body: => T): JFuture[T] = {
+      sparkSession: SparkSession, exec: ExecutorService) (body: => T): CompletableFuture[T] = {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
@@ -309,7 +309,7 @@ object SQLExecution extends Logging {
     // mode, we default back to the resources of the current Spark session.
     val artifactState = JobArtifactSet.getCurrentJobArtifactState.getOrElse(
       activeSession.artifactManager.state)
-    exec.submit(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
+    CompletableFuture.supplyAsync(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
       val originalSession = SparkSession.getActiveSession
       val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)
@@ -326,6 +326,6 @@ object SQLExecution extends Logging {
         SparkSession.clearActiveSession()
       }
       res
-    })
+    }, exec)
   }
 }

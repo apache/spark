@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.execution.python.streaming
 
 import java.util.UUID
 
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.ArrowPythonRunner
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, TransformWithStateMetadataUtils, TransformWithStateVariableInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
@@ -115,9 +116,14 @@ case class TransformWithStateInPandasExec(
   override def operatorStateMetadataVersion: Int = 2
 
   override def getColFamilySchemas(
-      setNullableFields: Boolean
+      shouldBeNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
-    driverProcessorHandle.getColumnFamilySchemas(setNullableFields)
+    // For Python, the user can explicitly set nullability on schema, so
+    // we need to throw an error if the schema is nullable
+    driverProcessorHandle.getColumnFamilySchemas(
+      shouldCheckNullable = shouldBeNullable,
+      shouldSetNullable = shouldBeNullable
+    )
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {

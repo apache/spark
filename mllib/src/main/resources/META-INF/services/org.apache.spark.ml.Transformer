@@ -65,6 +65,7 @@ org.apache.spark.ml.clustering.BisectingKMeansModel
 org.apache.spark.ml.clustering.GaussianMixtureModel
 org.apache.spark.ml.clustering.DistributedLDAModel
 org.apache.spark.ml.clustering.LocalLDAModel
+org.apache.spark.ml.clustering.PowerIterationClusteringWrapper
 
 # recommendation
 org.apache.spark.ml.recommendation.ALSModel

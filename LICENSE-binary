@@ -501,7 +501,6 @@ core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 
 Common Development and Distribution License (CDDL) 1.0
 ------------------------------------------------------
-javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.transaction:transaction-api
 
 
@@ -515,7 +514,9 @@ javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
 Eclipse Distribution License (EDL) 1.0
 --------------------------------------
 com.sun.istack:istack-commons-runtime
+jakarta.activation:jakarta.activation-api
 jakarta.xml.bind:jakarta.xml.bind-api
+org.glassfish.jaxb:jaxb-core
 org.glassfish.jaxb:jaxb-runtime
 
 Eclipse Public License (EPL) 2.0

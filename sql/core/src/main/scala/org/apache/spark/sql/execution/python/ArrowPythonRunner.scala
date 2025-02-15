@@ -47,6 +47,8 @@ abstract class BaseArrowPythonRunner(
       funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 

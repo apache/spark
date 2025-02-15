@@ -36,6 +36,7 @@ from pyspark.errors.exceptions.base import (
     SparkUpgradeException as BaseSparkUpgradeException,
     QueryContext as BaseQueryContext,
     QueryContextType,
+    StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
 )
 
 if TYPE_CHECKING:
@@ -295,6 +296,26 @@ class SparkNoSuchElementException(SparkConnectGrpcException, BaseNoSuchElementEx
     """
 
 
+class InvalidPlanInput(SparkConnectGrpcException):
+    """
+    Error thrown when a connect plan is not valid.
+    """
+
+
+class InvalidCommandInput(SparkConnectGrpcException):
+    """
+    Error thrown when a connect command is not valid.
+    """
+
+
+class StreamingPythonRunnerInitializationException(
+    SparkConnectGrpcException, BaseStreamingPythonRunnerInitException
+):
+    """
+    Failed to initialize a streaming Python runner.
+    """
+
+
 # Update EXCEPTION_CLASS_MAPPING here when adding a new exception
 EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.sql.catalyst.parser.ParseException": ParseException,
@@ -312,6 +333,10 @@ EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.api.python.PythonException": PythonException,
     "org.apache.spark.SparkNoSuchElementException": SparkNoSuchElementException,
     "org.apache.spark.SparkException": SparkException,
+    "org.apache.spark.sql.connect.common.InvalidPlanInput": InvalidPlanInput,
+    "org.apache.spark.sql.connect.common.InvalidCommandInput": InvalidCommandInput,
+    "org.apache.spark.api.python.StreamingPythonRunner"
+    "$StreamingPythonRunnerInitializationException": StreamingPythonRunnerInitializationException,
 }
 
 

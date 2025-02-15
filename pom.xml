@@ -193,7 +193,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.17.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.12.0</commons-pool2.version>
+    <commons-pool2.version>2.12.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
@@ -214,8 +214,8 @@
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.117.Final</netty.version>
-    <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
+    <netty.version>4.1.118.Final</netty.version>
+    <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.4</junit-jupiter.version>
     <junit-platform.version>1.11.4</junit-platform.version>
@@ -229,13 +229,13 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
     and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.1.0</arrow.version>
+    <arrow.version>18.2.0</arrow.version>
     <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.0.1</kubernetes-client.version>
+    <kubernetes-client.version>7.1.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -327,9 +327,10 @@
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
       -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
+      --enable-native-access=ALL-UNNAMED
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
-    <mysql.connector.version>9.1.0</mysql.connector.version>
+    <mysql.connector.version>9.2.0</mysql.connector.version>
     <postgresql.version>42.7.5</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
@@ -571,7 +572,7 @@
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.4.8</version>
+        <version>1.7.1</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
@@ -599,31 +600,23 @@
       <dependency>
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
-        <version>2.3.2</version>
+        <version>4.0.5</version>
         <scope>compile</scope>
         <exclusions>
-          <!-- for now, we only write XML in PMML export, and these can be excluded -->
-          <exclusion>
-            <groupId>com.sun.xml.fastinfoset</groupId>
-            <artifactId>FastInfoset</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.glassfish.jaxb</groupId>
             <artifactId>txw2</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.jvnet.staxex</groupId>
-            <artifactId>stax-ex</artifactId>
-          </exclusion>
-          <!--
-            SPARK-27611: Exclude redundant javax.activation implementation, which
-            conflicts with the existing javax.activation:activation:1.1.1 dependency.
-            -->
-          <exclusion>
-            <groupId>jakarta.activation</groupId>
-            <artifactId>jakarta.activation-api</artifactId>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-activation</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.xml.bind</groupId>
+        <artifactId>jakarta.xml.bind-api</artifactId>
+        <version>4.0.2</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -841,7 +834,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-9</version>
+        <version>1.5.6-10</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1061,13 +1054,6 @@
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
-        <!-- SPARK-28765 Unused JDK11-specific dependency -->
-        <exclusions>
-          <exclusion>
-            <groupId>jakarta.xml.bind</groupId>
-            <artifactId>jakarta.xml.bind-api</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
@@ -1214,13 +1200,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.17</version>
+        <version>1.17.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.17</version>
+        <version>1.17.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1544,16 +1530,6 @@
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
         <version>1.10</version>
-      </dependency>
-      <!-- See SPARK-23654 for info on this dependency;
-      It is used to keep javax.activation at v1.1.1 after dropping
-      jets3t as a dependency.
-       -->
-      <dependency>
-        <groupId>javax.activation</groupId>
-        <artifactId>activation</artifactId>
-        <version>1.1.1</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -2846,6 +2822,7 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <spark.hadoop.hadoop.caller.context.enabled>true</spark.hadoop.hadoop.caller.context.enabled>
               <spark.memory.debugFill>true</spark.memory.debugFill>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
@@ -2893,6 +2870,7 @@
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
+              <spark.hadoop.hadoop.caller.context.enabled>true</spark.hadoop.hadoop.caller.context.enabled>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
@@ -3224,7 +3202,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.20.2</version>
+            <version>10.21.2</version>
           </dependency>
         </dependencies>
         <executions>

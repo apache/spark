@@ -286,7 +286,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code></td>
      <td>1MB</td>
      <td>
-       The minimum size of shuffle partitions after coalescing. Its value can be at most 20% of <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>. This is useful when the target size is ignored during partition coalescing, which is the default case.
+       The minimum size of shuffle partitions after coalescing. This is useful when the target size is ignored during partition coalescing, which is the default case.
      </td>
      <td>3.2.0</td>
    </tr>

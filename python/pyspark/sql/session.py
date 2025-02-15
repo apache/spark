@@ -480,7 +480,13 @@ class SparkSession(SparkConversionMixin):
             from pyspark.core.context import SparkContext
 
             with self._lock:
-                is_api_mode_connect = opts.get("spark.api.mode", "classic").lower() == "connect"
+                default_api_mode = "classic"
+                if os.environ.get("SPARK_CONNECT_MODE", "") == "1":
+                    default_api_mode = "connect"
+
+                is_api_mode_connect = (
+                    opts.get("spark.api.mode", default_api_mode).lower() == "connect"
+                )
 
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
@@ -1957,7 +1963,7 @@ class SparkSession(SparkConversionMixin):
     @property
     def tvf(self) -> "TableValuedFunction":
         """
-        Returns a :class:`TableValuedFunction` that can be used to call a table-valued function
+        Returns a :class:`tvf.TableValuedFunction` that can be used to call a table-valued function
         (TVF).
 
         .. versionadded:: 4.0.0
@@ -1968,7 +1974,7 @@ class SparkSession(SparkConversionMixin):
 
         Returns
         -------
-        :class:`TableValuedFunction`
+        :class:`tvf.TableValuedFunction`
 
         Examples
         --------

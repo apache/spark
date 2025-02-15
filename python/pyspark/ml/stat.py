@@ -416,6 +416,17 @@ class Summarizer:
     @staticmethod
     def _get_single_metric(col: Column, weightCol: Optional[Column], metric: str) -> Column:
         col, weightCol = Summarizer._check_param(col, weightCol)
+
+        if is_remote():
+            # The alias name maybe different from the one in Spark Classic,
+            # because we cannot get the same string representation of the Column object.
+            return (
+                Summarizer.metrics(metric)
+                .summary(col, weightCol)
+                .getField(metric)
+                .alias(f"{metric}({col._expr})")
+            )
+
         return Column(
             JavaWrapper._new_java_obj(
                 "org.apache.spark.ml.stat.Summarizer." + metric, col._jc, weightCol._jc
@@ -457,6 +468,12 @@ class Summarizer:
         -------
         :py:class:`pyspark.ml.stat.SummaryBuilder`
         """
+        if is_remote():
+            builder = SummaryBuilder(None)
+            builder._metrics = [m for m in metrics]  # type: ignore[attr-defined]
+            builder._java_obj = None
+            return builder
+
         from pyspark.core.context import SparkContext
         from pyspark.sql.classic.column import _to_seq
 
@@ -481,7 +498,8 @@ class SummaryBuilder(JavaWrapper):
     """
 
     def __init__(self, jSummaryBuilder: "JavaObject"):
-        super(SummaryBuilder, self).__init__(jSummaryBuilder)
+        if not is_remote():
+            super(SummaryBuilder, self).__init__(jSummaryBuilder)
 
     def summary(self, featuresCol: Column, weightCol: Optional[Column] = None) -> Column:
         """
@@ -503,6 +521,16 @@ class SummaryBuilder(JavaWrapper):
             an aggregate column that contains the statistics. The exact content of this
             structure is determined during the creation of the builder.
         """
+        if is_remote():
+            from pyspark.sql.connect.functions import builtin as F
+
+            return F._invoke_function(
+                "aggregate_metrics",
+                F.array([F.lit(m) for m in self._metrics]),  # type: ignore[attr-defined]
+                featuresCol,
+                weightCol if weightCol is not None else F.lit(1.0),
+            )
+
         featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
         assert self._java_obj is not None
 
