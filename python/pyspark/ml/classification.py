@@ -4045,7 +4045,9 @@ class OneVsRestModelWriter(MLWriter):
         )
         for idx in range(numClasses):
             subModelPath = os.path.join(path, f"model_{idx}")
-            cast(MLWritable, instance.models[idx]).save(subModelPath)
+            cast(MLWritable, instance.models[idx]).write().session(self.sparkSession).save(
+                subModelPath
+            )
 
 
 @inherit_doc
