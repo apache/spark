@@ -32,9 +32,7 @@ class PythonScan(
   private def batchReader =
     ds.getOrCreateReaderInPython(shortName, outputSchema, options, isStreaming = false)
 
-  lazy val pythonBatch = new PythonBatch(ds, batchReader, outputSchema)
-
-  override def toBatch: Batch = pythonBatch
+  override def toBatch: Batch = new PythonBatch(ds, batchReader, outputSchema)
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
     new PythonMicroBatchStream(ds, shortName, outputSchema, options)

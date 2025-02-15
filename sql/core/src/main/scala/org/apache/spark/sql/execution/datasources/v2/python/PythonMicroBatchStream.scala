@@ -32,10 +32,11 @@ class PythonMicroBatchStream(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
-    options: CaseInsensitiveStringMap)
-    extends MicroBatchStream
-    with Logging
-    with AcceptsLatestSeenOffset {
+    options: CaseInsensitiveStringMap
+  )
+  extends MicroBatchStream
+  with Logging
+  with AcceptsLatestSeenOffset {
   private def dataSourceReader =
     ds.source.createPythonFunction(
       ds.getOrCreateReaderInPython(shortName, outputSchema, options, isStreaming = true).reader)
