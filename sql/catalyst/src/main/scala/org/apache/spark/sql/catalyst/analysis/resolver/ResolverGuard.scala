@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, SqlScriptingLocalVariableManager}
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
   GetViewColumnByNameAndOrdinal,
@@ -266,7 +266,9 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     LegacyBehaviorPolicy.withName(conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY)) ==
     LegacyBehaviorPolicy.CORRECTED
 
-  private def checkVariables() = catalogManager.tempVariableManager.isEmpty
+  private def checkVariables() =
+    catalogManager.tempVariableManager.isEmpty &&
+      SqlScriptingLocalVariableManager.get().forall(_.isEmpty)
 }
 
 object ResolverGuard {

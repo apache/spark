@@ -19,9 +19,11 @@ package org.apache.spark.sql.scripting
 
 import java.util.Locale
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
 /**
@@ -47,6 +49,9 @@ class SqlScriptingExecutionContext {
     }
     frames.last.exitScope(label)
   }
+
+  def currentFrame: SqlScriptingExecutionFrame = frames.last
+  def currentScope: SqlScriptingExecutionScope = currentFrame.currentScope
 
   def findHandler(condition: String, sqlState: String): Option[ExceptionHandlerExec] = {
     if (frames.isEmpty) {
@@ -127,6 +132,8 @@ class SqlScriptingExecutionFrame(
     }
   }
 
+  def currentScope: SqlScriptingExecutionScope = scopes.last
+
   // TODO: Introduce a separate class for different frame types (Script, Stored Procedure,
   //       Error Handler) implementing SqlScriptingExecutionFrame interface.
   def findHandler(
@@ -170,6 +177,7 @@ class SqlScriptingExecutionFrame(
 class SqlScriptingExecutionScope(
     val label: String,
     val triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap) {
+  val variables = new mutable.HashMap[String, VariableDefinition]
 
   /**
    * Finds the most appropriate error handler for exception based on its condition and SQL state.

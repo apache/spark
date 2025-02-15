@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import java.util.Locale
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.TempVariableManager
+import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingLocalVariableManager}
+import org.apache.spark.sql.catalyst.analysis.FakeLocalCatalog
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 
@@ -32,11 +36,10 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
   extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
-    val variableManager = session.sessionState.catalogManager.tempVariableManager
     val values = query.executeCollect()
     if (values.length == 0) {
       variables.foreach { v =>
-        createVariable(variableManager, v, null)
+        setVariable(v, null)
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -47,21 +50,49 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        createVariable(variableManager, v, value)
+        setVariable(v, value)
       }
     }
     Seq.empty
   }
 
-  private def createVariable(
-      variableManager: TempVariableManager,
+  private def setVariable(
       variable: VariableReference,
       value: Any): Unit = {
-    variableManager.create(
-      variable.identifier.name,
-      variable.varDef.defaultValueSQL,
-      Literal(value, variable.dataType),
-      overrideIfExists = true)
+    val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
+      variable.originalNameParts
+    } else {
+      variable.originalNameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
+    val scriptingVariableManager = SqlScriptingLocalVariableManager.get()
+
+    val variableManager = scriptingVariableManager
+      .filter(_ => variable.catalog == FakeLocalCatalog)
+      // If a local variable with nameParts exists, set it using scriptingVariableManager.
+      .map(varManager => if (varManager.get(namePartsCaseAdjusted).isEmpty) {
+        throw SparkException.internalError("Local variable should be present in SetVariableExec" +
+          "because ResolveSetVariable has already determined it is a local variable")
+      } else {
+        varManager
+      })
+      // If a local variable with nameParts doesn't exist, check if a session variable exists
+      // with those nameParts and set it using tempVariableManager.
+      .orElse(
+        Option.when(tempVariableManager.get(namePartsCaseAdjusted).isDefined) {
+          tempVariableManager
+        }
+      // If neither local or session variable exists, throw error. This shouldn't happen as
+      // existence of this variable is already checked in ResolveSetVariable.
+      ).getOrElse(
+        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
+      )
+
+    val varDef = VariableDefinition(
+      variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
+
+    variableManager.set(namePartsCaseAdjusted, varDef)
   }
 
   override def output: Seq[Attribute] = Seq.empty

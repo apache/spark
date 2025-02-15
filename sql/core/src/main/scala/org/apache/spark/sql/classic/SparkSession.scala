@@ -445,27 +445,29 @@ class SparkSession private(
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): DataFrame = {
     val sse = new SqlScriptingExecution(script, this, args)
-    var result: Option[Seq[Row]] = None
+    sse.withLocalVariableManager {
+      var result: Option[Seq[Row]] = None
 
-    // We must execute returned df before calling sse.getNextResult again because sse.hasNext
-    // advances the script execution and executes all statements until the next result. We must
-    // collect results immediately to maintain execution order.
-    // This ensures we respect the contract of SqlScriptingExecution API.
-    var df: Option[DataFrame] = sse.getNextResult
-    while (df.isDefined) {
-      sse.withErrorHandling {
-        // Collect results from the current DataFrame.
-        result = Some(df.get.collect().toSeq)
+      // We must execute returned df before calling sse.getNextResult again because sse.hasNext
+      // advances the script execution and executes all statements until the next result. We must
+      // collect results immediately to maintain execution order.
+      // This ensures we respect the contract of SqlScriptingExecution API.
+      var df: Option[DataFrame] = sse.getNextResult
+      while (df.isDefined) {
+        sse.withErrorHandling {
+          // Collect results from the current DataFrame.
+          result = Some(df.get.collect().toSeq)
+        }
+        df = sse.getNextResult
       }
-      df = sse.getNextResult
-    }
 
-    if (result.isEmpty) {
-      emptyDataFrame
-    } else {
-      val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
-      Dataset.ofRows(
-        self, LocalRelation.fromExternalRows(attributes, result.get))
+      if (result.isEmpty) {
+        emptyDataFrame
+      } else {
+        val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
+        Dataset.ofRows(
+          self, LocalRelation.fromExternalRows(attributes, result.get))
+      }
     }
   }
 

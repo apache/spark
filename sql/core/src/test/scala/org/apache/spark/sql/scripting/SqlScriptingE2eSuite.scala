@@ -134,7 +134,6 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |BEGIN
         |  DECLARE x INT;
         |  SET x = 1;
-        |  DROP TEMPORARY VARIABLE x;
         |END
         |""".stripMargin
     verifySqlScriptResult(sqlScript, Seq.empty)

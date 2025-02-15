@@ -19,6 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.ExecuteImmediateQuery
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -159,6 +160,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case forStmt: TestForStatement => forStmt.label.get
       case dropStmt: SingleStatementExec if dropStmt.parsedPlan.isInstanceOf[DropVariable]
         => "DropVariable"
+      case execImm: SingleStatementExec if execImm.parsedPlan.isInstanceOf[ExecuteImmediateQuery]
+        => "ExecuteImmediate"
       case _ => fail("Unexpected statement type")
     }
 
@@ -759,8 +762,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -782,8 +785,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "statement2",
       "statement1",
       "statement2",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -824,14 +827,14 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq(
       "body",
       "body",
-      "DropVariable", // drop for query var intCol1
-      "DropVariable", // drop for loop var y
+      "ExecuteImmediate", // drop for query var intCol1
+      "ExecuteImmediate", // drop for loop var y
       "body",
       "body",
-      "DropVariable", // drop for query var intCol1
-      "DropVariable", // drop for loop var y
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol1
+      "ExecuteImmediate", // drop for loop var y
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -848,7 +851,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -867,7 +870,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "statement2", "statement1", "statement2",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -906,10 +909,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body", "body",
-      "DropVariable", // drop for query var intCol1
+      "ExecuteImmediate", // drop for query var intCol1
       "body", "body",
-      "DropVariable", // drop for query var intCol1
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate", // drop for query var intCol1
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -932,8 +935,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "lbl1",
       "statement1",
       "lbl1",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -984,8 +987,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "outer_body",
       "body1",
       "lbl1",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -1030,7 +1033,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "lbl1", "statement1", "lbl1",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -1076,7 +1079,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "outer_body", "body1", "lbl1", "outer_body", "body1", "lbl1",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
