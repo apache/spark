@@ -466,6 +466,8 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
+            self._validate_startup_urls()
+
             opts = dict(self._options)
 
             if is_remote_only():
@@ -486,9 +488,10 @@ class SparkSession(SparkConversionMixin):
             from pyspark.core.context import SparkContext
 
             with self._lock:
-                is_api_mode_connect = (
-                    opts.get("spark.api.mode", default_api_mode()).lower() == "connect"
-                )
+                api_mode = opts.get("spark.api.mode", os.environ.get("SPARK_API_MODE", "")).lower()
+                if api_mode is None or api_mode not in ("classic", "connect"):
+                    api_mode = default_api_mode()
+                is_api_mode_connect = api_mode == "connect"
 
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
@@ -514,7 +517,7 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local") or is_api_mode_connect:
+                            if url.startswith("local"):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
                                 RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
