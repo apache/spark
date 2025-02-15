@@ -248,8 +248,9 @@ class RocksDBFileManager(
       checkpointDir: File,
       version: Long,
       numKeys: Long,
+      numInternalKeys: Long,
       fileMapping: Map[String, RocksDBSnapshotFile],
-      columnFamilyMapping: Option[Map[String, Short]] = None,
+      columnFamilyMapping: Option[Map[String, ColumnFamilyInfo]] = None,
       maxColumnFamilyId: Option[Short] = None,
       checkpointUniqueId: Option[String] = None): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
@@ -257,8 +258,27 @@ class RocksDBFileManager(
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
     val rocksDBFiles = saveImmutableFilesToDfs(
       version, localImmutableFiles, fileMapping, checkpointUniqueId)
-    val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys, columnFamilyMapping,
-      maxColumnFamilyId)
+
+    val colFamilyIdMapping: Option[Map[String, Short]] = if (columnFamilyMapping.isDefined) {
+      Some(columnFamilyMapping.get.map {
+        case (cfName, cfInfo) =>
+          cfName -> cfInfo.cfId
+      })
+    } else {
+      None
+    }
+
+    val colFamilyTypeMapping: Option[Map[String, Boolean]] = if (columnFamilyMapping.isDefined) {
+      Some(columnFamilyMapping.get.map {
+        case (cfName, cfInfo) =>
+          cfName -> cfInfo.isInternal
+      })
+    } else {
+      None
+    }
+
+    val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys, numInternalKeys,
+      colFamilyIdMapping, colFamilyTypeMapping, maxColumnFamilyId)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
     logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
@@ -924,6 +944,15 @@ object RocksDBFileManagerMetrics {
 }
 
 /**
+ * Case class to keep track of column family info within checkpoint metadata.
+ * @param cfId - virtual column family id
+ * @param isInternal - whether the column family is internal or not
+ */
+case class ColumnFamilyInfo(
+    cfId: Short,
+    isInternal: Boolean)
+
+/**
  * Classes to represent metadata of checkpoints saved to DFS. Since this is converted to JSON, any
  * changes to this MUST be backward-compatible.
  */
@@ -931,7 +960,9 @@ case class RocksDBCheckpointMetadata(
     sstFiles: Seq[RocksDBSstFile],
     logFiles: Seq[RocksDBLogFile],
     numKeys: Long,
+    numInternalKeys: Long,
     columnFamilyMapping: Option[Map[String, Short]] = None,
+    columnFamilyTypeMap: Option[Map[String, Boolean]] = None,
     maxColumnFamilyId: Option[Short] = None) {
 
   require(columnFamilyMapping.isDefined == maxColumnFamilyId.isDefined,
@@ -997,6 +1028,7 @@ object RocksDBCheckpointMetadata {
       sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
       logFiles.map(_.asInstanceOf[RocksDBLogFile]),
       numKeys,
+      0,
       None,
       None
     )
@@ -1005,14 +1037,18 @@ object RocksDBCheckpointMetadata {
   def apply(
       rocksDBFiles: Seq[RocksDBImmutableFile],
       numKeys: Long,
+      numInternalKeys: Long,
       columnFamilyMapping: Option[Map[String, Short]],
+      columnFamilyTypeMap: Option[Map[String, Boolean]],
       maxColumnFamilyId: Option[Short]): RocksDBCheckpointMetadata = {
     val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
     new RocksDBCheckpointMetadata(
       sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
       logFiles.map(_.asInstanceOf[RocksDBLogFile]),
       numKeys,
+      numInternalKeys,
       columnFamilyMapping,
+      columnFamilyTypeMap,
       maxColumnFamilyId
     )
   }
@@ -1022,21 +1058,25 @@ object RocksDBCheckpointMetadata {
       sstFiles: Seq[RocksDBSstFile],
       logFiles: Seq[RocksDBLogFile],
       numKeys: Long): RocksDBCheckpointMetadata = {
-    new RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys, None, None)
+    new RocksDBCheckpointMetadata(sstFiles, logFiles, numKeys, 0, None, None)
   }
 
   // Apply method for cases with column family information
   def apply(
       rocksDBFiles: Seq[RocksDBImmutableFile],
       numKeys: Long,
+      numInternalKeys: Long,
       columnFamilyMapping: Map[String, Short],
+      columnFamilyTypeMap: Map[String, Boolean],
       maxColumnFamilyId: Short): RocksDBCheckpointMetadata = {
     val (sstFiles, logFiles) = rocksDBFiles.partition(_.isInstanceOf[RocksDBSstFile])
     new RocksDBCheckpointMetadata(
       sstFiles.map(_.asInstanceOf[RocksDBSstFile]),
       logFiles.map(_.asInstanceOf[RocksDBLogFile]),
       numKeys,
+      numInternalKeys,
       Some(columnFamilyMapping),
+      Some(columnFamilyTypeMap),
       Some(maxColumnFamilyId)
     )
   }
@@ -1046,13 +1086,17 @@ object RocksDBCheckpointMetadata {
       sstFiles: Seq[RocksDBSstFile],
       logFiles: Seq[RocksDBLogFile],
       numKeys: Long,
+      numInternalKeys: Long,
       columnFamilyMapping: Map[String, Short],
+      columnFamilyTypeMap: Map[String, Boolean],
       maxColumnFamilyId: Short): RocksDBCheckpointMetadata = {
     new RocksDBCheckpointMetadata(
       sstFiles,
       logFiles,
       numKeys,
+      numInternalKeys,
       Some(columnFamilyMapping),
+      Some(columnFamilyTypeMap),
       Some(maxColumnFamilyId)
     )
   }

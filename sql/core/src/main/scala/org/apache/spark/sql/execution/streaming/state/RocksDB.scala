@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
-import scala.jdk.CollectionConverters.{ConcurrentMapHasAsScala, MapHasAsJava}
+import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -41,6 +41,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -165,6 +166,10 @@ class RocksDB(
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
+
+  @volatile private var numInternalKeysOnLoadedVersion = 0L
+  @volatile private var numInternalKeysOnWritingVersion = 0L
+
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
@@ -178,7 +183,10 @@ class RocksDB(
   // This is accessed and updated only between load and commit
   // which means it is implicitly guarded by acquireLock
   @GuardedBy("acquireLock")
-  private val colFamilyNameToIdMap = new ConcurrentHashMap[String, Short]()
+  private val colFamilyNameToInfoMap = new ConcurrentHashMap[String, ColumnFamilyInfo]()
+
+  @GuardedBy("acquireLock")
+  private val colFamilyIdToNameMap = new ConcurrentHashMap[Short, String]()
 
   @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
@@ -186,34 +194,49 @@ class RocksDB(
   @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
+  private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
+    colFamilyNameToInfoMap.get(cfName)
+  }
+
+  private def getColumnFamilyNameForId(cfId: Short): String = {
+    colFamilyIdToNameMap.get(cfId)
+  }
+
+  private def addToColFamilyMaps(cfName: String, cfId: Short, isInternal: Boolean): Unit = {
+    colFamilyNameToInfoMap.putIfAbsent(cfName, ColumnFamilyInfo(cfId, isInternal))
+    colFamilyIdToNameMap.putIfAbsent(cfId, cfName)
+  }
+
+  private def removeFromColFamilyMaps(cfName: String): Unit = {
+    val colFamilyInfo = colFamilyNameToInfoMap.get(cfName)
+    if (colFamilyInfo != null) {
+      colFamilyNameToInfoMap.remove(cfName)
+      colFamilyIdToNameMap.remove(colFamilyInfo.cfId)
+    }
+  }
+
+  private def clearColFamilyMaps(): Unit = {
+    colFamilyNameToInfoMap.clear()
+    colFamilyIdToNameMap.clear()
+  }
+
   /**
-   * Check whether the column family name is for internal column families.
+   * Check if the column family exists with given name and create one if it doesn't. Users can
+   * create external column families storing user facing data as well as internal column families
+   * such as secondary indexes. Metrics for both of these types are tracked separately.
    *
-   * @param cfName - column family name
-   * @return - true if the column family is for internal use, false otherwise
+   * @param colFamilyName - column family name
+   * @param isInternal - whether the column family is for internal use or not
+   * @return - virtual column family id
    */
-  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
-
-  // Methods to fetch column family mapping for this State Store version
-  def getColumnFamilyMapping: Map[String, Short] = {
-    colFamilyNameToIdMap.asScala
-  }
-
-  def getColumnFamilyId(cfName: String): Short = {
-    colFamilyNameToIdMap.get(cfName)
-  }
-
-  /**
-   * Create RocksDB column family, if not created already
-   */
-  def createColFamilyIfAbsent(colFamilyName: String): Short = {
+  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean): Short = {
     if (!checkColFamilyExists(colFamilyName)) {
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
-      colFamilyNameToIdMap.putIfAbsent(colFamilyName, newColumnFamilyId)
+      addToColFamilyMaps(colFamilyName, newColumnFamilyId, isInternal)
       shouldForceSnapshot.set(true)
       newColumnFamilyId
     } else {
-      colFamilyNameToIdMap.get(colFamilyName)
+      colFamilyNameToInfoMap.get(colFamilyName).cfId
     }
   }
 
@@ -221,12 +244,16 @@ class RocksDB(
    * Remove RocksDB column family, if exists
    * @return columnFamilyId if it exists, else None
    */
-  def removeColFamilyIfExists(colFamilyName: String): Option[Short] = {
+  def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     if (checkColFamilyExists(colFamilyName)) {
       shouldForceSnapshot.set(true)
-      Some(colFamilyNameToIdMap.remove(colFamilyName))
+      prefixScan(Array.empty[Byte], colFamilyName).foreach { kv =>
+        remove(kv.key, colFamilyName)
+      }
+      removeFromColFamilyMaps(colFamilyName)
+      true
     } else {
-      None
+      false
     }
   }
 
@@ -237,23 +264,19 @@ class RocksDB(
    * @return - true if the column family exists, false otherwise
    */
   def checkColFamilyExists(colFamilyName: String): Boolean = {
-    colFamilyNameToIdMap.containsKey(colFamilyName)
+    db != null && colFamilyNameToInfoMap.containsKey(colFamilyName)
   }
 
   // This method sets the internal column family metadata to
   // the default values it should be set to on load
   private def setInitialCFInfo(): Unit = {
-    colFamilyNameToIdMap.clear()
+    clearColFamilyMaps()
     shouldForceSnapshot.set(false)
     maxColumnFamilyId.set(0)
   }
 
   def getColFamilyCount(isInternal: Boolean): Long = {
-    if (isInternal) {
-      colFamilyNameToIdMap.asScala.keys.toSeq.count(checkInternalColumnFamilies)
-    } else {
-      colFamilyNameToIdMap.asScala.keys.toSeq.count(!checkInternalColumnFamilies(_))
-    }
+    colFamilyNameToInfoMap.asScala.values.toSeq.count(_.isInternal == isInternal)
   }
 
   // Mapping of local SST files to DFS files for file reuse.
@@ -375,6 +398,7 @@ class RocksDB(
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
 
@@ -448,6 +472,7 @@ class RocksDB(
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (conf.resetStatsOnLoad) {
@@ -468,28 +493,61 @@ class RocksDB(
   }
 
   /**
+   * Function to check if col family is internal or not based on information recorded in
+   * checkpoint metadata.
+   * @param cfName - column family name
+   * @param metadata - checkpoint metadata
+   * @return - type of column family (internal or otherwise)
+   */
+  private def checkColFamilyType(
+      cfName: String,
+      metadata: RocksDBCheckpointMetadata): Boolean = {
+    if (metadata.columnFamilyTypeMap.isEmpty) {
+      false
+    } else {
+      metadata.columnFamilyTypeMap.get.get(cfName) match {
+        case Some(cfType) =>
+          cfType
+        case None =>
+          false
+      }
+    }
+  }
+
+  /**
    * Initialize key metrics based on the metadata loaded from DFS and open local RocksDB.
    */
   private def openLocalRocksDB(metadata: RocksDBCheckpointMetadata): Unit = {
     setInitialCFInfo()
     metadata.columnFamilyMapping.foreach { mapping =>
-      colFamilyNameToIdMap.putAll(mapping.asJava)
+      mapping.foreach { case (colFamilyName, cfId) =>
+        addToColFamilyMaps(colFamilyName, cfId, checkColFamilyType(colFamilyName, metadata))
+      }
     }
 
     metadata.maxColumnFamilyId.foreach { maxId =>
       maxColumnFamilyId.set(maxId)
     }
-    openDB()
-    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
-      // we don't track the total number of rows - discard the number being track
-      -1L
-    } else if (metadata.numKeys < 0) {
-      // we track the total number of rows, but the snapshot doesn't have tracking number
-      // need to count keys now
-      countKeys()
-    } else {
-      metadata.numKeys
+
+    if (useColumnFamilies) {
+      createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
     }
+
+    openDB()
+    val (numKeys, numInternalKeys) = {
+      if (!conf.trackTotalNumberOfRows) {
+        // we don't track the total number of rows - discard the number being track
+        (-1L, -1L)
+      } else if (metadata.numKeys < 0) {
+        // we track the total number of rows, but the snapshot doesn't have tracking number
+        // need to count keys now
+        countKeys()
+      } else {
+        (metadata.numKeys, metadata.numInternalKeys)
+      }
+    }
+    numKeysOnWritingVersion = numKeys
+    numInternalKeysOnWritingVersion = numInternalKeys
   }
 
   def load(
@@ -557,16 +615,19 @@ class RocksDB(
     lastSnapshotVersion = snapshotVersion
     openDB()
 
-    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+    val (numKeys, numInternalKeys) = if (!conf.trackTotalNumberOfRows) {
       // we don't track the total number of rows - discard the number being track
-      -1L
+      (-1L, -1L)
     } else if (metadata.numKeys < 0) {
       // we track the total number of rows, but the snapshot doesn't have tracking number
       // need to count keys now
       countKeys()
     } else {
-      metadata.numKeys
+      (metadata.numKeys, metadata.numInternalKeys)
     }
+    numKeysOnWritingVersion = numKeys
+    numInternalKeysOnWritingVersion = numInternalKeys
+
     if (loadedVersion != endVersion) {
       val versionsAndUniqueIds: Array[(Long, Option[String])] =
         (loadedVersion + 1 to endVersion).map((_, None)).toArray
@@ -576,6 +637,7 @@ class RocksDB(
     // After changelog replay the numKeysOnWritingVersion will be updated to
     // the correct number of keys in the loaded version.
     numKeysOnLoadedVersion = numKeysOnWritingVersion
+    numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
     fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
 
     if (conf.resetStatsOnLoad) {
@@ -603,16 +665,33 @@ class RocksDB(
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v, uniqueId)
-        changelogReader.foreach { case (recordType, key, value) =>
-          recordType match {
-            case RecordType.PUT_RECORD =>
-              put(key, value)
 
-            case RecordType.DELETE_RECORD =>
-              remove(key)
+        if (useColumnFamilies) {
+          changelogReader.foreach { case (recordType, key, value) =>
+            val (keyWithoutPrefix, cfName) = decodeStateRowWithPrefix(key)
+            recordType match {
+              case RecordType.PUT_RECORD =>
+                put(keyWithoutPrefix, value, cfName)
 
-            case RecordType.MERGE_RECORD =>
-              merge(key, value)
+              case RecordType.DELETE_RECORD =>
+                remove(keyWithoutPrefix, cfName)
+
+              case RecordType.MERGE_RECORD =>
+                merge(keyWithoutPrefix, value, cfName)
+            }
+          }
+        } else {
+          changelogReader.foreach { case (recordType, key, value) =>
+            recordType match {
+              case RecordType.PUT_RECORD =>
+                put(key, value)
+
+              case RecordType.DELETE_RECORD =>
+                remove(key)
+
+              case RecordType.MERGE_RECORD =>
+                merge(key, value)
+            }
           }
         }
       } finally {
@@ -622,27 +701,105 @@ class RocksDB(
   }
 
   /**
+   * Function to encode state row with virtual col family id prefix
+   * @param data - passed byte array to be stored in state store
+   * @param cfName - name of column family
+   * @return - encoded byte array with virtual column family id prefix
+   */
+  private def encodeStateRowWithPrefix(
+      data: Array[Byte],
+      cfName: String): Array[Byte] = {
+    // Create result array big enough for all prefixes plus data
+    val result = new Array[Byte](StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES + data.length)
+    val offset = Platform.BYTE_ARRAY_OFFSET + StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES
+
+    val cfInfo = getColumnFamilyInfo(cfName)
+    Platform.putShort(result, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
+
+    // Write the actual data
+    Platform.copyMemory(
+      data, Platform.BYTE_ARRAY_OFFSET,
+      result, offset,
+      data.length
+    )
+
+    result
+  }
+
+  /**
+   * Function to decode state row with virtual col family id prefix
+   * @param data - passed byte array retrieved from state store
+   * @return - pair of decoded byte array without virtual column family id prefix
+   *           and name of column family
+   */
+  private def decodeStateRowWithPrefix(data: Array[Byte]): (Array[Byte], String) = {
+    val cfId = Platform.getShort(data, Platform.BYTE_ARRAY_OFFSET)
+    val cfName = getColumnFamilyNameForId(cfId)
+    val offset = Platform.BYTE_ARRAY_OFFSET + StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES
+
+    val key = new Array[Byte](data.length - StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.copyMemory(
+      data, offset,
+      key, Platform.BYTE_ARRAY_OFFSET,
+      key.length
+    )
+
+    (key, cfName)
+  }
+
+  /**
    * Get the value for the given key if present, or null.
    * @note This will return the last written value even if it was uncommitted.
    */
-  def get(key: Array[Byte]): Array[Byte] = {
-    db.get(readOptions, key)
+  def get(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    db.get(readOptions, keyWithPrefix)
   }
 
   /**
    * Put the given value for the given key.
    * @note This update is not committed to disk until commit() is called.
    */
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(readOptions, key)
-      if (oldValue == null) {
-        numKeysOnWritingVersion += 1
+  def put(
+      key: Array[Byte],
+      value: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    if (useColumnFamilies) {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, keyWithPrefix)
+        if (oldValue == null) {
+          val cfInfo = getColumnFamilyInfo(cfName)
+          if (cfInfo.isInternal) {
+            numInternalKeysOnWritingVersion += 1
+          } else {
+            numKeysOnWritingVersion += 1
+          }
+        }
+      }
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, keyWithPrefix)
+        if (oldValue == null) {
+          numKeysOnWritingVersion += 1
+        }
       }
     }
 
-    db.put(writeOptions, key, value)
-    changelogWriter.foreach(_.put(key, value))
+    db.put(writeOptions, keyWithPrefix, value)
+    changelogWriter.foreach(_.put(keyWithPrefix, value))
   }
 
   /**
@@ -656,31 +813,75 @@ class RocksDB(
    *
    * @note This update is not committed to disk until commit() is called.
    */
-  def merge(key: Array[Byte], value: Array[Byte]): Unit = {
-    if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(readOptions, key)
-      if (oldValue == null) {
-        numKeysOnWritingVersion += 1
+  def merge(
+      key: Array[Byte],
+      value: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    if (useColumnFamilies) {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, keyWithPrefix)
+        if (oldValue == null) {
+          val cfInfo = getColumnFamilyInfo(cfName)
+          if (cfInfo.isInternal) {
+            numInternalKeysOnWritingVersion += 1
+          } else {
+            numKeysOnWritingVersion += 1
+          }
+        }
+      }
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, keyWithPrefix)
+        if (oldValue == null) {
+          numKeysOnWritingVersion += 1
+        }
       }
     }
-    db.merge(writeOptions, key, value)
 
-    changelogWriter.foreach(_.merge(key, value))
+    db.merge(writeOptions, keyWithPrefix, value)
+    changelogWriter.foreach(_.merge(keyWithPrefix, value))
   }
 
   /**
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte]): Unit = {
-    if (conf.trackTotalNumberOfRows) {
-      val value = db.get(readOptions, key)
-      if (value != null) {
-        numKeysOnWritingVersion -= 1
+  def remove(key: Array[Byte], cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    if (useColumnFamilies) {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, keyWithPrefix)
+        if (oldValue != null) {
+          val cfInfo = getColumnFamilyInfo(cfName)
+          if (cfInfo.isInternal) {
+            numInternalKeysOnWritingVersion -= 1
+          } else {
+            numKeysOnWritingVersion -= 1
+          }
+        }
+      }
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val value = db.get(readOptions, keyWithPrefix)
+        if (value != null) {
+          numKeysOnWritingVersion -= 1
+        }
       }
     }
-    db.delete(writeOptions, key)
-    changelogWriter.foreach(_.delete(key))
+
+    db.delete(writeOptions, keyWithPrefix)
+    changelogWriter.foreach(_.delete(keyWithPrefix))
   }
 
   /**
@@ -700,7 +901,13 @@ class RocksDB(
     new NextIterator[ByteArrayPair] {
       override protected def getNext(): ByteArrayPair = {
         if (iter.isValid) {
-          byteArrayPair.set(iter.key, iter.value)
+          val key = if (useColumnFamilies) {
+            decodeStateRowWithPrefix(iter.key)._1
+          } else {
+            iter.key
+          }
+
+          byteArrayPair.set(key, iter.value)
           iter.next()
           byteArrayPair
         } else {
@@ -713,7 +920,7 @@ class RocksDB(
     }
   }
 
-  private def countKeys(): Long = {
+  private def countKeys(): (Long, Long) = {
     val iter = db.newIterator()
 
     try {
@@ -723,20 +930,46 @@ class RocksDB(
       iter.seekToFirst()
 
       var keys = 0L
-      while (iter.isValid) {
-        keys += 1
-        iter.next()
+      var internalKeys = 0L
+
+      if (!useColumnFamilies) {
+        while (iter.isValid) {
+          keys += 1
+          iter.next()
+        }
+      } else {
+        var currCfInfoOpt: Option[(String, ColumnFamilyInfo)] = None
+        while (iter.isValid) {
+          val (_, cfName) = decodeStateRowWithPrefix(iter.key)
+          if (currCfInfoOpt.isEmpty || currCfInfoOpt.get._1 != cfName) {
+            currCfInfoOpt = Some((cfName, getColumnFamilyInfo(cfName)))
+          }
+          if (currCfInfoOpt.get._2.isInternal) {
+            internalKeys += 1
+          } else {
+            keys += 1
+          }
+          iter.next()
+        }
       }
 
-      keys
+      (keys, internalKeys)
     } finally {
       iter.close()
     }
   }
 
-  def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
+  def prefixScan(
+      prefix: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
     val iter = db.newIterator()
-    iter.seek(prefix)
+    val updatedPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(prefix, cfName)
+    } else {
+      prefix
+    }
+
+    iter.seek(updatedPrefix)
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
     Option(TaskContext.get()).foreach { tc =>
@@ -745,8 +978,14 @@ class RocksDB(
 
     new NextIterator[ByteArrayPair] {
       override protected def getNext(): ByteArrayPair = {
-        if (iter.isValid && iter.key().take(prefix.length).sameElements(prefix)) {
-          byteArrayPair.set(iter.key, iter.value)
+        if (iter.isValid && iter.key().take(updatedPrefix.length).sameElements(updatedPrefix)) {
+          val key = if (useColumnFamilies) {
+            decodeStateRowWithPrefix(iter.key)._1
+          } else {
+            iter.key
+          }
+
+          byteArrayPair.set(key, iter.value)
           iter.next()
           byteArrayPair
         } else {
@@ -827,6 +1066,7 @@ class RocksDB(
       fileManager.setMaxSeenVersion(newVersion)
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
+      numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
       loadedVersion = newVersion
       commitLatencyMs ++= Map(
         "fileSync" -> fileSyncTimeMs
@@ -889,7 +1129,8 @@ class RocksDB(
         checkpointDir,
         version,
         numKeysOnWritingVersion,
-        colFamilyNameToIdMap.asScala.toMap,
+        numInternalKeysOnWritingVersion,
+        colFamilyNameToInfoMap.asScala.toMap,
         maxColumnFamilyId.get().toShort,
         dfsFileSuffix,
         immutableFileMapping,
@@ -924,6 +1165,7 @@ class RocksDB(
     acquire(RollbackStore)
     try {
       numKeysOnWritingVersion = numKeysOnLoadedVersion
+      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
       loadedVersion = -1L
       lastCommitBasedStateStoreCkptId = None
       lastCommittedStateStoreCkptId = None
@@ -1064,6 +1306,7 @@ class RocksDB(
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
+      numInternalKeysOnWritingVersion,
       memoryUsage,
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
@@ -1216,6 +1459,7 @@ class RocksDB(
           snapshot.checkpointDir,
           snapshot.version,
           snapshot.numKeys,
+          snapshot.numInternalKeys,
           snapshot.fileMapping,
           Some(snapshot.columnFamilyMapping),
           Some(snapshot.maxColumnFamilyId),
@@ -1290,7 +1534,8 @@ object RocksDB extends Logging {
       checkpointDir: File,
       version: Long,
       numKeys: Long,
-      columnFamilyMapping: Map[String, Short],
+      numInternalKeys: Long,
+      columnFamilyMapping: Map[String, ColumnFamilyInfo],
       maxColumnFamilyId: Short,
       dfsFileSuffix: String,
       fileMapping: Map[String, RocksDBSnapshotFile],
@@ -1679,6 +1924,7 @@ object RocksDBConf {
 case class RocksDBMetrics(
     numCommittedKeys: Long,
     numUncommittedKeys: Long,
+    numInternalKeys: Long,
     totalMemUsageBytes: Long,
     pinnedBlocksMemUsage: Long,
     totalSSTFilesBytes: Long,
