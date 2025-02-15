@@ -570,7 +570,7 @@ object StateStoreProvider {
 /**
  * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read the change
  * of state store over batches. This is used by State Data Source with additional options like
- * snapshotStartBatchId or readChangeFeed.
+ * snapshotStartBatchId or readChangeLog.
  */
 trait SupportsFineGrainedReplay {
 
