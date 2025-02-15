@@ -2011,6 +2011,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedTVFAliases]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedPolymorphicPythonUDTF]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
