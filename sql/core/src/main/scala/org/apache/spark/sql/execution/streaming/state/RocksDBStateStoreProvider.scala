@@ -328,7 +328,9 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
-          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt()
+          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
+          CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED
+            .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -523,6 +525,9 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
+
+  override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] =
+    ALL_INSTANCE_METRICS
 
   private[state] def latestVersion: Long = rocksDB.getLatestVersion()
 
@@ -837,6 +842,14 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES,
     CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES)
+
+  val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreInstanceMetric(
+    "rocksdbSnapshotLastUploaded",
+    "RocksDB: the last uploaded version of the snapshot for a specific state store instance",
+    ignoreIfUnchanged = false
+  )
+
+  val ALL_INSTANCE_METRICS = Seq(CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED)
 }
 
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */

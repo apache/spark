@@ -321,6 +321,35 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
+case class StateStoreInstanceMetric(
+    metricPrefix: String,
+    descPrefix: String,
+    partitionId: Option[Int] = None,
+    storeName: String = StateStoreId.DEFAULT_STORE_NAME,
+    initValue: Long = -1,
+    ordering: Ordering[Long] = Ordering.Long,
+    ignoreIfUnchanged: Boolean = true)
+  extends StateStoreCustomMetric {
+  override def name: String = {
+    assert(partitionId.isDefined, "Partition ID must be defined for instance metric name")
+    s"$metricPrefix.partition_${partitionId.get}_${storeName}"
+  }
+
+  override def desc: String = {
+    assert(partitionId.isDefined, "Partition ID must be defined for instance metric description")
+    s"$descPrefix (partitionId = ${partitionId.get}, storeName = ${storeName})"
+  }
+
+  override def withNewDesc(desc: String): StateStoreInstanceMetric = copy(descPrefix = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createSizeMetric(sparkContext, desc, initValue)
+
+  def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric = {
+    copy(partitionId = Some(partitionId), storeName = storeName)
+  }
+}
+
 sealed trait KeyStateEncoderSpec {
   def keySchema: StructType
   def jsonValue: JValue
@@ -504,6 +533,13 @@ trait StateStoreProvider {
    * (specifically, same names) through `StateStore.metrics`.
    */
   def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
+
+  /**
+   * Optional custom state store instance metrics that the implementation may want to report.
+   * @note The StateStore objects created by this provider must report the same custom metrics
+   * (specifically, same names) through `StateStore.metrics`.
+   */
+  def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = Seq.empty
 }
 
 object StateStoreProvider {

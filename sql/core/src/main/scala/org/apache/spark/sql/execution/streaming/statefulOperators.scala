@@ -216,7 +216,14 @@ trait StateStoreWriter
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
-  ) ++ stateStoreCustomMetrics ++ pythonMetrics
+  ) ++ stateStoreCustomMetrics ++ pythonMetrics ++ stateStoreInstanceMetrics
+
+  val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
+
+  // This is used to relate metric names back to their original metric object,
+  // which holds information on how to report the metric during getProgress.
+  lazy val instanceMetricConfiguration: Map[String, StateStoreInstanceMetric] =
+    stateStoreInstanceMetricObjects
 
   // This method is only used to fetch the state schema directory path for
   // operators that use StateSchemaV3, as prior versions only use a single
@@ -320,11 +327,44 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
+    // Still publish instance metrics that are marked with ignoreIfUnchanged,
+    // as those unchanged metric values may contain important information
+    val instanceMetricsToReport = stateStoreInstanceMetrics
+      .filter {
+        case (name, _) =>
+          val metric = longMetric(name)
+          val metricConfig = instanceMetricConfiguration(name)
+          // Keep instance metrics that are updated or aren't marked to be ignored,
+          // as their initial value could still be important.
+          !metric.isZero || !metricConfig.ignoreIfUnchanged
+      }
+      .groupBy {
+        // Group all instance metrics underneath their common metric prefix
+        // to ignore partition and store names.
+        case (name, _) => instanceMetricConfiguration(name).metricPrefix
+      }
+      .flatMap {
+        case (_, metrics) =>
+          // Select at most N metrics based on the metric's defined ordering
+          // to report to the driver. For example, ascending order would be taking the N smallest.
+          val metricConf = instanceMetricConfiguration(metrics.head._1)
+          metrics
+            .map {
+              case (name, metric) =>
+                name -> (if (longMetric(name).isZero) metricConf.initValue
+                         else longMetric(name).value)
+            }
+            .toSeq
+            .sortBy(_._2)(metricConf.ordering)
+            .take(conf.numStateStoreInstanceMetricsToReport)
+            .toMap
+      }
     val customMetrics = (stateStoreCustomMetrics ++ statefulOperatorCustomMetrics)
       .map(entry => entry._1 -> longMetric(entry._1).value)
+    val allCustomMetrics = customMetrics ++ instanceMetricsToReport
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(customMetrics.transform((_, v) => long2Long(v)).asJava)
+      new java.util.HashMap(allCustomMetrics.transform((_, v) => long2Long(v)).asJava)
 
     // We now don't report number of shuffle partitions inside the state operator. Instead,
     // it will be filled when the stream query progress is reported
@@ -373,9 +413,7 @@ trait StateStoreWriter
     val storeMetrics = store.metrics
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
-    storeMetrics.customMetrics.foreach { case (metric, value) =>
-      longMetric(metric.name) += value
-    }
+    setStoreCustomMetrics(storeMetrics.customMetrics)
 
     if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
       // Set the state store checkpoint information for the driver to collect
@@ -391,10 +429,51 @@ trait StateStoreWriter
     }
   }
 
+  protected def setStoreCustomMetrics(customMetrics: Map[StateStoreCustomMetric, Long]): Unit = {
+    customMetrics.foreach {
+      // Set the max for instance metrics
+      case (metric: StateStoreInstanceMetric, value) =>
+        // Check for cases where value < 0 and .value converts metric to 0
+        // Metrics like last uploaded snapshot version can have an init value of -1,
+        // which need special handling to avoid setting the metric to 0 using `.value`.
+        longMetric(metric.name).set(
+          if (longMetric(metric.name).isZero) {
+            value
+          } else {
+            // Use max to grab the most updated value across all state store instances,
+            // which for snapshot versions is the largest version number.
+            Math.max(value, longMetric(metric.name).value)
+          }
+        )
+      case (metric, value) =>
+        longMetric(metric.name) += value
+    }
+  }
+
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     provider.supportedCustomMetrics.map {
       metric => (metric.name, metric.createSQLMetric(sparkContext))
+    }.toMap
+  }
+
+  private def stateStoreInstanceMetrics: Map[String, SQLMetric] = {
+    stateStoreInstanceMetricObjects.map {
+      case (name, metric) => (name, metric.createSQLMetric(sparkContext))
+    }
+  }
+
+  private def stateStoreInstanceMetricObjects: Map[String, StateStoreInstanceMetric] = {
+    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
+    val maxPartitions = conf.defaultNumShufflePartitions
+
+    (0 until maxPartitions).flatMap { partitionId =>
+      provider.supportedInstanceMetrics.flatMap { metric =>
+        stateStoreNames.map { storeName =>
+          val metricWithPartition = metric.withNewId(partitionId, storeName)
+          (metricWithPartition.name, metricWithPartition)
+        }
+      }
     }.toMap
   }
 
