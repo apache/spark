@@ -151,6 +151,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       OptionParser parser = new OptionParser(true);
       parser.parse(submitArgs);
       this.isSpecialCommand = parser.isSpecialCommand;
+      boolean connectByDefault = "1".equals(System.getenv("SPARK_CONNECT_MODE"));
+      String defaultApiMode = connectByDefault ? "connect" : "classic";
+      String apiMode = conf.getOrDefault(SparkLauncher.SPARK_API_MODE, defaultApiMode);
+      if (conf.containsKey("spark.remote") || "connect".equalsIgnoreCase(apiMode)) {
+        isRemote = true;
+      }
     } else {
       this.isExample = isExample;
       this.isSpecialCommand = true;
@@ -384,9 +390,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
-    } else if (conf.getOrDefault(
-        SparkLauncher.SPARK_API_MODE, "classic").toLowerCase(Locale.ROOT).equals("connect") &&
-        masterStr != null) {
+    } else if (isRemote) {
+      // If `removeStr` is not specified but isRemote is true, it means the api mode is connect.
       env.put("SPARK_REMOTE", masterStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
@@ -528,11 +533,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          if (setConf[0].equals("spark.remote") ||
-              (setConf[0].equals(SparkLauncher.SPARK_API_MODE) &&
-                setConf[1].toLowerCase(Locale.ROOT).equals("connect"))) {
-            isRemote = true;
-          }
           conf.put(setConf[0], setConf[1]);
         }
         case CLASS -> {
