@@ -31,7 +31,7 @@ object SparkConnectPlannerTestUtils {
 
   def transform(spark: SparkSession, command: proto.Command): Unit = {
     val executeHolder = buildExecutePlanHolder(spark, command)
-    new SparkConnectPlanner(executeHolder).process(command, new MockObserver())
+    new SparkConnectPlanner(executeHolder).processWithoutResponseObserverForTesting(command)
   }
 
   private def buildExecutePlanHolder(
