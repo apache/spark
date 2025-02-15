@@ -213,7 +213,8 @@ class IsotonicRegressionModel private[ml] (
     private val oldModel: MLlibIsotonicRegressionModel)
   extends Model[IsotonicRegressionModel] with IsotonicRegressionBase with MLWritable {
 
-  private[ml] def this() = this(Identifiable.randomUID("isoReg"), null)
+  // For ml connect only
+  private[ml] def this() = this("", null)
 
   /** @group setParam */
   @Since("1.5.0")

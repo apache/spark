@@ -298,7 +298,8 @@ class VectorIndexerModel private[ml] (
 
   import VectorIndexerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("vecIdx"), -1, Map.empty)
+  // For ml connect only
+  private[ml] def this() = this("", -1, Map.empty)
 
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")

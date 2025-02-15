@@ -283,7 +283,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
   with MultilayerPerceptronParams with Serializable with MLWritable
   with HasTrainingSummary[MultilayerPerceptronClassificationTrainingSummary]{
 
-  private[ml] def this() = this(Identifiable.randomUID("mlpc"), Vectors.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty)
 
   @Since("1.6.0")
   override lazy val numFeatures: Int = $(layers).head

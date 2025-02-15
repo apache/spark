@@ -461,8 +461,8 @@ class FMRegressionModel private[regression] (
   extends RegressionModel[Vector, FMRegressionModel]
   with FMRegressorParams with MLWritable {
 
-  private[ml] def this() = this(Identifiable.randomUID("fmr"),
-    Double.NaN, Vectors.empty, Matrices.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Double.NaN, Vectors.empty, Matrices.empty)
 
   @Since("3.0.0")
   override val numFeatures: Int = linear.size

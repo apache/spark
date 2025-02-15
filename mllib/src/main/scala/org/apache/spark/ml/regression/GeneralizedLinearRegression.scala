@@ -1009,7 +1009,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   with GeneralizedLinearRegressionBase with MLWritable
   with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary] {
 
-  private[ml] def this() = this(Identifiable.randomUID("glm"), Vectors.empty, Double.NaN)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN)
 
   /**
    * Sets the link prediction (linear predictor) column name.

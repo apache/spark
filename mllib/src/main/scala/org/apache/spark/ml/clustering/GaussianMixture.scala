@@ -93,8 +93,8 @@ class GaussianMixtureModel private[ml] (
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable
   with HasTrainingSummary[GaussianMixtureSummary] {
 
-  private[ml] def this() = this(Identifiable.randomUID("gmm"),
-    Array.emptyDoubleArray, Array.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyDoubleArray, Array.empty)
 
   @Since("3.0.0")
   lazy val numFeatures: Int = gaussians.head.mean.size

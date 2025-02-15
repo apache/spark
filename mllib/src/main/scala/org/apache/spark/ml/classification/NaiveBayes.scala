@@ -401,8 +401,8 @@ class NaiveBayesModel private[ml] (
 
   import NaiveBayes._
 
-  private[ml] def this() = this(Identifiable.randomUID("nb"),
-    Vectors.empty, Matrices.empty, Matrices.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Matrices.empty, Matrices.empty)
 
   /**
    * mllib NaiveBayes is a wrapper of ml implementation currently.
