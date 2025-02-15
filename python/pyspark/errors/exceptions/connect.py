@@ -37,6 +37,7 @@ from pyspark.errors.exceptions.base import (
     QueryContext as BaseQueryContext,
     QueryContextType,
     StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
+    PickleException as BasePickleException,
 )
 
 if TYPE_CHECKING:
@@ -94,6 +95,14 @@ def convert_exception(
     # Return exception based on class mapping
     for error_class_name in classes:
         ExceptionClass = EXCEPTION_CLASS_MAPPING.get(error_class_name)
+        if ExceptionClass is SparkException:
+            for third_party_exception_class in THIRD_PARTY_EXCEPTION_CLASS_MAPPING:
+                ExceptionClass = (
+                    THIRD_PARTY_EXCEPTION_CLASS_MAPPING.get(third_party_exception_class)
+                    if third_party_exception_class in message
+                    else SparkException
+                )
+
         if ExceptionClass:
             return ExceptionClass(
                 message,
@@ -316,6 +325,14 @@ class StreamingPythonRunnerInitializationException(
     """
 
 
+class PickleException(SparkConnectGrpcException, BasePickleException):
+    """
+    Represents an exception which is failed while pickling from server side
+    such as `net.razorvine.pickle.PickleException`. This is different from `PySparkPicklingError`
+    which represents an exception failed from Python built-in `pickle.PicklingError`.
+    """
+
+
 # Update EXCEPTION_CLASS_MAPPING here when adding a new exception
 EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.sql.catalyst.parser.ParseException": ParseException,
@@ -337,6 +354,10 @@ EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.sql.connect.common.InvalidCommandInput": InvalidCommandInput,
     "org.apache.spark.api.python.StreamingPythonRunner"
     "$StreamingPythonRunnerInitializationException": StreamingPythonRunnerInitializationException,
+}
+
+THIRD_PARTY_EXCEPTION_CLASS_MAPPING = {
+    "net.razorvine.pickle.PickleException": PickleException,
 }
 
 

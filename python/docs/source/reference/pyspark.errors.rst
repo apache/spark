@@ -60,6 +60,7 @@ Classes
     TempTableAlreadyExistsException
     UnknownException
     UnsupportedOperationException
+    PickleException
 
 
 Methods
