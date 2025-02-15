@@ -1021,9 +1021,11 @@ private[spark] class SparkSubmit extends Logging {
     @tailrec
     def findCause(t: Throwable): Throwable = t match {
       case e: UndeclaredThrowableException =>
-        if (e.getCause() != null) findCause(e.getCause()) else e
+        if (e.getCause != null) findCause(e.getCause) else e
       case e: InvocationTargetException =>
-        if (e.getCause() != null) findCause(e.getCause()) else e
+        if (e.getCause != null) findCause(e.getCause) else e
+      case e: NoClassDefFoundError =>
+        if (e.getCause != null) findCause(e.getCause) else e
       case e: Throwable =>
         e
     }
@@ -1032,7 +1034,14 @@ private[spark] class SparkSubmit extends Logging {
       app.start(childArgs.toArray, sparkConf)
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        throw findCause(t) match {
+          case e: ClassNotFoundException =>
+            logError(log"Failed to load ${MDC(LogKeys.CLASS_NAME, e.getMessage)}\n" +
+              log"Using class path ${MDC(LogKeys.CLASS_PATH,
+                sys.props.get("java.class.path").get)}")
+            e
+          case e: Throwable => e
+        }
     } finally {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
