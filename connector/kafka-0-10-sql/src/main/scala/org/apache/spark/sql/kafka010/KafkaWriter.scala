@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, IntegerType, StringType, TimestampType}
 import org.apache.spark.util.Utils
 
 /**
@@ -43,6 +43,7 @@ private[kafka010] object KafkaWriter extends Logging {
   val VALUE_ATTRIBUTE_NAME: String = "value"
   val HEADERS_ATTRIBUTE_NAME: String = "headers"
   val PARTITION_ATTRIBUTE_NAME: String = "partition"
+  val TIMESTAMP_ATTRIBUTE_NAME: String = "timestamp"
 
   override def toString: String = "KafkaWriter"
 
@@ -108,6 +109,12 @@ private[kafka010] object KafkaWriter extends Logging {
   def partitionExpression(schema: Seq[Attribute]): Expression = {
     expression(schema, PARTITION_ATTRIBUTE_NAME, Seq(IntegerType)) {
       Literal(null, IntegerType)
+    }
+  }
+
+  def timestampExpression(schema: Seq[Attribute]): Expression = {
+    expression(schema, TIMESTAMP_ATTRIBUTE_NAME, Seq(DoubleType, TimestampType)) {
+      Literal(null, TimestampType)
     }
   }
 
