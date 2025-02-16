@@ -22,7 +22,6 @@ import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, ScheduledFuture, TimeoutException, TimeUnit}
 import java.util.concurrent.{Future => JFutrue}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.locks.Lock
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -1900,9 +1899,9 @@ private[spark] class DAGScheduler(
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
     // only updated in certain cases.
-    val (readLockOptTemp, isIndeterministicZombie) = event.reason match {
+    val (readLockTaken, isIndeterministicZombie) = event.reason match {
       case Success =>
-        val readLock = stage.acquireStageReadLock()
+        stage.acquireStageReadLock()
         val isZombieIndeterminate =
           (task.stageAttemptId < stage.latestInfo.attemptNumber()
             && stage.isIndeterminate) ||
@@ -1922,25 +1921,21 @@ private[spark] class DAGScheduler(
             case _ => updateAccumulators(event)
           }
         }
-        (Some(readLock), isZombieIndeterminate)
+        (true, isZombieIndeterminate)
 
       case _: ExceptionFailure | _: TaskKilled =>
         updateAccumulators(event)
-        (None, false)
+        (false, false)
 
-      case _ => (None, false)
-    }
-    val readLockOpt = if (isIndeterministicZombie) {
-      readLockOptTemp
-    } else {
-      readLockOptTemp.foreach(_.unlock())
-      None
+      case _ => (false, false)
     }
 
     try {
       handleTaskCompletionInOptionalReadLock(event, task, stageId, stage, isIndeterministicZombie)
     } finally {
-      readLockOpt.foreach(_.unlock())
+      if (readLockTaken) {
+        stage.releaseStageReadLock()
+      }
     }
   }
 
@@ -2155,7 +2150,7 @@ private[spark] class DAGScheduler(
             failedStages += failedStage
             failedStages += mapStage
             if (noResubmitEnqueued) {
-              val acquiredWriteLocks = mutable.Buffer.empty[Lock]
+              val writeLockedStages = mutable.Buffer.empty[Stage]
               try {
                 // If the map stage is INDETERMINATE, which means the map tasks may return
                 // different result when re-try, we need to re-try all the tasks of the failed
@@ -2196,7 +2191,9 @@ private[spark] class DAGScheduler(
                   val rollingBackStages = HashSet[Stage](mapStage)
                   stagesToRollback.foreach {
                     case mapStage: ShuffleMapStage =>
-                      acquiredWriteLocks += mapStage.acquireStageWriteLock()
+                      if (mapStage.acquireStageWriteLock()) {
+                        writeLockedStages += mapStage
+                      }
                       val numMissingPartitions = mapStage.findMissingPartitions().length
                       if (numMissingPartitions < mapStage.numTasks) {
                         if (sc.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
@@ -2217,7 +2214,9 @@ private[spark] class DAGScheduler(
                       }
 
                     case resultStage: ResultStage if resultStage.activeJob.isDefined =>
-                      acquiredWriteLocks += resultStage.acquireStageWriteLock()
+                      if (resultStage.acquireStageWriteLock()) {
+                        writeLockedStages += resultStage
+                      }
                       val numMissingPartitions = resultStage.findMissingPartitions().length
                       if (numMissingPartitions < resultStage.numTasks) {
                         // TODO: support to rollback result tasks.
@@ -2254,7 +2253,7 @@ private[spark] class DAGScheduler(
                   TimeUnit.MILLISECONDS
                 )
               } finally {
-                acquiredWriteLocks.foreach(_.unlock())
+                writeLockedStages.foreach(_.releaseStageWriteLock())
               }
             }
           }

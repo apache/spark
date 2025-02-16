@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.locks.{Lock, ReentrantReadWriteLock}
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.mutable
 import scala.collection.mutable.HashSet
@@ -71,7 +71,14 @@ private[scheduler] abstract class Stage(
 
   private val allPartitionsAsMissing: mutable.Set[Int] = mutable.Set.empty
 
-  private  val stageReattemptLock = new ReentrantReadWriteLock()
+  private val stageReattemptLock = new ReentrantReadWriteLock()
+  private val stageReadLock = stageReattemptLock.readLock()
+  private val stageWriteLock = stageReattemptLock.writeLock()
+  private val threadHoldingReadLock = new ThreadLocal[Boolean] {
+    override protected def initialValue (): Boolean = {
+      false
+    }
+  }
 
   val numPartitions = rdd.partitions.length
 
@@ -110,7 +117,7 @@ private[scheduler] abstract class Stage(
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
-    val lock = this.acquireStageWriteLock()
+    val writeLockTaken = this.acquireStageWriteLock()
     try {
       val metrics = new TaskMetrics
       metrics.register(rdd.sparkContext)
@@ -121,7 +128,9 @@ private[scheduler] abstract class Stage(
       // clear the entry in the allPartitionsAsMissing set
       allPartitionsAsMissing.clear()
     } finally {
-      lock.unlock()
+      if (writeLockTaken) {
+        this.releaseStageWriteLock()
+      }
     }
   }
 
@@ -155,15 +164,26 @@ private[scheduler] abstract class Stage(
   def markAttemptIdForAllPartitionsMissing(attemptId: Int): Unit =
     this.allPartitionsAsMissing.add(attemptId)
 
-  def acquireStageReadLock(): Lock = {
-    val rlock = this.stageReattemptLock.readLock()
-    rlock.lockInterruptibly()
-    rlock
+  def acquireStageReadLock(): Unit = {
+    this.stageReadLock.lockInterruptibly()
+    this.threadHoldingReadLock.set(true)
   }
 
-  def acquireStageWriteLock(): Lock = {
-    val wlock = this.stageReattemptLock.writeLock()
-    wlock.lockInterruptibly()
-    wlock
+  def releaseStageReadLock(): Unit = {
+    this.threadHoldingReadLock.set(false)
+    this.stageReadLock.unlock()
+  }
+
+  def acquireStageWriteLock(): Boolean = {
+    if (!this.threadHoldingReadLock.get()) {
+      stageWriteLock.lockInterruptibly()
+      true
+    } else {
+      false
+    }
+  }
+
+  def releaseStageWriteLock(): Unit = {
+    stageWriteLock.unlock()
   }
 }
