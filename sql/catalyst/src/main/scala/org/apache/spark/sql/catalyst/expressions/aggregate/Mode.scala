@@ -139,14 +139,14 @@ case class Mode(
     }
 
     // The Mode class uses special collation awareness logic
-    //  to handle string data types with various collations.
+    // to handle string data types with various collations.
     //
     // For string types that don't support binary equality,
     // we create a new map where the keys are the collation keys of the original strings.
     //
     // Keys from the original map are aggregated based on the corresponding collation keys.
-    //  The groupMapReduce method groups the entries by collation key and maps each group
-    //  to a single value (the sum of the counts), and finally reduces the groups to a single map.
+    // The groupMapReduce method groups the entries by collation key and maps each group
+    // to a single value (the sum of the counts), and finally reduces the groups to a single map.
     //
     // The new map is then used in the rest of the Mode evaluation logic.
     //
