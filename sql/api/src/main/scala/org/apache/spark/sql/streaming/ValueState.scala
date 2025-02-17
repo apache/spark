@@ -39,6 +39,9 @@ trait ValueState[S] extends Serializable {
    * If the state exists, the value is returned. If the state does not exist,
    * the default value for the type is returned for AnyVal types and null for AnyRef types.
    *
+   * Note that it's always recommended to check whether the state exists or not by calling exists()
+   * before calling get().
+   *
    * @return - the value of the state if it exists. If the state does not exist, the default value
    *           for the type is returned for AnyVal types and null for AnyRef types.
    */
