@@ -20127,7 +20127,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     |key|     c0|    c1|
     +---+-------+------+
     |  1| value1|value2|
-    |  2|value12|  null|
+    |  2|value12|  NULL|
     +---+-------+------+
 
     Example 2: Extract a json object from json array
@@ -20143,7 +20143,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     +---+-------+-------+
     |key|     c0|     c1|
     +---+-------+-------+
-    |  1| value1|   null|
+    |  1| value1|   NULL|
     |  2|value12|value13|
     +---+-------+-------+
 
@@ -20153,7 +20153,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     +---+-------------------+---------+
     |key|                 c0|       c1|
     +---+-------------------+---------+
-    |  1|["value1","value2"]|     null|
+    |  1|["value1","value2"]|     NULL|
     |  2|          "value12"|"value13"|
     +---+-------------------+---------+
     """
