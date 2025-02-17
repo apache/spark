@@ -4108,7 +4108,6 @@ object SQLConf {
       .doc("Allow PruneFilters to remove streaming subplans when we encounter a false filter. " +
         "This flag is to restore prior buggy behavior for broken pipelines.")
       .version("4.0.0")
-      // FIXME: let's see whether this could work smoothly...
       .withAlternative("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
       .booleanConf
       .createWithDefault(false)
