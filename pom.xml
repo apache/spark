@@ -2762,6 +2762,7 @@
               <jvmArg>-Xmx4g</jvmArg>
               <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
+              <jvmArg>--enable-native-access=ALL-UNNAMED</jvmArg>
             </jvmArgs>
             <javacArgs>
               <javacArg>--release</javacArg>
