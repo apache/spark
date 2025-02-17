@@ -19,10 +19,13 @@ package org.apache.spark.mllib.linalg
 
 import dev.ludovic.netlib.arpack.{ARPACK => NetlibARPACK, JavaARPACK => NetlibJavaARPACK, NativeARPACK => NetlibNativeARPACK}
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.SparkEnvUtils
+
 /**
  * ARPACK routines for MLlib's vectors and matrices.
  */
-private[spark] object ARPACK extends Serializable {
+private[spark] object ARPACK extends Serializable with Logging {
 
   @transient private var _javaARPACK: NetlibARPACK = _
   @transient private var _nativeARPACK: NetlibARPACK = _
@@ -36,8 +39,12 @@ private[spark] object ARPACK extends Serializable {
 
   private[spark] def nativeARPACK: NetlibARPACK = {
     if (_nativeARPACK == null) {
-      _nativeARPACK =
+      _nativeARPACK = if (SparkEnvUtils.allowNativeBlas) {
         try { NetlibNativeARPACK.getInstance } catch { case _: Throwable => javaARPACK }
+      } else {
+        logInfo("Disable native ARPACK because netlib.allowNativeBlas is false.")
+        javaARPACK
+      }
     }
     _nativeARPACK
   }

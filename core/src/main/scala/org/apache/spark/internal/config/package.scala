@@ -2919,4 +2919,12 @@ package object config {
       .checkValue(v => v.forall(Set("stdout", "stderr").contains),
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val SPARK_ML_ALLOW_NATIVE_BLAS =
+    ConfigBuilder("spark.ml.allowNativeBlas")
+      .doc("Whether allow using native BLAS/LAPACK/ARPACK implementations when native " +
+        "libraries are available. If disabled, always use Java implementations.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 }
