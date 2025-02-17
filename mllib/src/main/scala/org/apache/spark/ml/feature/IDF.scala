@@ -121,7 +121,8 @@ class IDFModel private[ml] (
 
   import IDFModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("idf"), null)
+  // For ml connect only
+  private[ml] def this() = this("", null)
 
   /** @group setParam */
   @Since("1.4.0")

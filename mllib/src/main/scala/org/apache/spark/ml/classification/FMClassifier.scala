@@ -259,8 +259,8 @@ class FMClassificationModel private[classification] (
     with FMClassifierParams with MLWritable
     with HasTrainingSummary[FMClassificationTrainingSummary]{
 
-  private[ml] def this() = this(Identifiable.randomUID("fmc"),
-    Double.NaN, Vectors.empty, Matrices.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Double.NaN, Vectors.empty, Matrices.empty)
 
   @Since("3.0.0")
   override val numClasses: Int = 2
