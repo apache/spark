@@ -267,7 +267,8 @@ def _with_origin(func: FuncT) -> FuncT:
                     set_current_origin(None, None)
             else:
                 spark = SparkSession.getActiveSession()
-                assert spark is not None
+                if spark is None:
+                    return func(*args, **kwargs)
                 assert spark._jvm is not None
                 jvm_pyspark_origin = getattr(
                     spark._jvm, "org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin"
