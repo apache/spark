@@ -1160,7 +1160,6 @@ primaryExpression
     | primaryExpression DOUBLE_COLON dataType                                                  #castByColon
     | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
-    | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
     | constant                                                                                 #constantDefault
@@ -1598,7 +1597,6 @@ ansiNonReserved
     | ALWAYS
     | ANALYZE
     | ANTI
-    | ANY_VALUE
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1934,7 +1932,6 @@ nonReserved
     | ANALYZE
     | AND
     | ANY
-    | ANY_VALUE
     | ARCHIVE
     | ARRAY
     | AS

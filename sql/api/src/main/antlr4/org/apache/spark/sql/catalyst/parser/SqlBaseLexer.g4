@@ -128,7 +128,6 @@ ANALYZE: 'ANALYZE';
 AND: 'AND';
 ANTI: 'ANTI';
 ANY: 'ANY';
-ANY_VALUE: 'ANY_VALUE';
 ARCHIVE: 'ARCHIVE';
 ARRAY: 'ARRAY' {incComplexTypeLevelCounter();};
 AS: 'AS';

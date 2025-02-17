@@ -14,7 +14,6 @@ ANALYZE	false
 AND	false
 ANTI	false
 ANY	false
-ANY_VALUE	false
 ARCHIVE	false
 ARRAY	false
 AS	false
