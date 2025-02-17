@@ -35,25 +35,24 @@ trait ValueState[S] extends Serializable {
   def exists(): Boolean
 
   /**
-   * Get the state value for current grouping key if it exists or return null otherwise.
-   * Note that in Scala - if you try to use Option(state.get()).orElse(something) - it will
-   * always return the option as defined for primitive types. So, it is recommended to use
-   * exists() method to check whether state exists or not, before calling get().
+   * Function to get the state value for the current grouping key.
+   * If the state exists, the value is returned. If the state does not exist,
+   * the default value for the type is returned for AnyVal types and null for AnyRef types.
    *
-   * @return - the value of the state if it exists, null otherwise. For primitive types, the
-   *           default value for the type is returned if state does not exist.
+   * @return - the value of the state if it exists. If the state does not exist, the default value
+   *           for the type is returned for AnyVal types and null for AnyRef types.
    */
   def get(): S
 
   /**
-   * Update the value of the state for the current grouping key to the new value.
+   * Function to update the value of the state for the current grouping key to the new value.
    *
    * @param newState - the new value
    */
   def update(newState: S): Unit
 
   /**
-   * Remove the state for the current grouping key.
+   * Function to remove the state for the current grouping key.
    */
   def clear(): Unit
 }

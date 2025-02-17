@@ -31,12 +31,10 @@ trait ListState[S] extends Serializable {
    */
   def exists(): Boolean
 
-  /** Get the state value. An empty iterator is returned if no value exists. */
-
   /**
    * Function to get the list of elements in the state as an iterator. If the state does not exist,
    * an empty iterator is returned.
-   * Note that its always recommended to check whether the state exists or not by calling exists()
+   * Note that it's always recommended to check whether the state exists or not by calling exists()
    * before calling get().
    *
    * @return - an iterator of elements in the state if it exists, an empty iterator otherwise.
@@ -70,7 +68,7 @@ trait ListState[S] extends Serializable {
   def appendList(newState: Array[S]): Unit
 
   /**
-   * Remove the state for the current grouping key.
+   * Function to remove the state for the current grouping key.
    */
   def clear(): Unit
 }
