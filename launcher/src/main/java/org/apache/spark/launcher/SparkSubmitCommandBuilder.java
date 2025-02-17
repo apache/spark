@@ -352,6 +352,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
+    if (config.containsKey("spark.ml.allowNativeBlas")) {
+      String allowNativeBlas = config.get("spark.ml.allowNativeBlas");
+      addOptionString(cmd, "-Dnetlib.allowNativeBlas=" + allowNativeBlas);
+    }
+
     // SPARK-36796: Always add some JVM runtime default options to submit command
     addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
     addOptionString(cmd, "-Dderby.connection.requireAuthentication=false");
