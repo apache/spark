@@ -27,22 +27,33 @@ import org.apache.spark.annotation.Evolving
  */
 trait ValueState[S] extends Serializable {
 
-  /** Whether state exists or not. */
+  /**
+   * Function to check whether state exists for current grouping key or not.
+   *
+   * @return - true if state exists, false otherwise.
+   */
   def exists(): Boolean
 
   /**
-   * Get the state value if it exists or return null otherwise.
+   * Get the state value for current grouping key if it exists or return null otherwise.
+   * Note that in Scala - if you try to use Option(state.get()).orElse(something) - it will
+   * always return the option as defined for primitive types. So, it is recommended to use
+   * exists() method to check whether state exists or not, before calling get().
+   *
+   * @return - the value of the state if it exists, null otherwise. For primitive types, the
+   *           default value for the type is returned if state does not exist.
    */
   def get(): S
 
   /**
-   * Update the value of the state.
+   * Update the value of the state for the current grouping key to the new value.
    *
-   * @param newState
-   *   the new value
+   * @param newState - the new value
    */
   def update(newState: S): Unit
 
-  /** Remove this state. */
+  /**
+   * Remove the state for the current grouping key.
+   */
   def clear(): Unit
 }

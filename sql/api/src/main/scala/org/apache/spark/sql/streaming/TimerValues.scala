@@ -33,6 +33,8 @@ trait TimerValues extends Serializable {
    * @note
    *   This will return a constant value throughout the duration of a streaming query trigger,
    *   even if the trigger is re-executed.
+   *
+   * @return - the current processing time in milliseconds
    */
   def getCurrentProcessingTimeInMs(): Long
 
@@ -44,6 +46,8 @@ trait TimerValues extends Serializable {
    * @note
    *   The watermark gets propagated at the end of each query. As a result, this method will
    *   return 0 (1970-01-01T00:00:00) for the first micro-batch.
+   *
+   * @return - the current event time watermark in milliseconds
    */
   def getCurrentWatermarkInMs(): Long
 }
