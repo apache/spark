@@ -20115,26 +20115,47 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
 
     Examples
     --------
-    Example 1: Extracts a json object from json string
+    Example 1: Extract a json object from json string
 
+    >>> import pyspark.sql.functions as sf
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
-    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \\
-    ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
-    [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
+    >>> extracted1 = sf.get_json_object(df.jstring, '$.f1').alias("c0")
+    >>> extracted2 = get_json_object(df.jstring, '$.f2').alias("c1")
+    >>> df.select(df.key, extracted1, extracted2).show()
+    +---+-------+------+
+    |key|     c0|    c1|
+    +---+-------+------+
+    |  1| value1|value2|
+    |  2|value12|  null|
+    +---+-------+------+
 
-    Example 2: Extracts a json object from json array
+    Example 2: Extract a json object from json array
 
-    >>> data = [("1", '''[{"f1": "value1"},{"f1": "value2"}]'''), \\
-    ...                   ("2", '''[{"f1": "value12"},{"f2": "value13"}]''')]
+    >>> import pyspark.sql.functions as sf
+    >>> jarray1 = '''[{"f1": "value1"},{"f1": "value2"}]'''
+    >>> jarray2 = '''[{"f1": "value12"},{"f2": "value13"}]'''
+    >>> data = [("1", jarray1), ("2", jarray2)]
     >>> df = spark.createDataFrame(data, ("key", "jarray"))
-    >>> df.select(df.key, get_json_object(df.jarray, '$[0].f1').alias("c0"), \\
-    ...                   get_json_object(df.jarray, '$[1].f2').alias("c1") ).collect()
-    [Row(key='1', c0='value1', c1=None), Row(key='2', c0='value12', c1='value13')]
+    >>> extracted1 = get_json_object(df.jarray, '$[0].f1').alias("c0")
+    >>> extracted2 = get_json_object(df.jarray, '$[1].f2').alias("c1")
+    >>> df.select(df.key, extracted1, extracted2).show()
+    +---+-------+-------+
+    |key|     c0|     c1|
+    +---+-------+-------+
+    |  1| value1|   null|
+    |  2|value12|value13|
+    +---+-------+-------+
 
-    >>> df.select(df.key, get_json_object(df.jarray, '$[*].f1').alias("c0"), \\
-    ...                   get_json_object(df.jarray, '$[*].f2').alias("c1") ).collect()
-    [Row(key='1', c0='["value1","value2"]', c1=None), Row(key='2', c0='"value12"', c1='"value13"')]
+    >>> extracted3 = get_json_object(df.jarray, '$[*].f1').alias("c0")
+    >>> extracted4 = get_json_object(df.jarray, '$[*].f2').alias("c1")
+    >>> df.select(df.key, extracted3, extracted4).show()
+    +---+-------------------+---------+
+    |key|                 c0|       c1|
+    +---+-------------------+---------+
+    |  1|["value1","value2"]|     null|
+    |  2|          "value12"|"value13"|
+    +---+-------------------+---------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
