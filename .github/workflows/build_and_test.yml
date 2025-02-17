@@ -1028,8 +1028,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
-    # Pin to 'Ubuntu 24.04' due to 'databricks/tpcds-kit' compilation
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       SPARK_LOCAL_IP: localhost
