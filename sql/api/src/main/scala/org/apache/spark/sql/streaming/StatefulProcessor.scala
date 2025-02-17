@@ -59,8 +59,8 @@ abstract class StatefulProcessor[K, I, O] extends Serializable {
    * and current timer values and optionally provide output rows.
    *
    * Note that in microbatch mode, input rows for a given grouping key will be provided in a
-   * single function invocation. If the grouping key is not seen in the current microbatch,
-   * this function will not be invoked for that key.
+   * single function invocation. If the grouping key is not seen in the current microbatch, this
+   * function will not be invoked for that key.
    *
    * @param key
    *   \- grouping key
@@ -144,8 +144,8 @@ abstract class StatefulProcessorWithInitialState[K, I, O, S] extends StatefulPro
    * checkpoint.
    *
    * Note that in microbatch mode, this function can be called for one or more times per grouping
-   * key. If the grouping key is not seen within the initial state dataframe rows, then the function
-   * will not be invoked for that key.
+   * key. If the grouping key is not seen within the initial state dataframe rows, then the
+   * function will not be invoked for that key.
    *
    * @param key
    *   \- grouping key
