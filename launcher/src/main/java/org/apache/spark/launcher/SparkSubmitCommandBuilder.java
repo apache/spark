@@ -151,15 +151,23 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       OptionParser parser = new OptionParser(true);
       parser.parse(submitArgs);
       this.isSpecialCommand = parser.isSpecialCommand;
-      boolean connectByDefault = "1".equals(System.getenv("SPARK_CONNECT_MODE"));
-      String defaultApiMode = connectByDefault ? "connect" : "classic";
-      String apiMode = conf.getOrDefault(SparkLauncher.SPARK_API_MODE, defaultApiMode);
-      if (conf.containsKey("spark.remote") || "connect".equalsIgnoreCase(apiMode)) {
+      if (conf.containsKey("spark.remote") || "connect".equalsIgnoreCase(getApiMode(conf))) {
         isRemote = true;
       }
     } else {
       this.isExample = isExample;
       this.isSpecialCommand = true;
+    }
+  }
+
+  private static String getApiMode(Map<String, String> conf) {
+    boolean connectByDefault = "1".equals(System.getenv("SPARK_CONNECT_MODE"));
+    String defaultApiMode = connectByDefault ? "connect" : "classic";
+    String apiMode = conf.get(SparkLauncher.SPARK_API_MODE);
+    if ("classic".equalsIgnoreCase(apiMode) || "connect".equalsIgnoreCase(apiMode)) {
+      return apiMode;
+    } else {
+      return defaultApiMode;
     }
   }
 
@@ -387,12 +395,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         remoteStr != null && (masterStr != null || deployStr != null)) {
       throw new IllegalStateException("Remote cannot be specified with master and/or deploy mode.");
     }
+
+    String apiMode = getApiMode(conf);
+    env.put("SPARK_API_MODE", apiMode);
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
-    } else if (isRemote) {
-      // If `removeStr` is not specified but isRemote is true, it means the api mode is connect.
-      env.put("SPARK_REMOTE", masterStr);
+    } else if ("connect".equalsIgnoreCase(apiMode)) {
+      env.put("MASTER", firstNonEmpty(masterStr, "local"));
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
