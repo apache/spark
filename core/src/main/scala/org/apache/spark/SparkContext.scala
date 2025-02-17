@@ -432,6 +432,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
+    SparkContext.supplementBlasOptions(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -3434,6 +3435,20 @@ object SparkContext extends Logging {
     }
     supplement(DRIVER_JAVA_OPTIONS)
     supplement(EXECUTOR_JAVA_OPTIONS)
+  }
+
+  private def supplementBlasOptions(conf: SparkConf): Unit = {
+    conf.getOption("spark.ml.allowNativeBlas").foreach { allowNativeBlas =>
+      def supplement(key: OptionalConfigEntry[String]): Unit = {
+        val v = conf.get(key) match {
+          case Some(opts) => s"-Dspark.ml.allowNativeBlas=$allowNativeBlas $opts"
+          case None => s"-Dspark.ml.allowNativeBlas=$allowNativeBlas"
+        }
+        conf.set(key.key, v)
+      }
+      supplement(DRIVER_JAVA_OPTIONS)
+      supplement(EXECUTOR_JAVA_OPTIONS)
+    }
   }
 }
 
