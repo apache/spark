@@ -20147,8 +20147,8 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     |  2|value12|value13|
     +---+-------+-------+
 
-    >>> extracted3 = get_json_object(df.jarray, '$[*].f1').alias("c0")
-    >>> extracted4 = get_json_object(df.jarray, '$[*].f2').alias("c1")
+    >>> extracted3 = sf.get_json_object(df.jarray, '$[*].f1').alias("c0")
+    >>> extracted4 = sf.get_json_object(df.jarray, '$[*].f2').alias("c1")
     >>> df.select(df.key, extracted3, extracted4).show()
     +---+-------------------+---------+
     |key|                 c0|       c1|
