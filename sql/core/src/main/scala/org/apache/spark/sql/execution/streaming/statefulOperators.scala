@@ -341,7 +341,11 @@ trait StateStoreWriter
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
         // to ignore partition and store names.
-        case (name, _) => instanceMetricConfiguration(name).metricPrefix
+        case (name, _) =>
+          (
+            instanceMetricConfiguration(name).stateStoreProvider,
+            instanceMetricConfiguration(name).metricPrefix
+          )
       }
       .flatMap {
         case (_, metrics) =>
@@ -414,6 +418,7 @@ trait StateStoreWriter
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
     setStoreCustomMetrics(storeMetrics.customMetrics)
+    setStoreInstanceMetrics(storeMetrics.instanceMetrics)
 
     if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
       // Set the state store checkpoint information for the driver to collect
@@ -431,10 +436,18 @@ trait StateStoreWriter
 
   protected def setStoreCustomMetrics(customMetrics: Map[StateStoreCustomMetric, Long]): Unit = {
     customMetrics.foreach {
-      // Set the max for instance metrics
-      case (metric: StateStoreInstanceMetric, value) =>
+      case (metric, value) =>
+        longMetric(metric.name) += value
+    }
+  }
+
+  protected def setStoreInstanceMetrics(
+      instanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
+    instanceMetrics.foreach {
+      case (metric, value) =>
+        // Set the max for instance metrics
         // Check for cases where value < 0 and .value converts metric to 0
-        // Metrics like last uploaded snapshot version can have an init value of -1,
+        // Some metrics like last uploaded snapshot version can have an initial value of -1,
         // which need special handling to avoid setting the metric to 0 using `.value`.
         longMetric(metric.name).set(
           if (longMetric(metric.name).isZero) {
@@ -445,8 +458,6 @@ trait StateStoreWriter
             Math.max(value, longMetric(metric.name).value)
           }
         )
-      case (metric, value) =>
-        longMetric(metric.name) += value
     }
   }
 

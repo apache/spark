@@ -528,6 +528,7 @@ case class StreamingSymmetricHashJoinExec(
         numTotalStateRows += combinedMetrics.numKeys
         stateMemory += combinedMetrics.memoryUsedBytes
         setStoreCustomMetrics(combinedMetrics.customMetrics)
+        setStoreInstanceMetrics(combinedMetrics.instanceMetrics)
       }
 
       val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide);

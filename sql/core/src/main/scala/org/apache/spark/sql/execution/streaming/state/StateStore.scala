@@ -250,11 +250,15 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
  * @param customMetrics   Custom implementation-specific metrics
  *                        The metrics reported through this must have the same `name` as those
  *                        reported by `StateStoreProvider.customMetrics`.
+ * @param instanceMetrics Custom implementation-specific metrics that are specific to state stores
+ *                        The metrics reported through this must have the same `name` as those
+ *                        reported by `StateStoreProvider.customMetrics`.
  */
 case class StateStoreMetrics(
     numKeys: Long,
     memoryUsedBytes: Long,
-    customMetrics: Map[StateStoreCustomMetric, Long])
+    customMetrics: Map[StateStoreCustomMetric, Long],
+    instanceMetrics: Map[StateStoreInstanceMetric, Long] = Map.empty)
 
 /**
  * State store checkpoint information, used to pass checkpointing information from executors
@@ -281,10 +285,20 @@ object StateStoreMetrics {
       customMetric -> sumOfMetrics
     }.toMap
 
+    val distinctInstanceMetrics = allMetrics.flatMap(_.instanceMetrics.keys).distinct
+    val instanceMetrics = allMetrics.flatMap(_.instanceMetrics)
+    val combinedInstanceMetrics = distinctInstanceMetrics.map { instanceMetric =>
+      val sameMetrics = instanceMetrics.filter(_._1 == instanceMetric)
+      // Use the instance metric's custom ordering to select the combined metric value
+      val selectedMetrics = sameMetrics.map(_._2).min(instanceMetric.ordering)
+      instanceMetric -> selectedMetrics
+    }.toMap
+
     StateStoreMetrics(
       allMetrics.map(_.numKeys).sum,
       allMetrics.map(_.memoryUsedBytes).sum,
-      combinedCustomMetrics)
+      combinedCustomMetrics,
+      combinedInstanceMetrics)
   }
 }
 
@@ -321,31 +335,69 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-case class StateStoreInstanceMetric(
-    metricPrefix: String,
-    descPrefix: String,
-    partitionId: Option[Int] = None,
-    storeName: String = StateStoreId.DEFAULT_STORE_NAME,
-    initValue: Long = -1,
-    ordering: Ordering[Long] = Ordering.Long,
-    ignoreIfUnchanged: Boolean = true)
-  extends StateStoreCustomMetric {
-  override def name: String = {
+trait StateStoreInstanceMetric {
+  def metricPrefix: String
+  def descPrefix: String
+  def descNotes: String
+  def partitionId: Option[Int]
+  def storeName: String
+  def stateStoreProvider: String
+  def initValue: Long
+
+  def createSQLMetric(sparkContext: SparkContext): SQLMetric
+
+  /** This determines the selection of instance metrics during progress reporting */
+  def ordering: Ordering[Long]
+
+  /** Should this instance metric be reported if it is unchanged from its initial value */
+  def ignoreIfUnchanged: Boolean
+
+  def name: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric name")
-    s"$metricPrefix.partition_${partitionId.get}_${storeName}"
+    s"$stateStoreProvider.$metricPrefix.partition_${partitionId.get}_$storeName"
   }
 
-  override def desc: String = {
+  def desc: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric description")
-    s"$descPrefix (partitionId = ${partitionId.get}, storeName = ${storeName})"
+    s"$stateStoreProvider: $descPrefix " +
+    s"(partitionId = ${partitionId.get}, storeName = $storeName, notes = $descNotes)"
   }
 
-  override def withNewDesc(desc: String): StateStoreInstanceMetric = copy(descPrefix = desc)
+  def withNewDescNotes(descNotes: String): StateStoreInstanceMetric
 
-  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+  def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric
+}
+
+case class StateStoreSnapshotLastUploadInstanceMetric(
+    stateStoreProvider: String,
+    descNotes: String = "None",
+    partitionId: Option[Int] = None,
+    storeName: String = StateStoreId.DEFAULT_STORE_NAME)
+  extends StateStoreInstanceMetric {
+
+  override def metricPrefix: String = "SnapshotLastUploaded"
+
+  override def descPrefix: String = {
+    "The last uploaded version of the snapshot for a specific state store instance"
+  }
+
+  override def initValue: Long = -1L
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric = {
     SQLMetrics.createSizeMetric(sparkContext, desc, initValue)
+  }
 
-  def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric = {
+  override def ordering: Ordering[Long] = Ordering.Long
+
+  override def ignoreIfUnchanged: Boolean = false
+
+  override def withNewDescNotes(descNotes: String): StateStoreSnapshotLastUploadInstanceMetric = {
+    copy(descNotes = descNotes)
+  }
+
+  override def withNewId(
+      partitionId: Int,
+      storeName: String): StateStoreSnapshotLastUploadInstanceMetric = {
     copy(partitionId = Some(partitionId), storeName = storeName)
   }
 }

@@ -328,20 +328,24 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
-          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
-          CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED
-            .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion
+          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt()
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
+
+        val stateStoreInstanceMetrics = Map[StateStoreInstanceMetric, Long](
+          CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED
+            .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion
+        )
 
         StateStoreMetrics(
           rocksDBMetrics.numUncommittedKeys,
           rocksDBMetrics.totalMemUsageBytes,
-          stateStoreCustomMetrics)
+          stateStoreCustomMetrics,
+          stateStoreInstanceMetrics)
       } else {
         logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
           log"and version=${MDC(VERSION_NUM, version)}")
-        StateStoreMetrics(0, 0, Map.empty)
+        StateStoreMetrics(0, 0, Map.empty, Map.empty)
       }
     }
 
@@ -526,8 +530,7 @@ private[sql] class RocksDBStateStoreProvider
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
 
-  override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] =
-    ALL_INSTANCE_METRICS
+  override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = ALL_INSTANCE_METRICS
 
   private[state] def latestVersion: Long = rocksDB.getLatestVersion()
 
@@ -843,11 +846,8 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES,
     CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES)
 
-  val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreInstanceMetric(
-    "rocksdbSnapshotLastUploaded",
-    "RocksDB: the last uploaded version of the snapshot for a specific state store instance",
-    ignoreIfUnchanged = false
-  )
+  val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED =
+    StateStoreSnapshotLastUploadInstanceMetric("rocksdb")
 
   val ALL_INSTANCE_METRICS = Seq(CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED)
 }

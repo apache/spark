@@ -47,7 +47,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
-  private val SNAPSHOT_LAG_METRIC_PREFIX = "rocksdbSnapshotLastUploaded.partition_"
+  private val SNAPSHOT_LAG_METRIC_PREFIX = "rocksdb.SnapshotLastUploaded.partition_"
 
   testWithColumnFamilies("RocksDBStateStore",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
