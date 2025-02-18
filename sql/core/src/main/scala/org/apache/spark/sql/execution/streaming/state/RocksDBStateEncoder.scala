@@ -892,7 +892,16 @@ class AvroStateEncoder(
       valueAvroType) // Defining Avro writer for this struct type
     writer.write(avroData, encoder) // Avro.GenericDataRecord -> byte array
     encoder.flush()
-    out.toByteArray
+    val bytesToEncode = out.toByteArray
+    // prepend version byte
+    val encodedBytes = new Array[Byte](bytesToEncode.length + STATE_ENCODING_NUM_VERSION_BYTES)
+    Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
+    // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
+    Platform.copyMemory(
+      bytesToEncode, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+      bytesToEncode.length)
+    encodedBytes
   }
 
   /**
@@ -907,7 +916,9 @@ class AvroStateEncoder(
     if (valueBytes != null) {
       val reader = new GenericDatumReader[Any](valueAvroType)
       val decoder = DecoderFactory.get().binaryDecoder(
-        valueBytes, 0, valueBytes.length, null)
+        valueBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_VERSION,
+        valueBytes.length -  Platform.BYTE_ARRAY_OFFSET - STATE_ENCODING_VERSION,
+        null)
       // bytes -> Avro.GenericDataRecord
       val genericData = reader.read(null, decoder)
       // Avro.GenericDataRecord -> InternalRow
@@ -940,7 +951,9 @@ class AvroStateEncoder(
     if (valueBytes != null) {
       val reader = new GenericDatumReader[Any](writerSchema, readerSchema)
       val decoder = DecoderFactory.get().binaryDecoder(
-        valueBytes, 0, valueBytes.length, null)
+        valueBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_VERSION,
+        valueBytes.length -  Platform.BYTE_ARRAY_OFFSET - STATE_ENCODING_VERSION,
+        null)
       // bytes -> Avro.GenericDataRecord
       val genericData = reader.read(null, decoder)
       // Avro.GenericDataRecord -> InternalRow
