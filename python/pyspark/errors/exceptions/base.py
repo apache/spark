@@ -363,6 +363,14 @@ class PySparkImportError(PySparkException, ImportError):
     """
 
 
+class PickleException(PySparkException):
+    """
+    Represents an exception which is failed while pickling from server side
+    such as `net.razorvine.pickle.PickleException`. This is different from `PySparkPicklingError`
+    which represents an exception failed from Python built-in `pickle.PicklingError`.
+    """
+
+
 class QueryContextType(Enum):
     """
     The type of :class:`QueryContext`.
