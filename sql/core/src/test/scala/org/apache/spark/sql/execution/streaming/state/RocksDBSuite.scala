@@ -628,8 +628,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       if (isChangelogCheckpointingEnabled) {
         assert(changelogVersionsPresent(remoteDir) === (1 to 50))
         if (colFamiliesEnabled) {
-          assert(snapshotVersionsPresent(remoteDir) ===
-            Seq(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50))
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1) ++ Range.inclusive(5, 10, 5))
         } else {
           assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
         }
@@ -948,6 +947,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
 
       if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
+        // This is because 30 is executed twice and snapshot does not overwrite in checkpoint v2
         assert(snapshotVersionsPresent(remoteDir) === (1 to 30) :+ 30 :+ 31)
       } else {
         assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
