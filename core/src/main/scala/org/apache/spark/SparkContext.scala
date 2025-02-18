@@ -3435,7 +3435,7 @@ object SparkContext extends Logging {
   }
 
   private def supplementBlasOptions(conf: SparkConf): Unit = {
-    val opts = s"-Dspark.ml.allowNativeBlas=${Utils.allowNativeBlas}"
+    val opts = s"-Dnetlib.allowNativeBlas=${Utils.allowNativeBlas}"
     supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, opts)
     supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }

@@ -350,7 +350,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     if (config.containsKey("spark.ml.allowNativeBlas")) {
       String allowNativeBlas = config.get("spark.ml.allowNativeBlas");
-      addOptionString(cmd, "-Dspark.ml.allowNativeBlas=" + allowNativeBlas);
+      addOptionString(cmd, "-Dnetlib.allowNativeBlas=" + allowNativeBlas);
     }
 
     // SPARK-36796: Always add some JVM runtime default options to submit command

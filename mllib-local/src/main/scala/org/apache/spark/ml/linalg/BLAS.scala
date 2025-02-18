@@ -45,7 +45,7 @@ private[spark] object BLAS extends Serializable with Logging {
       _nativeBLAS = if (SparkEnvUtils.allowNativeBlas) {
         try { NetlibNativeBLAS.getInstance } catch { case _: Throwable => javaBLAS }
       } else {
-        logInfo("Disable native BLAS because spark.ml.allowNativeBlas is false.")
+        logInfo("Disable native BLAS because netlib.allowNativeBlas is false.")
         javaBLAS
       }
     }

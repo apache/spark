@@ -1050,9 +1050,7 @@ private[spark] class Client(
 
     javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
 
-    sparkConf.getOption("spark.ml.allowNativeBlas").foreach { allowNativeBlas =>
-      javaOpts += s"-Dspark.ml.allowNativeBlas=$allowNativeBlas"
-    }
+    javaOpts += s"-Dnetlib.allowNativeBlas=${sparkConf.get(SPARK_ML_ALLOW_NATIVE_BLAS)}"
 
     // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`
     // is added by default.
