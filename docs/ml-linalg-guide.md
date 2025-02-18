@@ -46,8 +46,7 @@ The installation should be done on all nodes of the cluster. Generic version of 
 
 For Debian / Ubuntu:
 ```
-sudo apt-get install libopenblas-base
-sudo update-alternatives --config libblas.so.3
+sudo apt-get install libopenblas-dev
 ```
 For CentOS / RHEL:
 ```
@@ -76,7 +75,7 @@ You can also point `dev.ludovic.netlib` to specific libraries names and paths. F
 
 If native libraries are not properly configured in the system, the Java implementation (javaBLAS) will be used as fallback option.
 
-You can also set `spark.ml.allowNativeBlas` to `false` to disable native BLAS and always use the Java implementation.
+You can also set spark conf `spark.ml.allowNativeBlas` or Java system property `netlib.allowNativeBlas` to `false` to disable native BLAS and always use the Java implementation.
 
 ## Spark Configuration
 
