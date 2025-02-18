@@ -28,9 +28,9 @@ private[spark] trait SparkEnvUtils {
   }
 
   /**
-   * Whether allow using native BLAS library if available.
+   * Whether allow using native BLAS/LAPACK/ARPACK libraries if available.
    */
-  val allowNativeBlas = "true".equals(System.getProperty("spark.ml.allowNativeBlas", "true"))
+  val allowNativeBlas = "true".equals(System.getProperty("netlib.allowNativeBlas", "true"))
 }
 
 object SparkEnvUtils extends SparkEnvUtils
