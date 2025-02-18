@@ -40,13 +40,13 @@
       </activation>
       <dependencies>
         <dependency>
-          <groupId>org.apache.hadoop</groupId>
+          <groupId>${hadoop.group}</groupId>
           <artifactId>hadoop-client-runtime</artifactId>
           <version>${hadoop.version}</version>
           <scope>${hadoop.deps.scope}</scope>
         </dependency>
         <dependency>
-          <groupId>org.apache.hadoop</groupId>
+          <groupId>${hadoop.group}</groupId>
           <artifactId>hadoop-client-minicluster</artifactId>
           <version>${hadoop.version}</version>
           <scope>test</scope>
@@ -92,7 +92,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
     </dependency>

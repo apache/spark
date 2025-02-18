@@ -137,7 +137,7 @@
           <version>${project.version}</version>
         </dependency>
         <dependency>
-          <groupId>org.apache.hadoop</groupId>
+          <groupId>${hadoop.group}</groupId>
           <artifactId>hadoop-yarn-server-web-proxy</artifactId>
         </dependency>
       </dependencies>

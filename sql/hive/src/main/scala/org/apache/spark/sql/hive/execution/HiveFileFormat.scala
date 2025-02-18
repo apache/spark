@@ -86,7 +86,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
     // Add table properties from storage handler to hadoopConf, so any custom storage
     // handler settings can be set to hadoopConf
     HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, conf, false)
-    Utilities.copyTableJobPropertiesToConf(tableDesc, conf)
+    Utilities.copyTableJobPropertiesToConf(tableDesc, new JobConf(conf))
 
     // Avoid referencing the outer object.
     val fileSinkConfSer = fileSinkConf

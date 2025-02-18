@@ -121,7 +121,7 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-minikdc</artifactId>
     </dependency>
     <!-- Kafka embedded server uses Zookeeper 3.5.7 API -->

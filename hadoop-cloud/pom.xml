@@ -59,13 +59,13 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-client-runtime</artifactId>
       <version>${hadoop.version}</version>
     </dependency>
@@ -74,7 +74,7 @@
       intra-jackson-module version problems.
       -->
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-aws</artifactId>
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
@@ -130,7 +130,7 @@
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-azure</artifactId>
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
@@ -146,13 +146,13 @@
     but it still needs some selective exclusion across versions, especially 3.0.x.
     -->
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
+      <groupId>${hadoop.group}</groupId>
       <artifactId>hadoop-cloud-storage</artifactId>
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
       <exclusions>
         <exclusion>
-          <groupId>org.apache.hadoop</groupId>
+          <groupId>${hadoop.group}</groupId>
           <artifactId>hadoop-common</artifactId>
         </exclusion>
         <exclusion>
@@ -167,7 +167,7 @@
           manually exclude it to avoid recurring issues similar to HADOOP-18159 in Spark.
         -->
         <exclusion>
-          <groupId>org.apache.hadoop</groupId>
+          <groupId>${hadoop.group}</groupId>
           <artifactId>hadoop-cos</artifactId>
         </exclusion>
       </exclusions>

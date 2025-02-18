@@ -187,7 +187,13 @@ echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DI
 echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
-cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
+# Fabio: copy jars from the spark-assemmbly-*-dist directory which
+# contains the distribution prepared by the maven-assembly-plugin
+# The maven-assembly-plugin has rules to remove the hadoop/hops dependencies
+# from the final distribution
+# You need to run the -Pbigtop-dist profile for this to work
+cp "$SPARK_HOME"/assembly/target/spark-assembly_"$SCALA_VERSION"-"$VERSION"-dist/lib/* "$DISTDIR/jars/"
+cp "$SPARK_HOME"/assembly/target/spark-assembly_"$SCALA_VERSION"-"$VERSION"-dist/*.jar "$DISTDIR/jars/"
 
 # Only create the yarn directory if the yarn artifacts were built.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then

@@ -866,10 +866,10 @@ private[hive] class HiveClientImpl(
     def closeDriver(driver: Driver): Unit = {
       // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
       // and the CommandProcessorFactory.clean function removed.
-      driver.getClass.getMethod("close").invoke(driver)
-      if (version != hive.v3_0 && version != hive.v3_1) {
-        CommandProcessorFactory.clean(conf)
-      }
+      // Fabio: Comment this to avoid compilation issue with Hive3
+      // if (version != hive.v3_0 && version != hive.v3_1) {
+      //   CommandProcessorFactory.clean(conf)
+      // }
     }
 
     // Hive query needs to start SessionState.
