@@ -892,16 +892,27 @@ class AvroStateEncoder(
       valueAvroType) // Defining Avro writer for this struct type
     writer.write(avroData, encoder) // Avro.GenericDataRecord -> byte array
     encoder.flush()
-    val bytesToEncode = out.toByteArray
-    // prepend version byte
+    prependVersionByte(out.toByteArray)
+  }
+
+  private def prependVersionByte(bytesToEncode: Array[Byte]): Array[Byte] = {
     val encodedBytes = new Array[Byte](bytesToEncode.length + STATE_ENCODING_NUM_VERSION_BYTES)
     Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
     // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
     Platform.copyMemory(
-      bytesToEncode, Platform.BYTE_ARRAY_OFFSET,
+      bytesToEncode, 0,
       encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
       bytesToEncode.length)
     encodedBytes
+  }
+
+  private def removeVersionByte(bytes: Array[Byte]): Array[Byte] = {
+    val resultBytes = new Array[Byte](bytes.length - STATE_ENCODING_NUM_VERSION_BYTES)
+    Platform.copyMemory(
+      bytes, STATE_ENCODING_NUM_VERSION_BYTES + Platform.BYTE_ARRAY_OFFSET,
+      resultBytes, 0, resultBytes.length
+    )
+    resultBytes
   }
 
   /**
@@ -909,16 +920,15 @@ class AvroStateEncoder(
    * deserializes to an UnsafeRow using the Avro deserializer
    */
   def decodeFromAvroToUnsafeRow(
-      valueBytes: Array[Byte],
+      b: Array[Byte],
       avroDeserializer: AvroDeserializer,
       valueAvroType: Schema,
       valueProj: UnsafeProjection): UnsafeRow = {
-    if (valueBytes != null) {
+    if (b != null) {
+      val valueBytes = removeVersionByte(b)
       val reader = new GenericDatumReader[Any](valueAvroType)
       val decoder = DecoderFactory.get().binaryDecoder(
-        valueBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_VERSION,
-        valueBytes.length -  Platform.BYTE_ARRAY_OFFSET - STATE_ENCODING_VERSION,
-        null)
+        valueBytes, 0, valueBytes.length, null)
       // bytes -> Avro.GenericDataRecord
       val genericData = reader.read(null, decoder)
       // Avro.GenericDataRecord -> InternalRow
@@ -943,17 +953,16 @@ class AvroStateEncoder(
    * @return The deserialized UnsafeRow, or null if input bytes are null
    */
   def decodeFromAvroToUnsafeRow(
-      valueBytes: Array[Byte],
+      b: Array[Byte],
       avroDeserializer: AvroDeserializer,
       writerSchema: Schema,
       readerSchema: Schema,
       valueProj: UnsafeProjection): UnsafeRow = {
-    if (valueBytes != null) {
+    if (b != null) {
+      val valueBytes = removeVersionByte(b)
       val reader = new GenericDatumReader[Any](writerSchema, readerSchema)
       val decoder = DecoderFactory.get().binaryDecoder(
-        valueBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_VERSION,
-        valueBytes.length -  Platform.BYTE_ARRAY_OFFSET - STATE_ENCODING_VERSION,
-        null)
+        valueBytes, 0, valueBytes.length, null)
       // bytes -> Avro.GenericDataRecord
       val genericData = reader.read(null, decoder)
       // Avro.GenericDataRecord -> InternalRow
