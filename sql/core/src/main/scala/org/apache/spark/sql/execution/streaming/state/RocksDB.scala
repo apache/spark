@@ -247,7 +247,7 @@ class RocksDB(
   def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     if (checkColFamilyExists(colFamilyName)) {
       shouldForceSnapshot.set(true)
-      prefixScan(Array.empty[Byte], colFamilyName).foreach { kv =>
+      iterator(colFamilyName).foreach { kv =>
         remove(kv.key, colFamilyName)
       }
       removeFromColFamilyMaps(colFamilyName)
@@ -499,7 +499,7 @@ class RocksDB(
    * @param metadata - checkpoint metadata
    * @return - type of column family (internal or otherwise)
    */
-  private def checkColFamilyType(
+  private def isInternalColFamily(
       cfName: String,
       metadata: RocksDBCheckpointMetadata): Boolean = {
     if (metadata.columnFamilyTypeMap.isEmpty) {
@@ -521,7 +521,7 @@ class RocksDB(
     setInitialCFInfo()
     metadata.columnFamilyMapping.foreach { mapping =>
       mapping.foreach { case (colFamilyName, cfId) =>
-        addToColFamilyMaps(colFamilyName, cfId, checkColFamilyType(colFamilyName, metadata))
+        addToColFamilyMaps(colFamilyName, cfId, isInternalColFamily(colFamilyName, metadata))
       }
     }
 
@@ -917,6 +917,17 @@ class RocksDB(
         }
       }
       override protected def close(): Unit = { iter.close() }
+    }
+  }
+
+  /**
+   * Get an iterator of all committed and uncommitted key-value pairs for the given column family.
+   */
+  def iterator(cfName: String): Iterator[ByteArrayPair] = {
+    if (!useColumnFamilies) {
+      iterator()
+    } else {
+      prefixScan(Array.empty[Byte], cfName)
     }
   }
 
