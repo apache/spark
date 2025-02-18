@@ -1648,23 +1648,7 @@ class NoPrefixKeyStateEncoder(
   extends RocksDBKeyStateEncoder with Logging {
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    if (!useColumnFamilies) {
-      dataEncoder.encodeKey(row)
-    } else {
-      // First encode the row with the data encoder
-      val rowBytes = dataEncoder.encodeKey(row)
-
-      // Create data array with version byte
-      val dataWithVersion = new Array[Byte](STATE_ENCODING_NUM_VERSION_BYTES + rowBytes.length)
-      Platform.putByte(dataWithVersion, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
-      Platform.copyMemory(
-        rowBytes, Platform.BYTE_ARRAY_OFFSET,
-        dataWithVersion, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
-        rowBytes.length
-      )
-
-      dataWithVersion
-    }
+    dataEncoder.encodeKey(row)
   }
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
@@ -1675,17 +1659,28 @@ class NoPrefixKeyStateEncoder(
     } else {
       val dataWithVersion = keyBytes
 
-      // Skip version byte to get to actual data
-      val dataLength = dataWithVersion.length - STATE_ENCODING_NUM_VERSION_BYTES
+      val version = Platform.getByte(dataWithVersion, Platform.BYTE_ARRAY_OFFSET)
+      // For version 0, we were writing an extra version byte in the key row.
+      // We want to skip over this byte, as it is not necessary, and dealt with in
+      // dataEncoder.decodeKey.
+      // This is fixed for subsequent versions
+      val rowBytes = if (version == 0 && !dataEncoder.supportsSchemaEvolution) {
+        // Skip version byte to get to actual data
+        val dataLength = dataWithVersion.length - STATE_ENCODING_NUM_VERSION_BYTES
 
-      // Extract data bytes and decode using data encoder
-      val dataBytes = new Array[Byte](dataLength)
-      Platform.copyMemory(
-        dataWithVersion, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
-        dataBytes, Platform.BYTE_ARRAY_OFFSET,
-        dataLength
-      )
-      dataEncoder.decodeKey(dataBytes)
+        // Extract data bytes and decode using data encoder
+        val dataBytes = new Array[Byte](dataLength)
+        Platform.copyMemory(
+          dataWithVersion, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+          dataBytes, Platform.BYTE_ARRAY_OFFSET,
+          dataLength
+        )
+        dataBytes
+      } else {
+        dataWithVersion
+      }
+
+      dataEncoder.decodeKey(rowBytes)
     }
   }
 
