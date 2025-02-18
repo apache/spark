@@ -32,10 +32,7 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql import Row
-from pyspark.sql.conversion import (
-    ArrowTableToRowsConversion,
-    LocalDataToArrowConversion,
-)
+from pyspark.sql.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,
