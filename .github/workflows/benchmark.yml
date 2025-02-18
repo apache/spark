@@ -46,7 +46,7 @@ on:
 jobs:
   matrix-gen:
     name: Generate matrix for job splits
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     env:
@@ -60,7 +60,7 @@ jobs:
   tpcds-1g-gen:
     name: "Generate an input dataset for TPCDSQueryBenchmark with SF=1"
     if: contains(github.event.inputs.class, 'TPCDSQueryBenchmark') || contains(github.event.inputs.class, '*')
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: databricks/tpcds-kit
-          ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
+          ref: 1b7fb7529edae091684201fab142d956d6afd881
           path: ./tpcds-kit
       - name: Build tpcds-kit
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
@@ -117,8 +117,7 @@ jobs:
     name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
     if: always()
     needs: [matrix-gen, tpcds-1g-gen]
-    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
