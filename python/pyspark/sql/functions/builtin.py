@@ -20137,8 +20137,8 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     >>> jarray2 = '''[{"f1": "value12"},{"f2": "value13"}]'''
     >>> data = [("1", jarray1), ("2", jarray2)]
     >>> df = spark.createDataFrame(data, ("key", "jarray"))
-    >>> extracted1 = get_json_object(df.jarray, '$[0].f1').alias("c0")
-    >>> extracted2 = get_json_object(df.jarray, '$[1].f2').alias("c1")
+    >>> extracted1 = sf.get_json_object(df.jarray, '$[0].f1').alias("c0")
+    >>> extracted2 = sf.get_json_object(df.jarray, '$[1].f2').alias("c1")
     >>> df.select(df.key, extracted1, extracted2).show()
     +---+-------+-------+
     |key|     c0|     c1|
