@@ -76,6 +76,8 @@ You can also point `dev.ludovic.netlib` to specific libraries names and paths. F
 
 If native libraries are not properly configured in the system, the Java implementation (javaBLAS) will be used as fallback option.
 
+You can also set `spark.ml.allowNativeBlas` to `false` to disable native BLAS and always use the Java implementation.
+
 ## Spark Configuration
 
 The default behavior of multi-threading in either Intel MKL or OpenBLAS may not be optimal with Spark's execution model [^1].
