@@ -3409,46 +3409,34 @@ object SparkContext extends Logging {
     }
   }
 
+  private def supplement(
+      conf: SparkConf, key: OptionalConfigEntry[String], javaOpts: String): Unit = {
+    val v = conf.get(key) match {
+      case Some(opts) => s"$javaOpts $opts"
+      case None => javaOpts
+    }
+    conf.set(key.key, v)
+  }
+
   /**
    * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
-        case None => JavaModuleOptions.defaultModuleOptions()
-      }
-      conf.set(key.key, v)
-    }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    supplement(conf, DRIVER_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
+    supplement(conf, EXECUTOR_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
   }
 
   private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"
-        case None => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
-      }
-      conf.set(key.key, v)
-    }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    val opts = s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
+    supplement(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplement(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }
 
   private def supplementBlasOptions(conf: SparkConf): Unit = {
-    conf.getOption("spark.ml.allowNativeBlas").foreach { allowNativeBlas =>
-      def supplement(key: OptionalConfigEntry[String]): Unit = {
-        val v = conf.get(key) match {
-          case Some(opts) => s"-Dspark.ml.allowNativeBlas=$allowNativeBlas $opts"
-          case None => s"-Dspark.ml.allowNativeBlas=$allowNativeBlas"
-        }
-        conf.set(key.key, v)
-      }
-      supplement(DRIVER_JAVA_OPTIONS)
-      supplement(EXECUTOR_JAVA_OPTIONS)
-    }
+    val opts = s"-Dspark.ml.allowNativeBlas=${Utils.allowNativeBlas}"
+    supplement(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplement(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }
 }
 
