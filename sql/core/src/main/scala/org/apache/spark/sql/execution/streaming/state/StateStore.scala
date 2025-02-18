@@ -696,8 +696,6 @@ object StateStore extends Logging {
 
   val DEFAULT_COL_FAMILY_NAME = "default"
 
-  val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
-
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 

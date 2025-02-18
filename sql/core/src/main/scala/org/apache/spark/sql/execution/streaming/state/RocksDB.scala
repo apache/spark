@@ -41,7 +41,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -709,21 +708,8 @@ class RocksDB(
   private def encodeStateRowWithPrefix(
       data: Array[Byte],
       cfName: String): Array[Byte] = {
-    // Create result array big enough for all prefixes plus data
-    val result = new Array[Byte](StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES + data.length)
-    val offset = Platform.BYTE_ARRAY_OFFSET + StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES
-
     val cfInfo = getColumnFamilyInfo(cfName)
-    Platform.putShort(result, Platform.BYTE_ARRAY_OFFSET, cfInfo.cfId)
-
-    // Write the actual data
-    Platform.copyMemory(
-      data, Platform.BYTE_ARRAY_OFFSET,
-      result, offset,
-      data.length
-    )
-
-    result
+    RocksDBStateStoreProvider.encodeStateRowWithPrefix(data, cfInfo.cfId)
   }
 
   /**
@@ -733,17 +719,9 @@ class RocksDB(
    *           and name of column family
    */
   private def decodeStateRowWithPrefix(data: Array[Byte]): (Array[Byte], String) = {
-    val cfId = Platform.getShort(data, Platform.BYTE_ARRAY_OFFSET)
+    val cfId = RocksDBStateStoreProvider.getColumnFamilyBytesAsId(data)
     val cfName = getColumnFamilyNameForId(cfId)
-    val offset = Platform.BYTE_ARRAY_OFFSET + StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES
-
-    val key = new Array[Byte](data.length - StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-    Platform.copyMemory(
-      data, offset,
-      key, Platform.BYTE_ARRAY_OFFSET,
-      key.length
-    )
-
+    val key = RocksDBStateStoreProvider.decodeStateRowWithPrefix(data)
     (key, cfName)
   }
 

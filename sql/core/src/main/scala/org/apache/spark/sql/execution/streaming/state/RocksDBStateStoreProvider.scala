@@ -651,12 +651,85 @@ object RocksDBStateStoreProvider {
   // Version as a single byte that specifies the encoding of the row data in RocksDB
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
+  val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
 
   val SCHEMA_ID_PREFIX_BYTES = 2
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
   private val DEFAULT_SCHEMA_IDS = StateSchemaInfo(0, 0)
+
+  /**
+   * Encodes a virtual column family ID into a byte array suitable for RocksDB.
+   *
+   * This method creates a fixed-size byte array prefixed with the virtual column family ID,
+   * which is used to partition data within RocksDB.
+   *
+   * @param virtualColFamilyId The column family identifier to encode
+   * @return A byte array containing the encoded column family ID
+   */
+  def getColumnFamilyIdAsBytes(virtualColFamilyId: Short): Array[Byte] = {
+    val encodedBytes = new Array[Byte](RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId)
+    encodedBytes
+  }
+
+  /**
+   * Function to encode state row with virtual col family id prefix
+   * @param data - passed byte array to be stored in state store
+   * @param vcfId - virtual column family id
+   * @return - encoded byte array with virtual column family id prefix
+   */
+  def encodeStateRowWithPrefix(
+      data: Array[Byte],
+      vcfId: Short): Array[Byte] = {
+    // Create result array big enough for all prefixes plus data
+    val result = new Array[Byte](RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES
+      + data.length)
+    val offset = Platform.BYTE_ARRAY_OFFSET +
+      RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES
+
+    Platform.putShort(result, Platform.BYTE_ARRAY_OFFSET, vcfId)
+
+    // Write the actual data
+    Platform.copyMemory(
+      data, Platform.BYTE_ARRAY_OFFSET,
+      result, offset,
+      data.length
+    )
+
+    result
+  }
+
+  /**
+   * Function to decode virtual column family id from byte array
+   * @param data - passed byte array retrieved from state store
+   * @return - virtual column family id
+   */
+  def getColumnFamilyBytesAsId(data: Array[Byte]): Short = {
+    Platform.getShort(data, Platform.BYTE_ARRAY_OFFSET)
+  }
+
+  /**
+   * Function to decode state row with virtual col family id prefix
+   * @param data - passed byte array retrieved from state store
+   * @return - pair of decoded byte array without virtual column family id prefix
+   *           and name of column family
+   */
+  def decodeStateRowWithPrefix(data: Array[Byte]): Array[Byte] = {
+    val offset = Platform.BYTE_ARRAY_OFFSET +
+      RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES
+
+    val key = new Array[Byte](data.length -
+      RocksDBStateStoreProvider.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.copyMemory(
+      data, offset,
+      key, Platform.BYTE_ARRAY_OFFSET,
+      key.length
+    )
+
+    key
+  }
 
   // Add the cache at companion object level so it persists across provider instances
   private val dataEncoderCache: NonFateSharingCache[StateRowEncoderCacheKey, RocksDBDataEncoder] =
@@ -832,33 +905,6 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected var changelogSuffix: String = "changelog"
 
-  /**
-   * Encodes a virtual column family ID into a byte array suitable for RocksDB.
-   *
-   * This method creates a fixed-size byte array prefixed with the virtual column family ID,
-   * which is used to partition data within RocksDB.
-   *
-   * @param virtualColFamilyId The column family identifier to encode
-   * @return A byte array containing the encoded column family ID
-   */
-  private def getColumnFamilyIdBytes(virtualColFamilyId: Short): Array[Byte] = {
-    val encodedBytes = new Array[Byte](StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId)
-    encodedBytes
-  }
-
-  private def getExtractedKey(data: Array[Byte]): Array[Byte] = {
-    val offset = Platform.BYTE_ARRAY_OFFSET + StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES
-
-    val key = new Array[Byte](data.length - StateStore.VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-    Platform.copyMemory(
-      data, offset,
-      key, Platform.BYTE_ARRAY_OFFSET,
-      key.length
-    )
-    key
-  }
-
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
@@ -878,13 +924,14 @@ class RocksDBStateStoreChangeDataReader(
         }
 
         val nextRecord = reader.next()
-        val colFamilyIdBytes: Array[Byte] = getColumnFamilyIdBytes(currEncoder._3)
+        val colFamilyIdBytes: Array[Byte] =
+          RocksDBStateStoreProvider.getColumnFamilyIdAsBytes(currEncoder._3)
         val endIndex = colFamilyIdBytes.size
         // Function checks for byte arrays being equal
         // from index 0 to endIndex - 1 (both inclusive)
         if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
           colFamilyIdBytes, 0, endIndex)) {
-          val extractedKey = getExtractedKey(nextRecord._2)
+          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(nextRecord._2)
           val result = (nextRecord._1, extractedKey, nextRecord._3)
           currRecord = result
         }
