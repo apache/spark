@@ -1155,9 +1155,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         Seq.empty
       }
 
-      (31 to 60).foreach { i =>
-        result = result :+ i
-      }
+      result ++ (31 to 60)
       assert(snapshotVersionsPresent(remoteDir) === result)
       for (version <- 1 to 60) {
         db.load(version, versionToUniqueId.get(version), readOnly = true)
