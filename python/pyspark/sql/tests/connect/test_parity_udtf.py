@@ -27,7 +27,7 @@ if should_test_connect:
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
     from pyspark.sql.connect.functions import lit, udtf
     from pyspark.errors.exceptions.connect import (
-        SparkConnectGrpcException,
+        PickleException,
         PythonException,
         InvalidPlanInput,
     )
@@ -46,10 +46,8 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         finally:
             super(UDTFParityTests, cls).tearDownClass()
 
-    # TODO: use PySpark error classes instead of SparkConnectGrpcException
-
     def test_struct_output_type_casting_row(self):
-        self.check_struct_output_type_casting_row(SparkConnectGrpcException)
+        self.check_struct_output_type_casting_row(PickleException)
 
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")

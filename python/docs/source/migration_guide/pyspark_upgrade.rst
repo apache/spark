@@ -74,6 +74,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, the schema of a map column is inferred by merging the schemas of all pairs in the map. To restore the previous behavior where the schema is only inferred from the first non-null pair, you can set ``spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled`` to ``true``.
 * In Spark 4.0, `compute.ops_on_diff_frames` is on by default. To restore the previous behavior, set `compute.ops_on_diff_frames` to `false`.
 * In Spark 4.0, the data type `YearMonthIntervalType` in ``DataFrame.collect`` no longer returns the underlying integers. To restore the previous behavior, set ``PYSPARK_YM_INTERVAL_LEGACY`` environment variable to ``1``.
+* In Spark 4.0, items other than functions (e.g. ``DataFrame``, ``Column``, ``StructType``) have been removed from the wildcard import ``from pyspark.sql.functions import *``, you should import these items from proper modules (e.g. ``from pyspark.sql import DataFrame, Column``, ``from pyspark.sql.types import StructType``).
 
 
 Upgrading from PySpark 3.3 to 3.4

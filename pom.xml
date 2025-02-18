@@ -33,7 +33,7 @@
   <licenses>
     <license>
       <name>Apache-2.0</name>
-      <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.html</url>
       <distribution>repo</distribution>
     </license>
   </licenses>
@@ -117,7 +117,7 @@
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <maven.version>3.9.9</maven.version>
-    <exec-maven-plugin.version>3.2.0</exec-maven-plugin.version>
+    <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7.1</asm.version>
     <slf4j.version>2.0.16</slf4j.version>
@@ -174,7 +174,7 @@
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
-    <versions-maven-plugin.version>2.16.2</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -226,8 +226,8 @@
     <sbt-jupiter-interface.version>0.13.3</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
-    ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
-    and ./python/packaging/connect/setup.py too.
+    ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
+    ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.2.0</arrow.version>
     <ammonite.version>3.0.1</ammonite.version>
@@ -2591,7 +2591,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.4.1</version>
+          <version>3.5.0</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2645,14 +2645,14 @@
             <dependency>
               <groupId>org.codehaus.mojo</groupId>
               <artifactId>extra-enforcer-rules</artifactId>
-              <version>1.8.0</version>
+              <version>1.9.0</version>
             </dependency>
           </dependencies>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.5.0</version>
+          <version>3.6.0</version>
           <executions>
             <execution>
               <id>module-timestamp-property</id>
@@ -2762,6 +2762,7 @@
               <jvmArg>-Xmx4g</jvmArg>
               <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
+              <jvmArg>--enable-native-access=ALL-UNNAMED</jvmArg>
             </jvmArgs>
             <javacArgs>
               <javacArg>--release</javacArg>
@@ -2788,7 +2789,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.2.5</version>
+          <version>3.5.2</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2924,7 +2925,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>
-          <version>3.3.2</version>
+          <version>3.4.0</version>
           <configuration>
             <filesets>
               <fileset>
@@ -2951,7 +2952,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.6.3</version>
+          <version>3.11.2</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -3007,7 +3008,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.5.2</version>
+          <version>3.6.0</version>
           <dependencies>
             <dependency>
               <groupId>org.ow2.asm</groupId>
@@ -3037,7 +3038,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.6.1</version>
+          <version>3.8.1</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -3178,7 +3179,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.3.1</version>
+        <version>3.6.0</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -3296,7 +3297,7 @@
       <plugin>
         <groupId>org.cyclonedx</groupId>
         <artifactId>cyclonedx-maven-plugin</artifactId>
-        <version>2.8.0</version>
+        <version>2.9.1</version>
         <executions>
           <execution>
             <phase>package</phase>

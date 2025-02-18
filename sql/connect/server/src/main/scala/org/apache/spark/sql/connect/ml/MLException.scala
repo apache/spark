@@ -30,3 +30,9 @@ private[spark] case class MLAttributeNotAllowedException(className: String, attr
       errorClass = "CONNECT_ML.ATTRIBUTE_NOT_ALLOWED",
       messageParameters = Map("className" -> className, "attribute" -> attribute),
       cause = null)
+
+private[spark] case class MLCacheInvalidException(objectName: String)
+    extends SparkException(
+      errorClass = "CONNECT_ML.CACHE_INVALID",
+      messageParameters = Map("objectName" -> objectName),
+      cause = null)

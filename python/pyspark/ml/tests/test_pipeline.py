@@ -18,6 +18,7 @@
 import tempfile
 import unittest
 
+from pyspark.sql import Row
 from pyspark.ml.pipeline import Pipeline, PipelineModel
 from pyspark.ml.feature import (
     VectorAssembler,
@@ -26,6 +27,7 @@ from pyspark.ml.feature import (
     MinMaxScaler,
     MinMaxScalerModel,
 )
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
 from pyspark.ml.clustering import KMeans, KMeansModel
 from pyspark.testing.mlutils import MockDataset, MockEstimator, MockTransformer
@@ -171,6 +173,24 @@ class PipelineTestsMixin:
             model2 = PipelineModel.load(d)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.stages), str(model2.stages))
+
+    def test_model_gc(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
+                Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
+                Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0])),
+            ]
+        )
+
+        def fit_transform(df):
+            lr = LogisticRegression(maxIter=1, regParam=0.01, weightCol="weight")
+            model = lr.fit(df)
+            return model.transform(df)
+
+        output = fit_transform(df)
+        self.assertEqual(output.count(), 3)
 
 
 class PipelineTests(PipelineTestsMixin, ReusedSQLTestCase):

@@ -617,7 +617,8 @@ class LocalLDAModel private[ml] (
     sparkSession: SparkSession)
   extends LDAModel(uid, vocabSize, sparkSession) {
 
-  private[ml] def this() = this(Identifiable.randomUID("lda"), -1, null, null)
+  // For ml connect only
+  private[ml] def this() = this("", -1, null, null)
 
   oldLocalModel.setSeed(getSeed)
 
@@ -715,7 +716,8 @@ class DistributedLDAModel private[ml] (
     private var oldLocalModelOption: Option[OldLocalLDAModel])
   extends LDAModel(uid, vocabSize, sparkSession) {
 
-  private[ml] def this() = this(Identifiable.randomUID("lda"), -1, null, null, None)
+  // For ml connect only
+  private[ml] def this() = this("", -1, null, null, None)
 
   override private[clustering] def oldLocalModel: OldLocalLDAModel = {
     if (oldLocalModelOption.isEmpty) {
