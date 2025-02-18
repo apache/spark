@@ -742,6 +742,39 @@ class RocksDB(
   }
 
   /**
+   * Function to keep track of metrics updates around the number of keys in the store.
+   * @param keyWithPrefix - key with prefix
+   * @param cfName - column family name
+   * @param isPutOrMerge - flag to indicate if the operation is put or merge
+   */
+  private def handleMetricsUpdate(
+      keyWithPrefix: Array[Byte],
+      cfName: String,
+      isPutOrMerge: Boolean): Unit = {
+    val updateCount = if (isPutOrMerge) 1L else -1L
+    if (useColumnFamilies) {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, keyWithPrefix)
+        if (oldValue == null) {
+          val cfInfo = getColumnFamilyInfo(cfName)
+          if (cfInfo.isInternal) {
+            numInternalKeysOnWritingVersion += updateCount
+          } else {
+            numKeysOnWritingVersion += updateCount
+          }
+        }
+      }
+    } else {
+      if (conf.trackTotalNumberOfRows) {
+        val oldValue = db.get(readOptions, keyWithPrefix)
+        if (oldValue == null) {
+          numKeysOnWritingVersion += updateCount
+        }
+      }
+    }
+  }
+
+  /**
    * Put the given value for the given key.
    * @note This update is not committed to disk until commit() is called.
    */
@@ -755,27 +788,7 @@ class RocksDB(
       key
     }
 
-    if (useColumnFamilies) {
-      if (conf.trackTotalNumberOfRows) {
-        val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue == null) {
-          val cfInfo = getColumnFamilyInfo(cfName)
-          if (cfInfo.isInternal) {
-            numInternalKeysOnWritingVersion += 1
-          } else {
-            numKeysOnWritingVersion += 1
-          }
-        }
-      }
-    } else {
-      if (conf.trackTotalNumberOfRows) {
-        val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue == null) {
-          numKeysOnWritingVersion += 1
-        }
-      }
-    }
-
+    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
     db.put(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.put(keyWithPrefix, value))
   }
@@ -801,27 +814,7 @@ class RocksDB(
       key
     }
 
-    if (useColumnFamilies) {
-      if (conf.trackTotalNumberOfRows) {
-        val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue == null) {
-          val cfInfo = getColumnFamilyInfo(cfName)
-          if (cfInfo.isInternal) {
-            numInternalKeysOnWritingVersion += 1
-          } else {
-            numKeysOnWritingVersion += 1
-          }
-        }
-      }
-    } else {
-      if (conf.trackTotalNumberOfRows) {
-        val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue == null) {
-          numKeysOnWritingVersion += 1
-        }
-      }
-    }
-
+    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
     db.merge(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.merge(keyWithPrefix, value))
   }
@@ -837,27 +830,7 @@ class RocksDB(
       key
     }
 
-    if (useColumnFamilies) {
-      if (conf.trackTotalNumberOfRows) {
-        val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue != null) {
-          val cfInfo = getColumnFamilyInfo(cfName)
-          if (cfInfo.isInternal) {
-            numInternalKeysOnWritingVersion -= 1
-          } else {
-            numKeysOnWritingVersion -= 1
-          }
-        }
-      }
-    } else {
-      if (conf.trackTotalNumberOfRows) {
-        val value = db.get(readOptions, keyWithPrefix)
-        if (value != null) {
-          numKeysOnWritingVersion -= 1
-        }
-      }
-    }
-
+    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = false)
     db.delete(writeOptions, keyWithPrefix)
     changelogWriter.foreach(_.delete(keyWithPrefix))
   }
