@@ -20117,12 +20117,12 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     --------
     Example 1: Extract a json object from json string
 
-    >>> import pyspark.sql.functions as sf
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
-    >>> extracted1 = sf.get_json_object(df.jstring, '$.f1').alias("c0")
-    >>> extracted2 = get_json_object(df.jstring, '$.f2').alias("c1")
-    >>> df.select(df.key, extracted1, extracted2).show()
+    >>> df.select(df.key,
+    ...     get_json_object(df.jstring, '$.f1').alias("c0"),
+    ...     get_json_object(df.jstring, '$.f2').alias("c1")
+    ... ).show()
     +---+-------+------+
     |key|     c0|    c1|
     +---+-------+------+
@@ -20132,14 +20132,15 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
 
     Example 2: Extract a json object from json array
 
-    >>> import pyspark.sql.functions as sf
-    >>> jarray1 = '''[{"f1": "value1"},{"f1": "value2"}]'''
-    >>> jarray2 = '''[{"f1": "value12"},{"f2": "value13"}]'''
-    >>> data = [("1", jarray1), ("2", jarray2)]
+    >>> data = [
+    ... ("1", '''[{"f1": "value1"},{"f1": "value2"}]'''),
+    ... ("2", '''[{"f1": "value12"},{"f2": "value13"}]''')
+    ... ]
     >>> df = spark.createDataFrame(data, ("key", "jarray"))
-    >>> extracted1 = get_json_object(df.jarray, '$[0].f1').alias("c0")
-    >>> extracted2 = get_json_object(df.jarray, '$[1].f2').alias("c1")
-    >>> df.select(df.key, extracted1, extracted2).show()
+    >>> df.select(df.key,
+    ...     get_json_object(df.jarray, '$[0].f1').alias("c0"),
+    ...     get_json_object(df.jarray, '$[1].f2').alias("c1")
+    ... ).show()
     +---+-------+-------+
     |key|     c0|     c1|
     +---+-------+-------+
@@ -20147,9 +20148,10 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     |  2|value12|value13|
     +---+-------+-------+
 
-    >>> extracted3 = get_json_object(df.jarray, '$[*].f1').alias("c0")
-    >>> extracted4 = get_json_object(df.jarray, '$[*].f2').alias("c1")
-    >>> df.select(df.key, extracted3, extracted4).show()
+    >>> df.select(df.key,
+    ...     get_json_object(df.jarray, '$[*].f1').alias("c0"),
+    ...     get_json_object(df.jarray, '$[*].f2').alias("c1")
+    ... ).show()
     +---+-------------------+---------+
     |key|                 c0|       c1|
     +---+-------------------+---------+
