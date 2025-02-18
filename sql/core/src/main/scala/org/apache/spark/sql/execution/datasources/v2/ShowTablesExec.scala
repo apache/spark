@@ -22,9 +22,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for showing tables.
@@ -40,17 +41,17 @@ case class ShowTablesExec(
     val tables = catalog.listTables(namespace.toArray)
     tables.map { table =>
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table))
+        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table, catalog))
       }
     }
 
     rows.toSeq
   }
 
-  private def isTempView(ident: Identifier): Boolean = {
-    catalog match {
-      case s: V2SessionCatalog => s.isTempView(ident)
-      case _ => false
-    }
+  private def isTempView(ident: Identifier, catalog: TableCatalog): Boolean = {
+    if (CatalogV2Util.isSessionCatalog(catalog)) {
+      session.sessionState.catalog
+        .isTempView((ident.namespace() :+ ident.name()).toImmutableArraySeq)
+    } else false
   }
 }
