@@ -3409,7 +3409,7 @@ object SparkContext extends Logging {
     }
   }
 
-  private def supplement(
+  private def supplementJavaOpts(
       conf: SparkConf, key: OptionalConfigEntry[String], javaOpts: String): Unit = {
     val v = conf.get(key) match {
       case Some(opts) => s"$javaOpts $opts"
@@ -3423,20 +3423,20 @@ object SparkContext extends Logging {
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    supplement(conf, DRIVER_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
-    supplement(conf, EXECUTOR_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
+    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
+    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
   }
 
   private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
     val opts = s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
-    supplement(conf, DRIVER_JAVA_OPTIONS, opts)
-    supplement(conf, EXECUTOR_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }
 
   private def supplementBlasOptions(conf: SparkConf): Unit = {
     val opts = s"-Dspark.ml.allowNativeBlas=${Utils.allowNativeBlas}"
-    supplement(conf, DRIVER_JAVA_OPTIONS, opts)
-    supplement(conf, EXECUTOR_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }
 }
 
