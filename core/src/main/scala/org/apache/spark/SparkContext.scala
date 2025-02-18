@@ -3423,8 +3423,9 @@ object SparkContext extends Logging {
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
-    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, JavaModuleOptions.defaultModuleOptions())
+    val opts = JavaModuleOptions.defaultModuleOptions()
+    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }
 
   private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
