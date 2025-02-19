@@ -159,8 +159,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
     val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
     verify(buffer, times(0)).release()
-    val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
-    var in = wrappedInputStream.invokePrivate(delegateAccess())
+    var in = wrappedInputStream.delegate
     in match {
       case stream: CheckedInputStream =>
         val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")

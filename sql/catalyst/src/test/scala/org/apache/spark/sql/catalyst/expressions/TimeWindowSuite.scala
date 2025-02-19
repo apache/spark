@@ -96,35 +96,33 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
     }
   }
 
-  private val parseExpression = PrivateMethod[Long](Symbol("parseExpression"))
-
   test("parse sql expression for duration in microseconds - string") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal("5 seconds")))
+    val dur = TimeWindow.parseExpression(Literal("5 seconds"))
     assert(dur.isInstanceOf[Long])
     assert(dur === 5000000)
   }
 
   test("parse sql expression for duration in microseconds - integer") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal(100)))
+    val dur = TimeWindow.parseExpression(Literal(100))
     assert(dur.isInstanceOf[Long])
     assert(dur === 100)
   }
 
   test("parse sql expression for duration in microseconds - long") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2L << 52, LongType)))
+    val dur = TimeWindow.parseExpression(Literal.create(2L << 52, LongType))
     assert(dur.isInstanceOf[Long])
     assert(dur === (2L << 52))
   }
 
   test("parse sql expression for duration in microseconds - invalid interval") {
     intercept[AnalysisException] {
-      TimeWindow.invokePrivate(parseExpression(Literal("2 apples")))
+      TimeWindow.parseExpression(Literal("2 apples"))
     }
   }
 
   test("parse sql expression for duration in microseconds - invalid expression") {
     intercept[AnalysisException] {
-      TimeWindow.invokePrivate(parseExpression(Rand(123)))
+      TimeWindow.parseExpression(Rand(123))
     }
   }
 
