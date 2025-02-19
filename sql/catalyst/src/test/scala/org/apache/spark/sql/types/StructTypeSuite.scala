@@ -22,10 +22,12 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, ResolveDefaultColumnsUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
@@ -797,5 +799,36 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
     assert(
       mapper.readTree(mapWithNestedArray.json) == mapper.readTree(expectedJson))
+  }
+
+  test("SPARK-51208: ColumnDefinition.toV1Column should preserve EXISTS_DEFAULT resolution") {
+
+    def validateConvertedDefaults(
+        colName: String,
+        dataType: DataType,
+        defaultSQL: String,
+        expectedExists: String): Unit = {
+      val existsDefault = ResolveDefaultColumns.analyze(colName, dataType, defaultSQL, "")
+      val col =
+        ColumnDefinition(colName, dataType, true, None,
+          Some(DefaultValueExpression(existsDefault, defaultSQL)))
+
+      val structField = col.toV1Column
+      assert(
+        structField.metadata.getString(
+          ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY) ==
+          defaultSQL)
+      val existsSQL = structField.metadata.getString(
+          ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      assert(existsSQL == expectedExists)
+      assert(Literal.fromSQL(existsSQL).resolved)
+    }
+
+    validateConvertedDefaults("c1", StringType, "current_catalog()", "'spark_catalog'")
+    validateConvertedDefaults("c2", VariantType, "parse_json('1')", "PARSE_JSON('1')")
+    validateConvertedDefaults("c3", VariantType, "parse_json('{\"k\": \"v\"}')",
+      "PARSE_JSON('{\"k\":\"v\"}')")
+    validateConvertedDefaults("c4", VariantType, "parse_json(null)", "CAST(NULL AS VARIANT)")
+    validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
   }
 }

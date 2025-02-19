@@ -41,7 +41,13 @@ private class AttributeHelper(
     val sessionHolder: SessionHolder,
     val objRef: String,
     val methods: Array[Method]) {
-  protected lazy val instance = sessionHolder.mlCache.get(objRef)
+  protected lazy val instance = {
+    val obj = sessionHolder.mlCache.get(objRef)
+    if (obj == null) {
+      throw MLCacheInvalidException(s"object $objRef")
+    }
+    obj
+  }
   // Get the attribute by reflection
   def getAttribute: Any = {
     assert(methods.length >= 1)
@@ -114,7 +120,7 @@ private[connect] object MLHandler extends Logging {
       case proto.MlCommand.CommandCase.FIT =>
         val fitCmd = mlCommand.getFit
         val estimatorProto = fitCmd.getEstimator
-        assert(estimatorProto.getType == proto.MlOperator.OperatorType.ESTIMATOR)
+        assert(estimatorProto.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
 
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
         val estimator =
@@ -181,6 +187,9 @@ private[connect] object MLHandler extends Logging {
           case proto.MlCommand.Write.TypeCase.OBJ_REF => // save a model
             val objId = mlCommand.getWrite.getObjRef.getId
             val model = mlCache.get(objId).asInstanceOf[Model[_]]
+            if (model == null) {
+              throw MLCacheInvalidException(s"model $objId")
+            }
             val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
             MLUtils.setInstanceParams(copiedModel, mlCommand.getWrite.getParams)
 
@@ -197,21 +206,21 @@ private[connect] object MLHandler extends Logging {
             val params = Some(writer.getParams)
 
             operatorType match {
-              case proto.MlOperator.OperatorType.ESTIMATOR =>
+              case proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR =>
                 val estimator = MLUtils.getEstimator(sessionHolder, writer.getOperator, params)
                 estimator match {
                   case writable: MLWritable => MLUtils.write(writable, mlCommand.getWrite)
                   case other => throw MlUnsupportedException(s"Estimator $other is not writable")
                 }
 
-              case proto.MlOperator.OperatorType.EVALUATOR =>
+              case proto.MlOperator.OperatorType.OPERATOR_TYPE_EVALUATOR =>
                 val evaluator = MLUtils.getEvaluator(sessionHolder, writer.getOperator, params)
                 evaluator match {
                   case writable: MLWritable => MLUtils.write(writable, mlCommand.getWrite)
                   case other => throw MlUnsupportedException(s"Evaluator $other is not writable")
                 }
 
-              case proto.MlOperator.OperatorType.TRANSFORMER =>
+              case proto.MlOperator.OperatorType.OPERATOR_TYPE_TRANSFORMER =>
                 val transformer =
                   MLUtils.getTransformer(sessionHolder, writer.getOperator, params)
                 transformer match {
@@ -232,7 +241,7 @@ private[connect] object MLHandler extends Logging {
         val name = operator.getName
         val path = mlCommand.getRead.getPath
 
-        if (operator.getType == proto.MlOperator.OperatorType.MODEL) {
+        if (operator.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_MODEL) {
           val model = MLUtils.loadTransformer(sessionHolder, name, path)
           val id = mlCache.register(model)
           return proto.MlCommandResult
@@ -244,18 +253,21 @@ private[connect] object MLHandler extends Logging {
                 .setUid(model.uid)
                 .setParams(Serializer.serializeParams(model)))
             .build()
-
         }
 
-        val mlOperator = if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
-          MLUtils.loadEstimator(sessionHolder, name, path).asInstanceOf[Params]
-        } else if (operator.getType == proto.MlOperator.OperatorType.EVALUATOR) {
-          MLUtils.loadEvaluator(sessionHolder, name, path).asInstanceOf[Params]
-        } else if (operator.getType == proto.MlOperator.OperatorType.TRANSFORMER) {
-          MLUtils.loadTransformer(sessionHolder, name, path).asInstanceOf[Params]
-        } else {
-          throw MlUnsupportedException(s"${operator.getType} read not supported")
-        }
+        val mlOperator =
+          if (operator.getType ==
+              proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR) {
+            MLUtils.loadEstimator(sessionHolder, name, path).asInstanceOf[Params]
+          } else if (operator.getType ==
+              proto.MlOperator.OperatorType.OPERATOR_TYPE_EVALUATOR) {
+            MLUtils.loadEvaluator(sessionHolder, name, path).asInstanceOf[Params]
+          } else if (operator.getType ==
+              proto.MlOperator.OperatorType.OPERATOR_TYPE_TRANSFORMER) {
+            MLUtils.loadTransformer(sessionHolder, name, path).asInstanceOf[Params]
+          } else {
+            throw MlUnsupportedException(s"${operator.getType} read not supported")
+          }
 
         proto.MlCommandResult
           .newBuilder()
@@ -270,7 +282,7 @@ private[connect] object MLHandler extends Logging {
       case proto.MlCommand.CommandCase.EVALUATE =>
         val evalCmd = mlCommand.getEvaluate
         val evalProto = evalCmd.getEvaluator
-        assert(evalProto.getType == proto.MlOperator.OperatorType.EVALUATOR)
+        assert(evalProto.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_EVALUATOR)
 
         val dataset = MLUtils.parseRelationProto(evalCmd.getDataset, sessionHolder)
         val evaluator =
@@ -295,7 +307,7 @@ private[connect] object MLHandler extends Logging {
             val transformProto = relation.getTransform
             assert(
               transformProto.getTransformer.getType ==
-                proto.MlOperator.OperatorType.TRANSFORMER)
+                proto.MlOperator.OperatorType.OPERATOR_TYPE_TRANSFORMER)
             val dataset = MLUtils.parseRelationProto(transformProto.getInput, sessionHolder)
             val transformer = MLUtils.getTransformer(sessionHolder, transformProto)
             transformer.transform(dataset)
@@ -323,5 +335,4 @@ private[connect] object MLHandler extends Logging {
       case other => throw MlUnsupportedException(s"$other not supported")
     }
   }
-
 }

@@ -175,7 +175,9 @@ object TransformWithStateOperatorProperties extends Logging {
  */
 trait TransformWithStateMetadataUtils extends Logging {
 
-  def getColFamilySchemas(setNullableFields: Boolean): Map[String, StateStoreColFamilySchema]
+  // This method will return the column family schemas, and check whether the fields in the
+  // schema are nullable. If Avro encoding is used, we want to enforce nullability
+  def getColFamilySchemas(shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema]
 
   def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo]
 

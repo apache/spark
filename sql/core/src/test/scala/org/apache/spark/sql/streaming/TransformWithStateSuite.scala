@@ -118,7 +118,7 @@ class DefaultValueEvolvedProcessor
       timerValues: TimerValues): Iterator[(String, EvolvedState)] = {
 
     rows.map { value =>
-      val current = state.getOption().getOrElse {
+      val current = Option(state.get()).getOrElse {
         // If no state exists, create new state
         EvolvedState(
           value.hashCode, value, 100L, true, 99.9
@@ -213,7 +213,8 @@ class RunningCountStatefulProcessorInitialOrder
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(TwoLongs(0L, -1L)).value1 + 1
+    val count = Option(_countState.get()).getOrElse(TwoLongs(0L, -1L)).value1 + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -239,7 +240,8 @@ class RenameEvolvedProcessor extends StatefulProcessor[String, String, (String, 
       key: String,
       rows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(RenamedFields(0L, -1L)).value4 + 1
+    val count = Option(_countState.get()).getOrElse(RenamedFields(0L, -1L)).value4 + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -265,7 +267,7 @@ class RunningCountStatefulProcessorReorderedFields
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(ReorderedLongs(-1L, 0L)).value1 + 1
+    val count = Option(_countState.get()).getOrElse(ReorderedLongs(-1L, 0L)).value1 + 1
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -292,7 +294,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+    val count = Option(_countState.get()).getOrElse(0L) + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -323,7 +326,8 @@ class RunningCountStatefulProcessorTwoLongs
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(TwoLongs(0L, 0L)).value1 + 1
+    val count = Option(_countState.get()).getOrElse(TwoLongs(0L, 0L)).value1 + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -349,8 +353,9 @@ class RunningCountStatefulProcessorNestedLongs
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(
+    val count = Option(_countState.get()).getOrElse(
       NestedLongs(0L, TwoLongs(0L, 0L))).value + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -379,7 +384,8 @@ class RunningCountStatefulProcessorWithTTL
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+    val count = Option(_countState.get()).getOrElse(0L) + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -427,7 +433,8 @@ class RunningCountStatefulProcessorInt
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0) + 1
+    val count = Option(_countState.get()).getOrElse(0) + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -445,7 +452,8 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
+
     if (currCount == 0 && (key == "a" || key == "c")) {
       getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
         + 5000)
@@ -508,7 +516,8 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
+
     val count = currCount + inputRows.size
     processUnexpiredRows(key, currCount, count, timerValues)
     Iterator((key, count.toString))
@@ -530,7 +539,7 @@ class RunningCountStatefulProcessorWithMultipleTimers
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
     val count = currCount + inputRows.size
     _countState.update(count)
     if (getHandle.listTimers().isEmpty) {
@@ -546,7 +555,7 @@ class RunningCountStatefulProcessorWithMultipleTimers
       key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
     if (getHandle.listTimers().size == 1) {
       _countState.clear()
     }
@@ -574,7 +583,7 @@ class MaxEventTimeStatefulProcessor
     val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
     _maxEventTimeState.update(maxEventTimeSec)
 
-    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    val registeredTimerMs: Long = Option(_timerState.get()).getOrElse(0L)
     if (registeredTimerMs < timeoutTimestampMs) {
       getHandle.deleteTimer(registeredTimerMs)
       getHandle.registerTimer(timeoutTimestampMs)
@@ -588,7 +597,7 @@ class MaxEventTimeStatefulProcessor
       timerValues: TimerValues): Iterator[(String, Int)] = {
     val valuesSeq = inputRows.toSeq
     val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-      _maxEventTimeState.getOption().getOrElse(0L))
+      Option(_maxEventTimeState.get()).getOrElse(0L))
     processUnexpiredRows(maxEventTimeSec)
     Iterator((key, maxEventTimeSec.toInt))
   }
@@ -621,8 +630,8 @@ class RunningCountMostRecentStatefulProcessor
       key: String,
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
-    val mostRecent = _mostRecent.getOption().getOrElse("")
+    val count = Option(_countState.get()).getOrElse(0L) + 1
+    val mostRecent = Option(_mostRecent.get()).getOrElse("")
 
     var output = List[(String, String, String)]()
     inputRows.foreach { row =>
@@ -651,7 +660,7 @@ class MostRecentStatefulProcessorWithDeletion
       key: String,
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val mostRecent = _mostRecent.getOption().getOrElse("")
+    val mostRecent = Option(_mostRecent.get()).getOrElse("")
 
     var output = List[(String, String)]()
     inputRows.foreach { row =>
@@ -1397,7 +1406,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
             val schema3 = StateStoreColFamilySchema(
               "$rowCounter_listState", 0,
               keySchema, 0,
-              new StructType().add("count", LongType, nullable = shouldBeNullable),
+              new StructType().add("count", LongType, nullable = true),
               Some(NoPrefixKeyStateEncoderSpec(keySchema)),
               None
             )

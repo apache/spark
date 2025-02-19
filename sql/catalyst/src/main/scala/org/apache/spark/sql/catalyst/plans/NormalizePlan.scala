@@ -40,7 +40,10 @@ object NormalizePlan extends PredicateHelper {
    */
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
-    withNormalizedRuntimeReplaceable transformAllExpressions {
+    withNormalizedRuntimeReplaceable.transformAllExpressions {
+      case subqueryExpression: SubqueryExpression =>
+        val normalizedPlan = normalizeExpressions(subqueryExpression.plan)
+        subqueryExpression.withNewPlan(normalizedPlan)
       case commonExpressionDef: CommonExpressionDef =>
         commonExpressionDef.copy(id = new CommonExpressionId(id = 0))
       case commonExpressionRef: CommonExpressionRef =>
@@ -73,7 +76,7 @@ object NormalizePlan extends PredicateHelper {
    * we must normalize them to check if two different queries are identical.
    */
   def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
-    plan transformAllExpressions {
+    plan.transformAllExpressions {
       case s: ScalarSubquery =>
         s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case s: LateralSubquery =>
@@ -117,7 +120,7 @@ object NormalizePlan extends PredicateHelper {
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     val cteIdNormalizer = new CteIdNormalizer
-    plan transform {
+    plan.transformUpWithSubqueries {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
           splitConjunctivePredicates(condition)

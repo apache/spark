@@ -797,7 +797,7 @@ _is_remote_only = None
 def is_remote_only() -> bool:
     """
     Returns if the current running environment is only for Spark Connect.
-    If users install pyspark-connect alone, RDD API does not exist.
+    If users install pyspark-client alone, RDD API does not exist.
 
     .. versionadded:: 4.0.0
 
@@ -833,6 +833,34 @@ def is_remote_only() -> bool:
     except ImportError:
         _is_remote_only = True
         return _is_remote_only
+
+
+# This function will be called in `pyspark` script as well,
+# so this should be available without a running Spark.
+# If move or rename, please update the script too.
+def spark_connect_mode() -> str:
+    """
+    Return the env var SPARK_CONNECT_MODE; otherwise "1" if `pyspark_connect` is available.
+    """
+    connect_by_default = os.environ.get("SPARK_CONNECT_MODE")
+    if connect_by_default is not None:
+        return connect_by_default
+    try:
+        import pyspark_connect  # noqa: F401
+
+        return "1"
+    except ImportError:
+        return "0"
+
+
+def default_api_mode() -> str:
+    """
+    Return the default API mode.
+    """
+    if spark_connect_mode() == "1":
+        return "connect"
+    else:
+        return "classic"
 
 
 if __name__ == "__main__":

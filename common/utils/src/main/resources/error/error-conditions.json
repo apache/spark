@@ -772,7 +772,12 @@
     "subClass" : {
       "ATTRIBUTE_NOT_ALLOWED" : {
         "message" : [
-          "<attribute> is not allowed to be accessed."
+          "<attribute> in <className> is not allowed to be accessed."
+        ]
+      },
+      "CACHE_INVALID" : {
+        "message" : [
+          "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {
@@ -2315,16 +2320,6 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
-      "DEFAULT_COLLATION" : {
-        "message" : [
-          "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
-        ]
-      },
-      "DEFAULT_COLLATION_NOT_SUPPORTED" : {
-        "message" : [
-          "Setting default session collation other than UTF8_BINARY is currently not supported."
-        ]
-      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -4629,6 +4624,12 @@
     ],
     "sqlState" : "42K0I"
   },
+  "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script. Make sure the sql_string is a well-formed SQL statement and does not contain BEGIN and END."
+    ],
+    "sqlState" : "07501"
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -5072,6 +5073,14 @@
     ],
     "sqlState" : "42601"
   },
+  "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE" : {
+    "message" : [
+      "If Avro encoding is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable",
+      "when using the TransformWithState operator.",
+      "Please make the schema nullable. Current schema: <schema>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
@@ -5392,11 +5401,6 @@
       "RDD" : {
         "message" : [
           "Resilient Distributed Datasets (RDDs)."
-        ]
-      },
-      "REGISTER_UDAF" : {
-        "message" : [
-          "Registering User Defined Aggregate Functions (UDAFs)."
         ]
       },
       "SESSION_BASE_RELATION_TO_DATAFRAME" : {
@@ -6631,7 +6635,7 @@
   },
   "_LEGACY_ERROR_TEMP_1047" : {
     "message" : [
-      "<hintName> Hint parameter should include columns, but <invalidParams> found."
+      "<hintName> Hint parameters should include an optional integral partitionNum and/or columns, but <invalidParams> can not be recognized as either partitionNum or columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1048" : {

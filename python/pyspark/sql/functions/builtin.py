@@ -17656,6 +17656,37 @@ def collation(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collation", col)
 
 
+@_try_remote_functions
+def quote(col: "ColumnOrName") -> Column:
+    r"""Returns `str` enclosed by single quotes and each instance of
+    single quote in it is preceded by a backslash.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to be quoted.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        quoted string
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(["Don't"], "STRING")
+    >>> df.select("*", sf.quote("value")).show()
+    +-----+------------+
+    |value|quote(value)|
+    +-----+------------+
+    |Don't|    'Don\'t'|
+    +-----+------------+
+    """
+    return _invoke_function_over_columns("quote", col)
+
+
 # ---------------------- Collection functions ------------------------------
 
 
@@ -20115,11 +20146,49 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
 
     Examples
     --------
+    Example 1: Extract a json object from json string
+
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
-    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \\
-    ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
-    [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
+    >>> df.select(df.key,
+    ...     get_json_object(df.jstring, '$.f1').alias("c0"),
+    ...     get_json_object(df.jstring, '$.f2').alias("c1")
+    ... ).show()
+    +---+-------+------+
+    |key|     c0|    c1|
+    +---+-------+------+
+    |  1| value1|value2|
+    |  2|value12|  NULL|
+    +---+-------+------+
+
+    Example 2: Extract a json object from json array
+
+    >>> data = [
+    ... ("1", '''[{"f1": "value1"},{"f1": "value2"}]'''),
+    ... ("2", '''[{"f1": "value12"},{"f2": "value13"}]''')
+    ... ]
+    >>> df = spark.createDataFrame(data, ("key", "jarray"))
+    >>> df.select(df.key,
+    ...     get_json_object(df.jarray, '$[0].f1').alias("c0"),
+    ...     get_json_object(df.jarray, '$[1].f2').alias("c1")
+    ... ).show()
+    +---+-------+-------+
+    |key|     c0|     c1|
+    +---+-------+-------+
+    |  1| value1|   NULL|
+    |  2|value12|value13|
+    +---+-------+-------+
+
+    >>> df.select(df.key,
+    ...     get_json_object(df.jarray, '$[*].f1').alias("c0"),
+    ...     get_json_object(df.jarray, '$[*].f2').alias("c1")
+    ... ).show()
+    +---+-------------------+---------+
+    |key|                 c0|       c1|
+    +---+-------------------+---------+
+    |  1|["value1","value2"]|     NULL|
+    |  2|          "value12"|"value13"|
+    +---+-------------------+---------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -20427,7 +20496,7 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
@@ -20438,9 +20507,10 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20451,21 +20521,29 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist or the cast fails.
@@ -20476,9 +20554,10 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20489,19 +20568,26 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(try_variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    if isinstance(path, str):
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions
@@ -26333,7 +26419,8 @@ def udf(
         Defaults to :class:`StringType`.
     useArrow : bool, optional
         whether to use Arrow to optimize the (de)serialization. When it is None, the
-        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
+        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect,
+        which is "true" by default.
 
     Examples
     --------

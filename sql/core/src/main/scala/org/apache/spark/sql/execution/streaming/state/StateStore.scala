@@ -419,13 +419,11 @@ sealed trait KeyStateEncoderSpec {
    *
    * @param dataEncoder The encoder to handle the actual data encoding/decoding
    * @param useColumnFamilies Whether to use RocksDB column families
-   * @param virtualColFamilyId Optional column family ID when column families are used
    * @return A RocksDBKeyStateEncoder configured for this spec
    */
   def toEncoder(
       dataEncoder: RocksDBDataEncoder,
-      useColumnFamilies: Boolean,
-      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder
 }
 
 object KeyStateEncoderSpec {
@@ -452,10 +450,9 @@ case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEn
 
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
-      useColumnFamilies: Boolean,
-      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
     new NoPrefixKeyStateEncoder(
-      dataEncoder, keySchema, useColumnFamilies, columnFamilyInfo)
+      dataEncoder, keySchema, useColumnFamilies)
   }
 }
 
@@ -468,12 +465,10 @@ case class PrefixKeyScanStateEncoderSpec(
 
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
-      useColumnFamilies: Boolean,
-      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
     new PrefixKeyScanStateEncoder(
-      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies, columnFamilyInfo)
+      dataEncoder, keySchema, numColsPrefixKey, useColumnFamilies)
   }
-
 
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
@@ -491,10 +486,9 @@ case class RangeKeyScanStateEncoderSpec(
 
   override def toEncoder(
       dataEncoder: RocksDBDataEncoder,
-      useColumnFamilies: Boolean,
-      columnFamilyInfo: Option[ColumnFamilyInfo]): RocksDBKeyStateEncoder = {
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
     new RangeKeyScanStateEncoder(
-      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies, columnFamilyInfo)
+      dataEncoder, keySchema, orderingOrdinals, useColumnFamilies)
   }
 
   override def jsonValue: JValue = {

@@ -123,8 +123,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
-              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumExternalColumnFamilies",
-              "rocksdbNumInternalColumnFamilies"))
+              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumInternalColFamiliesKeys",
+              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies"))
           }
         } finally {
           query.stop()

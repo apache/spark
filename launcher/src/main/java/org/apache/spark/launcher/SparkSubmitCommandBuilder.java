@@ -151,9 +151,23 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       OptionParser parser = new OptionParser(true);
       parser.parse(submitArgs);
       this.isSpecialCommand = parser.isSpecialCommand;
+      if (conf.containsKey("spark.remote") || "connect".equalsIgnoreCase(getApiMode(conf))) {
+        isRemote = true;
+      }
     } else {
       this.isExample = isExample;
       this.isSpecialCommand = true;
+    }
+  }
+
+  private static String getApiMode(Map<String, String> conf) {
+    boolean connectByDefault = "1".equals(System.getenv("SPARK_CONNECT_MODE"));
+    String defaultApiMode = connectByDefault ? "connect" : "classic";
+    String apiMode = conf.get(SparkLauncher.SPARK_API_MODE);
+    if ("classic".equalsIgnoreCase(apiMode) || "connect".equalsIgnoreCase(apiMode)) {
+      return apiMode;
+    } else {
+      return defaultApiMode;
     }
   }
 
@@ -381,13 +395,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         remoteStr != null && (masterStr != null || deployStr != null)) {
       throw new IllegalStateException("Remote cannot be specified with master and/or deploy mode.");
     }
+
+    String apiMode = getApiMode(conf);
+    env.put("SPARK_API_MODE", apiMode);
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
-    } else if (conf.getOrDefault(
-        SparkLauncher.SPARK_API_MODE, "classic").toLowerCase(Locale.ROOT).equals("connect") &&
-        masterStr != null) {
-      env.put("SPARK_REMOTE", masterStr);
+    } else if ("connect".equalsIgnoreCase(apiMode)) {
+      env.put("MASTER", firstNonEmpty(masterStr, "local"));
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
@@ -528,11 +543,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          if (setConf[0].equals("spark.remote") ||
-              (setConf[0].equals(SparkLauncher.SPARK_API_MODE) &&
-                setConf[1].toLowerCase(Locale.ROOT).equals("connect"))) {
-            isRemote = true;
-          }
           conf.put(setConf[0], setConf[1]);
         }
         case CLASS -> {

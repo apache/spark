@@ -78,6 +78,13 @@ def try_remote_intermediate_result(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def invoke_helper_attr(method: str, *args: Any) -> Any:
+    from pyspark.ml.wrapper import JavaWrapper
+
+    helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+    return helper._call_java(method, *args)
+
+
 def invoke_helper_relation(method: str, *args: Any) -> "ConnectDataFrame":
     from pyspark.ml.wrapper import JavaWrapper
 
@@ -136,7 +143,7 @@ def try_remote_fit(f: FuncT) -> FuncT:
             input = dataset._plan.plan(client)
             assert isinstance(self._java_obj, str)
             estimator = pb2.MlOperator(
-                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.ESTIMATOR
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
             )
             command = pb2.Command()
             command.ml_command.fit.CopyFrom(
@@ -249,6 +256,21 @@ def try_remote_call(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+# delete the object from the ml cache eagerly
+def del_remote_cache(ref_id: str) -> None:
+    if ref_id is not None and "." not in ref_id:
+        try:
+            from pyspark.sql.connect.session import SparkSession
+
+            session = SparkSession.getActiveSession()
+            if session is not None:
+                session.client.remove_ml_cache(ref_id)
+                return
+        except Exception:
+            # SparkSession's down.
+            return
+
+
 def try_remote_del(f: FuncT) -> FuncT:
     """Mark the function/property to delete a model on the server side."""
 
@@ -261,18 +283,19 @@ def try_remote_del(f: FuncT) -> FuncT:
 
         if in_remote:
             # Delete the model if possible
-            model_id = self._java_obj
-            if model_id is not None and "." not in model_id:
-                try:
-                    from pyspark.sql.connect.session import SparkSession
-
-                    session = SparkSession.getActiveSession()
-                    if session is not None:
-                        session.client.remove_ml_cache(model_id)
-                        return
-                except Exception:
-                    # SparkSession's down.
-                    return
+            # model_id = self._java_obj
+            # del_remote_cache(model_id)
+            #
+            # Above codes delete the model from the ml cache eagerly, and may cause
+            # NPE in the server side in the case of 'fit_transform':
+            #
+            # def fit_transform(df):
+            #     model = estimator.fit(df)
+            #     return model.transform(df)
+            #
+            # output = fit_transform(df)
+            # output.show()
+            return
         else:
             return f(self)
 
@@ -361,7 +384,7 @@ def try_remote_evaluate(f: FuncT) -> FuncT:
             input = dataset._plan.plan(client)
             assert isinstance(self._java_obj, str)
             evaluator = pb2.MlOperator(
-                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.EVALUATOR
+                name=self._java_obj, uid=self.uid, type=pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
             )
             command = pb2.Command()
             command.ml_command.evaluate.CopyFrom(
