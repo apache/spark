@@ -109,8 +109,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     bits
   }
 
-  private val _treePatternBits = new BestEffortLazyVal[BitSet](() => getDefaultTreePatternBits)
-
   /**
    * For child classes to validate `nodePatterns`.
    */
@@ -120,6 +118,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
    * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
    */
+  private val _treePatternBits = new BestEffortLazyVal[BitSet](() => getDefaultTreePatternBits)
   override def treePatternBits: BitSet = _treePatternBits()
 
   /**
