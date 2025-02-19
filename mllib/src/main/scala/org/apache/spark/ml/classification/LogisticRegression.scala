@@ -45,7 +45,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.VersionUtils
+import org.apache.spark.util._
 
 /**
  * Params for logistic regression.
@@ -1041,6 +1041,21 @@ class LogisticRegression @Since("1.2.0") (
     (solution, arrayBuilder.result())
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    // TODO: get numClasses and numFeatures together from dataset
+    val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    var size = SizeEstimator.estimate((this.params, this.uid))
+    if (checkMultinomial(numClasses)) {
+      size += Matrices.getDenseSize(numFeatures, numClasses)
+      size += Vectors.getDenseSize(numClasses)
+    } else {
+      size += Matrices.getDenseSize(numFeatures, 1)
+      size += Vectors.getDenseSize(1)
+    }
+    size
+  }
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
@@ -1246,6 +1261,11 @@ class LogisticRegressionModel private[spark] (
       val m = margin(features)
       Vectors.dense(-m, m)
     }
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid,
+      this.coefficientMatrix, this.interceptVector))
   }
 
   @Since("1.4.0")

@@ -36,3 +36,17 @@ private[spark] case class MLCacheInvalidException(objectName: String)
       errorClass = "CONNECT_ML.CACHE_INVALID",
       messageParameters = Map("objectName" -> objectName),
       cause = null)
+
+private[spark] case class MlItemSizeExceededException(
+    operation: String,
+    name: String,
+    estimatedSize: Long,
+    maximumSize: Long)
+    extends SparkException(
+      errorClass = "CONNECT_ML.MODEL_ITEM_EXCEEDED",
+      messageParameters = Map(
+        "operation" -> operation,
+        "name" -> name,
+        "estimatedSize" -> estimatedSize.toString,
+        "maximumSize" -> maximumSize.toString),
+      cause = null)

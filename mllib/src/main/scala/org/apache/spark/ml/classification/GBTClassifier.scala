@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.regression.DecisionTreeRegressionModel
+import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -208,6 +209,17 @@ class GBTClassifier @Since("1.4.0") (
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    var maxCategoricalValue = Option.empty[Int]
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    if (categoricalFeatures.nonEmpty) {
+      maxCategoricalValue = Some(categoricalFeatures.values.max)
+    }
+    SizeEstimator.estimate((this.params, this.uid)) +
+      DecisionTreeRegressor.estimateModelSize($(maxDepth), maxCategoricalValue) * $(maxIter) +
+      8 * $(maxIter) + 32
+  }
+
   @Since("1.4.1")
   override def copy(extra: ParamMap): GBTClassifier = defaultCopy(extra)
 }
@@ -335,6 +347,11 @@ class GBTClassificationModel private[ml](
         throw new RuntimeException("Unexpected error in GBTClassificationModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid,
+      this._trees, this._treeWeights, this.numFeatures, this.numClasses))
   }
 
   @Since("1.4.0")

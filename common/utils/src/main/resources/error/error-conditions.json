@@ -780,6 +780,11 @@
           "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
         ]
       },
+      "MODEL_ITEM_EXCEEDED" : {
+        "message" : [
+          "Cannot <operation> object <name>, since its estimated size <estimatedSize> exceeds the limitation <maximumSize>."
+        ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"

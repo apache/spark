@@ -1113,6 +1113,7 @@ pyspark_ml_connect = Module(
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
+        "pyspark.ml.tests.connect.test_connect_cache",
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
         "pyspark.ml.tests.connect.test_parity_torch_data_loader",

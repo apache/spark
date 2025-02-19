@@ -34,7 +34,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.VersionUtils
+import org.apache.spark.util.{SizeEstimator, VersionUtils}
 
 /**
  * Params for Naive Bayes Classifiers.
@@ -344,6 +344,23 @@ class NaiveBayes @Since("1.5.0") (
     new NaiveBayesModel(uid, pi.compressed, theta.compressed, sigma.compressed)
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    var size = SizeEstimator.estimate((this.params, this.uid))
+    $(modelType) match {
+      case Multinomial | Bernoulli | Complement =>
+        size += Vectors.getDenseSize(numClasses) // pi
+        size += Matrices.getDenseSize(numClasses, numFeatures) // theta
+        size += Matrices.getDenseSize(0, 0) // sigma
+      case Gaussian =>
+        size += Vectors.getDenseSize(numClasses) // pi
+        size += Matrices.getDenseSize(numClasses, numFeatures) // theta
+        size += Matrices.getDenseSize(numClasses, numFeatures) // sigma
+    }
+    size
+  }
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayes = defaultCopy(extra)
 }
@@ -549,6 +566,11 @@ class NaiveBayesModel private[ml] (
         throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid,
+      this.pi, this.theta, this.sigma))
   }
 
   @Since("1.5.0")

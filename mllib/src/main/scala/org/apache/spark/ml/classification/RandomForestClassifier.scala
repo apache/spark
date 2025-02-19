@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SizeEstimator
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -204,6 +205,18 @@ class RandomForestClassifier @Since("1.4.0") (
     model.setSummary(Some(rfSummary))
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    var maxCategoricalValue = Option.empty[Int]
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    if (categoricalFeatures.nonEmpty) {
+      maxCategoricalValue = Some(categoricalFeatures.values.max)
+    }
+    val numClasses = getNumClasses(dataset)
+    SizeEstimator.estimate((this.params, this.uid)) +
+      DecisionTreeClassifier.estimateModelSize(
+        numClasses, $(maxDepth), maxCategoricalValue) * $(numTrees) + 20
+  }
+
   @Since("1.4.1")
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
 }
@@ -356,6 +369,11 @@ class RandomForestClassificationModel private[ml] (
         throw new RuntimeException("Unexpected error in RandomForestClassificationModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid,
+      this._trees, this.numFeatures, this.numClasses))
   }
 
   @Since("1.4.0")

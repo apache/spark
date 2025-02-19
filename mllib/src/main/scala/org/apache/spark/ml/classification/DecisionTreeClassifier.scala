@@ -37,6 +37,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
@@ -155,6 +156,18 @@ class DecisionTreeClassifier @Since("1.4.0") (
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopy(extra)
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    var maxCategoricalValue = Option.empty[Int]
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    if (categoricalFeatures.nonEmpty) {
+      maxCategoricalValue = Some(categoricalFeatures.values.max)
+    }
+    val numClasses = getNumClasses(dataset)
+
+    SizeEstimator.estimate((this.params, this.uid)) +
+      DecisionTreeClassifier.estimateModelSize(numClasses, $(maxDepth), maxCategoricalValue)
+  }
 }
 
 @Since("1.4.0")
@@ -165,6 +178,31 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
 
   @Since("2.0.0")
   override def load(path: String): DecisionTreeClassifier = super.load(path)
+
+  private[ml] def estimateModelSize(
+      numClasses: Int,
+      maxDepth: Int,
+      maxCategoricalValue: Option[Int]): Long = {
+    // ContinuousSplit (override val featureIndex: Int, val threshold: Double)
+    var maxSplitSize = 12L
+    if (maxCategoricalValue.nonEmpty) {
+      // class CategoricalSplit (override val featureIndex: Int,
+      //                         _leftCategories: Array[Double],
+      //                         val numCategories: Int)
+      maxSplitSize = 8L * maxCategoricalValue.get + 20L
+    }
+
+    // GiniCalculator(stats: Array[Double], var rawCount: Long)
+    // EntropyCalculator(stats: Array[Double], var rawCount: Long)
+    val impurityStatsSize = 8 * numClasses + 20
+
+    // depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes
+    val numLeave = 1 << maxDepth
+    val numInternalNodes = numLeave - 1
+
+    (16 + impurityStatsSize) * numLeave +
+      (56 + maxSplitSize + impurityStatsSize) * numInternalNodes + 8
+  }
 }
 
 /**
@@ -235,6 +273,11 @@ class DecisionTreeClassificationModel private[ml] (
         throw new RuntimeException("Unexpected error in DecisionTreeClassificationModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid,
+      this.rootNode, this.numFeatures, this.numClasses))
   }
 
   @Since("1.4.0")

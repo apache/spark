@@ -22,22 +22,51 @@ import java.util.concurrent.{ConcurrentMap, TimeUnit}
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.Model
 import org.apache.spark.ml.util.ConnectHelper
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.util.SizeEstimator
 
 /**
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
-private[connect] class MLCache extends Logging {
+private[connect] class MLCache(session: SparkSession) extends Logging {
   private val helper = new ConnectHelper()
   private val helperID = "______ML_CONNECT_HELPER______"
+  private def conf = session.sessionState.conf
 
-  private val cachedModel: ConcurrentMap[String, Object] = CacheBuilder
-    .newBuilder()
-    .softValues()
-    .maximumSize(MLCache.MAX_CACHED_ITEMS)
-    .expireAfterAccess(MLCache.CACHE_TIMEOUT_MINUTE, TimeUnit.MINUTES)
-    .build[String, Object]()
-    .asMap()
+  private val cachedModel: ConcurrentMap[String, (Object, Long)] = {
+    val builder = CacheBuilder.newBuilder().softValues()
+
+    val cacheWeight = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE)
+    val cacheSize = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_SIZE)
+    val timeOut = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_TIMEOUT)
+
+    if (cacheWeight > 0) {
+      builder
+        .maximumWeight(cacheWeight)
+        .weigher((key: String, value: (Object, Long)) => {
+          // The weigher needs an integer
+          Math.min(value._2, Int.MaxValue).toInt
+        })
+      if (cacheSize > 0) {
+        // Guava cache doesn't support enabling maximumSize and maximumWeight together
+        logWarning(
+          s"Both ${Connect.CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE.key} and " +
+            s"${Connect.CONNECT_SESSION_ML_CACHE_SIZE.key} are set, " +
+            s"${Connect.CONNECT_SESSION_ML_CACHE_SIZE.key} will be ignored.")
+      }
+    } else if (cacheSize > 0) {
+      builder.maximumSize(cacheSize)
+    }
+
+    if (timeOut > 0) {
+      builder.expireAfterAccess(timeOut, TimeUnit.SECONDS)
+    }
+
+    builder.build[String, (Object, Long)]().asMap()
+  }
 
   /**
    * Cache an object into a map of MLCache, and return its key
@@ -47,8 +76,18 @@ private[connect] class MLCache extends Logging {
    *   the key
    */
   def register(obj: Object): String = {
+    val (estimatedSize, name) = obj match {
+      case m: Model[_] => (m.estimatedSize, m.uid)
+      case o => (SizeEstimator.estimate(o), Option(o).map(_.getClass.getName).getOrElse("NULL"))
+    }
+
+    val maxSize = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_SINGLE_ITEM_SIZE)
+    if (maxSize > 0 && estimatedSize > maxSize) {
+      throw MlItemSizeExceededException("cache", name, estimatedSize, maxSize)
+    }
+
     val objectId = UUID.randomUUID().toString
-    cachedModel.put(objectId, obj)
+    cachedModel.put(objectId, (obj, estimatedSize))
     objectId
   }
 
@@ -63,7 +102,12 @@ private[connect] class MLCache extends Logging {
     if (refId == helperID) {
       helper
     } else {
-      cachedModel.get(refId)
+      val tuple = cachedModel.get(refId)
+      if (tuple != null) {
+        tuple._1
+      } else {
+        null
+      }
     }
   }
 

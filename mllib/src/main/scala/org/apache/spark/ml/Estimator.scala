@@ -81,4 +81,13 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   }
 
   override def copy(extra: ParamMap): Estimator[M]
+
+  /**
+   * For ml connect only.
+   * Estimate the size of the model to be fitted in bytes, based on the parameters and
+   * the dataset, e.g., using $(k) and numFeatures to estimate a k-means model size.
+   * Only driver side memory usage is counted, distributed objects (like DataFrame,
+   * RDD, Graph, Training Summary) are ignored.
+   */
+  private[spark] def estimateModelSize(dataset: Dataset[_]): Long = throw new NotImplementedError
 }

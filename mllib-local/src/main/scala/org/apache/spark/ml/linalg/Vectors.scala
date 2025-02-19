@@ -192,7 +192,7 @@ sealed trait Vector extends Serializable {
 
   private[ml] def compressedWithNNZ(nnz: Int): Vector = {
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
-    if (1.5 * (nnz + 1.0) < size) {
+    if (Vectors.getSparseSize(nnz) < Vectors.getDenseSize(size)) {
       toSparseWithSize(nnz)
     } else {
       toDense
@@ -230,6 +230,8 @@ sealed trait Vector extends Serializable {
    */
   private[spark] def nonZeroIterator: Iterator[(Int, Double)] =
     activeIterator.filter(_._2 != 0)
+
+  private[ml] def getSizeInBytes: Long
 }
 
 /**
@@ -504,6 +506,10 @@ object Vectors {
 
   /** Max number of nonzero entries used in computing hash code. */
   private[linalg] val MAX_HASH_NNZ = 128
+
+  private[ml] def getSparseSize(nnz: Long): Long = nnz * 12 + 20
+
+  private[ml] def getDenseSize(size: Long): Long = size * 8 + 8
 }
 
 /**
@@ -596,6 +602,8 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
 
   private[spark] override def activeIterator: Iterator[(Int, Double)] =
     iterator
+
+  override private[ml] def getSizeInBytes: Long = Vectors.getDenseSize(values.length)
 }
 
 @Since("2.0.0")
@@ -845,6 +853,8 @@ class SparseVector @Since("2.0.0") (
     val localValues = values
     Iterator.tabulate(numActives)(j => (localIndices(j), localValues(j)))
   }
+
+  override private[ml] def getSizeInBytes: Long = Vectors.getSparseSize(values.length)
 }
 
 @Since("2.0.0")

@@ -313,4 +313,49 @@ object Connect {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
+  val CONNECT_SESSION_ML_CACHE_TIMEOUT =
+    buildConf("spark.connect.session.mlCache.timeout")
+      .doc(
+        "How long to wait in seconds for ML cache to automatically remove a cached entry " +
+          "after the entry's creation or its last access. " +
+          "If set to a non-positive value, the limitation will be disabled.")
+      .version("4.1.0")
+      .internal()
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(3600)
+
+  val CONNECT_SESSION_ML_CACHE_SINGLE_ITEM_SIZE =
+    buildConf("spark.connect.session.mlCache.singleItemSize")
+      .doc("Sets the maximum size of single cached ML object in Spark Connect Session. " +
+        "If set to a value less or equal than zero, this config will take no effect.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(-1)
+      // TODO: Enable this config when all builtin algorithms support model size estimation
+      // .createWithDefaultString("16MB")
+
+  val CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE =
+    buildConf("spark.connect.session.mlCache.totalItemSize")
+      .doc(
+        "Sets the maximum size of all cached ML objects in Spark Connect Session. " +
+          "If the total size exceeds this limitation, some cached items are likely be evicted. " +
+          "If set to a value less or equal than zero, this config will take no effect.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("256MB")
+
+  val CONNECT_SESSION_ML_CACHE_SIZE =
+    buildConf("spark.connect.session.mlCache.maxSize")
+      .doc(
+        "Sets the maximum number of cached ML objects in Spark Connect Session. " +
+          "If set to a value less or equal than zero, or " +
+          s"'${CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE.key}' is enabled, " +
+          "this config will take no effect.")
+      .version("4.1.0")
+      .internal()
+      .intConf
+      .createWithDefault(256)
 }
