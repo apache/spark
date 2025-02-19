@@ -628,7 +628,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       if (isChangelogCheckpointingEnabled) {
         assert(changelogVersionsPresent(remoteDir) === (1 to 50))
         if (colFamiliesEnabled) {
-          assert(snapshotVersionsPresent(remoteDir) === Seq(1) ++ Range.inclusive(5, 10, 5))
+          assert(snapshotVersionsPresent(remoteDir) === Seq(1) ++ Range.inclusive(5, 50, 5))
         } else {
           assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
         }
@@ -1157,7 +1157,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         Seq.empty
       }
 
-      result ++ (31 to 60)
+      (31 to 60).foreach { i =>
+        result = result :+ i
+      }
       assert(snapshotVersionsPresent(remoteDir) === result)
       for (version <- 1 to 60) {
         db.load(version, versionToUniqueId.get(version), readOnly = true)
