@@ -21,18 +21,21 @@ import io.grpc.{Metadata, ServerCall, ServerCallHandler, ServerInterceptor, Stat
 
 class PreSharedKeyAuthenticationInterceptor(token: String) extends ServerInterceptor {
 
+  val authorizationMetadataKey = Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
+
+  val expectedValue = s"Bearer $token"
+
   override def interceptCall[ReqT, RespT](
       call: ServerCall[ReqT, RespT],
       metadata: Metadata,
       next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
-    val authHeaderValue =
-      metadata.get(Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER))
+    val authHeaderValue = metadata.get(authorizationMetadataKey)
 
     if (authHeaderValue == null) {
       val status = Status.UNAUTHENTICATED.withDescription("No authentication token provided")
       call.close(status, new Metadata())
       new ServerCall.Listener[ReqT]() {}
-    } else if (authHeaderValue != s"Bearer $token") {
+    } else if (authHeaderValue != expectedValue) {
       val status = Status.UNAUTHENTICATED.withDescription("Invalid authentication token")
       call.close(status, new Metadata())
       new ServerCall.Listener[ReqT]() {}
