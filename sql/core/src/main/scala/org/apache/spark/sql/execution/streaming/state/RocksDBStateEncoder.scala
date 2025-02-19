@@ -919,10 +919,10 @@ class AvroStateEncoder(
    * deserializes to an UnsafeRow using the Avro deserializer
    */
   def decodeFromAvroToUnsafeRow(
-     valueBytes: Array[Byte],
-     avroDeserializer: AvroDeserializer,
-     valueAvroType: Schema,
-     valueProj: UnsafeProjection): UnsafeRow = {
+    valueBytes: Array[Byte],
+    avroDeserializer: AvroDeserializer,
+    valueAvroType: Schema,
+    valueProj: UnsafeProjection): UnsafeRow = {
     if (valueBytes != null) {
       val reader = new GenericDatumReader[Any](valueAvroType)
       val decoder = DecoderFactory.get().binaryDecoder(
@@ -951,11 +951,11 @@ class AvroStateEncoder(
    * @return The deserialized UnsafeRow, or null if input bytes are null
    */
   def decodeFromAvroToUnsafeRow(
-     valueBytes: Array[Byte],
-     avroDeserializer: AvroDeserializer,
-     writerSchema: Schema,
-     readerSchema: Schema,
-     valueProj: UnsafeProjection): UnsafeRow = {
+      valueBytes: Array[Byte],
+      avroDeserializer: AvroDeserializer,
+      writerSchema: Schema,
+      readerSchema: Schema,
+      valueProj: UnsafeProjection): UnsafeRow = {
     if (valueBytes != null) {
       val reader = new GenericDatumReader[Any](writerSchema, readerSchema)
       val decoder = DecoderFactory.get().binaryDecoder(
