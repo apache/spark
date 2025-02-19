@@ -54,6 +54,7 @@ message Expression {
     TypedAggregateExpression typed_aggregate_expression = 20;
     LazyExpression lazy_expression = 21;
     SubqueryExpression subquery_expression = 22;
+    GetColumnByOrdinal get_column_by_ordinal = 23;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -507,4 +508,12 @@ message SubqueryExpression {
     // (Optional) Whether this is a single partition.
     optional bool with_single_partition = 3;
   }
+}
+
+message GetColumnByOrdinal {
+  // (Required) The ordinal (index) of the column to get.
+  int32 ordinal = 1;
+
+  // (Optional) The id of corresponding connect plan.
+  optional int64 plan_id = 2;
 }

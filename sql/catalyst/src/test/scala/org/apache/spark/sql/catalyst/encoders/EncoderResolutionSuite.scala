@@ -176,28 +176,6 @@ class EncoderResolutionSuite extends PlanTest {
     assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
-  test("the real number of fields doesn't match encoder schema: tuple encoder") {
-    val encoder = ExpressionEncoder[(String, Long)]()
-
-    {
-      val attrs = Seq($"a".string, $"b".long, $"c".int)
-      checkError(
-        exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<a: STRING, b: BIGINT, c: INT>\"",
-          "ordinal" -> "2"))
-    }
-
-    {
-      val attrs = Seq($"a".string)
-      checkError(
-        exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<a: STRING>\"",
-          "ordinal" -> "2"))
-    }
-  }
-
   test("the real number of fields doesn't match encoder schema: nested tuple encoder") {
     val encoder = ExpressionEncoder[(String, (Long, String))]()
 

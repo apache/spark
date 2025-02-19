@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{col, lit, struct}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.MetadataBuilder
 
 /**
@@ -39,9 +39,12 @@ private[connect] object ColumnUtils {
   /**
    * Select a column of a Dataset by its position.
    */
-  def getByOrdinal(ordinal: Int): Column = {
+  def getByOrdinal(ordinal: Int, planId: Option[Long] = None): Column = {
     require(ordinal >= 0)
-    Column.internalFn("get_column_by_ordinal", lit(ordinal))
+    ConnectConversions.column { builder =>
+      val b = builder.getGetColumnByOrdinalBuilder.setOrdinal(ordinal)
+      planId.foreach(b.setPlanId)
+    }
   }
 
   implicit class RichColumn(val column: Column) extends AnyVal {
@@ -80,14 +83,5 @@ private[connect] object ColumnUtils {
     def canFlattenResult: Boolean = udf.outputEncoder.exists(e => agnosticEncoderFor(e).isStruct)
 
     def flattenResult(result: String): Column = col(result + ".*")
-  }
-
-  implicit class RichDataset[E](val ds: Dataset[E]) extends AnyVal {
-    def all: Column = ds.col("*")
-    def wrapAll: Column = struct(all)
-    def col(ordinal: Int): Column = getByOrdinal(ordinal)
-    def apply(ordinal: Int): Column = col(ordinal)
-    def firstCol: Column = getByOrdinal(0)
-    def appendColumn(column: Column): DataFrame = ds.select(all, column)
   }
 }

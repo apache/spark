@@ -120,7 +120,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       val resolved = e match {
         case f: LambdaFunction if !f.bound => f
 
-        case GetColumnByOrdinal(ordinal, _) =>
+        case get: GetColumnByOrdinal =>
+          val ordinal = get.ordinal
           val attrCandidates = getAttrCandidates()
           if (ordinal < 0 || ordinal >= attrCandidates.length) {
             throw QueryCompilationErrors.ordinalOutOfBoundsError(

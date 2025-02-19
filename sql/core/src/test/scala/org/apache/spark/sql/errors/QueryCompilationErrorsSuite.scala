@@ -618,30 +618,6 @@ class QueryCompilationErrorsSuite
       parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
   }
 
-  test("UNSUPPORTED_DESERIALIZER: " +
-    "the real number of fields doesn't match encoder schema") {
-    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-
-    val e1 = intercept[AnalysisException] {
-      ds.as[(String, Int, Long)]
-    }
-    checkError(
-      exception = e1,
-      condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-      parameters = Map(
-        "schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
-        "ordinal" -> "3"))
-
-    val e2 = intercept[AnalysisException] {
-      ds.as[Tuple1[String]]
-    }
-    checkError(
-      exception = e2,
-      condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
-        "ordinal" -> "1"))
-  }
-
   test("UNSUPPORTED_GENERATOR: " +
     "generators are not supported when it's nested in expressions") {
     val e = intercept[AnalysisException](

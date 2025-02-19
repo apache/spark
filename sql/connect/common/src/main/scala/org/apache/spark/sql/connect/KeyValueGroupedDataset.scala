@@ -488,10 +488,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
     // Create a Dataset in the form of (value, key) where value is the transformed value. We mark
     // the key column as a metadata column to avoid naming conflicts if the mapValueFunction
     // returns a column with the same name.
-    val valueMapUdf = SparkUserDefinedFunction(
-      valueMapFunc.get,
-      Seq(agnosticEncoderFor(ivEncoder)),
-      agnosticEncoderFor(vEncoder))
+    val valueMapUdf = SparkUserDefinedFunction(valueMapFunc.get, ivEncoder :: Nil, vEncoder)
+      .withName("mapValues")
     val valueKeyDs =
       ds.select(valueMapUdf(ds).as("value"), grouping.aggregateColumn(ds).asMetadataColumn("key"))
     val keyRef = valueKeyDs.metadataColumn("key")

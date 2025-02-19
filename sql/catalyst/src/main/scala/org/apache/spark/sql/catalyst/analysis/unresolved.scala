@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, Metadata, NullType, StructType}
+import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1022,11 +1022,22 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
     copy(deserializer = newChild)
 }
 
-case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
+case class GetColumnByOrdinal(
+    ordinal: Int)(
+    val explicitDataType: Option[DataType]) extends LeafExpression
   with Unevaluable with NonSQLExpression {
-  def this(ordinal: Expression) = this(IntegerLiteral.unapply(ordinal).get, NullType)
+  override def dataType: DataType = explicitDataType.getOrElse(
+    throw new UnresolvedException("dataType"))
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+}
+
+object GetColumnByOrdinal {
+  def apply(ordinal: Int, dataType: DataType): GetColumnByOrdinal =
+    GetColumnByOrdinal(ordinal)(Option(dataType))
+
+  def unapply(e: GetColumnByOrdinal): Option[(Int, DataType)] =
+    e.explicitDataType.map(dt => e.ordinal -> dt)
 }
 
 case class GetViewColumnByNameAndOrdinal(

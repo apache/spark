@@ -5493,11 +5493,6 @@
         "message" : [
           "need a(n) <desiredType> field but got <dataType>."
         ]
-      },
-      "FIELD_NUMBER_MISMATCH" : {
-        "message" : [
-          "try to map <schema> to Tuple<ordinal>, but failed as the number of fields does not line up."
-        ]
       }
     },
     "sqlState" : "0A000"

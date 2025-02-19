@@ -1558,4 +1558,38 @@ class Dataset[T] private[sql] (
 
   override def queryExecution: QueryExecution =
     throw ConnectClientUnsupportedErrors.queryExecution()
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Internal Helpers.
+  ////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Select all columns of this dataset.
+   */
+  private[connect] def all: Column = col("*")
+
+  /**
+   * Select all columns of this dataset and wrap them in a struct.
+   */
+  private[connect] def wrapAll: Column = struct(all)
+
+  /**
+   * Select a column of this dataset by its ordinal (position).
+   */
+  private[connect] def col(ordinal: Int): Column = ColumnUtils.getByOrdinal(ordinal, getPlanId)
+
+  /**
+   * Select a column of this dataset by its ordinal (position).
+   */
+  private[connect] def apply(ordinal: Int): Column = col(ordinal)
+
+  /**
+   * Select the first column of this dataset.
+   */
+  private[connect] def firstCol: Column = col(0)
+
+  /**
+   * Append a column to the end of this dataset.
+   */
+  private[connect] def appendColumn(column: Column): DataFrame = select(all, column)
 }
