@@ -100,7 +100,7 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.2.3' scipy coverage matplotlib lxml
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.2.3 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 twine==3.4.1"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.2.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 twine==3.4.1"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.29.1 googleapis-common-protos==1.65.0 graphviz==0.20.3"
 
@@ -109,7 +109,7 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.10 -m pip install --ignore-installed 'six==1.16.0'  # Avoid `python3-six` installation
 RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.10 -m pip install 'torch<2.6.0' torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.10 -m pip install deepspeed torcheval && \
     python3.10 -m pip cache purge
 
@@ -121,7 +121,7 @@ RUN apt-get update && apt-get install -y \
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 RUN python3.9 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.9 -m pip install 'torch<2.6.0' torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.9 -m pip install torcheval && \
     python3.9 -m pip cache purge
 
