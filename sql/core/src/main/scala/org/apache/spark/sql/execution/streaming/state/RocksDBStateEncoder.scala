@@ -899,7 +899,7 @@ class AvroStateEncoder(
     val encodedBytes = new Array[Byte](bytesToEncode.length + STATE_ENCODING_NUM_VERSION_BYTES)
     Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
     Platform.copyMemory(
-      bytesToEncode, 0,
+      bytesToEncode, Platform.BYTE_ARRAY_OFFSET,
       encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
       bytesToEncode.length)
     encodedBytes
@@ -909,7 +909,7 @@ class AvroStateEncoder(
     val resultBytes = new Array[Byte](bytes.length - STATE_ENCODING_NUM_VERSION_BYTES)
     Platform.copyMemory(
       bytes, STATE_ENCODING_NUM_VERSION_BYTES + Platform.BYTE_ARRAY_OFFSET,
-      resultBytes, 0, resultBytes.length
+      resultBytes, Platform.BYTE_ARRAY_OFFSET, resultBytes.length
     )
     resultBytes
   }
