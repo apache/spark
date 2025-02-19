@@ -650,7 +650,7 @@ case class StateRowEncoderCacheKey(
 object RocksDBStateStoreProvider {
   // Version as a single byte that specifies the encoding of the row data in RocksDB
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
-  val STATE_ENCODING_VERSION: Byte = 1
+  val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
 
   val SCHEMA_ID_PREFIX_BYTES = 2
