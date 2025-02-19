@@ -14,20 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
-
-# Arrow is required for arrow conversion.
-require_minimum_pyarrow_version()
-
 
 import array
 import datetime
 import decimal
-from typing import Any, Callable, List, Sequence
+from typing import TYPE_CHECKING, Any, Callable, List, Sequence
 
-import pyarrow as pa
 from pyspark.errors import PySparkValueError
 from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
+from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -46,6 +41,9 @@ from pyspark.sql.types import (
     VariantVal,
     _create_row,
 )
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 
 class LocalDataToArrowConversion:
@@ -317,6 +315,9 @@ class LocalDataToArrowConversion:
 
     @staticmethod
     def convert(data: Sequence[Any], schema: StructType, use_large_var_types: bool) -> "pa.Table":
+        require_minimum_pyarrow_version()
+        import pyarrow as pa
+
         assert isinstance(data, list) and len(data) > 0
 
         assert schema is not None and isinstance(schema, StructType)
@@ -526,6 +527,9 @@ class ArrowTableToRowsConversion:
 
     @staticmethod
     def convert(table: "pa.Table", schema: StructType) -> List[Row]:
+        require_minimum_pyarrow_version()
+        import pyarrow as pa
+
         assert isinstance(table, pa.Table)
 
         assert schema is not None and isinstance(schema, StructType)
