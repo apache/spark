@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
+import org.apache.spark.sql.catalyst.parser.SqlScriptingLabelContext.isForbiddenLabelName
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -285,8 +286,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // If we are in EXECUTE IMMEDIATE lookup only session variables.
       .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
       // If variable name is qualified with session.<varName> treat it as a session variable.
-      .filter(_ =>
-        nameParts.length <= 2 && nameParts.init.map(_.toLowerCase(Locale.ROOT)) != Seq("session"))
+      .filterNot(_ =>
+        nameParts.length > 2 || (nameParts.length == 2 && isForbiddenLabelName(nameParts.head)))
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(
