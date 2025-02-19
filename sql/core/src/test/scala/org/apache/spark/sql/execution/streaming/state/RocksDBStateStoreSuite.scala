@@ -74,9 +74,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(iter.hasNext)
       val kv = iter.next()
 
+      // For Avro encoding, the format is
+      // |--SCHEMA ID (2 bytes)--|--VERSION ID (1 byte)--|--DATA--|
+      val offset = if (conf.stateStoreEncodingFormat == "avro") {
+        SCHEMA_ID_PREFIX_BYTES
+      } else {
+        0
+      }
+
       // Verify the version encoded in first byte of the key and value byte arrays
-      assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-      assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+      assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET + offset) ===
+        STATE_ENCODING_VERSION)
+      assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET + offset) ===
+        STATE_ENCODING_VERSION)
     }
   }
 
