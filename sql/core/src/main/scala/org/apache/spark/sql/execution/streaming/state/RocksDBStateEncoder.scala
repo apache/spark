@@ -892,7 +892,7 @@ class AvroStateEncoder(
       valueAvroType) // Defining Avro writer for this struct type
     writer.write(avroData, encoder) // Avro.GenericDataRecord -> byte array
     encoder.flush()
-    prependVersionByte(out.toByteArray)
+    out.toByteArray
   }
 
   private def prependVersionByte(bytesToEncode: Array[Byte]): Array[Byte] = {
@@ -919,12 +919,11 @@ class AvroStateEncoder(
    * deserializes to an UnsafeRow using the Avro deserializer
    */
   def decodeFromAvroToUnsafeRow(
-     rowBytes: Array[Byte],
+     valueBytes: Array[Byte],
      avroDeserializer: AvroDeserializer,
      valueAvroType: Schema,
      valueProj: UnsafeProjection): UnsafeRow = {
-    if (rowBytes != null) {
-      val valueBytes = removeVersionByte(rowBytes)
+    if (valueBytes != null) {
       val reader = new GenericDatumReader[Any](valueAvroType)
       val decoder = DecoderFactory.get().binaryDecoder(
         valueBytes, 0, valueBytes.length, null)
@@ -944,7 +943,7 @@ class AvroStateEncoder(
    * This method takes a byte array written using Avro encoding, and
    * deserializes to an UnsafeRow using the Avro deserializer
    *
-   * @param rowBytes The raw bytes containing Avro-encoded data
+   * @param valueBytes The raw bytes containing Avro-encoded data
    * @param avroDeserializer Custom deserializer to convert Avro records to InternalRows
    * @param writerSchema The Avro schema used when writing the data
    * @param readerSchema The Avro schema to use for reading (may be different from writer schema)
@@ -952,13 +951,12 @@ class AvroStateEncoder(
    * @return The deserialized UnsafeRow, or null if input bytes are null
    */
   def decodeFromAvroToUnsafeRow(
-     rowBytes: Array[Byte],
+     valueBytes: Array[Byte],
      avroDeserializer: AvroDeserializer,
      writerSchema: Schema,
      readerSchema: Schema,
      valueProj: UnsafeProjection): UnsafeRow = {
-    if (rowBytes != null) {
-      val valueBytes = removeVersionByte(rowBytes)
+    if (valueBytes != null) {
       val reader = new GenericDatumReader[Any](writerSchema, readerSchema)
       val decoder = DecoderFactory.get().binaryDecoder(
         valueBytes, 0, valueBytes.length, null)
@@ -977,7 +975,7 @@ class AvroStateEncoder(
   private val out = new ByteArrayOutputStream
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    keyStateEncoderSpec match {
+    val keyBytes = keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(_) =>
         val avroRow =
           encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
@@ -988,6 +986,7 @@ class AvroStateEncoder(
         encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, prefixKeyAvroType, out)
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeKey")
     }
+    prependVersionByte(keyBytes)
   }
 
   override def encodeRemainingKey(row: UnsafeRow): Array[Byte] = {
@@ -999,8 +998,8 @@ class AvroStateEncoder(
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeRemainingKey")
     }
     // prepend stateSchemaId to the remaining key portion
-    encodeWithStateSchemaId(
-      StateSchemaIdRow(currentKeySchemaId, avroRow))
+    prependVersionByte(encodeWithStateSchemaId(
+      StateSchemaIdRow(currentKeySchemaId, avroRow)))
   }
 
   /**
@@ -1139,16 +1138,18 @@ class AvroStateEncoder(
     val encoder = EncoderFactory.get().binaryEncoder(out, null)
     writer.write(record, encoder)
     encoder.flush()
-    out.toByteArray
+    prependVersionByte(out.toByteArray)
   }
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
     val avroRow = encodeUnsafeRowToAvro(row, avroEncoder.valueSerializer, valueAvroType, out)
     // prepend stateSchemaId to the Avro-encoded value portion
-    encodeWithStateSchemaId(StateSchemaIdRow(currentValSchemaId, avroRow))
+    prependVersionByte(
+      encodeWithStateSchemaId(StateSchemaIdRow(currentValSchemaId, avroRow)))
   }
 
-  override def decodeKey(bytes: Array[Byte]): UnsafeRow = {
+  override def decodeKey(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(_) =>
         val schemaIdRow = decodeStateSchemaIdRow(bytes)
@@ -1162,7 +1163,8 @@ class AvroStateEncoder(
   }
 
 
-  override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = {
+  override def decodeRemainingKey(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
     keyStateEncoderSpec match {
       case PrefixKeyScanStateEncoderSpec(_, _) =>
@@ -1195,7 +1197,8 @@ class AvroStateEncoder(
    * @throws UnsupportedOperationException if a field's data type is not supported for range
    *                                       scan decoding
    */
-  override def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow = {
+  override def decodePrefixKeyForRangeScan(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     val reader = new GenericDatumReader[GenericRecord](rangeScanAvroType)
     val decoder = DecoderFactory.get().binaryDecoder(bytes, 0, bytes.length, null)
     val record = reader.read(null, decoder)
@@ -1278,7 +1281,8 @@ class AvroStateEncoder(
     rowWriter.getRow()
   }
 
-  override def decodeValue(bytes: Array[Byte]): UnsafeRow = {
+  override def decodeValue(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
     val writerSchema = getStateSchemaProvider.getSchemaMetadataValue(
       StateSchemaMetadataKey(
@@ -1673,38 +1677,7 @@ class NoPrefixKeyStateEncoder(
   }
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    if (!useColumnFamilies) {
-      dataEncoder.decodeKey(keyBytes)
-    } else if (keyBytes == null) {
-      null
-    } else {
-      val dataWithVersion = keyBytes
-
-      val version = Platform.getByte(dataWithVersion, Platform.BYTE_ARRAY_OFFSET)
-      // For version 0, we were writing an extra version byte in the key row.
-      // We want to skip over this byte, as it is not necessary, and dealt with in
-      // dataEncoder.decodeKey.
-      // This is fixed for subsequent versions
-      // When Avro encoding was used, we were not writing any version byte, and the
-      // first byte was instead used for schema ID.
-      val rowBytes = if (version == 0 && !dataEncoder.supportsSchemaEvolution) {
-        // Skip version byte to get to actual data
-        val dataLength = dataWithVersion.length - STATE_ENCODING_NUM_VERSION_BYTES
-
-        // Extract data bytes and decode using data encoder
-        val dataBytes = new Array[Byte](dataLength)
-        Platform.copyMemory(
-          dataWithVersion, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
-          dataBytes, Platform.BYTE_ARRAY_OFFSET,
-          dataLength
-        )
-        dataBytes
-      } else {
-        dataWithVersion
-      }
-
-      dataEncoder.decodeKey(rowBytes)
-    }
+    dataEncoder.decodeKey(keyBytes)
   }
 
   override def supportPrefixKeyScan: Boolean = false
