@@ -47,11 +47,9 @@ case class ExecuteImmediateQuery(
  * This rule substitutes execute immediate query node with plan that is passed as string literal
  * or session parameter.
  */
-class SubstituteExecuteImmediate(
-    val catalogManager: CatalogManager,
-    resolveChild: LogicalPlan => LogicalPlan,
-    checkAnalysis: LogicalPlan => Unit)
-  extends Rule[LogicalPlan] with ColumnResolutionHelper {
+class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
+  extends Rule[LogicalPlan]
+    with ColumnResolutionHelper {
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -154,16 +152,9 @@ class SubstituteExecuteImmediate(
           }
         }
 
-        // Fully analyze the generated plan. AnalysisContext.withExecuteImmediateContext makes sure
-        // that SQL scripting local variables will not be accessed from the plan.
-        val finalPlan = AnalysisContext.withExecuteImmediateContext {
-          resolveChild(queryPlan)
-        }
-        checkAnalysis(finalPlan)
-
         if (targetVariables.nonEmpty) {
-          SetVariable(targetVariables, finalPlan)
-        } else { finalPlan }
+          SetVariable(targetVariables, queryPlan)
+        } else { queryPlan }
     }
 
   private def parseStatement(
