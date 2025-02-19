@@ -29,21 +29,26 @@ import org.apache.spark.annotation.Evolving
 trait TimerValues extends Serializable {
 
   /**
-   * Get the current processing time as milliseconds in epoch time.
+   * Function to get the current processing time as milliseconds in epoch time.
+   *
    * @note
    *   This will return a constant value throughout the duration of a streaming query trigger,
    *   even if the trigger is re-executed.
+   *
+   * @return - the current processing time in milliseconds
    */
   def getCurrentProcessingTimeInMs(): Long
 
   /**
-   * Get the current event time watermark as milliseconds in epoch time.
+   * Function to get the current event time watermark as milliseconds in epoch time.
    *
    * @note
    *   This can be called only when watermark is set before calling `transformWithState`.
    * @note
    *   The watermark gets propagated at the end of each query. As a result, this method will
    *   return 0 (1970-01-01T00:00:00) for the first micro-batch.
+   *
+   * @return - the current event time watermark in milliseconds
    */
   def getCurrentWatermarkInMs(): Long
 }

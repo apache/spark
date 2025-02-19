@@ -2418,6 +2418,15 @@ class SparkConnectPlanner(
     }
   }
 
+  /**
+   * Exposed for testing. Processes a command without a response observer.
+   *
+   * Called only from SparkConnectPlannerTestUtils.
+   */
+  private[planner] def processWithoutResponseObserverForTesting(command: proto.Command): Unit = {
+    process(command, new MockObserver())
+  }
+
   def process(
       command: proto.Command,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
