@@ -17,21 +17,21 @@
 
 package org.apache.spark.sql.connect
 
-import java.util.{Collections, List => JList}
-import java.util.concurrent.atomic.AtomicLong
+import java.util.{List => JList}
 
 import scala.annotation.unused
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Expression
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
+import org.apache.spark.sql.connect.ColumnUtils._
 import org.apache.spark.sql.connect.ConnectConversions._
+import org.apache.spark.sql.connect.KeyValueGroupedDatasetImpl.Grouping
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfUtils}
 import org.apache.spark.sql.expressions.{ReduceAggregator, SparkUserDefinedFunction}
 import org.apache.spark.sql.functions.{col, lit, struct}
@@ -389,13 +389,13 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
 private class KeyValueGroupedDatasetImpl[K, V, IV](
     private val sparkSession: SparkSession,
     private val plan: proto.Plan,
-    private val grouping: KeyValueGroupedDatasetImpl.Grouping[K, IV],
+    private val grouping: Grouping[K, IV],
     private val ivEncoder: AgnosticEncoder[IV],
     private val vEncoder: AgnosticEncoder[V],
     private val valueMapFunc: Option[IV => V])
     extends KeyValueGroupedDataset[K, V] {
 
-  private def ds: Dataset[IV] = sparkSession.newDataset(ivEncoder, plan)
+  private lazy val ds: Dataset[IV] = sparkSession.newDataset(ivEncoder, plan)
 
   override def keyAs[L: Encoder]: KeyValueGroupedDataset[L, V] = {
     new KeyValueGroupedDatasetImpl[L, V, IV](
@@ -419,9 +419,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
         .orElse(Option(valueFunc.asInstanceOf[IV => W])))
   }
 
-  override def keys: Dataset[K] = {
-    grouping.keys(ds).dropDuplicates()
-  }
+  override def keys: Dataset[K] = grouping.keys(ds).dropDuplicates()
 
   override def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
       f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
@@ -463,75 +461,51 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
     val (plan, key) = if (valueMapFunc.isDefined) {
       prepareAggWithMapValues()
     } else {
-      (this.plan, grouping.aggregateCol)
+      prepareAggWithoutMapValues()
     }
-    val rEnc = ProductEncoder.tuple(
-      grouping.encoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
-    val agg = sparkSession.newDataset(rEnc) { builder =>
+    val rEnc =
+      ProductEncoder.tuple(grouping.encoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
+    sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
         .setInput(plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-        .addGroupingExpressions(toExpr(key.as("key")))
+        .addGroupingExpressions(toExpr(key.asRegularColumn("key")))
         .addAllAggregateExpressions(columns.map(c => toTypedExpr(c, vEncoder)).asJava)
     }
-    // scalastyle:off
-    println(agg.plan)
-    agg
   }
 
   private def prepareAggWithoutMapValues(): (proto.Plan, Column) = {
-
-
-
+    // Append the grouping key to the end of the Dataset. We mark the key column as a metadata
+    // column to avoid name collisions with the input Dataset. This step is needed because Spark
+    // currently does not support star expansion on Aggregate Grouping Expressions.
+    val dsWithKey = sparkSession
+      .newDataset(ivEncoder, plan)
+      .appendColumn(grouping.aggregateColumn(ds).asMetadataColumn("key"))
+    (dsWithKey.plan, dsWithKey.metadataColumn("key"))
   }
 
   private def prepareAggWithMapValues(): (proto.Plan, Column) = {
-    // Step 1. Create a Dataset in the form of (value, key) where value is the transformed value.
-    // Step 1a. Create the value expression
+    // Create a Dataset in the form of (value, key) where value is the transformed value. We mark
+    // the key column as a metadata column to avoid naming conflicts if the mapValueFunction
+    // returns a column with the same name.
     val valueMapUdf = SparkUserDefinedFunction(
       valueMapFunc.get,
       Seq(agnosticEncoderFor(ivEncoder)),
       agnosticEncoderFor(vEncoder))
-    val valueMapInput = if (ivEncoder.isStruct) {
-      // The UDF is expecting a struct as its input so we create one here.
-      struct(col("*"))
-    } else {
-      // The UDF is expecting a single value. In that case the convention
-      // is to bind to the first column of the input.
-      KeyValueGroupedDatasetImpl.firstCol
-    }
-    val valueExpr = valueMapUdf(valueMapInput)
-    // Step 1b. Create the dataset with a value and key column.
-    val keyName = generateUniqueColumnName("key")
-    val valueKeyDs = sparkSession.newDataset(ivEncoder, plan)
-      .select(valueExpr.as("value"), grouping.aggregateCol.as(keyName))
+    val valueKeyDs =
+      ds.select(valueMapUdf(ds).as("value"), grouping.aggregateColumn(ds).asMetadataColumn("key"))
+    val keyRef = valueKeyDs.metadataColumn("key")
 
-    // It is important that we get the key column from the `valueKeyDs`, instead of the
-    // `valuesKeyDs` we create in the next step. If we resolve against this Dataset we are
-    // guaranteed not to have naming conflicts if the mapValueFunction - for some bizarre reason -
-    // returns a column with the same name.
-    val keyRef = valueKeyDs(keyName)
-
-    // Step 2. Create a Dataset where the values are expanded when the mapValue function returns a
-    // struct. The key is appended after the values. This step is needed to make sure the value
-    // encoder can bind to the dataset without any modifications to the typed columns. The reason
-    // for this is that tuple and value encoders use ordinal based binding instead name base
-    // binding.
-    val valuesKeyDs = if (vEncoder.isStruct) {
-      valueKeyDs.select(col("value.*"), keyRef)
+    // Expand the value column if the mapValue function returns a struct. This is needed to make
+    // sure the value encoder can bind to the dataset without any modifications to the typed
+    // columns. The reason for this is that tuple and value encoders use ordinal based binding
+    // instead name base binding. The key is appended at the end.
+    val valuesKeyDs = if (valueMapUdf.canFlattenResult) {
+      valueKeyDs.select(valueMapUdf.flattenResult("value"), keyRef)
     } else {
       valueKeyDs
     }
     (valuesKeyDs.plan, keyRef)
-  }
-
-  // Attempt to generate a unique column name. The requirement here is to generate a column name
-  // that is extremely unlikely to be used in the result of the value map function. For this
-  // reason we generate a fairly random name that is illegal to use in Scala/Java.
-  private def generateUniqueColumnName(prefix: String): String = {
-    s"#__generated_" + prefix + "_" +
-      sparkSession.sessionId + "_" +
-      KeyValueGroupedDatasetImpl.idGen.incrementAndGet()
   }
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
@@ -590,7 +564,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
       function = nf,
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
-    toExpr(udf.apply(inputEncoders.map(_ => col("*")): _*)).getCommonInlineUserDefinedFunction
+    toExpr(udf.applyToAll()).getCommonInlineUserDefinedFunction
   }
 
   /**
@@ -602,15 +576,13 @@ private class KeyValueGroupedDatasetImpl[K, V, IV](
 }
 
 private object KeyValueGroupedDatasetImpl {
-  private[connect] val idGen: AtomicLong = new AtomicLong(0)
   private[connect] val firstCol = Column.internalFn("get_column_by_ordinal", lit(0))
 
   private def apply[K, V](
-      session: SparkSession,
-      plan: proto.Plan,
+      ds: Dataset[_],
       grouping: Grouping[K, V],
       vEncoder: AgnosticEncoder[V]): KeyValueGroupedDatasetImpl[K, V, V] = {
-    new KeyValueGroupedDatasetImpl(session, plan, grouping, vEncoder, vEncoder, None)
+    new KeyValueGroupedDatasetImpl(ds.sparkSession, ds.plan, grouping, vEncoder, vEncoder, None)
   }
 
   def apply[K, V](
@@ -619,8 +591,9 @@ private object KeyValueGroupedDatasetImpl {
       groupingFunc: V => K): KeyValueGroupedDatasetImpl[K, V, V] = {
     val vEncoder = ds.agnosticEncoder
     val udf = SparkUserDefinedFunction(groupingFunc, vEncoder :: Nil, kEncoder)
-    val grouping = KeyFunctionGrouping(groupingFunc, udf, kEncoder, kEncoder, vEncoder.isStruct)
-    apply(ds.sparkSession, ds.plan, grouping, vEncoder)
+      .withName("groupingFun")
+    val grouping = KeyFunctionGrouping(groupingFunc, udf, kEncoder, kEncoder)
+    apply(ds, grouping, vEncoder)
   }
 
   def apply[K, V](
@@ -628,15 +601,19 @@ private object KeyValueGroupedDatasetImpl {
       kEncoder: AgnosticEncoder[K],
       vEncoder: AgnosticEncoder[V],
       groupingExprs: Seq[Column]): KeyValueGroupedDatasetImpl[K, V, V] = {
-    val udf = SparkUserDefinedFunction(UdfUtils.noOp(), vEncoder :: Nil, kEncoder)
-    val grouping = RelationalGrouping[K, V](groupingExprs, udf, kEncoder)
-    apply(df.sparkSession, df.plan, grouping, vEncoder)
+    // We use a dummy UDF to pass the key encoder to the SparkConnectPlanner. This is not really
+    // needed because the only time we need this encoder is when we already pass a function that
+    // contains the proper encoder.
+    val udf = SparkUserDefinedFunction(UdfUtils.identical(), vEncoder :: Nil, kEncoder)
+    val grouping = RelationalGrouping[K, V](groupingExprs, udf(all), kEncoder)
+    apply(df, grouping, vEncoder)
   }
 
   abstract class Grouping[K, V] {
     val encoder: AgnosticEncoder[K]
-    def exprs: JList[proto.Expression]
-    def aggregateCol: Column
+    protected def keyColumns: Seq[Column]
+    lazy val exprs: JList[proto.Expression] = keyColumns.map(toExpr).asJava
+    def aggregateColumn(ds: Dataset[V]): Column
     def keys(ds: Dataset[V]): Dataset[K]
     def as[L: Encoder]: Grouping[L, V]
   }
@@ -645,19 +622,10 @@ private object KeyValueGroupedDatasetImpl {
       f: V => IK,
       udf: SparkUserDefinedFunction,
       initialEncoder: AgnosticEncoder[IK],
-      encoder: AgnosticEncoder[K],
-      isValueStruct: Boolean)
-    extends Grouping[K, V] {
-    override lazy val exprs: JList[proto.Expression] =
-      Collections.singletonList(toExpr(udf(col("*"))))
-    override lazy val aggregateCol: Column = {
-      val input = if (isValueStruct) {
-        struct(col("*"))
-      } else {
-        firstCol
-      }
-      udf(input)
-    }
+      encoder: AgnosticEncoder[K])
+      extends Grouping[K, V] {
+    override lazy val keyColumns: Seq[Column] = Seq(udf(col("*")))
+    override def aggregateColumn(ds: Dataset[V]): Column = udf(ds)
     override def keys(ds: Dataset[V]): Dataset[K] = ds.map(f)(initialEncoder).as(encoder)
     override def as[L: Encoder]: KeyFunctionGrouping[IK, L, V] =
       copy(encoder = agnosticEncoderFor[L])
@@ -665,12 +633,11 @@ private object KeyValueGroupedDatasetImpl {
 
   case class RelationalGrouping[K, V](
       columns: Seq[Column],
-      udf: SparkUserDefinedFunction,
+      dummy: Column,
       encoder: AgnosticEncoder[K])
-    extends Grouping[K, V] {
-    override lazy val exprs: JList[Expression] =
-      (toExpr(udf(col("*"))) +: columns.map(toExpr)).asJava
-    override lazy val aggregateCol: Column = columns match {
+      extends Grouping[K, V] {
+    override def keyColumns: Seq[Column] = dummy +: columns
+    override def aggregateColumn(ds: Dataset[V]): Column = columns match {
       case Seq(col) => col
       case _ => struct(columns: _*)
     }
