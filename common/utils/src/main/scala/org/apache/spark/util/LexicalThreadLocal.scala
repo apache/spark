@@ -20,7 +20,7 @@ package org.apache.spark.util
 /**
  * Helper trait for defining thread locals with lexical scoping. With this helper, the thread local
  * is private and can only be set by the [[Handle]]. The [[Handle]] only exposes the thread local
- * value to functions passed into its [[runWith]] method. This pattern allows for the lifetime of
+ * value to functions passed into its [[Handle.runWith]] method. This pattern allows for the lifetime of
  * the thread local value to be strictly controlled.
  *
  * Rather than calling `tl.set(...)` and `tl.remove()` you would get a handle and execute your code
