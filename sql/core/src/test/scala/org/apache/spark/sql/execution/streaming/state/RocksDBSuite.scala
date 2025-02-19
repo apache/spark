@@ -969,6 +969,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
 
+      // Behavior is slightly different when column families are enabled with checkpoint v2
+      // since snapshot version 31 was created previously.
       if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
         assert(snapshotVersionsPresent(remoteDir) === Seq(31, 60, 60))
       } else {

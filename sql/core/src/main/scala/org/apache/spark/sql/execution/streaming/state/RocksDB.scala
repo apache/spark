@@ -742,6 +742,22 @@ class RocksDB(
   }
 
   /**
+   * Function to check if value exists for a key or not depending on the operation type.
+   * @param oldValue - old value for the key
+   * @param isPutOrMerge - flag to indicate if the operation is put or merge
+   * @return - true if the value doesn't exist for putAndMerge operation and vice versa for remove
+   */
+  private def checkExistingEntry(
+    oldValue: Array[Byte],
+    isPutOrMerge: Boolean): Boolean = {
+    if (isPutOrMerge) {
+      oldValue == null
+    } else {
+      oldValue != null
+    }
+  }
+
+  /**
    * Function to keep track of metrics updates around the number of keys in the store.
    * @param keyWithPrefix - key with prefix
    * @param cfName - column family name
@@ -755,7 +771,7 @@ class RocksDB(
     if (useColumnFamilies) {
       if (conf.trackTotalNumberOfRows) {
         val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue == null) {
+        if (checkExistingEntry(oldValue, isPutOrMerge)) {
           val cfInfo = getColumnFamilyInfo(cfName)
           if (cfInfo.isInternal) {
             numInternalKeysOnWritingVersion += updateCount
@@ -767,7 +783,7 @@ class RocksDB(
     } else {
       if (conf.trackTotalNumberOfRows) {
         val oldValue = db.get(readOptions, keyWithPrefix)
-        if (oldValue == null) {
+        if (checkExistingEntry(oldValue, isPutOrMerge)) {
           numKeysOnWritingVersion += updateCount
         }
       }
