@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.FrameBoundary
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoDataTypes}
@@ -412,6 +412,32 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .setOutputType(ProtoDataTypes.LongType)
           .setNullable(false)
           .setAggregate(true)))
+
+    val invokeColumn = Column(InvokeInlineUserDefinedFunction(aggregator, Nil))
+    val result = ColumnNodeToProtoConverter.toTypedExpr(invokeColumn, PrimitiveLongEncoder)
+    val expected = expr { builder =>
+      builder.getTypedAggregateExpressionBuilder.getScalarScalaUdfBuilder
+        .setPayload(UdfToProtoUtils
+          .toUdfPacketBytes(aggregator, PrimitiveLongEncoder :: Nil, PrimitiveLongEncoder))
+        .addInputTypes(ProtoDataTypes.LongType)
+        .setOutputType(ProtoDataTypes.LongType)
+        .setNullable(true)
+        .setAggregate(true)
+      val origin = builder.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder
+      invokeColumn.node.origin.stackTrace.map {
+        _.foreach { element =>
+          origin.addStackTrace(
+            proto.StackTraceElement
+              .newBuilder()
+              .setClassLoaderName(element.getClassLoaderName)
+              .setDeclaringClass(element.getClassName)
+              .setMethodName(element.getMethodName)
+              .setFileName(element.getFileName)
+              .setLineNumber(element.getLineNumber))
+        }
+      }
+    }
+    assert(result == expected)
   }
 
   test("extension") {

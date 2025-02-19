@@ -398,8 +398,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case s: Star =>
             withPosition(s) {
-              // scalastyle:off
-              println(operator)
               throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
             }
 

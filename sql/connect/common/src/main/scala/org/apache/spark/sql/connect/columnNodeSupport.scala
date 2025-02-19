@@ -159,8 +159,6 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case InvokeInlineUserDefinedFunction(f, args, isDistinct, _) =>
         val udf = f match {
           case f: UserDefinedFunction => f
-          case a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked] =>
-            UserDefinedAggregator(a, e.get)
           case udaf: UserDefinedAggregateFunction =>
             UserDefinedAggregator(
               aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
