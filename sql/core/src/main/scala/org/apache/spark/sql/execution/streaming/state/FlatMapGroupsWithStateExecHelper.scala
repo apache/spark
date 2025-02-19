@@ -152,7 +152,7 @@ object FlatMapGroupsWithStateExecHelper {
       shouldStoreTimestamp: Boolean) extends StateManagerImplBase(shouldStoreTimestamp) {
 
     private val timestampTimeoutAttribute =
-      AttributeReference("timeoutTimestamp", dataType = LongType, nullable = false)()
+      AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
 
     private val stateAttributes: Seq[Attribute] = {
       val encSchemaAttribs = toAttributes(stateEncoder.schema)
