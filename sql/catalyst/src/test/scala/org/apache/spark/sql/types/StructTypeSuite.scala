@@ -847,6 +847,6 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .build())))
     val res = ResolveDefaultColumns.existenceDefaultValues(source)
     assert(res(0) == null)
-    assert(res(1) == "spark_catalog")
+    assert(res(1) == UTF8String.fromString("spark_catalog"))
   }
 }

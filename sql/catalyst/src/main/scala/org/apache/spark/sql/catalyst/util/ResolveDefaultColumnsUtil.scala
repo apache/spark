@@ -343,9 +343,10 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
 
     val resolvedExpr = expr match {
-      case _: ExprLiteral | _: Cast => expr
+      case _: ExprLiteral => expr
+      case c: Cast if c.resolved => expr
       case _ =>
-        fallbackResolveExistenceDefaultValue(field, defaultSQL)
+        fallbackResolveExistenceDefaultValue(field)
     }
 
     coerceDefaultValue(resolvedExpr, field.dataType, "", field.name, defaultSQL)
@@ -356,20 +357,20 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // it is possible that this assumption does not hold, so we fallback to full analysis
   // if we encounter an unresolved existsDefault
   private def fallbackResolveExistenceDefaultValue(
-      field: StructField,
-      defaultSQL: String): Expression = {
-    logWarning(log"Encountered unresolved exists default value: " +
-      log"'${MDC(COLUMN_DEFAULT_VALUE, defaultSQL)}' " +
-      log"for column ${MDC(COLUMN_NAME, field.name)} " +
-      log"with ${MDC(COLUMN_DATA_TYPE_SOURCE, field.dataType)}, " +
-      log"falling back to full analysis.")
+      field: StructField): Expression = {
+    field.getExistenceDefaultValue().map { defaultSQL: String =>
 
-    field.getExistenceDefaultValue().map { text: String =>
+      logWarning(log"Encountered unresolved exists default value: " +
+        log"'${MDC(COLUMN_DEFAULT_VALUE, defaultSQL)}' " +
+        log"for column ${MDC(COLUMN_NAME, field.name)} " +
+        log"with ${MDC(COLUMN_DATA_TYPE_SOURCE, field.dataType)}, " +
+        log"falling back to full analysis.")
+
       val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
       val literal = expr match {
         case _: ExprLiteral | _: Cast => expr
         case _ => throw SparkException.internalError(s"parse existence default as literal err," +
-          s" field name: ${field.name}, value: $text")
+          s" field name: ${field.name}, value: $defaultSQL")
       }
       // sanity check
       if (!literal.resolved) {
