@@ -237,7 +237,13 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         class CustomChannelBuilder(ChannelBuilder):
             def toChannel(self):
-                return self._insecure_channel(endpoint)
+                creds = grpc.local_channel_credentials()
+
+                if self.token is not None:
+                    creds = grpc.composite_channel_credentials(
+                        creds, grpc.access_token_call_credentials(self.token)
+                    )
+                return self._secure_channel(endpoint, creds)
 
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
         session.sql("select 1 + 1")

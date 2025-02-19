@@ -731,6 +731,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
         (remoteString.exists(_.startsWith("local")) ||
           (remoteString.isDefined && isAPIModeConnect)) &&
         maybeConnectStartScript.exists(Files.exists(_))) {
+        val token = java.util.UUID.randomUUID().toString()
         server = Some {
           val args =
             Seq(
@@ -745,13 +746,14 @@ object SparkSession extends SparkSessionCompanion with Logging {
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
+          pb.environment().put("SPARK_CONNECT_AUTHENTICATE_TOKEN", token)
           pb.start()
         }
 
         // Let the server start. We will directly request to set the configurations
         // and this sleep makes less noisy with retries.
         Thread.sleep(2000L)
-        System.setProperty("spark.remote", "sc://localhost")
+        System.setProperty("spark.remote", s"sc://localhost/;token=$token")
 
         // scalastyle:off runtimeaddshutdownhook
         Runtime.getRuntime.addShutdownHook(new Thread() {

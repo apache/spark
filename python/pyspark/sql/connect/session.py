@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import uuid
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -908,6 +909,7 @@ class SparkSession:
                         )
                 del os.environ["SPARK_LOCAL_REMOTE"]
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
+                del os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
 
@@ -1030,6 +1032,8 @@ class SparkSession:
 
         2. Starts a regular Spark session that automatically starts a Spark Connect server
            via ``spark.plugins`` feature.
+
+        Returns the authentication token that should be used to connect to this session.
         """
         from pyspark import SparkContext, SparkConf
 
@@ -1041,6 +1045,8 @@ class SparkSession:
             init_opts.update(opts)
             opts = init_opts
 
+            token = str(uuid.uuid4())
+
             # Configurations to be overwritten
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master
@@ -1048,6 +1054,10 @@ class SparkSession:
                 del overwrite_conf["spark.remote"]
             if "spark.api.mode" in overwrite_conf:
                 del overwrite_conf["spark.api.mode"]
+            # When running a local server, always use an ephemeral port
+            overwrite_conf["spark.connect.grpc.binding.port"] = "0"
+            overwrite_conf["spark.connect.authenticate.token"] = token
+            os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
 
             # Configurations to be set if unset.
             default_conf = {
@@ -1055,11 +1065,6 @@ class SparkSession:
                 "spark.sql.artifact.isolation.enabled": "true",
                 "spark.sql.artifact.isolation.alwaysApplyClassloader": "true",
             }
-
-            if "SPARK_TESTING" in os.environ:
-                # For testing, we use 0 to use an ephemeral port to allow parallel testing.
-                # See also SPARK-42272.
-                overwrite_conf["spark.connect.grpc.binding.port"] = "0"
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
             try:
@@ -1081,7 +1086,6 @@ class SparkSession:
                 new_opts = {k: opts[k] for k in opts if k in runtime_conf_keys}
                 opts.clear()
                 opts.update(new_opts)
-
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
