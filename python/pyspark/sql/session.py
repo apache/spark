@@ -40,7 +40,7 @@ from typing import (
 )
 
 from pyspark.conf import SparkConf
-from pyspark.util import is_remote_only
+from pyspark.util import default_api_mode, is_remote_only
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
@@ -473,6 +473,12 @@ class SparkSession(SparkConversionMixin):
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
+                if url is None:
+                    raise PySparkRuntimeError(
+                        errorClass="CONNECT_URL_NOT_SET",
+                        messageParameters={},
+                    )
+
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
                 return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
@@ -480,7 +486,10 @@ class SparkSession(SparkConversionMixin):
             from pyspark.core.context import SparkContext
 
             with self._lock:
-                is_api_mode_connect = opts.get("spark.api.mode", "classic").lower() == "connect"
+                api_mode = opts.get("spark.api.mode", os.environ.get("SPARK_API_MODE", "")).lower()
+                if api_mode not in ("classic", "connect"):
+                    api_mode = default_api_mode()
+                is_api_mode_connect = api_mode == "connect"
 
                 if (
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
@@ -495,10 +504,10 @@ class SparkSession(SparkConversionMixin):
                             SparkContext._active_spark_context is None
                             and SparkSession._instantiatedSession is None
                         ):
-                            if is_api_mode_connect:
-                                url = opts.get("spark.master", os.environ.get("MASTER"))
-                            else:
-                                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                            if url is None and is_api_mode_connect:
+                                url = opts.get("spark.master", os.environ.get("MASTER", "local"))
 
                             if url is None:
                                 raise PySparkRuntimeError(
@@ -506,7 +515,9 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local") or is_api_mode_connect:
+                            if url.startswith("local") or (
+                                is_api_mode_connect and not url.startswith("sc://")
+                            ):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
                                 RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
@@ -1957,7 +1968,7 @@ class SparkSession(SparkConversionMixin):
     @property
     def tvf(self) -> "TableValuedFunction":
         """
-        Returns a :class:`TableValuedFunction` that can be used to call a table-valued function
+        Returns a :class:`tvf.TableValuedFunction` that can be used to call a table-valued function
         (TVF).
 
         .. versionadded:: 4.0.0
@@ -1968,7 +1979,7 @@ class SparkSession(SparkConversionMixin):
 
         Returns
         -------
-        :class:`TableValuedFunction`
+        :class:`tvf.TableValuedFunction`
 
         Examples
         --------

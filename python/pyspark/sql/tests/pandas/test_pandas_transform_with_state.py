@@ -1470,6 +1470,39 @@ class TransformWithStateInPandasTestsMixin:
                     check_exception=check_exception,
                 )
 
+    def test_not_nullable_fails(self):
+        with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                input_path = tempfile.mkdtemp()
+                self._prepare_test_resource1(input_path)
+
+                df = self._build_test_df(input_path)
+
+                def check_basic_state(batch_df, batch_id):
+                    result = batch_df.collect()[0]
+                    assert result.value["id"] == 0  # First ID from test data
+                    assert result.value["name"] == "name-0"
+
+                def check_exception(error):
+                    from pyspark.errors.exceptions.captured import StreamingQueryException
+
+                    if not isinstance(error, StreamingQueryException):
+                        return False
+
+                    error_msg = str(error)
+                    return (
+                        "[TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
+                        and "column family state must be nullable" in error_msg
+                    )
+
+                self._run_evolution_test(
+                    BasicProcessorNotNullable(),
+                    checkpoint_dir,
+                    check_basic_state,
+                    df,
+                    check_exception=check_exception,
+                )
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
@@ -1876,6 +1909,27 @@ class BasicProcessor(StatefulProcessor):
     # Schema definitions
     state_schema = StructType(
         [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
+    )
+
+    def init(self, handle):
+        self.state = handle.getValueState("state", self.state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        for pdf in rows:
+            pass
+        id_val = int(key[0])
+        name = f"name-{id_val}"
+        self.state.update((id_val, name))
+        yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+
+    def close(self) -> None:
+        pass
+
+
+class BasicProcessorNotNullable(StatefulProcessor):
+    # Schema definitions
+    state_schema = StructType(
+        [StructField("id", IntegerType(), False), StructField("name", StringType(), False)]
     )
 
     def init(self, handle):

@@ -521,7 +521,7 @@ class ExtendedInfo extends ExtendedExplainGenerator {
 
   def getActualPlan(plan: SparkPlan): SparkPlan = {
     plan match {
-      case p : AdaptiveSparkPlanExec => p.executedPlan
+      case p : AdaptiveSparkPlanExec => getActualPlan(p.executedPlan)
       case p : QueryStageExec => p.plan
       case p : WholeStageCodegenExec => p.child
       case p => p

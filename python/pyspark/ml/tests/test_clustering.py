@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 
 from pyspark.ml.linalg import Vectors, SparseVector
-from pyspark.sql import SparkSession
 from pyspark.ml.clustering import (
     KMeans,
     KMeansModel,
@@ -38,6 +37,7 @@ from pyspark.ml.clustering import (
     DistributedLDAModel,
     PowerIterationClustering,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ClusteringTestsMixin:
@@ -462,7 +462,6 @@ class ClusteringTestsMixin:
             model2 = DistributedLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
-    # TODO(SPARK-51080): Fix save/load for PowerIterationClustering
     def test_power_iteration_clustering(self):
         spark = self.spark
 
@@ -496,13 +495,19 @@ class ClusteringTestsMixin:
         self.assertEqual(assignments.columns, ["id", "cluster"])
         self.assertEqual(assignments.count(), 6)
 
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="power_iteration_clustering") as d:
+            pic.write().overwrite().save(d)
+            pic2 = PowerIterationClustering.load(d)
+            self.assertEqual(str(pic), str(pic2))
+            self.assertEqual(pic.uid, pic2.uid)
+            self.assertEqual(pic.getK(), pic2.getK())
+            self.assertEqual(pic.getMaxIter(), pic2.getMaxIter())
+            self.assertEqual(pic.getWeightCol(), pic2.getWeightCol())
 
-class ClusteringTests(ClusteringTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
 
-    def tearDown(self) -> None:
-        self.spark.stop()
+class ClusteringTests(ClusteringTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

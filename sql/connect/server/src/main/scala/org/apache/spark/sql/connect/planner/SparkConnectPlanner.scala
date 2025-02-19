@@ -75,7 +75,8 @@ import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalComman
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
-import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
@@ -2471,6 +2472,15 @@ class SparkConnectPlanner(
       case _ =>
         throw InvalidPlanInput(s"Unsupported merge action type ${action.getActionType}.")
     }
+  }
+
+  /**
+   * Exposed for testing. Processes a command without a response observer.
+   *
+   * Called only from SparkConnectPlannerTestUtils.
+   */
+  private[planner] def processWithoutResponseObserverForTesting(command: proto.Command): Unit = {
+    process(command, new MockObserver())
   }
 
   def process(

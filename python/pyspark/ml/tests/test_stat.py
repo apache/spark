@@ -18,13 +18,73 @@
 import numpy as np
 import unittest
 
-from pyspark.ml.linalg import Vectors
-from pyspark.ml.stat import ChiSquareTest, Correlation, KolmogorovSmirnovTest
-from pyspark.sql import DataFrame
+from pyspark.ml.linalg import Vectors, DenseVector
+from pyspark.ml.stat import (
+    ChiSquareTest,
+    Correlation,
+    KolmogorovSmirnovTest,
+    Summarizer,
+    SummaryBuilder,
+)
+from pyspark.sql import functions as F
+from pyspark.sql import DataFrame, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class StatTestsMixin:
+    def test_summarizer(self):
+        spark = self.spark
+        data = [
+            [Vectors.dense([1, 0, 0, -2]), 1.0],
+            [Vectors.dense([4, 5, 0, 3]), 2.0],
+            [Vectors.dense([6, 7, 0, 8]), 1.0],
+            [Vectors.dense([9, 0, 0, 1]), 1.0],
+        ]
+        df = spark.createDataFrame(data, ["features", "weight"])
+
+        summarizer = Summarizer.metrics("mean", "count")
+        self.assertIsInstance(summarizer, SummaryBuilder)
+
+        res1 = df.select(summarizer.summary(df.features))
+        self.assertEqual(res1.columns, ["aggregate_metrics(features, 1.0)"])
+        self.assertEqual(res1.count(), 1)
+        self.assertEqual(res1.head()[0], Row(mean=DenseVector([5.0, 3.0, 0.0, 2.5]), count=4))
+
+        res2 = df.select(summarizer.summary(F.col("features"), df.weight))
+        self.assertEqual(res2.columns, ["aggregate_metrics(features, weight)"])
+        self.assertEqual(res2.count(), 1)
+        self.assertEqual(
+            res2.head()[0],
+            Row(mean=DenseVector([4.8, 3.4, 0.0, 2.6]), count=4),
+            res2.head()[0][0].toArray(),
+        )
+
+        res3 = df.select(Summarizer.max(df.features, df.weight))
+        self.assertEqual(res3.columns, ["max(features)"])
+        self.assertEqual(res3.count(), 1)
+        self.assertEqual(res3.head()[0], DenseVector([9.0, 7.0, 0.0, 8.0]))
+
+        res4 = df.select(Summarizer.numNonZeros(F.col("features")))
+        self.assertEqual(res4.columns, ["numNonZeros(features)"])
+        self.assertEqual(res4.count(), 1)
+        self.assertEqual(res4.head()[0], DenseVector([4.0, 2.0, 0.0, 4.0]))
+
+        res5 = df.select(Summarizer.normL1(F.col("features")))
+        self.assertEqual(res5.columns, ["normL1(features)"])
+        self.assertEqual(res5.count(), 1)
+        self.assertEqual(res5.head()[0], DenseVector([20.0, 12.0, 0.0, 14.0]))
+
+        res6 = df.select(Summarizer.normL2(F.col("features")))
+        self.assertEqual(res6.columns, ["normL2(features)"])
+        self.assertEqual(res6.count(), 1)
+        self.assertTrue(
+            np.allclose(
+                res6.head()[0].toArray(),
+                [11.5758369, 8.60232527, 0.0, 8.83176087],
+                atol=1e-4,
+            ),
+        )
+
     def test_chisquaretest(self):
         spark = self.spark
         data = [
