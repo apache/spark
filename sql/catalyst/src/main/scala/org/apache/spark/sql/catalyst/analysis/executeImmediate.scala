@@ -49,7 +49,8 @@ case class ExecuteImmediateQuery(
  */
 class SubstituteExecuteImmediate(
     val catalogManager: CatalogManager,
-    resolveChild: LogicalPlan => LogicalPlan)
+    resolveChild: LogicalPlan => LogicalPlan,
+    checkAnalysis: LogicalPlan => Unit)
   extends Rule[LogicalPlan] with ColumnResolutionHelper {
 
   def resolveVariable(e: Expression): Expression = {
@@ -158,6 +159,7 @@ class SubstituteExecuteImmediate(
         val finalPlan = AnalysisContext.withExecuteImmediateContext {
           resolveChild(queryPlan)
         }
+        checkAnalysis(finalPlan)
 
         if (targetVariables.nonEmpty) {
           SetVariable(targetVariables, finalPlan)
