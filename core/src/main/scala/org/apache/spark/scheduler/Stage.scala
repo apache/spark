@@ -26,9 +26,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
 
-
-
-
 /**
  * A stage is a set of parallel tasks all computing the same function that need to run as part
  * of a Spark job, where all the tasks have the same shuffle dependencies. Each DAG of tasks run
@@ -74,8 +71,6 @@ private[scheduler] abstract class Stage(
   private val stageReattemptLock = new ReentrantReadWriteLock()
   private val stageReadLock = stageReattemptLock.readLock()
   private val stageWriteLock = stageReattemptLock.writeLock()
-
-
   val numPartitions = rdd.partitions.length
 
   /** Set of jobs that this stage belongs to. */

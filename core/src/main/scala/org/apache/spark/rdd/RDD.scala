@@ -2079,7 +2079,6 @@ abstract class RDD[T: ClassTag](
   private final lazy val _outputDeterministicLevel: DeterministicLevel.Value =
     getOutputDeterministicLevel
 
-
   /**
    * Returns the deterministic level of this RDD's output. Please refer to [[DeterministicLevel]]
    * for the definition.

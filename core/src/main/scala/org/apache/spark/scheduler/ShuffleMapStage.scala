@@ -99,5 +99,4 @@ private[spark] class ShuffleMapStage(
   }
 
   override def isIndeterminate: Boolean = this.shuffleDep.isInDeterministic || super.isIndeterminate
-
 }
