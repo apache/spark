@@ -327,36 +327,32 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    // Still publish instance metrics that are marked with ignoreIfUnchanged,
-    // as those unchanged metric values may contain important information
-    val instanceMetricsToReport = stateStoreInstanceMetrics
+    val instanceMetricsToReport = instanceMetricConfiguration
       .filter {
-        case (name, _) =>
-          val metric = longMetric(name)
-          val metricConfig = instanceMetricConfiguration(name)
+        case (name, metricConfig) =>
           // Keep instance metrics that are updated or aren't marked to be ignored,
           // as their initial value could still be important.
-          !metric.isZero || !metricConfig.ignoreIfUnchanged
+          !metricConfig.ignoreIfUnchanged || !longMetric(name).isZero
       }
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
         // to ignore partition and store names.
-        case (name, _) =>
+        case (name, metricConfig) =>
           (
-            instanceMetricConfiguration(name).stateStoreProvider,
-            instanceMetricConfiguration(name).metricPrefix
+            metricConfig.stateStoreProvider,
+            metricConfig.metricPrefix
           )
       }
       .flatMap {
         case (_, metrics) =>
           // Select at most N metrics based on the metric's defined ordering
           // to report to the driver. For example, ascending order would be taking the N smallest.
-          val metricConf = instanceMetricConfiguration(metrics.head._1)
+          val metricConf = metrics.head._2
           metrics
             .map {
-              case (name, metric) =>
-                name -> (if (longMetric(name).isZero) metricConf.initValue
-                         else longMetric(name).value)
+              case (_, metric) =>
+                metric.name -> (if (longMetric(metric.name).isZero) metricConf.initValue
+                                else longMetric(metric.name).value)
             }
             .toSeq
             .sortBy(_._2)(metricConf.ordering)
@@ -445,19 +441,9 @@ trait StateStoreWriter
       instanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
     instanceMetrics.foreach {
       case (metric, value) =>
-        // Set the max for instance metrics
-        // Check for cases where value < 0 and .value converts metric to 0
-        // Some metrics like last uploaded snapshot version can have an initial value of -1,
-        // which need special handling to avoid setting the metric to 0 using `.value`.
-        longMetric(metric.name).set(
-          if (longMetric(metric.name).isZero) {
-            value
-          } else {
-            // Use max to grab the most updated value across all state store instances,
-            // which for snapshot versions is the largest version number.
-            Math.max(value, longMetric(metric.name).value)
-          }
-        )
+        val metricConfig = instanceMetricConfiguration(metric.name)
+        // Update the metric's value based on the defined combine method
+        longMetric(metric.name).set(metricConfig.combine(longMetric(metric.name), value))
     }
   }
 
@@ -469,14 +455,14 @@ trait StateStoreWriter
   }
 
   private def stateStoreInstanceMetrics: Map[String, SQLMetric] = {
-    stateStoreInstanceMetricObjects.map {
+    instanceMetricConfiguration.map {
       case (name, metric) => (name, metric.createSQLMetric(sparkContext))
     }
   }
 
   private def stateStoreInstanceMetricObjects: Map[String, StateStoreInstanceMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
-    val maxPartitions = conf.defaultNumShufflePartitions
+    val maxPartitions = getStateInfo.numPartitions
 
     (0 until maxPartitions).flatMap { partitionId =>
       provider.supportedInstanceMetrics.flatMap { metric =>

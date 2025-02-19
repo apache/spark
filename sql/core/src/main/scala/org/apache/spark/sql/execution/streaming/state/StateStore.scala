@@ -249,10 +249,11 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
  * @param memoryUsedBytes Memory used by the state store
  * @param customMetrics   Custom implementation-specific metrics
  *                        The metrics reported through this must have the same `name` as those
- *                        reported by `StateStoreProvider.customMetrics`.
+ *                        reported by `StateStoreProvider.supportedCustomMetrics`.
  * @param instanceMetrics Custom implementation-specific metrics that are specific to state stores
  *                        The metrics reported through this must have the same `name` as those
- *                        reported by `StateStoreProvider.customMetrics`.
+ *                        reported by `StateStoreProvider.supportedInstanceMetrics`,
+ *                        including partition id and store name.
  */
 case class StateStoreMetrics(
     numKeys: Long,
@@ -285,20 +286,11 @@ object StateStoreMetrics {
       customMetric -> sumOfMetrics
     }.toMap
 
-    val distinctInstanceMetrics = allMetrics.flatMap(_.instanceMetrics.keys).distinct
-    val instanceMetrics = allMetrics.flatMap(_.instanceMetrics)
-    val combinedInstanceMetrics = distinctInstanceMetrics.map { instanceMetric =>
-      val sameMetrics = instanceMetrics.filter(_._1 == instanceMetric)
-      // Use the instance metric's custom ordering to select the combined metric value
-      val selectedMetrics = sameMetrics.map(_._2).min(instanceMetric.ordering)
-      instanceMetric -> selectedMetrics
-    }.toMap
-
     StateStoreMetrics(
       allMetrics.map(_.numKeys).sum,
       allMetrics.map(_.memoryUsedBytes).sum,
       combinedCustomMetrics,
-      combinedInstanceMetrics)
+      allMetrics.flatMap(_.instanceMetrics).toMap)
   }
 }
 
@@ -338,7 +330,6 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
 trait StateStoreInstanceMetric {
   def metricPrefix: String
   def descPrefix: String
-  def descNotes: String
   def partitionId: Option[Int]
   def storeName: String
   def stateStoreProvider: String
@@ -346,11 +337,22 @@ trait StateStoreInstanceMetric {
 
   def createSQLMetric(sparkContext: SparkContext): SQLMetric
 
-  /** This determines the selection of instance metrics during progress reporting */
+  /**
+   * Defines how instance metrics are selected for progress reporting.
+   * Metrics are sorted by value using this ordering, and only the first N metrics are displayed.
+   * For example, the highest N metrics by value should use Ordering.Long.reverse.
+   */
   def ordering: Ordering[Long]
 
   /** Should this instance metric be reported if it is unchanged from its initial value */
   def ignoreIfUnchanged: Boolean
+
+  /**
+   * Defines how to merge metric values from different executors for the same state store
+   * instance in situations like speculative execution or provider unloading. In most cases,
+   * the original metric value is at its initial value.
+   */
+  def combine(originalMetric: SQLMetric, value: Long): Long
 
   def name: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric name")
@@ -359,18 +361,14 @@ trait StateStoreInstanceMetric {
 
   def desc: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric description")
-    s"$stateStoreProvider: $descPrefix " +
-    s"(partitionId = ${partitionId.get}, storeName = $storeName, notes = $descNotes)"
+    s"$stateStoreProvider: $descPrefix (partitionId = ${partitionId.get}, storeName = $storeName)"
   }
-
-  def withNewDescNotes(descNotes: String): StateStoreInstanceMetric
 
   def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric
 }
 
 case class StateStoreSnapshotLastUploadInstanceMetric(
     stateStoreProvider: String,
-    descNotes: String = "None",
     partitionId: Option[Int] = None,
     storeName: String = StateStoreId.DEFAULT_STORE_NAME)
   extends StateStoreInstanceMetric {
@@ -391,8 +389,17 @@ case class StateStoreSnapshotLastUploadInstanceMetric(
 
   override def ignoreIfUnchanged: Boolean = false
 
-  override def withNewDescNotes(descNotes: String): StateStoreSnapshotLastUploadInstanceMetric = {
-    copy(descNotes = descNotes)
+  override def combine(originalMetric: SQLMetric, value: Long): Long = {
+    // Check for cases where the initial value is less than 0, forcing metric.value to
+    // convert it to 0. Since the last uploaded snapshot version can have an initial
+    // value of -1, we need special handling to avoid turning the -1 into a 0.
+    if (originalMetric.isZero) {
+      value
+    } else {
+      // Use max to grab the most recent snapshot version across all executors
+      // of the same store instance
+      Math.max(originalMetric.value, value)
+    }
   }
 
   override def withNewId(
@@ -582,14 +589,14 @@ trait StateStoreProvider {
   /**
    * Optional custom metrics that the implementation may want to report.
    * @note The StateStore objects created by this provider must report the same custom metrics
-   * (specifically, same names) through `StateStore.metrics`.
+   * (specifically, same names) through `StateStore.metrics.customMetrics`.
    */
   def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
 
   /**
    * Optional custom state store instance metrics that the implementation may want to report.
-   * @note The StateStore objects created by this provider must report the same custom metrics
-   * (specifically, same names) through `StateStore.metrics`.
+   * @note The StateStore objects created by this provider must report the same instance metrics
+   * (specifically, same names) through `StateStore.metrics.instanceMetrics`.
    */
   def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = Seq.empty
 }

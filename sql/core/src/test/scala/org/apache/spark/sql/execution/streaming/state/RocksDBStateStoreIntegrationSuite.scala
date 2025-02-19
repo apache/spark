@@ -301,7 +301,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-      SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "5"
+      SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
     ) {
       withTempDir { checkpointDir =>
         val inputData = MemoryStream[String]
