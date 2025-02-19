@@ -1291,6 +1291,7 @@ class Expression(google.protobuf.message.Message):
     TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
     LAZY_EXPRESSION_FIELD_NUMBER: builtins.int
     SUBQUERY_EXPRESSION_FIELD_NUMBER: builtins.int
+    GET_COLUMN_BY_ORDINAL_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___ExpressionCommon: ...
@@ -1339,6 +1340,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def subquery_expression(self) -> global___SubqueryExpression: ...
     @property
+    def get_column_by_ordinal(self) -> global___GetColumnByOrdinal: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1369,6 +1372,7 @@ class Expression(google.protobuf.message.Message):
         typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
         lazy_expression: global___LazyExpression | None = ...,
         subquery_expression: global___SubqueryExpression | None = ...,
+        get_column_by_ordinal: global___GetColumnByOrdinal | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1390,6 +1394,8 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "extension",
             b"extension",
+            "get_column_by_ordinal",
+            b"get_column_by_ordinal",
             "lambda_function",
             b"lambda_function",
             "lazy_expression",
@@ -1443,6 +1449,8 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "extension",
             b"extension",
+            "get_column_by_ordinal",
+            b"get_column_by_ordinal",
             "lambda_function",
             b"lambda_function",
             "lazy_expression",
@@ -1502,6 +1510,7 @@ class Expression(google.protobuf.message.Message):
             "typed_aggregate_expression",
             "lazy_expression",
             "subquery_expression",
+            "get_column_by_ordinal",
             "extension",
         ]
         | None
@@ -2076,3 +2085,33 @@ class SubqueryExpression(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["table_arg_options"] | None: ...
 
 global___SubqueryExpression = SubqueryExpression
+
+class GetColumnByOrdinal(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ORDINAL_FIELD_NUMBER: builtins.int
+    PLAN_ID_FIELD_NUMBER: builtins.int
+    ordinal: builtins.int
+    """(Required) The ordinal (index) of the column to get."""
+    plan_id: builtins.int
+    """(Optional) The id of corresponding connect plan."""
+    def __init__(
+        self,
+        *,
+        ordinal: builtins.int = ...,
+        plan_id: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_plan_id", b"_plan_id", "ordinal", b"ordinal", "plan_id", b"plan_id"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+    ) -> typing_extensions.Literal["plan_id"] | None: ...
+
+global___GetColumnByOrdinal = GetColumnByOrdinal
