@@ -51,6 +51,7 @@ message Expression {
     CallFunction call_function = 16;
     NamedArgumentExpression named_argument_expression = 17;
     MergeAction merge_action = 19;
+    TypedAggregateExpression typed_aggregate_expression = 20;
     LazyExpression lazy_expression = 21;
     SubqueryExpression subquery_expression = 22;
 
@@ -422,6 +423,11 @@ message JavaUDF {
 
   // (Required) Indicate if the Java user-defined function is an aggregate function
   bool aggregate = 3;
+}
+
+message TypedAggregateExpression {
+  // (Required) The aggregate function object packed into bytes.
+  ScalarScalaUDF scalar_scala_udf = 1;
 }
 
 message CallFunction {

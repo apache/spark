@@ -148,6 +148,11 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunction(apply(function, e))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
+      case InvokeInlineUserDefinedFunction(
+           a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked], Nil, isDistinct, _) =>
+        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get), Nil, isDistinct)
+        builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
+
       case InvokeInlineUserDefinedFunction(f, args, isDistinct, _) =>
         val udf = f match {
           case f: UserDefinedFunction => f

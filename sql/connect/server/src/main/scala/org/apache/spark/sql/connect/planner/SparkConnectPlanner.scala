@@ -49,6 +49,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView,
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -1500,14 +1501,22 @@ class SparkConnectPlanner(
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
-    val logicalPlan = if (rel.hasInput) {
+    val baseRel = if (rel.hasInput) {
       transformRelation(rel.getInput)
     } else {
       logical.OneRowRelation()
     }
 
+    val logicalPlan =
+      if (rel.getExpressionsList.asScala.toSeq.exists(
+          _.getExprTypeCase == proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION)) {
+        session.sessionState.executePlan(baseRel).analyzed
+      } else {
+        baseRel
+      }
+
     val projection = rel.getExpressionsList.asScala.toSeq
-      .map(transformExpression)
+      .map(transformExpression(_, Some(logicalPlan)))
       .map(toNamedExpression)
 
     logical.Project(projectList = projection, child = logicalPlan)
@@ -1524,14 +1533,31 @@ class SparkConnectPlanner(
    *   Catalyst expression
    */
   @DeveloperApi
-  def transformExpression(exp: proto.Expression): Expression = {
+  def transformExpression(exp: proto.Expression): Expression = transformExpression(exp, None)
+
+  /**
+   * Transforms an input protobuf expression into the Catalyst expression. This is usually not
+   * called directly. Typically the planner will traverse the expressions automatically, only
+   * plugins are expected to manually perform expression transformations.
+   *
+   * @param exp
+   *   the input expression
+   * @param baseRelationOpt
+   *   inputs of the base relation that contains this expression
+   * @return
+   *   Catalyst expression
+   */
+  @DeveloperApi
+  def transformExpression(
+      exp: proto.Expression,
+      baseRelationOpt: Option[LogicalPlan]): Expression = {
     if (exp.hasCommon && exp.getCommon.hasOrigin) {
       val origin = transformOrigin(exp.getCommon.getOrigin)
       CurrentOrigin.withOrigin(origin) {
-        doTransformExpression(exp)
+        doTransformExpression(exp, baseRelationOpt)
       }
     } else {
-      doTransformExpression(exp)
+      doTransformExpression(exp, baseRelationOpt)
     }
   }
 
@@ -1576,7 +1602,9 @@ class SparkConnectPlanner(
       /* lineNumber */ element.getLineNumber)
   }
 
-  private def doTransformExpression(exp: proto.Expression): Expression = {
+  private def doTransformExpression(
+      exp: proto.Expression,
+      baseRelationOpt: Option[LogicalPlan]): Expression = {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
@@ -1612,6 +1640,8 @@ class SparkConnectPlanner(
         transformNamedArgumentExpression(exp.getNamedArgumentExpression)
       case proto.Expression.ExprTypeCase.MERGE_ACTION =>
         transformMergeAction(exp.getMergeAction)
+      case proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION =>
+        transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
       case proto.Expression.ExprTypeCase.LAZY_EXPRESSION =>
         transformLazyExpression(exp.getLazyExpression)
       case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
@@ -1796,18 +1826,7 @@ class SparkConnectPlanner(
       case udf: SparkUserDefinedFunction =>
         UserDefinedFunctionUtils.toScalaUDF(udf, children)
       case uda: UserDefinedAggregator[_, _, _] =>
-        val aggregator = if (children == Seq(UnresolvedStar(None))) {
-          val tae = TypedAggregateExpression(uda.aggregator)(
-            uda.aggregator.bufferEncoder,
-            uda.aggregator.outputEncoder)
-          tae.withInputInfo(
-            UnresolvedDeserializer(encoderFor(uda.inputEncoder).deserializer, Nil),
-            uda.inputEncoder.clsTag.runtimeClass,
-            uda.inputEncoder.schema)
-        } else {
-          ScalaAggregator(uda, children)
-        }
-        aggregator.toAggregateExpression(fun.getIsDistinct)
+        ScalaAggregator(uda, children).toAggregateExpression(fun.getIsDistinct)
       case other =>
         throw InvalidPlanInput(
           s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
@@ -2287,7 +2306,7 @@ class SparkConnectPlanner(
 
     val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
     val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr))
+      .map(expr => transformExpressionWithTypedReduceExpression(expr, ds.analyzedData))
       .map(toNamedExpression)
     logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
   }
@@ -2296,11 +2315,19 @@ class SparkConnectPlanner(
     if (!rel.hasInput) {
       throw InvalidPlanInput("Aggregate needs a plan input")
     }
-    val logicalPlan = transformRelation(rel.getInput)
+    val input = transformRelation(rel.getInput)
+
+    val logicalPlan =
+      if (rel.getAggregateExpressionsList.asScala.toSeq.exists(
+          _.getExprTypeCase == proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION)) {
+        session.sessionState.executePlan(input).analyzed
+      } else {
+        input
+      }
 
     val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr))
+      .map(expr => transformExpressionWithTypedReduceExpression(expr, logicalPlan))
     val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
 
     rel.getGroupType match {
@@ -2360,7 +2387,8 @@ class SparkConnectPlanner(
 
   @deprecated("TypedReduce is now implemented using a normal UDAF aggregator.", "4.0.0")
   private def transformTypedReduceExpression(
-      fun: proto.Expression.UnresolvedFunction): Expression = {
+      fun: proto.Expression.UnresolvedFunction,
+      dataAttributes: Seq[Attribute]): Expression = {
     assertPlan(fun.getFunctionName == "reduce")
     assertPlan(fun.getArgumentsCount == 1, "reduce requires single child expression")
     val udf = fun.getArgumentsList.asScala match {
@@ -2373,19 +2401,47 @@ class SparkConnectPlanner(
     }
     val encoder = udf.outputEncoder
     val reduce = ReduceAggregator(udf.function)(encoder).toColumn.expr
-    TypedAggUtils.withInputType(reduce, encoderFor(encoder), Nil)
+    TypedAggUtils.withInputType(reduce, encoderFor(encoder), dataAttributes)
   }
 
   private def transformExpressionWithTypedReduceExpression(
-      expr: proto.Expression): Expression = {
+      expr: proto.Expression,
+      plan: LogicalPlan): Expression = {
     expr.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here.
         // This special handling is now deprecated and will be removed in the future.
-        transformTypedReduceExpression(expr.getUnresolvedFunction)
-      case _ => transformExpression(expr)
+        transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
+      case _ => transformExpression(expr, Some(plan))
     }
+  }
+
+  private def transformTypedAggregateExpression(
+      expr: proto.TypedAggregateExpression,
+      baseRelationOpt: Option[LogicalPlan]): AggregateExpression = {
+    val udf = expr.getScalarScalaUdf
+    assertPlan(udf.getAggregate)
+
+    val udfPacket = unpackScalaUDF[UdfPacket](udf)
+    assertPlan(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
+
+    val aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]]
+    val tae =
+      TypedAggregateExpression(aggregator)(aggregator.bufferEncoder, aggregator.outputEncoder)
+    val taeWithInput = baseRelationOpt match {
+      case Some(baseRelation) =>
+        val inputEncoder = TypedScalaUdf.encoderFor(
+          udfPacket.inputEncoders.head,
+          "input",
+          Some(baseRelation.output))
+        TypedAggUtils
+          .withInputType(tae, inputEncoder, baseRelation.output)
+          .asInstanceOf[TypedAggregateExpression]
+      case _ =>
+        tae
+    }
+    taeWithInput.toAggregateExpression()
   }
 
   private def transformMergeAction(action: proto.MergeAction): MergeAction = {
