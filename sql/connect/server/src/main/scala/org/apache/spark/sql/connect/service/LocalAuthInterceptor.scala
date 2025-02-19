@@ -30,11 +30,10 @@ class LocalAuthInterceptor(localToken: String) extends ServerInterceptor {
       call: ServerCall[ReqT, RespT],
       headers: Metadata,
       next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
-    val t = Option(
+    val token = Option(
       headers.get(Metadata.Key
         .of(ConnectCommon.CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME, Metadata.ASCII_STRING_MARSHALLER)))
-      .map(_.substring("Bearer ".length))
-    if (t.isEmpty || t.get != localToken) {
+    if (token.isEmpty || token.get != localToken) {
       throw new SparkSecurityException(
         errorClass = "_LEGACY_ERROR_TEMP_3303",
         messageParameters = Map.empty)

@@ -641,8 +641,8 @@ class SparkConnectClient(object):
             else DefaultChannelBuilder(connection, channel_options)
         )
         self._builder.set(
-            ChannelBuilder.CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME,
-            SparkConnectClient._local_auth_token)
+            ChannelBuilder.CONNECT_LOCAL_AUTH_TOKEN_PARAM_NAME, SparkConnectClient._local_auth_token
+        )
         self._user_id = None
         self._retry_policies: List[RetryPolicy] = []
 

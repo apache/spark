@@ -313,6 +313,23 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
         self.assertEqual(self.spark.conf.get("integer"), "1")
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class SparkConnectLocalAuthTests(unittest.TestCase):
+    def test_auth_failure(self):
+        os.environ["SPARK_CONNECT_LOCAL_AUTH_TOKEN"] = "invalid"
+        try:
+            (
+                PySparkSession.builder.appName(self.__class__.__name__)
+                .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+                .getOrCreate()
+            )
+        except PySparkException as e:
+            assert e.getCondition() == "_LEGACY_ERROR_TEMP_3303"
+        finally:
+            del os.environ["SPARK_CONNECT_LOCAL_AUTH_TOKEN"]
+        self.fail("Exception should occur.")
+
+
 if should_test_connect:
 
     class TestError(grpc.RpcError, Exception):

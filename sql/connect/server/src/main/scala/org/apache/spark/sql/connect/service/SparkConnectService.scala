@@ -370,9 +370,14 @@ object SparkConnectService extends Logging {
     val sparkConnectService = new SparkConnectService(debugMode)
     val protoReflectionService =
       if (debugMode) Some(ProtoReflectionService.newInstance()) else None
+    val serverToken =
+      Option(System.getenv(ConnectCommon.CONNECT_LOCAL_AUTH_TOKEN_ENV_NAME)).orElse {
+        if (Utils.isTesting) Some(SparkEnv.get.conf.get("spark.testing.token"))
+        else None
+      }
     val configuredInterceptors =
       SparkConnectInterceptorRegistry.createConfiguredInterceptors() ++
-        ConnectCommon.localAuthToken.map(new LocalAuthInterceptor(_))
+        serverToken.map(new LocalAuthInterceptor(_))
 
     val startServiceFn = (port: Int) => {
       val sb = bindAddress match {
