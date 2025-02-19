@@ -462,7 +462,7 @@ trait StateStoreWriter
 
   private def stateStoreInstanceMetricObjects: Map[String, StateStoreInstanceMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
-    val maxPartitions = getStateInfo.numPartitions
+    val maxPartitions = stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
 
     (0 until maxPartitions).flatMap { partitionId =>
       provider.supportedInstanceMetrics.flatMap { metric =>
