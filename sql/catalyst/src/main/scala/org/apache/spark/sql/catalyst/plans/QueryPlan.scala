@@ -69,8 +69,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def outputOrdering: Seq[SortOrder] = Nil
 
-  // Override `treePatternBits` to propagate bits for its expressions.
-  override lazy val treePatternBits: BitSet = {
+  private val _treePatternBits = new BestEffortLazyVal[BitSet](() => {
     val bits: BitSet = getDefaultTreePatternBits
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
@@ -78,7 +77,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       bits.union(exprIterator.next().treePatternBits)
     }
     bits
-  }
+  })
+
+  // Override `treePatternBits` to propagate bits for its expressions.
+  override def treePatternBits: BitSet = _treePatternBits()
 
   /**
    * The set of all attributes that are input to this operator by its children.
