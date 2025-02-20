@@ -33,6 +33,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
  * @tparam T over T
  */
 @DeveloperApi
+@deprecated("This trait is intended only as a migration tool and will be removed in 4.1")
 trait AgnosticExpressionPathEncoder[T]
   extends AgnosticEncoder[T] {
   /**
