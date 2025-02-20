@@ -30,21 +30,23 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
-import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
-import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
+import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, StreamingExecutionRelation, StreamingRelation, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
@@ -128,11 +130,39 @@ class QueryExecution(
     case _ => "command"
   }
 
+  private def assertNoStreamSourceMarkerNode(p: LogicalPlan): Unit = {
+    // In UnsupportedOperationChecker.checkForBatch, we check if the plan has any streaming node.
+    // That is more aggressive than just checking the marker node for streaming source which is
+    // yet to be materialized. We'd like to be a bit conservative here since this is the exact
+    // problematic case we figured out.
+    p.foreach {
+      case _: StreamingRelation | _: StreamingRelationV2 |
+           _: StreamingExecutionRelation | _: StreamingDataSourceV2ScanRelation =>
+        val msg = "Queries with streaming sources must be executed with writeStream.start()"
+        // This is exactly the same with UnsupportedOperationChecker.checkForBatch.
+        // TODO: Classify and issue a new error class, along with UnsupportedOperationChecker.
+        throw new ExtendedAnalysisException(
+          new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3102",
+            messageParameters = Map("msg" -> msg)),
+          plan = p)
+
+      case _ =>
+    }
+  }
+
   private def eagerlyExecuteCommands(p: LogicalPlan) = {
     def eagerlyExecute(
         p: LogicalPlan,
         name: String,
         mode: CommandExecutionMode.Value): LogicalPlan = {
+      // Since we are about to execute the plan, the plan shouldn't have a marker node to be
+      // materialized during microbatch planning. If the plan has a marker node, it is highly
+      // likely that users put streaming sources in a batch query.
+      // This case brings problem before reaching the check in UnsupportedOperationChecker,
+      // (assertSupported), so we need to verify here manually.
+      assertNoStreamSourceMarkerNode(p)
+
       // Since Command execution will eagerly take place here,
       // and in most cases be the bulk of time and effort,
       // with the rest of processing of the root plan being just outputting command results,
