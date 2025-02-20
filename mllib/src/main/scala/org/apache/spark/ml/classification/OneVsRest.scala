@@ -105,7 +105,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
     DefaultParamsWriter.saveMetadata(instance, path, spark, extraMetadata, Some(jsonParams))
 
     val classifierPath = new Path(path, "classifier").toString
-    instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
+    instance.getClassifier.asInstanceOf[MLWritable].write.session(spark).save(classifierPath)
   }
 
   def loadImpl(

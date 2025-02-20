@@ -508,6 +508,11 @@ class SparkSession(SparkConversionMixin):
 
                             if url is None and is_api_mode_connect:
                                 url = opts.get("spark.master", os.environ.get("MASTER", "local"))
+                                if url.startswith("sc://"):
+                                    raise PySparkRuntimeError(
+                                        errorClass="MASTER_URL_INVALID",
+                                        messageParameters={},
+                                    )
 
                             if url is None:
                                 raise PySparkRuntimeError(

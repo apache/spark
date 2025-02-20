@@ -51,6 +51,7 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     QueryContext,
     QueryContextType,
     StreamingPythonRunnerInitializationException,
+    PickleException,
 )
 
 
@@ -87,4 +88,5 @@ __all__ = [
     "QueryContext",
     "QueryContextType",
     "StreamingPythonRunnerInitializationException",
+    "PickleException",
 ]
