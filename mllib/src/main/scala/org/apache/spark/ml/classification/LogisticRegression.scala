@@ -1265,7 +1265,7 @@ class LogisticRegressionModel private[spark] (
 
   private[spark] override def estimatedSize: Long = {
     SizeEstimator.estimate((this.params, this.uid,
-      this.coefficientMatrix, this.interceptVector))
+      this.coefficientMatrix, this.interceptVector, this.numClasses, this.isMultinomial))
   }
 
   @Since("1.4.0")
