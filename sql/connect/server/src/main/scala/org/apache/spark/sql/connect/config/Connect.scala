@@ -328,7 +328,7 @@ object Connect {
 
   def getAuthenticateToken: Option[String] = {
     SparkEnv.get.conf.get(CONNECT_AUTHENTICATE_TOKEN).orElse {
-      sys.env.get(CONNECT_AUTHENTICATE_TOKEN_ENV)
+      Option(System.getenv.get(CONNECT_AUTHENTICATE_TOKEN_ENV))
     }
   }
 }
