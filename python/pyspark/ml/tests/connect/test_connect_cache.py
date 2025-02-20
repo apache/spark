@@ -31,7 +31,7 @@ class ConnectCacheTests(unittest.TestCase):
         self.spark = (
             SparkSession.builder.remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]"))
             .config("spark.connect.session.mlCache.singleItemSize", "2MB")
-            .config("spark.connect.session.mlCache.totalItemSize", "10MB")
+            .config("spark.connect.session.mlCache.totalItemSize", "5MB")
             .getOrCreate()
         )
 
@@ -48,7 +48,7 @@ class ConnectCacheTests(unittest.TestCase):
         )
         self.assertEqual(
             spark.conf.get("spark.connect.session.mlCache.totalItemSize"),
-            "10MB",
+            "5MB",
         )
 
     def test_large_single_model(self):

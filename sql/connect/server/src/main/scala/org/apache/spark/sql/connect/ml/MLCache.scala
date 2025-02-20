@@ -21,11 +21,11 @@ import java.util.concurrent.{ConcurrentMap, TimeUnit}
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.util.ConnectHelper
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.config.Connect._
 import org.apache.spark.util.SizeEstimator
 
 /**
@@ -39,9 +39,9 @@ private[connect] class MLCache(session: SparkSession) extends Logging {
   private val cachedModel: ConcurrentMap[String, (Object, Long)] = {
     val builder = CacheBuilder.newBuilder().softValues()
 
-    val cacheWeight = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE)
-    val cacheSize = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_SIZE)
-    val timeOut = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_TIMEOUT)
+    val cacheWeight = conf.getConf(CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE)
+    val cacheSize = conf.getConf(CONNECT_SESSION_ML_CACHE_SIZE)
+    val timeOut = conf.getConf(CONNECT_SESSION_ML_CACHE_TIMEOUT)
 
     if (cacheWeight > 0) {
       builder
@@ -53,9 +53,9 @@ private[connect] class MLCache(session: SparkSession) extends Logging {
       if (cacheSize > 0) {
         // Guava cache doesn't support enabling maximumSize and maximumWeight together
         logWarning(
-          s"Both ${Connect.CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE.key} and " +
-            s"${Connect.CONNECT_SESSION_ML_CACHE_SIZE.key} are set, " +
-            s"${Connect.CONNECT_SESSION_ML_CACHE_SIZE.key} will be ignored.")
+          log"Both '${MDC(LogKeys.CONFIG, CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE.key)}' and " +
+            log"'${MDC(LogKeys.CONFIG, CONNECT_SESSION_ML_CACHE_SIZE.key)}' are set, " +
+            log"the latter will be ignored.")
       }
     } else if (cacheSize > 0) {
       builder.maximumSize(cacheSize)
@@ -81,7 +81,7 @@ private[connect] class MLCache(session: SparkSession) extends Logging {
       case o => (SizeEstimator.estimate(o), Option(o).map(_.getClass.getName).getOrElse("NULL"))
     }
 
-    val maxSize = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_SINGLE_ITEM_SIZE)
+    val maxSize = conf.getConf(CONNECT_SESSION_ML_CACHE_SINGLE_ITEM_SIZE)
     if (maxSize > 0 && estimatedSize > maxSize) {
       throw MlItemSizeExceededException("cache", name, estimatedSize, maxSize)
     }
