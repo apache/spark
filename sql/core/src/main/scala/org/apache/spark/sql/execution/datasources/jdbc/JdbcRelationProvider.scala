@@ -58,16 +58,19 @@ class JdbcRelationProvider extends CreatableRelationProvider
               // In this case, we should truncate table and then load.
               truncateTable(conn, options)
               val tableSchema = JdbcUtils.getSchemaOption(conn, options)
+              conn.close()
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, options.table, options)
               createTable(conn, options.table, df.schema, isCaseSensitive, options)
+              conn.close()
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
 
           case SaveMode.Append =>
             val tableSchema = JdbcUtils.getSchemaOption(conn, options)
+            conn.close()
             saveTable(df, tableSchema, isCaseSensitive, options)
 
           case SaveMode.ErrorIfExists =>
@@ -80,10 +83,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
         }
       } else {
         createTable(conn, options.table, df.schema, isCaseSensitive, options)
+        conn.close()
         saveTable(df, Some(df.schema), isCaseSensitive, options)
       }
     } finally {
-      conn.close()
+      if (!conn.isClosed) {
+        conn.close()
+      }
     }
 
     createRelation(sqlContext, parameters)
