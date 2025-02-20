@@ -56,7 +56,7 @@ if have_pyarrow:
 class GroupedApplyInPandasWithStateTestsMixin:
     @classmethod
     def conf(cls):
-        cfg = SparkConf()
+        cfg = super().conf()
         cfg.set("spark.sql.shuffle.partitions", "5")
         return cfg
 

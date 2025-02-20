@@ -909,7 +909,6 @@ class SparkSession:
                         )
                 del os.environ["SPARK_LOCAL_REMOTE"]
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
-                del os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
 
