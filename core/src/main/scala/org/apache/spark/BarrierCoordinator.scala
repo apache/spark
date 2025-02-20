@@ -140,7 +140,7 @@ private[spark] class BarrierCoordinator(
           } catch {
             case _: InterruptedException =>
               // Handle interruption gracefully
-              Thread.currentThread().interrupt() // Restore interrupt status
+              Thread.currentThread().interrupt()
             case e: Exception => new SparkException("Error during " +
               s"running of barrier tasks for " +
               s"$barrierId", e)
