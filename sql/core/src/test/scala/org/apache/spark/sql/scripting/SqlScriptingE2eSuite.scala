@@ -43,9 +43,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql(sqlText)
     checkAnswer(df, expected)
 
-    if (expectedSchema.isDefined) {
-      assert(df.schema === expectedSchema.get)
-    }
+    assert(expectedSchema.forall(_ === df.schema))
   }
 
   private def verifySqlScriptResultWithNamedParams(
