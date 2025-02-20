@@ -22,9 +22,9 @@ import java.util
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{ExecuteImmediateQuery, NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
@@ -38,7 +38,6 @@ sealed trait CompoundStatementExec extends Logging {
 
   /**
    * Whether the statement originates from the SQL script or is created during the interpretation.
-   * Example: DropVariable statements are automatically created at the end of each compound.
    */
   val isInternal: Boolean = false
 
@@ -115,8 +114,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   A map of parameter names to SQL literal expressions.
  * @param isInternal
  *   Whether the statement originates from the SQL script or it is created during the
- *   interpretation. Example: DropVariable statements are automatically created at the end of each
- *   compound.
+ *   interpretation.
  * @param context
  *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
@@ -988,7 +986,10 @@ class ForStatementExec(
   }
 
   private def createDropVarExec(varName: String): SingleStatementExec = {
-    val dropVar = DropVariable(UnresolvedIdentifier(Seq(varName)), ifExists = true)
+    // As DROP TEMPORARY VARIABLE is forbidden within a script, use EXECUTE IMMEDIATE to bypass
+    // this limitation. This will be removed once FOR is updated to properly use local variables.
+    val dropVar = ExecuteImmediateQuery(
+      Seq.empty, Left("DROP TEMPORARY VARIABLE IF EXISTS " + varName), Seq.empty)
     new SingleStatementExec(dropVar, Origin(), Map.empty, isInternal = true, context)
   }
 
