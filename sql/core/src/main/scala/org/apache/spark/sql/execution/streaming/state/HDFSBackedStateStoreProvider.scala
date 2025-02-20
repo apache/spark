@@ -220,7 +220,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       } + (metricStateOnCurrentVersionSizeBytes -> SizeEstimator.estimate(mapToUpdate))
 
       val instanceMetrics = Map(
-        metricInstanceSnapshotLastUploaded.withNewId(
+        instanceMetricSnapshotLastUpload.withNewId(
           stateStoreId.partitionId, stateStoreId.storeName
         ) -> lastSnapshotUploadedVersion
       )
@@ -398,7 +398,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] =
-    Seq(metricInstanceSnapshotLastUploaded)
+    Seq(instanceMetricSnapshotLastUpload)
 
   private def toMessageWithContext: MessageWithContext = {
     log"HDFSStateStoreProvider[id = (op=${MDC(LogKeys.OP_ID, stateStoreId.operatorId)}," +
@@ -433,7 +433,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private val loadedMapCacheHitCount: LongAdder = new LongAdder
   private val loadedMapCacheMissCount: LongAdder = new LongAdder
 
-  // -1 represents no version has ever been uploaded
+  // This is updated when the maintenance task writes the snapshot file, -1 represents no version
+  // has ever been uploaded.
   private var lastSnapshotUploadedVersion: Long = -1L
 
   private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
@@ -448,7 +449,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     StateStoreCustomSumMetric("loadedMapCacheMissCount",
       "count of cache miss on states cache in provider")
 
-  private lazy val metricInstanceSnapshotLastUploaded: StateStoreInstanceMetric =
+  private lazy val instanceMetricSnapshotLastUpload: StateStoreInstanceMetric =
     StateStoreSnapshotLastUploadInstanceMetric()
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
