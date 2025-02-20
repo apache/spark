@@ -394,18 +394,12 @@ class GroupedData:
             initial_state_plan = initialState._df._plan
             initial_state_grouping_cols = initialState._grouping_cols
 
-        output_schema: str = (
-            outputStructType.json()
-            if isinstance(outputStructType, StructType)
-            else outputStructType
-        )
-
         return DataFrame(
             plan.TransformWithStateInPandas(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
                 function=udf_obj,
-                output_schema=output_schema,
+                output_schema=outputStructType,
                 output_mode=outputMode,
                 time_mode=timeMode,
                 event_time_col_name=eventTimeColumnName,

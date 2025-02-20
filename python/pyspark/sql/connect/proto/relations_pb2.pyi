@@ -3788,26 +3788,23 @@ class TransformWithStateInfo(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     TIME_MODE_FIELD_NUMBER: builtins.int
-    OUTPUT_MODE_FIELD_NUMBER: builtins.int
     EVENT_TIME_COLUMN_NAME_FIELD_NUMBER: builtins.int
     OUTPUT_SCHEMA_FIELD_NUMBER: builtins.int
     time_mode: builtins.str
     """(Required) Time mode string for transformWithState."""
-    output_mode: builtins.str
-    """(Required) Output mode string for transformWithState."""
     event_time_column_name: builtins.str
     """(Optional) Event time column name."""
-    output_schema: builtins.str
-    """(Optional) Schema for the output DataFrame.
-    Only required used for TransformWithStateInPandas.
-    """
+    @property
+    def output_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) Schema for the output DataFrame.
+        Only required used for TransformWithStateInPandas.
+        """
     def __init__(
         self,
         *,
         time_mode: builtins.str = ...,
-        output_mode: builtins.str = ...,
         event_time_column_name: builtins.str | None = ...,
-        output_schema: builtins.str | None = ...,
+        output_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3831,8 +3828,6 @@ class TransformWithStateInfo(google.protobuf.message.Message):
             b"_output_schema",
             "event_time_column_name",
             b"event_time_column_name",
-            "output_mode",
-            b"output_mode",
             "output_schema",
             b"output_schema",
             "time_mode",

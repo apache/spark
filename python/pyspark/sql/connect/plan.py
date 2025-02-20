@@ -2554,7 +2554,7 @@ class TransformWithStateInPandas(LogicalPlan):
         child: Optional["LogicalPlan"],
         grouping_cols: Sequence[Column],
         function: "UserDefinedFunction",
-        output_schema: str,
+        output_schema: Union[DataType, str],
         output_mode: str,
         time_mode: str,
         event_time_col_name: str,
@@ -2573,7 +2573,9 @@ class TransformWithStateInPandas(LogicalPlan):
         else:
             super().__init__(child, self._collect_references(grouping_cols))
         self._grouping_cols = grouping_cols
-        self._output_schema = output_schema
+        self._output_schema: DataType = (
+            UnparsedDataType(output_schema) if isinstance(output_schema, str) else output_schema
+        )
         self._output_mode = output_mode
         self._time_mode = time_mode
         self._event_time_col_name = event_time_col_name
@@ -2588,6 +2590,8 @@ class TransformWithStateInPandas(LogicalPlan):
         plan.group_map.grouping_expressions.extend(
             [c.to_plan(session) for c in self._grouping_cols]
         )
+        plan.group_map.output_mode = self._output_mode
+
         # fill in initial state related fields
         if self._initial_state_plan is not None:
             plan.group_map.initial_input.CopyFrom(self._initial_state_plan.plan(session))
@@ -2599,9 +2603,8 @@ class TransformWithStateInPandas(LogicalPlan):
         # fill in transformWithStateInPandas related fields
         tws_info = proto.TransformWithStateInfo()
         tws_info.time_mode = self._time_mode
-        tws_info.output_mode = self._output_mode
-        tws_info.output_schema = self._output_schema
         tws_info.event_time_column_name = self._event_time_col_name
+        tws_info.output_schema.CopyFrom(pyspark_types_to_proto_types(self._output_schema))
 
         plan.group_map.transform_with_state_info.CopyFrom(tws_info)
 

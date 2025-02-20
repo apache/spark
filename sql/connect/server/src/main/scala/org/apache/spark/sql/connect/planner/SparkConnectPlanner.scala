@@ -1043,7 +1043,15 @@ class SparkConnectPlanner(
       groupedDs: RelationalGroupedDataset,
       rel: proto.GroupMap): LogicalPlan = {
     val twsInfo = rel.getTransformWithStateInfo
-    val outputSchema = parseSchema(twsInfo.getOutputSchema)
+    val outputSchema: StructType = {
+      transformDataType(twsInfo.getOutputSchema) match {
+        case s: StructType => s
+        case dt =>
+          throw InvalidPlanInput(
+            "Invalid user-defined output schema type for TransformWithStateInPandas. " +
+              s"Expect a struct type, but got ${dt.typeName}.")
+      }
+    }
 
     if (rel.hasInitialInput) {
       val initialGroupingCols = rel.getInitialGroupingExpressionsList.asScala.toSeq.map(expr =>
@@ -1063,7 +1071,7 @@ class SparkConnectPlanner(
         .transformWithStateInPandas(
           Column(resolvedPythonUDF),
           outputSchema,
-          twsInfo.getOutputMode,
+          rel.getOutputMode,
           twsInfo.getTimeMode,
           initialStateDs,
           twsInfo.getEventTimeColumnName)
@@ -1073,7 +1081,7 @@ class SparkConnectPlanner(
         .transformWithStateInPandas(
           Column(pythonUdf),
           outputSchema,
-          twsInfo.getOutputMode,
+          rel.getOutputMode,
           twsInfo.getTimeMode,
           null,
           twsInfo.getEventTimeColumnName)
