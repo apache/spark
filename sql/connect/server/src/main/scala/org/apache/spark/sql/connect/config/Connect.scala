@@ -333,8 +333,8 @@ object Connect {
       .internal()
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(-1)
-      // TODO: Enable this config when all builtin algorithms support model size estimation
-      // .createWithDefaultString("16MB")
+  // TODO: Enable this config when all builtin algorithms support model size estimation
+  // .createWithDefaultString("16MB")
 
   val CONNECT_SESSION_ML_CACHE_TOTAL_ITEM_SIZE =
     buildConf("spark.connect.session.mlCache.totalItemSize")
