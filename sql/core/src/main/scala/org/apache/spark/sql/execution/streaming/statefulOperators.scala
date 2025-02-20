@@ -337,11 +337,7 @@ trait StateStoreWriter
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
         // to ignore partition and store names.
-        case (name, metricConfig) =>
-          (
-            metricConfig.stateStoreProvider,
-            metricConfig.metricPrefix
-          )
+        case (name, metricConfig) => metricConfig.metricPrefix
       }
       .flatMap {
         case (_, metrics) =>

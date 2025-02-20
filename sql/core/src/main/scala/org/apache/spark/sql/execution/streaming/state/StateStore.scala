@@ -332,7 +332,6 @@ trait StateStoreInstanceMetric {
   def descPrefix: String
   def partitionId: Option[Int]
   def storeName: String
-  def stateStoreProvider: String
   def initValue: Long
 
   def createSQLMetric(sparkContext: SparkContext): SQLMetric
@@ -356,19 +355,18 @@ trait StateStoreInstanceMetric {
 
   def name: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric name")
-    s"$stateStoreProvider.$metricPrefix.partition_${partitionId.get}_$storeName"
+    s"$metricPrefix.partition_${partitionId.get}_$storeName"
   }
 
   def desc: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric description")
-    s"$stateStoreProvider: $descPrefix (partitionId = ${partitionId.get}, storeName = $storeName)"
+    s"$descPrefix (partitionId = ${partitionId.get}, storeName = $storeName)"
   }
 
   def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric
 }
 
 case class StateStoreSnapshotLastUploadInstanceMetric(
-    stateStoreProvider: String,
     partitionId: Option[Int] = None,
     storeName: String = StateStoreId.DEFAULT_STORE_NAME)
   extends StateStoreInstanceMetric {
