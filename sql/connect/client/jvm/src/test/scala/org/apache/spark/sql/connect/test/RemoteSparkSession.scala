@@ -94,7 +94,7 @@ object SparkConnectServerUtils {
    * configs, we add them here
    */
   private def testConfigs: Seq[String] = {
-    // To find InMemoryTableCatalog for V2 writer tests
+    // To find InMemoryProcedureCatalog for V2 writer tests
     val catalystTestJar =
       findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
 
@@ -115,8 +115,8 @@ object SparkConnectServerUtils {
       "in-memory"
     }
     val confs = Seq(
-      // Use InMemoryTableCatalog for V2 writer tests
-      "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
+      // Use InMemoryProcedureCatalog for V2 writer tests
+      "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryProcedureCatalog",
       // Try to use the hive catalog, fallback to in-memory if it is not there.
       "spark.sql.catalogImplementation=" + catalogImplementation,
       // Make the server terminate reattachable streams every 1 second and 123 bytes,
