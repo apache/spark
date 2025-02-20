@@ -84,10 +84,17 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
 
   /**
    * For ml connect only.
-   * Estimate the size of the model to be fitted in bytes, based on the parameters and
-   * the dataset, e.g., using $(k) and numFeatures to estimate a k-means model size.
-   * Only driver side memory usage is counted, distributed objects (like DataFrame,
+   * Estimate an upper-bound size of the model to be fitted in bytes, based on the
+   * parameters and the dataset, e.g., using $(k) and numFeatures to estimate a
+   * k-means model size.
+   * 1, Only driver side memory usage is counted, distributed objects (like DataFrame,
    * RDD, Graph, Training Summary) are ignored.
+   * 2, If there is no enough information to get an accurate size, try to estimate the
+   * upper-bound size, e.g.
+   *    - Given a LogisticRegression estimator, assume the coefficients are dense, even
+   *      though the actual fitted model might be sparse (by L1 penalty).
+   *    - Given a tree model, assume all underlying trees are complete binary trees, even
+   *      though some branches might be pruned or truncated.
    */
   private[spark] def estimateModelSize(dataset: Dataset[_]): Long = throw new NotImplementedError
 }
