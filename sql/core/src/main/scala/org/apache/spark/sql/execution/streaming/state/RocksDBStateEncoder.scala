@@ -903,7 +903,7 @@ class AvroStateEncoder(
    * @param bytesToEncode The original byte array to prepend the version byte to
    * @return A new byte array with the version byte prepended at the beginning
    */
-  private def prependVersionByte(bytesToEncode: Array[Byte]): Array[Byte] = {
+  private[sql] def prependVersionByte(bytesToEncode: Array[Byte]): Array[Byte] = {
     val encodedBytes = new Array[Byte](bytesToEncode.length + STATE_ENCODING_NUM_VERSION_BYTES)
     Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
     Platform.copyMemory(
@@ -920,7 +920,7 @@ class AvroStateEncoder(
    * @param bytes The byte array containing the version byte at the start
    * @return A new byte array with the version byte removed
    */
-  private def removeVersionByte(bytes: Array[Byte]): Array[Byte] = {
+  private[sql] def removeVersionByte(bytes: Array[Byte]): Array[Byte] = {
     val resultBytes = new Array[Byte](bytes.length - STATE_ENCODING_NUM_VERSION_BYTES)
     Platform.copyMemory(
       bytes, STATE_ENCODING_NUM_VERSION_BYTES + Platform.BYTE_ARRAY_OFFSET,
