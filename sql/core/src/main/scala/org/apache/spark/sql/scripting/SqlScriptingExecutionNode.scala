@@ -683,6 +683,9 @@ class SimpleCaseStatementExec(
           Seq(Alias(EqualTo(cachedCaseVariableLiteral, expr), "condition")()),
           OneRowRelation()
         )
+        // We hack the Origin to provide more descriptive error messages. For example, if
+        // the case variable is 1 and the condition expression it's compared to is 5, we
+        // will get Origin with text "(1 = 5)".
         val conditionText = condition.projectList.head.asInstanceOf[Alias].child.toString
         val condStmt = new SingleStatementExec(
           condition,
