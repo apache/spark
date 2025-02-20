@@ -372,11 +372,6 @@ object ResolveDefaultColumns extends QueryErrorsBase
         case _ => throw SparkException.internalError(s"parse existence default as literal err," +
           s" field name: ${field.name}, value: $defaultSQL")
       }
-      // sanity check
-      if (!literal.resolved) {
-        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-          "", field.name, defaultSQL, null)
-      }
       literal
     }.orNull
   }
