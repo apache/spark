@@ -67,7 +67,7 @@ class ConnectCacheTests(unittest.TestCase):
             weightCol="weight",
         )
 
-        with self.assertRaisesRegex(PySparkException, "CONNECT_ML.MODEL_ITEM_EXCEEDED") as e:
+        with self.assertRaisesRegex(PySparkException, "CONNECT_ML.CACHE_ITEM_EXCEEDED") as e:
             lor.fit(df)
 
     def test_model_eviction(self):

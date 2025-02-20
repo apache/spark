@@ -43,7 +43,7 @@ private[spark] case class MlItemSizeExceededException(
     estimatedSize: Long,
     maximumSize: Long)
     extends SparkException(
-      errorClass = "CONNECT_ML.MODEL_ITEM_EXCEEDED",
+      errorClass = "CONNECT_ML.CACHE_ITEM_EXCEEDED",
       messageParameters = Map(
         "operation" -> operation,
         "name" -> name,
