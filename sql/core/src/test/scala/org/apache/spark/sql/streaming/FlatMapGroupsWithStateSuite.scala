@@ -468,7 +468,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   testWithAllStateVersions("flatMapGroupsWithState - streaming with processing time timeout") {
-    assume(isStateFormatSupported(sqlConf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)))
+    assume(
+      isStateFormatSupported(sqlConf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)))
     // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
     // It returns the count if changed, or -1 if the state was removed by timeout.
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
@@ -536,7 +537,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   testWithAllStateVersions("flatMapGroupsWithState - streaming w/ event time timeout + watermark") {
-    assume(isStateFormatSupported(sqlConf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)))
+    assume(
+      isStateFormatSupported(sqlConf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)))
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS()
