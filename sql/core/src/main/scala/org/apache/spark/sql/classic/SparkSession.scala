@@ -453,10 +453,12 @@ class SparkSession private(
       // collect results immediately to maintain execution order.
       // This ensures we respect the contract of SqlScriptingExecution API.
       var df: Option[DataFrame] = sse.getNextResult
+      var resultSchema: Option[StructType] = None
       while (df.isDefined) {
         sse.withErrorHandling {
           // Collect results from the current DataFrame.
           result = Some(df.get.collect().toSeq)
+          resultSchema = Some(df.get.schema)
         }
         df = sse.getNextResult
       }
@@ -464,7 +466,10 @@ class SparkSession private(
       if (result.isEmpty) {
         emptyDataFrame
       } else {
-        val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
+        // If `result` is defined, then `resultSchema` must be defined as well.
+        assert(resultSchema.isDefined)
+
+        val attributes = DataTypeUtils.toAttributes(resultSchema.get)
         Dataset.ofRows(
           self, LocalRelation.fromExternalRows(attributes, result.get))
       }
