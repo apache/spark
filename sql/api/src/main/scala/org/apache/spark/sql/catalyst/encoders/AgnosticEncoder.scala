@@ -286,5 +286,6 @@ object AgnosticEncoders {
     override def dataType: DataType = transformed.dataType
     override def schema: StructType = transformed.schema
     override def isStruct: Boolean = transformed.isStruct
+    override def nullable: Boolean = transformed.nullable
   }
 }

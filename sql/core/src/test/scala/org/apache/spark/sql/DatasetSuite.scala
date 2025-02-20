@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import scala.reflect.ClassTag
+import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -36,11 +36,15 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.DeserializerBuildHelper.createDeserializerForString
+import org.apache.spark.sql.catalyst.SerializerBuildHelper.createSerializerForString
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, AgnosticExpressionPathEncoder, Codec, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder, EncoderField, IterableEncoder, MapEncoder, OptionEncoder, PrimitiveIntEncoder, ProductEncoder, TimestampEncoder, TransformingEncoder}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Expression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToInstant
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.instantToMicros
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -2804,6 +2808,21 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-49960: joinWith custom encoder") {
+    /*
+    test based on "joinWith class with primitive, toDF"
+    with "custom" encoder.  Removing the use of AgnosticExpressionPathEncoder
+    within SerializerBuildHelper and DeserializerBuildHelper will trigger MatchErrors
+     */
+    val ds1 = Seq(1, 1, 2).toDS()
+    val ds2 = SparkSession.active.createDataset[ClassData](Seq(ClassData("a", 1),
+      ClassData("b", 2)))(CustomPathEncoder.custClassDataEnc)
+
+    checkAnswer(
+      ds1.joinWith(ds2, $"value" === $"b").toDF().select($"_1", $"_2.a", $"_2.b"),
+      Row(1, "a", 1) :: Row(1, "a", 1) :: Row(2, "b", 2) :: Nil)
+  }
+
   test("SPARK-49961: transform type should be consistent (classic)") {
     val ds = Seq(1, 2).toDS()
     val f: classic.Dataset[Int] => classic.Dataset[Int] =
@@ -2841,6 +2860,265 @@ class DatasetSuite extends QueryTest
     checkDataset(Seq(seqMutableSet).toDS(), seqMutableSet)
     checkDataset(Seq(mapMutableSet).toDS(), mapMutableSet)
   }
+
+  // below tests are related to SPARK-49960 and TransformingEncoder usage
+  test("Incorrect derived nullability with TransformingEncoder - non nullable") {
+    val sparkI = spark
+    type T = Tuple2[Seq[Seq[Int]], Seq[Int]]
+    val data: Seq[T] = Seq( ( Seq( Seq(1, 2, 3) ), Seq(1, 2, 3) ) )
+    // for reference only
+    val sparkDataTypeOG = {
+      import sparkI.implicits._
+      val ds = spark.createDataset[Tuple2[Seq[Seq[Int]], Seq[Int]]](data)
+      ds.schema
+    }
+
+    val provider = () =>
+      new Codec[Seq[Int], Seq[Int]]{
+        override def encode(in: Seq[Int]): Seq[Int] = in
+        override def decode(out: Seq[Int]): Seq[Int] = out
+      }
+
+    val transformingSeq =
+      TransformingEncoder[Seq[Int], Seq[Int]](
+        implicitly[ClassTag[Seq[Int]]],
+        IterableEncoder[Seq[Int], Int](implicitly[ClassTag[Seq[Int]]],
+          PrimitiveIntEncoder, false, false),
+        provider
+      )
+
+    val enc =
+      ProductEncoder(
+        implicitly[ClassTag[T]],
+        Seq(
+          EncoderField("_1",
+            IterableEncoder[Seq[Seq[Int]], Seq[Int]](implicitly[ClassTag[Seq[Seq[Int]]]],
+              transformingSeq, false, false), false, Metadata.empty),
+          EncoderField( "_2", transformingSeq, false, Metadata.empty)
+        ),
+        None
+      )
+    val sparkViaAgnostic = {
+      val ds = spark.createDataset(data)(enc)
+      ds.schema
+    }
+    // the nullability without TransformingEncoder nullability (SerializerBuilderHelper)
+    // is incorrect (_2 is inferred as nullable)
+    assert(enc.dataType === sparkViaAgnostic)
+  }
+
+  def provider[A]: () => Codec[V[A], A] = () =>
+    new Codec[V[A], A]{
+      override def encode(in: V[A]): A = in.v
+      override def decode(out: A): V[A] = V(out)
+    }
+
+  def transforming[A](underlying: AgnosticEncoder[A]): TransformingEncoder[V[A], A] =
+    TransformingEncoder[V[A], A](
+      implicitly[ClassTag[V[A]]],
+      underlying,
+      provider
+    )
+
+  val V_INT = StructType(Seq(StructField("v", IntegerType, nullable = false)))
+
+  // "value" usage for single field, a wrapping nullable type is required
+  val OPTION_OF_V_INT = StructType(Seq(StructField("value",
+    V_INT, nullable = true)))
+
+  // product encoder for a non-nullable V
+  val V_OF_INT =
+    ProductEncoder(
+      classTag[V[Int]],
+      Seq(EncoderField("v", PrimitiveIntEncoder, nullable = false, Metadata.empty)),
+      None
+    )
+
+  test("""Encoder derivation with nested TransformingEncoder of OptionEncoder""".stripMargin) {
+    val sparkI = spark
+    type T = V[V[Option[V[Int]]]]
+    val data: Seq[T] = Seq(V(V(None)), V(V(Some(V(1)))))
+    // for reference - datatype will introduce nested classes as expected
+    val sparkDataTypeOG = {
+      import sparkI.implicits._
+      val ds = spark.createDataset[V[V[Option[V[Int]]]]](data)
+      ds.schema
+    }
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      transforming(
+        transforming(
+          OptionEncoder(
+            // works
+            // transforming(PrimitiveIntEncoder)
+            // does not work
+            V_OF_INT
+          )
+        )
+      )
+
+    assert(enc.schema === OPTION_OF_V_INT)
+
+    val sparkViaAgnostic = {
+      val ds = spark.createDataset(data)(enc)
+      ds.schema
+    }
+
+    /* The schema has been changed to just the Product V[Int], the wrapping Option value
+        struct has been removed - it should not have been */
+    assert(sparkViaAgnostic === enc.schema)
+
+    val ds = spark.createDataset(data)(enc)
+    assert(ds.collect().toVector === data.toVector)
+  }
+
+  test("""Encoder derivation with TransformingEncoder of OptionEncoder""".stripMargin) {
+    val sparkI = spark
+    type T = V[Option[V[Int]]]
+    val data: Seq[T] = Seq(V(None), V(Some(V(1))))
+    // for reference - datatype will introduce nested classes as expected
+    val sparkDataTypeOG = {
+      import sparkI.implicits._
+      val ds = spark.createDataset[V[Option[V[Int]]]](data)
+      ds.schema
+    }
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      transforming(
+        OptionEncoder(
+          // works
+          // transforming(PrimitiveIntEncoder)
+          // does not work
+          V_OF_INT
+        )
+      )
+
+    assert(enc.schema === OPTION_OF_V_INT)
+
+    val sparkViaAgnostic = {
+      val ds = spark.createDataset(data)(enc)
+      ds.schema
+    }
+
+    /* The schema has been changed to just the Product V[Int], the wrapping Option value
+        struct has been removed - it should not have been */
+    assert(sparkViaAgnostic === enc.schema)
+
+    val ds = spark.createDataset(data)(enc)
+    assert(ds.collect().toVector === data.toVector)
+  }
+
+  val longEncForTimestamp: AgnosticEncoder[V[Long]] =
+    TransformingEncoder[V[Long], java.sql.Timestamp](
+      classTag,
+      TimestampEncoder(true),
+      () =>
+        new Codec[V[Long], java.sql.Timestamp] with Serializable {
+          override def encode(in: V[Long]): Timestamp = Timestamp.from(microsToInstant(in.v))
+
+          override def decode(out: Timestamp): V[Long] = V[Long](instantToMicros(out.toInstant))
+        }
+    )
+
+  test("""TransformingEncoder as Iterable""".stripMargin) {
+    val sparkI = spark
+    type T = Seq[V[Long]]
+    val data: Seq[T] = Seq(Seq(V(0)), Seq(V(1), V(2)))
+    // for reference - datatype will introduce nested classes as expected
+    val sparkDataTypeOG = {
+      import sparkI.implicits._
+      val ds = spark.createDataset[Seq[V[Long]]](data)
+      ds.schema
+    }
+
+    /* requires validateAndSerializeElement to test for TransformingEncoder */
+    val enc: AgnosticEncoder[T] =
+      IterableEncoder[Seq[V[Long]], V[Long]](
+        implicitly[ClassTag[Seq[V[Long]]]],
+        longEncForTimestamp,
+        containsNull = false,
+        lenientSerialization = false)
+
+    assert(enc.dataType === new ArrayType(TimestampType, false))
+
+    val sparkViaAgnostic = {
+      val ds = spark.createDataset(data)(enc)
+      ds.schema
+    }
+
+    assert(sparkViaAgnostic === enc.schema)
+
+    val ds = spark.createDataset(data)(enc)
+    assert(ds.collect().toVector === data.toVector)
+  }
+
+  test("""TransformingEncoder as Map Key/Value""".stripMargin) {
+    val sparkI = spark
+    type T = Map[V[Long], V[Long]]
+    val data: Seq[T] = Seq(Map(V(0L) -> V(0L)), Map(V(1L) -> V(1L)), Map(V(2L) -> V(2L)))
+    // for reference - datatype will introduce nested classes as expected
+    val sparkDataTypeOG = {
+      import sparkI.implicits._
+      val ds = spark.createDataset[Map[V[Long], V[Long]]](data)
+      ds.schema
+    }
+
+    /* requires validateAndSerializeElement to test for TransformingEncoder */
+    val enc: AgnosticEncoder[T] =
+      MapEncoder[T, V[Long], V[Long]](
+        implicitly[ClassTag[T]],
+        longEncForTimestamp,
+        longEncForTimestamp,
+        valueContainsNull = false)
+
+    assert(enc.dataType === new MapType(TimestampType, TimestampType, false))
+
+    val sparkViaAgnostic = {
+      val ds = spark.createDataset(data)(enc)
+      ds.schema
+    }
+
+    assert(sparkViaAgnostic === enc.schema)
+
+    val ds = spark.createDataset(data)(enc)
+    assert(ds.collect().toVector === data.toVector)
+  }
+}
+
+/**
+ * SPARK-49960 - Mimic a custom encoder such as those provided by typelevel Frameless
+ */
+object CustomPathEncoder {
+
+  val realClassDataEnc: ProductEncoder[ClassData] =
+    Encoders.product[ClassData].asInstanceOf[ProductEncoder[ClassData]]
+
+  val custStringEnc: AgnosticExpressionPathEncoder[String] =
+    new AgnosticExpressionPathEncoder[String] {
+
+      override def toCatalyst(input: Expression): Expression =
+        createSerializerForString(input)
+
+      override def fromCatalyst(inputPath: Expression): Expression =
+        createDeserializerForString(inputPath, returnNullable = false)
+
+      override def isPrimitive: Boolean = false
+
+      override def dataType: DataType = StringType
+
+      override def clsTag: ClassTag[String] = implicitly[ClassTag[String]]
+
+      override def isStruct: Boolean = true
+    }
+
+  val custClassDataEnc: ProductEncoder[ClassData] = realClassDataEnc.copy(fields =
+    Seq(realClassDataEnc.fields.head.copy(enc = custStringEnc),
+      realClassDataEnc.fields.last)
+  )
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2984,3 +3262,5 @@ case class SaveModeArrayCase(modes: Array[SaveMode])
 
 case class K1(a: Long)
 case class K2(a: Long, b: Long)
+
+case class V[A](v: A)
