@@ -242,11 +242,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows10(1).getString(0) === "alex")
   }
 
-  // MySQL Connector/J uses collation 'utf8mb4_0900_ai_ci' as collation for connection.
-  // The MySQL server 9.1.0 uses collation 'utf8mb4_0900_ai_ci' for database by default.
-  // This method uses string colume directly as the result of cast has the same collation.
-  def testCastStringTarget(stringLiteral: String, stringCol: String): String = stringCol
-
   test("SPARK-50793: MySQL JDBC Connector failed to cast some types") {
     val tableName = catalogName + ".test_cast_function"
     withTable(tableName) {
@@ -297,24 +292,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       testCast("SHORT", stringCol, longCol, LongType, longValue)
       testCast("INTEGER", stringCol, longCol, LongType, longValue)
       testCast("LONG", stringCol, longCol, LongType, longValue)
-      testCast(
-        "STRING",
-        longCol,
-        testCastStringTarget(stringLiteral, stringCol),
-        StringType,
-        stringValue)
-      testCast(
-        "STRING",
-        binaryCol,
-        testCastStringTarget(stringLiteral, stringCol),
-        StringType,
-        stringValue)
-      testCast(
-        "STRING",
-        doubleCol,
-        testCastStringTarget(stringLiteral, stringCol),
-        StringType,
-        doubleLiteral)
+      testCast("STRING", longCol, stringCol, StringType, stringValue)
+      testCast("STRING", binaryCol, stringCol, StringType, stringValue)
+      testCast("STRING", doubleCol, stringCol, StringType, doubleLiteral)
       testCast("DOUBLE", stringCol, doubleCol, DoubleType, doubleValue)
       testCast("DOUBLE", longCol, doubleCol, DoubleType, doubleValue)
     }
@@ -340,12 +320,6 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false"
+        s"&useSSL=false&sessionVariables=collation_connection='utf8mb4_0900_ai_ci'"
   }
-
-  // MariaDB Connector/J uses collation 'utf8mb4_unicode_ci' as collation for connection.
-  // The MySQL server 9.1.0 uses collation 'utf8mb4_0900_ai_ci' for database by default.
-  // This method uses string literal so the result of cast and literal have the same collation.
-  override def testCastStringTarget(stringLiteral: String, stringCol: String): String =
-    stringLiteral
 }
