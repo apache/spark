@@ -1045,8 +1045,6 @@ class SparkSession:
             init_opts.update(opts)
             opts = init_opts
 
-            token = str(uuid.uuid4())
-
             # Configurations to be overwritten
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master
@@ -1054,8 +1052,13 @@ class SparkSession:
                 del overwrite_conf["spark.remote"]
             if "spark.api.mode" in overwrite_conf:
                 del overwrite_conf["spark.api.mode"]
-            overwrite_conf["spark.connect.authenticate.token"] = token
-            os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
+
+            # Check for a user provided authentication token, creating a new one if not,
+            # and make sure it's set in the environment,
+            if "SPARK_CONNECT_AUTHENTICATE_TOKEN" not in os.environ:
+                os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = opts.get(
+                    "spark.connect.authenticate.token", str(uuid.uuid4())
+                )
 
             # Configurations to be set if unset.
             default_conf = {

@@ -21,7 +21,8 @@ import io.grpc.{Metadata, ServerCall, ServerCallHandler, ServerInterceptor, Stat
 
 class PreSharedKeyAuthenticationInterceptor(token: String) extends ServerInterceptor {
 
-  val authorizationMetadataKey = Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
+  val authorizationMetadataKey =
+    Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
 
   val expectedValue = s"Bearer $token"
 
