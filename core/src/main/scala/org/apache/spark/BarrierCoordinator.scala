@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.util.TimerTask
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 import java.util.function.Consumer
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -55,6 +55,7 @@ private[spark] class BarrierCoordinator(
   // fetch result, we shall fix the issue.
   private lazy val timer = ThreadUtils.newSingleThreadScheduledExecutor(
     "BarrierCoordinator barrier epoch increment timer")
+  private var timerFuture: Option[ScheduledFuture[_]] = None
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
@@ -80,8 +81,9 @@ private[spark] class BarrierCoordinator(
       states.forEachValue(1, clearStateConsumer)
       states.clear()
       listenerBus.removeListener(listener)
-      ThreadUtils.shutdown(timer)
     } finally {
+      cancelTimerTask()
+      ThreadUtils.shutdown(timer)
       super.onStop()
     }
   }
@@ -122,23 +124,49 @@ private[spark] class BarrierCoordinator(
     // Init a TimerTask for a barrier() call.
     private def initTimerTask(state: ContextBarrierState): Unit = {
       timerTask = new TimerTask {
-        override def run(): Unit = state.synchronized {
-          // Timeout current barrier() call, fail all the sync requests.
-          requesters.foreach(_.sendFailure(new SparkException("The coordinator didn't get all " +
-            s"barrier sync requests for barrier epoch $barrierEpoch from $barrierId within " +
-            s"$timeoutInSecs second(s).")))
-          cleanupBarrierStage(barrierId)
-        }
+        override def run(): Unit =
+          try {
+            state.synchronized {
+              if (!Thread.currentThread().isInterrupted()) {
+                // Timeout current barrier() call, fail all the sync requests.
+                requesters.foreach(
+                  _.sendFailure(new SparkException("The coordinator didn't get all " +
+                    s"barrier sync requests for barrier epoch +" +
+                    s" $barrierEpoch from $barrierId within " +
+                    s"$timeoutInSecs second(s).")))
+                cleanupBarrierStage(barrierId)
+              }
+            }
+          } catch {
+            case _: InterruptedException =>
+              // Handle interruption gracefully
+              Thread.currentThread().interrupt() // Restore interrupt status
+            case e: Exception => new SparkException("Error during " +
+              s"running of barrier tasks for " +
+              s"$barrierId", e)
+          } finally {
+            // Ensure cleanup happens even if interrupted or exception occurs
+            try {
+              state.synchronized {
+                if (requesters.nonEmpty) {
+                  requesters.clear()
+                }
+              }
+            } catch {
+              case e: Exception => new SparkException("Error during " +
+                  s"clearing RPC CallContexts for " +
+                  s"$barrierId", e)
+            }
+          }
       }
     }
 
-    // Cancel the current active TimerTask and release resources.
+    /* Cancel the tasks scheduled to run inside the ScheduledExecutor Threadpool
+    * The original implementation was clearing java.util.Timer and java.util.TimerTasks
+    * This became a no-op when java.util.Timer was replaced with ScheduledThreadPoolExecutor
+    */
     private def cancelTimerTask(): Unit = {
-      if (timerTask != null) {
-        timerTask.cancel()
-        timer.purge()
-        timerTask = null
-      }
+      timerFuture.foreach(_.cancel(true))
     }
 
     // Process the global sync request. The barrier() call succeed if collected enough requests
@@ -173,7 +201,8 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS)
+          timerFuture =
+            Some(timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS))
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester
