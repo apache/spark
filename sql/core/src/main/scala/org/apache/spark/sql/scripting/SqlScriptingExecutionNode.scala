@@ -629,8 +629,8 @@ class SimpleCaseStatementExec(
   private var isCacheValid = false
   private def validateCache(): Unit = {
     if (!isCacheValid) {
-      caseVariableExec.isExecuted = true
       val values = caseVariableExec.buildDataFrame(session).collect()
+      caseVariableExec.isExecuted = true
 
       caseVariableLiteral = Literal(values.head.get(0))
       conditionBodyTupleIterator = createConditionBodyIterator
