@@ -241,7 +241,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             context)
         val bodyExec =
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec]
-        new ForStatementExec(queryExec, variableNameOpt, bodyExec, label, session, context)
+        new ForStatementExec(
+          queryExec, variableNameOpt, bodyExec.statements, label, session, context)
 
       case leaveStatement: LeaveStatement =>
         new LeaveStatementExec(leaveStatement.label)
