@@ -20,9 +20,9 @@ import unittest
 
 import numpy as np
 
-from pyspark.errors import AnalysisException, PySparkTypeError, PySparkException
-from pyspark.sql import DataFrame, Row, SparkSession
-from pyspark.ml.linalg import Vectors, Matrices, DenseMatrix
+from pyspark.errors import PySparkException
+from pyspark.sql import SparkSession
+from pyspark.ml.linalg import Vectors, DenseMatrix
 from pyspark.ml.classification import LogisticRegression
 
 
@@ -105,7 +105,7 @@ class ConnectCacheTests(unittest.TestCase):
             models.append(model)
 
         # The first model should have been evicted
-        with self.assertRaisesRegex(PySparkException, "CONNECT_ML.CACHE_INVALID") as e:
+        with self.assertRaisesRegex(PySparkException, "CONNECT_ML.CACHE_INVALID"):
             first_model.transform(df).count()
 
 
