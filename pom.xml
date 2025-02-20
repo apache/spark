@@ -122,7 +122,7 @@
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.24.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.2.0.2</hadoop.version>
+    <hadoop.version>3.2.0.16-EE-SNAPSHOT</hadoop.version>
     <hadoop.group>io.hops</hadoop.group>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>3.23.4</protobuf.version>
@@ -352,9 +352,9 @@
       </snapshots>
     </repository>
     <repository>
-      <id>Hops</id>
-      <name>Hops Repository</name>
-      <url>https://archiva.hops.works/repository/Hops/</url>
+      <id>HopsEE</id>
+      <name>Hops Release Repository</name>
+      <url>https://nexus.hops.works/repository/hops-artifacts</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -3988,9 +3988,9 @@
   </profiles>
   <distributionManagement>
     <repository>
-      <id>Hops</id>
-      <name>Hops Repo</name>
-      <url>https://archiva.hops.works/repository/Hops/</url>
+      <id>HopsEE</id>
+      <name>Hops Release Repository</name>
+      <url>https://nexus.hops.works/repository/hops-artifacts</url>
     </repository>
   </distributionManagement>
 </project>
