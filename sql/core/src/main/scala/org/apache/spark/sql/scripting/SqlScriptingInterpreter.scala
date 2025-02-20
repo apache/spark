@@ -20,8 +20,8 @@ package org.apache.spark.sql.scripting
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CompoundPlanStatement, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, OneRowRelation, Project, RepeatStatement, SearchedCaseStatement, SimpleCaseStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -187,7 +187,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
 
-      case CaseStatement(conditions, conditionalBodies, elseBody) =>
+      case SearchedCaseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
           new SingleStatementExec(
             condition.parsedPlan,
@@ -199,8 +199,24 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
           transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
-        new CaseStatementExec(
+        new SearchedCaseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
+
+      case SimpleCaseStatement(caseExpr, conditionExpressions, conditionalBodies, elseBody) =>
+        val caseValueStmt = SingleStatement(
+          Project(Seq(Alias(caseExpr, "caseVariable")()), OneRowRelation()))
+        val caseVarExec = new SingleStatementExec(
+          caseValueStmt.parsedPlan,
+          caseValueStmt.origin,
+          args,
+          isInternal = true,
+          context)
+        val conditionalBodiesExec = conditionalBodies.map(body =>
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
+        val elseBodyExec = elseBody.map(body =>
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
+        new SimpleCaseStatementExec(
+          caseVarExec, conditionExpressions, conditionalBodiesExec, elseBodyExec, session, context)
 
       case WhileStatement(condition, body, label) =>
         val conditionExec =
