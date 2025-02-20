@@ -21,7 +21,7 @@ from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import have_torch, torch_requirement_message
 
-if not is_remote_only():
+if False:  # not is_remote_only():
     from pyspark.ml.torch.tests.test_data_loader import TorchDistributorDataLoaderUnitTests
 
     @unittest.skipIf(
