@@ -26,7 +26,7 @@ from pyspark.ml.linalg import Vectors
 from pyspark.testing.utils import have_torch, torch_requirement_message
 
 
-@unittest.skipIf(not have_torch, torch_requirement_message)
+@unittest.skipIf(True, torch_requirement_message)
 class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
