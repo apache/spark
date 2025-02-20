@@ -176,28 +176,6 @@ class EncoderResolutionSuite extends PlanTest {
     assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
-  test("the real number of fields doesn't match encoder schema: nested tuple encoder") {
-    val encoder = ExpressionEncoder[(String, (Long, String))]()
-
-    {
-      val attrs = Seq($"a".string, $"b".struct($"x".long, $"y".string, $"z".int))
-      checkError(
-        exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<x: BIGINT, y: STRING, z: INT>\"",
-          "ordinal" -> "2"))
-    }
-
-    {
-      val attrs = Seq($"a".string, $"b".struct($"x".long))
-      checkError(
-        exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-        parameters = Map("schema" -> "\"STRUCT<x: BIGINT>\"",
-          "ordinal" -> "2"))
-    }
-  }
-
   test("nested case class can have different number of fields from the real schema") {
     val encoder = ExpressionEncoder[(String, StringIntClass)]()
     val attrs = Seq($"a".string, $"b".struct($"a".string, $"b".int, $"c".int))

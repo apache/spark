@@ -1030,6 +1030,8 @@ case class GetColumnByOrdinal(
     throw new UnresolvedException("dataType"))
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = explicitDataType.toSeq
 }
 
 object GetColumnByOrdinal {
