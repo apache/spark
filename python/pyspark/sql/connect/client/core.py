@@ -315,7 +315,7 @@ class DefaultChannelBuilder(ChannelBuilder):
 
     @staticmethod
     def default_port() -> int:
-        if "SPARK_LOCAL_REMOTE" in os.environ and not is_remote_only():
+        if "SPARK_TESTING" in os.environ and not is_remote_only():
             from pyspark.sql.session import SparkSession as PySparkSession
 
             # In the case when Spark Connect uses the local mode, it starts the regular Spark

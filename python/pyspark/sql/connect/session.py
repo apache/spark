@@ -1054,8 +1054,6 @@ class SparkSession:
                 del overwrite_conf["spark.remote"]
             if "spark.api.mode" in overwrite_conf:
                 del overwrite_conf["spark.api.mode"]
-            # When running a local server, always use an ephemeral port
-            overwrite_conf["spark.connect.grpc.binding.port"] = "0"
             overwrite_conf["spark.connect.authenticate.token"] = token
             os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
 
@@ -1065,6 +1063,11 @@ class SparkSession:
                 "spark.sql.artifact.isolation.enabled": "true",
                 "spark.sql.artifact.isolation.alwaysApplyClassloader": "true",
             }
+
+            if "SPARK_TESTING" in os.environ:
+                # For testing, we use 0 to use an ephemeral port to allow parallel testing.
+                # See also SPARK-42272.
+                overwrite_conf["spark.connect.grpc.binding.port"] = "0"
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
             try:
