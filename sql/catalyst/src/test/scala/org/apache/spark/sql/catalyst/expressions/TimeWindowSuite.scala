@@ -20,15 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampNTZType, TimestampType}
 
-class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
+class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("time window is unevaluable") {
     intercept[SparkException] {
