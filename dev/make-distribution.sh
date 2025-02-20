@@ -255,6 +255,7 @@ if [ "$MAKE_PIP" == "true" ]; then
   rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
   python3 packaging/classic/setup.py sdist
   python3 packaging/connect/setup.py sdist
+  python3 packaging/client/setup.py sdist
   popd > /dev/null
 else
   echo "Skipping building python distribution package"

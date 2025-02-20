@@ -25,21 +25,24 @@ object NondeterministicExpressionCollection {
   def getNondeterministicToAttributes(
       expressions: Seq[Expression]): LinkedHashMap[Expression, NamedExpression] = {
     val nonDeterministicToAttributes = new LinkedHashMap[Expression, NamedExpression]
-    expressions
-      .filterNot(_.deterministic)
-      .flatMap { expr =>
+
+    for (expr <- expressions) {
+      if (!expr.deterministic) {
         val leafNondeterministic = expr.collect {
-          case n: Nondeterministic => n
+          case nondeterministicExpr: Nondeterministic => nondeterministicExpr
           case udf: UserDefinedExpression if !udf.deterministic => udf
         }
-        leafNondeterministic.distinct.map { e =>
-          val ne = e match {
-            case n: NamedExpression => n
-            case _ => Alias(e, "_nondeterministic")()
+
+        for (nondeterministicExpr <- leafNondeterministic.distinct) {
+          val namedExpression = nondeterministicExpr match {
+            case namedExpression: NamedExpression => namedExpression
+            case _ => Alias(nondeterministicExpr, "_nondeterministic")()
           }
-          nonDeterministicToAttributes.put(e, ne)
+          nonDeterministicToAttributes.put(nondeterministicExpr, namedExpression)
         }
       }
+    }
+
     nonDeterministicToAttributes
   }
 }

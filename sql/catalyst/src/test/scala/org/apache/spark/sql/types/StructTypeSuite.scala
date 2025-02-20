@@ -804,10 +804,10 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-51208: ColumnDefinition.toV1Column should preserve EXISTS_DEFAULT resolution") {
 
     def validateConvertedDefaults(
-      colName: String,
-      dataType: DataType,
-      defaultSQL: String,
-      expectedExists: String): Unit = {
+        colName: String,
+        dataType: DataType,
+        defaultSQL: String,
+        expectedExists: String): Unit = {
       val existsDefault = ResolveDefaultColumns.analyze(colName, dataType, defaultSQL, "")
       val col =
         ColumnDefinition(colName, dataType, true, None,
@@ -829,6 +829,6 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     validateConvertedDefaults("c3", VariantType, "parse_json('{\"k\": \"v\"}')",
       "PARSE_JSON('{\"k\":\"v\"}')")
     validateConvertedDefaults("c4", VariantType, "parse_json(null)", "CAST(NULL AS VARIANT)")
-
+    validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
   }
 }

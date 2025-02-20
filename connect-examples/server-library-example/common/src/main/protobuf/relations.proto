@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.jobs
+syntax = 'proto3';
 
-/**
- * Names of the CSS classes corresponding to each type of task detail. Used to allow users
- * to optionally show/hide columns.
- *
- * If new optional metrics are added here, they should also be added to the end of webui.css
- * to have the style set to "display: none;" by default.
- */
-private[spark] object TaskDetailsClassNames {
-  val SCHEDULER_DELAY = "scheduler_delay"
-  val TASK_DESERIALIZATION_TIME = "deserialization_time"
-  val SHUFFLE_READ_FETCH_WAIT_TIME = "fetch_wait_time"
-  val SHUFFLE_READ_REMOTE_SIZE = "shuffle_read_remote"
-  val RESULT_SERIALIZATION_TIME = "serialization_time"
-  val GETTING_RESULT_TIME = "getting_result_time"
-  val PEAK_EXECUTION_MEMORY = "peak_execution_memory"
+option java_multiple_files = true;
+option java_package = "org.apache.connect.examples.serverlibrary.proto";
+
+import "base.proto";
+
+message CustomRelation {
+  oneof relation_type {
+    Scan scan = 1;
+  }
+}
+
+message Scan {
+  // (Required) Table to scan.
+  CustomTable table = 1;
 }
