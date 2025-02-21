@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   And,
   Attribute,
+  AttributeSet,
   Coalesce,
   EqualTo,
   Expression,
@@ -125,8 +126,10 @@ object NaturalAndUsingJoinResolution extends DataTypeErrorsBase with SQLConfHelp
       joinPairs: Seq[(Attribute, Attribute)],
       joinType: JoinType): (Seq[NamedExpression], Seq[Attribute]) = {
     // columns not in joinPairs
-    val lUniqueOutput = leftOutput.filterNot(att => leftKeys.contains(att))
-    val rUniqueOutput = rightOutput.filterNot(att => rightKeys.contains(att))
+    val leftKeysLookup = AttributeSet(leftKeys)
+    val rightKeysLookup = AttributeSet(rightKeys)
+    val lUniqueOutput = leftOutput.filterNot(att => leftKeysLookup.contains(att))
+    val rUniqueOutput = rightOutput.filterNot(att => rightKeysLookup.contains(att))
     joinType match {
       case LeftOuter =>
         (

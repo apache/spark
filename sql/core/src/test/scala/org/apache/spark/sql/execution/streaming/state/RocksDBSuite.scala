@@ -433,7 +433,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
       // Verify schema ID in remaining key bytes
-      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(
+        encoder.removeVersionByte(encodedRemainingKey))
       assert(decodedSchemaIdRow.schemaId === 18,
         "Schema ID not preserved in prefix scan remaining key encoding")
     }
@@ -462,7 +463,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
       // Verify schema ID in remaining key bytes
-      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(
+        encoder.removeVersionByte(encodedRemainingKey))
       assert(decodedSchemaIdRow.schemaId === 24,
         "Schema ID not preserved in range scan remaining key encoding")
 
@@ -565,7 +567,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val encodedValue = valueEncoder.encodeValue(value)
 
       // Verify schema ID was included and preserved
-      val decodedSchemaIdRow = avroEncoder.decodeStateSchemaIdRow(encodedValue)
+      val decodedSchemaIdRow = avroEncoder.decodeStateSchemaIdRow(
+        avroEncoder.removeVersionByte(encodedValue))
       assert(decodedSchemaIdRow.schemaId === 42,
         "Schema ID not preserved in single value encoding")
 
