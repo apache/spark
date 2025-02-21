@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
-import org.apache.spark.sql.catalyst.plans.logical.{Call, CommandResult, LocalRelation, LogicalPlan, MultiResult}
+import org.apache.spark.sql.catalyst.plans.logical.{Call, CommandResult, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
@@ -64,7 +64,8 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
           relation.data)
       case _ =>
         // TODO wrap in command result to support SparkConnect
-        MultiResult(relations)
+        throw SparkException.internalError(
+          s"Multi-result procedures are temporarily not supported.")
     }
   }
 
