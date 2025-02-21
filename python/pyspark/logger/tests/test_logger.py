@@ -110,8 +110,34 @@ class LoggerTestsMixin:
             )
             self.assertTrue("Traceback" in log_json["exception"]["stacktrace"][0])
 
+    def test_log_exception_with_stacktrace(self):
+        try:
+            raise ValueError("Test Exception")
+        except ValueError:
+            self.logger.exception("Exception occurred", user="test_user_stacktrace")
+
+        log_json = json.loads(self.handler.stream.getvalue().strip())
+
+        self.assertEqual(log_json["msg"], "Exception occurred")
+        self.assertEqual(log_json["context"], {"user": "test_user_stacktrace"})
+        self.assertTrue("exception" in log_json)
+        self.assertTrue("class" in log_json["exception"])
+        self.assertTrue("msg" in log_json["exception"])
+        self.assertTrue("stacktrace" in log_json["exception"])
+        self.assertIsInstance(log_json["exception"]["stacktrace"], list)
+
+        # Check the structure of "stacktrace"
+        for frame in log_json["exception"]["stacktrace"]:
+            self.assertTrue("class" in frame)
+            self.assertTrue("method" in frame)
+            self.assertTrue("file" in frame)
+            self.assertTrue("line" in frame)
+
 
 class LoggerTests(LoggerTestsMixin, ReusedSQLTestCase):
+    def test_log_exception_with_stacktrace(self):
+        super().test_log_exception_with_stacktrace()
+
     pass
 
 

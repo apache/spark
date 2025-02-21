@@ -18,6 +18,7 @@
 
 import logging
 import json
+import traceback
 from typing import cast, Optional
 
 SPARK_LOG_SCHEMA = (
@@ -26,7 +27,7 @@ SPARK_LOG_SCHEMA = (
     "msg STRING, "
     "context map<STRING, STRING>, "
     "exception STRUCT<class STRING, msg STRING, "
-    "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING,line STRING>>>,"
+    "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING, line STRING>>> ,"
     "logger STRING"
 )
 
@@ -66,10 +67,21 @@ class JSONFormatter(logging.Formatter):
         }
         if record.exc_info:
             exc_type, exc_value, exc_tb = record.exc_info
+            stacktrace = traceback.extract_tb(exc_tb)
+
+            structured_stacktrace = [
+                {
+                    "class": exc_type.__name__ if exc_type else "UnknownException",
+                    "method": frame.name,
+                    "file": frame.filename,
+                    "line": str(frame.lineno),
+                }
+                for frame in stacktrace
+            ]
             log_entry["exception"] = {
                 "class": exc_type.__name__ if exc_type else "UnknownException",
                 "msg": str(exc_value),
-                "stacktrace": self.formatException(record.exc_info).splitlines(),
+                "stacktrace": structured_stacktrace,
             }
         return json.dumps(log_entry, ensure_ascii=False)
 
