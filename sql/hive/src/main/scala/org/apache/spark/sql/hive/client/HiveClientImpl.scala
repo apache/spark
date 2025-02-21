@@ -19,8 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{OutputStream, PrintStream}
 import java.lang.{Iterable => JIterable}
-import java.lang.reflect.{Proxy => JdkProxy}
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{InvocationTargetException, Method, Proxy => JdkProxy}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{HashMap => JHashMap, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
@@ -67,7 +66,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, SparkClassUtils, Utils}
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -1417,45 +1416,57 @@ private[hive] object HiveClientImpl extends Logging {
       case _: NoSuchMethodError =>
         Hive.get(hiveConf)
     }
-    configureMaxThriftMessageSize(hiveConf, hive.getMSC)
+
+    // Follow behavior of HIVE-26633 (4.0.0), only apply the max message size when
+    // `hive.thrift.client.max.message.size` is set and the value is positive
+    Option(hiveConf.get("hive.thrift.client.max.message.size"))
+      .map(HiveConf.toSizeBytes(_).toInt).filter(_ > 0)
+      .foreach { maxMessageSize =>
+        logDebug(s"Trying to set metastore client thrift max message to $maxMessageSize")
+        configureMaxThriftMessageSize(hiveConf, hive.getMSC, maxMessageSize)
+      }
+
     hive
+  }
+
+  private def getFieldValue[T](obj: Any, fieldName: String): T = {
+    val field = obj.getClass.getDeclaredField(fieldName)
+    field.setAccessible(true)
+    field.get(obj).asInstanceOf[T]
+  }
+
+  private def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
+    val method = klass.getDeclaredMethod(name, args: _*)
+    method.setAccessible(true)
+    method
   }
 
   // SPARK-49489: a surgery for Hive 2.3.10 due to lack of HIVE-26633
   private def configureMaxThriftMessageSize(
-      hiveConf: HiveConf, msClient: IMetaStoreClient): Unit = try {
+      hiveConf: HiveConf, msClient: IMetaStoreClient, maxMessageSize: Int): Unit = try {
     msClient match {
       // Hive uses Java Dynamic Proxy to enhance the MetaStoreClient to support synchronization
       // and retrying, we should unwrap and access the real MetaStoreClient instance firstly
       case proxy if JdkProxy.isProxyClass(proxy.getClass) =>
         JdkProxy.getInvocationHandler(proxy) match {
           case syncHandler if syncHandler.getClass.getName.endsWith("SynchronizedHandler") =>
-            val realMscField = SparkClassUtils.classForName(
-                "org.apache.hadoop.hive.metastore.HiveMetaStoreClient$SynchronizedHandler")
-              .getDeclaredField("client")
-            realMscField.setAccessible(true)
-            val realMsc = realMscField.get(syncHandler).asInstanceOf[IMetaStoreClient]
-            configureMaxThriftMessageSize(hiveConf, realMsc)
+            val realMsc = getFieldValue[IMetaStoreClient](syncHandler, "client")
+            configureMaxThriftMessageSize(hiveConf, realMsc, maxMessageSize)
           case retryHandler: RetryingMetaStoreClient =>
-            val realMscField = classOf[RetryingMetaStoreClient].getDeclaredField("base")
-            realMscField.setAccessible(true)
-            val realMsc = realMscField.get(retryHandler).asInstanceOf[IMetaStoreClient]
-            configureMaxThriftMessageSize(hiveConf, realMsc)
+            val realMsc = getFieldValue[IMetaStoreClient](retryHandler, "base")
+            configureMaxThriftMessageSize(hiveConf, realMsc, maxMessageSize)
           case _ =>
         }
-
       case msc: HiveMetaStoreClient if !msc.isLocalMetaStore =>
         msc.getTTransport match {
           case t: TEndpointTransport =>
-            // The configuration is added in HIVE-26633 (4.0.0)
-            val maxThriftMessageSize = HiveConf.toSizeBytes(
-              hiveConf.get("hive.thrift.client.max.message.size", "1gb")).toInt
-            if (t.getConfiguration.getMaxMessageSize != maxThriftMessageSize) {
-              t.getConfiguration.setMaxMessageSize(maxThriftMessageSize)
-              val resetConsumedMessageSizeMethod = classOf[TEndpointTransport]
-                .getDeclaredMethod("resetConsumedMessageSize", classOf[Long])
-              resetConsumedMessageSizeMethod.setAccessible(true)
-              resetConsumedMessageSizeMethod.invoke(t, Long.box(-1L))
+            val currentMaxMessageSize = t.getConfiguration.getMaxMessageSize
+            if (currentMaxMessageSize != maxMessageSize) {
+              logDebug("Change the current metastore client thrift max message size from " +
+                s"$currentMaxMessageSize to $maxMessageSize")
+              t.getConfiguration.setMaxMessageSize(maxMessageSize)
+              findMethod(classOf[TEndpointTransport], "resetConsumedMessageSize", classOf[Long])
+                .invoke(t, Long.box(-1L))
             }
           case _ =>
         }
