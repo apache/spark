@@ -627,6 +627,17 @@ class SparkSession private[sql] (
     }
     allocator.close()
     SparkSession.onSessionClose(this)
+    SparkSession.server.synchronized {
+      if (SparkSession.server.isDefined) {
+        // When local mode is in use, follow the regular Spark session's
+        // behavior by terminating the Spark Connect server,
+        // meaning that you can stop local mode, and restart the Spark Connect
+        // client with a different remote address.
+        new ProcessBuilder(SparkSession.maybeConnectStopScript.get.toString)
+          .start()
+        SparkSession.server = None
+      }
+    }
   }
 
   /** @inheritdoc */
@@ -679,6 +690,10 @@ object SparkSession extends SparkSessionCompanion with Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
+  private val maybeConnectStartScript =
+    Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
+  private val maybeConnectStopScript =
+    Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "stop-connect-server.sh"))
   private[sql] val sparkOptions = sys.props.filter { p =>
     p._1.startsWith("spark.") && p._2.nonEmpty
   }.toMap
@@ -695,34 +710,37 @@ object SparkSession extends SparkSessionCompanion with Logging {
    * Create a new Spark Connect server to connect locally.
    */
   private[sql] def withLocalConnectServer[T](f: => T): T = {
-    synchronized {
-      lazy val isAPIModeConnect =
-        Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
-          .getOrElse("classic")
-          .toLowerCase(Locale.ROOT) == "connect"
-      val remoteString = sparkOptions
-        .get("spark.remote")
-        .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
-        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
-        .orElse {
-          if (isAPIModeConnect) {
-            sparkOptions.get("spark.master").orElse(sys.env.get("MASTER"))
-          } else {
-            None
-          }
+    lazy val isAPIModeConnect =
+      Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
+        .getOrElse("classic")
+        .toLowerCase(Locale.ROOT) == "connect"
+    val remoteString = sparkOptions
+      .get("spark.remote")
+      .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
+      .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+      .orElse {
+        if (isAPIModeConnect) {
+          sparkOptions.get("spark.master").orElse(sys.env.get("MASTER"))
+        } else {
+          None
         }
+      }
 
-      val maybeConnectScript =
-        Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
-
+    server.synchronized {
       if (server.isEmpty &&
         (remoteString.exists(_.startsWith("local")) ||
           (remoteString.isDefined && isAPIModeConnect)) &&
-        maybeConnectScript.exists(Files.exists(_))) {
+        maybeConnectStartScript.exists(Files.exists(_))) {
         server = Some {
           val args =
-            Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions
+            Seq(
+              maybeConnectStartScript.get.toString,
+              "--master",
+              remoteString.get) ++ (sparkOptions ++ Map(
+              "spark.sql.artifact.isolation.enabled" -> "true",
+              "spark.sql.artifact.isolation.alwaysApplyClassloader" -> "true"))
               .filter(p => !p._1.startsWith("spark.remote"))
+              .filter(p => !p._1.startsWith("spark.api.mode"))
               .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
@@ -737,14 +755,17 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
         // scalastyle:off runtimeaddshutdownhook
         Runtime.getRuntime.addShutdownHook(new Thread() {
-          override def run(): Unit = if (server.isDefined) {
-            new ProcessBuilder(maybeConnectScript.get.toString)
-              .start()
+          override def run(): Unit = server.synchronized {
+            if (server.isDefined) {
+              new ProcessBuilder(maybeConnectStopScript.get.toString)
+                .start()
+            }
           }
         })
         // scalastyle:on runtimeaddshutdownhook
       }
     }
+
     f
   }
 
