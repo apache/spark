@@ -146,8 +146,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
       },
-      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
     )
 
     checkAnswer(
@@ -251,8 +251,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwrite(lit(true))
       },
-      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
     )
 
     checkAnswer(
@@ -356,8 +356,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwritePartitions()
       },
-      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
     )
 
     checkAnswer(
