@@ -38,6 +38,7 @@ class DataSourceV2DataFrameSuite
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key, "testcat")
   }
 
   after {
@@ -261,6 +262,40 @@ class DataSourceV2DataFrameSuite
       checkAnswer(spark.table(t1), df2)
     } finally {
       spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("columns with default values") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id INT, dep STRING) USING foo")
+
+      val df1 = Seq((1, "hr")).toDF("id", "dep")
+      df1.writeTo(tableName).append()
+
+      sql(s"ALTER TABLE $tableName ADD COLUMN txt STRING DEFAULT 'initial-text'")
+
+      val df2 = Seq((2, "hr"), (3, "software")).toDF("id", "dep")
+      df2.writeTo(tableName).append()
+
+      sql(s"ALTER TABLE $tableName ALTER COLUMN txt SET DEFAULT 'new-text'")
+
+      val df3 = Seq((4, "hr"), (5, "hr")).toDF("id", "dep")
+      df3.writeTo(tableName).append()
+
+      val df4 = Seq((6, "hr", null), (7, "hr", "explicit-text")).toDF("id", "dep", "txt")
+      df4.writeTo(tableName).append()
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(
+          Row(1, "hr", "initial-text"),
+          Row(2, "hr", "initial-text"),
+          Row(3, "software", "initial-text"),
+          Row(4, "hr", "new-text"),
+          Row(5, "hr", "new-text"),
+          Row(6, "hr", null),
+          Row(7, "hr", "explicit-text")))
     }
   }
 }
