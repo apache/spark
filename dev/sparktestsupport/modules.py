@@ -1471,6 +1471,8 @@ pyspark_logger = Module(
     dependencies=[],
     source_file_regexes=["python/pyspark/logger"],
     python_test_goals=[
+        # doctests
+        "pyspark.logger.logger",
         # unittests
         "pyspark.logger.tests.test_logger",
         "pyspark.logger.tests.connect.test_parity_logger",
