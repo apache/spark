@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
 import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, Index, MetaException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
@@ -243,7 +243,7 @@ private[client] sealed abstract class Shim {
 
   def getMSC(hive: Hive): IMetaStoreClient
 
-  def getIndexes(hive: Hive, dbName: String, tableName: String, max: Short): Seq[Index]
+  // def getIndexes(hive: Hive, dbName: String, tableName: String, max: Short): Seq[Index]
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
@@ -688,6 +688,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     hive.renamePartition(table, oldPartSpec, newPart)
   }
 
+  /*
   override def getIndexes(
       hive: Hive,
       dbName: String,
@@ -696,6 +697,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     recordHiveCall()
     hive.getIndexes(dbName, tableName, max).asScala.toSeq
   }
+  */
 }
 
 private[client] class Shim_v0_13 extends Shim_v0_12 {

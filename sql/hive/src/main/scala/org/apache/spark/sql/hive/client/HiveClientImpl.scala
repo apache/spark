@@ -1029,6 +1029,8 @@ private[hive] class HiveClientImpl(
     others.foreach { table =>
       val t = table.getTableName
       logDebug(s"Deleting table $t")
+      shim.dropTable(client, "default", t)
+      /*
       try {
         shim.getIndexes(client, "default", t, 255).foreach { index =>
           shim.dropIndex(client, "default", t, index.getIndexName)
@@ -1041,6 +1043,7 @@ private[hive] class HiveClientImpl(
           // HIVE-18448 Hive 3.0 remove index APIs
           shim.dropTable(client, "default", t)
       }
+      */
     }
     shim.getAllDatabases(client).filterNot(_ == "default").foreach { db =>
       logDebug(s"Dropping Database: $db")
