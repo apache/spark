@@ -16,7 +16,6 @@
 #
 
 import os
-import operator
 import sys
 import uuid
 import warnings
@@ -27,7 +26,6 @@ from typing import (
     Any,
     Dict,
     Generic,
-    Iterable,
     List,
     Optional,
     Type,
@@ -94,10 +92,9 @@ from pyspark.ml.util import (
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.linalg import Matrix, Vector, Vectors, VectorUDT
+from pyspark.ml.linalg import Matrix, Vector
 from pyspark.sql import DataFrame, Row, SparkSession, functions as F
 from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.utils import is_remote
 
@@ -3859,7 +3856,7 @@ class OneVsRestModel(
             transformedDataset = model.transform(aggregatedDataset).select(*columns)
             updatedDataset = transformedDataset.withColumn(
                 tmpColName,
-                F.array_append(accColName, SF.get_vector(F.col(rawPredictionCol), F.lit(1))),
+                F.array_append(accColName, SF.vector_get(F.col(rawPredictionCol), F.lit(1))),
             )
             newColumns = origCols + [tmpColName]
 

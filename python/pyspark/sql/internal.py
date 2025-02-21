@@ -132,7 +132,7 @@ class InternalFunction:
         return F.make_interval(**{unit_mapping[unit]: F.lit(e)})
 
     @staticmethod
-    def get_vector(vec: Column, idx: Column) -> Column:
+    def vector_get(vec: Column, idx: Column) -> Column:
         unwrapped = F.unwrap_udt(vec)
         is_dense = unwrapped.getField("type") == F.lit(1)
         values = unwrapped.getField("values")
