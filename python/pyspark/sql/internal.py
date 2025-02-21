@@ -150,7 +150,7 @@ class InternalFunction:
 
     @staticmethod
     def array_argmax(arr: Column) -> Column:
-        def merge(acc, vv):
+        def merge(acc: Column, vv: Column) -> Column:
             v = acc.getField("v")
             i = acc.getField("i")
             j = acc.getField("j")
