@@ -145,7 +145,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, Seq.empty)
   }
 
-  test("script with empty result") {
+  test("SPARK-51284: script with empty result") {
     withTable("scripting_test_table") {
       val sqlScript =
         """
