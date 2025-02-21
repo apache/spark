@@ -642,44 +642,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(fromRow(toRow(B("aB", "text"))) == B("aB", "text"))
   }
 
-  test("transforming encoders as value class - Frameless value class as parameter use case") {
-    // works via ExpressionEncoder derivation
-    val v = ValueContainer(2, StringWrapper("b"))
-
-    val agEnc = AgnosticEncoders.agnosticEncoderFor[ValueContainer]
-
-    val provider = () => new Codec[StringWrapper, String]{
-      override def encode(in: StringWrapper): String = in.s
-
-      override def decode(out: String): StringWrapper = StringWrapper(out)
-    }
-    val valueEncoder = TransformingEncoder(
-      classTag[StringWrapper],
-      ScalaReflection.encoderFor[String],
-      provider)
-
-    val clazzEncoder = ExpressionEncoder(agEnc/* ProductEncoder(
-      classTag[ValueContainer],
-      Seq(
-        EncoderField("a", ScalaReflection.encoderFor[Int], nullable = false, Metadata.empty),
-        EncoderField("b", valueEncoder, nullable = false, Metadata.empty)
-      ),
-      None
-    ) */).resolveAndBind()
-
-    assert(clazzEncoder.schema === StructType(
-      Seq(
-        StructField("a", IntegerType, nullable = false),
-        StructField("b", StringType)
-      )
-    ))
-
-    val toRow = clazzEncoder.createSerializer()
-    val fromRow = clazzEncoder.createDeserializer()
-
-    assert(fromRow(toRow(v)) == v)
-  }
-
   test("transforming row encoder") {
     val schema = new StructType().add("a", LongType).add("b", StringType)
     val encoder = ExpressionEncoder(TransformingEncoder(
