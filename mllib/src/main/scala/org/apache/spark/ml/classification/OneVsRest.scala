@@ -41,6 +41,7 @@ import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 private[ml] trait ClassifierTypeTrait {
@@ -176,8 +177,6 @@ final class OneVsRestModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    import org.apache.spark.util.ArrayImplicits._
-
     // Check schema
     val outputSchema = transformSchema(dataset.schema, logging = true)
 

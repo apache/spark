@@ -50,18 +50,20 @@ object functions {
   // input: vector, output: double
   private[ml] def get_vector(v: Column, index: Column): Column = {
     val unwrapped = sf.unwrap_udt(v)
-    val size = unwrapped.getField("size")
-    val values = unwrapped.getField("values")
     val isDense = unwrapped.getField("type") === sf.lit(1)
+    val values = unwrapped.getField("values")
+    val size = sf.when(isDense, sf.array_size(values)).otherwise(unwrapped.getField("size"))
     val sparseIdx = array_binary_search(unwrapped.getField("indices"), index)
 
-    sf.when(sf.not(index >= 0 && index < size),
+    sf.when(index >= 0 && index < size,
+      sf.when(isDense, sf.get(values, index))
+        .when(sparseIdx >= 0, sf.get(values, sparseIdx))
+        .otherwise(sf.lit(0.0))
+    ).otherwise(
       sf.raise_error(sf.printf(
-        sf.lit(s"Vector index must be in [0, %s), but got %s"), size, index)))
-      .when(isDense, sf.get(unwrapped.getField("values"), index))
-      .when(sparseIdx >= 0, sf.get(values, sparseIdx))
-      .otherwise(sf.lit(0))
-      .cast("double")
+        sf.lit(s"Vector index must be in [0, %s), but got %s"), size, index)
+      )
+    )
   }
 
   // input: array<double>, output: int
