@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
   extends SparkStrategies {
 
-  protected def conf: SQLConf = session.sessionState.conf
+  def conf: SQLConf = session.sessionState.conf
 
   def numPartitions: Int = conf.numShufflePartitions
 
