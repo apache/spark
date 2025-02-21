@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.PrintStream
+import org.apache.hadoop.hive.common.io.SessionStream
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -59,9 +59,9 @@ private[hive] trait HiveClient {
    */
   def runSqlHive(sql: String): Seq[String]
 
-  def setOut(stream: PrintStream): Unit
-  def setInfo(stream: PrintStream): Unit
-  def setError(stream: PrintStream): Unit
+  def setOut(stream: SessionStream): Unit
+  def setInfo(stream: SessionStream): Unit
+  def setError(stream: SessionStream): Unit
 
   /** Returns the names of all tables in the given database. */
   def listTables(dbName: String): Seq[String]

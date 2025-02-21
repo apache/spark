@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.PrintStream
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets.UTF_8
@@ -31,6 +30,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.common.io.SessionStream
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
@@ -183,8 +183,8 @@ private[hive] class HiveClientImpl(
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
     shim.setCurrentSessionState(state)
-    state.out = new PrintStream(outputBuffer, true, UTF_8.name())
-    state.err = new PrintStream(outputBuffer, true, UTF_8.name())
+    state.out = new SessionStream(outputBuffer, true, UTF_8.name())
+    state.err = new SessionStream(outputBuffer, true, UTF_8.name())
     state
   }
 
@@ -312,15 +312,15 @@ private[hive] class HiveClientImpl(
     ret
   }
 
-  def setOut(stream: PrintStream): Unit = withHiveState {
+  def setOut(stream: SessionStream): Unit = withHiveState {
     state.out = stream
   }
 
-  def setInfo(stream: PrintStream): Unit = withHiveState {
+  def setInfo(stream: SessionStream): Unit = withHiveState {
     state.info = stream
   }
 
-  def setError(stream: PrintStream): Unit = withHiveState {
+  def setError(stream: SessionStream): Unit = withHiveState {
     state.err = stream
   }
 
@@ -874,6 +874,8 @@ private[hive] class HiveClientImpl(
 
     // Hive query needs to start SessionState.
     SessionState.start(state)
+    state.out = new SessionStream(outputBuffer, true, UTF_8.name())
+    state.err = new SessionStream(outputBuffer, true, UTF_8.name())
     logDebug(s"Running hiveql '$cmd'")
     if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
@@ -1353,7 +1355,7 @@ private[hive] object HiveClientImpl extends Logging {
         new HiveConf(conf, classOf[HiveConf])
     }
     try {
-      Hive.getWithoutRegisterFns(hiveConf)
+      Hive.getWithFastCheck(hiveConf, false)
     } catch {
       // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
       // 2.3.8 don't), therefore here we fallback when encountering the exception.
