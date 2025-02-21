@@ -730,6 +730,8 @@ object SparkConnectClient {
       grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
       grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT) {
 
+    private def isLocal = host.equals("localhost")
+
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
       if (userId != null) {
@@ -742,7 +744,7 @@ object SparkConnectClient {
     }
 
     def credentials: ChannelCredentials = {
-      if (isSslEnabled.contains(true)) {
+      if (isSslEnabled.contains(true) || (token.isDefined && !isLocal)) {
         token match {
           case Some(t) =>
             // With access token added in the http header.
@@ -753,22 +755,23 @@ object SparkConnectClient {
             TlsChannelCredentials.create()
         }
       } else {
-        token match {
-          case Some(t) =>
-            CompositeChannelCredentials.create(
-              InsecureChannelCredentials.create(),
-              new AccessTokenCallCredentials(t))
-          case None =>
-            InsecureChannelCredentials.create()
-        }
+        InsecureChannelCredentials.create()
       }
     }
 
     def createChannel(): ManagedChannel = {
-      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, credentials)
+      val creds = credentials
+      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, creds)
 
-      if (metadata.nonEmpty) {
-        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
+      // Workaround LocalChannelCredentials are added in
+      // https://github.com/grpc/grpc-java/issues/9900
+      var metadataWithOptionalToken = metadata
+      if (!isSslEnabled.contains(true) && isLocal && token.isDefined) {
+        metadataWithOptionalToken = metadata + (("Authorization", s"Bearer ${token.get}"))
+      }
+
+      if (metadataWithOptionalToken.nonEmpty) {
+        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadataWithOptionalToken))
       }
 
       interceptors.foreach(channelBuilder.intercept(_))
