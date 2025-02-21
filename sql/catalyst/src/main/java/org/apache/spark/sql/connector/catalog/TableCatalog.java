@@ -311,4 +311,49 @@ public interface TableCatalog extends CatalogPlugin {
    */
   void renameTable(Identifier oldIdent, Identifier newIdent)
       throws NoSuchTableException, TableAlreadyExistsException;
+
+  /**
+   * Instantiate a builder to create a table in the catalog.
+   *
+   * @param ident a table identifier.
+   * @param columns the columns of the new table.
+   * @return the TableBuilder to create a table.
+   */
+  default TableBuilder buildTable(Identifier ident, Column[] columns) {
+    return new TableBuilderImpl(this, ident, columns);
+  }
+
+  /**
+   * Builder used to create tables.
+   *
+   * <p>Call {@link #buildTable(Identifier, Column[])} to create a new builder.
+   */
+  interface TableBuilder {
+    /**
+     * Sets the partitions for the table.
+     *
+     * @param partitions Partitions for the table.
+     * @return this for method chaining
+     */
+    TableBuilder withPartitions(Transform[] partitions);
+
+    /**
+     * Sets the key/value properties to the table.
+     *
+     * @param properties key/value properties
+     * @return this for method chaining
+     */
+    TableBuilder withProperties(Map<String, String> properties);
+
+    /**
+     * Creates the table.
+     *
+     * @return metadata for the new table. This can be null if getting the metadata for the new
+     * table is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+     * @throws TableAlreadyExistsException   If a table or view already exists for the identifier
+     * @throws UnsupportedOperationException If a requested partition transform is not supported
+     * @throws NoSuchNamespaceException      If the identifier namespace does not exist (optional)
+     */
+    Table create() throws TableAlreadyExistsException, NoSuchNamespaceException;
+  }
 }
