@@ -56,7 +56,8 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
     withSQLConf(
-      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+      "spark.sql.shuffle.partitions" -> "1", // Avoid too many reducers.
+      "spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport" -> "0"
     ) {
       val readDF = spark.readStream
         .format("rate")
