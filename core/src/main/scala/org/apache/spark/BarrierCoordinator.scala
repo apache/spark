@@ -146,17 +146,8 @@ private[spark] class BarrierCoordinator(
               s"$barrierId", e)
           } finally {
             // Ensure cleanup happens even if interrupted or exception occurs
-            try {
-              state.synchronized {
-                if (requesters.nonEmpty) {
-                  requesters.clear()
-                }
-              }
-            } catch {
-              case e: Exception => new SparkException("Error during " +
-                  s"clearing RPC CallContexts for " +
-                  s"$barrierId", e)
-            }
+            cleanupBarrierStage(barrierId)
+            state.clear()
           }
       }
     }
