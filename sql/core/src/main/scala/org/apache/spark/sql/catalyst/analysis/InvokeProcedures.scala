@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
