@@ -135,9 +135,6 @@ class LoggerTestsMixin:
 
 
 class LoggerTests(LoggerTestsMixin, ReusedSQLTestCase):
-    def test_log_exception_with_stacktrace(self):
-        super().test_log_exception_with_stacktrace()
-
     pass
 
 
