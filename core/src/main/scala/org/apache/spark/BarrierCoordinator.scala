@@ -82,7 +82,7 @@ private[spark] class BarrierCoordinator(
       states.clear()
       listenerBus.removeListener(listener)
     } finally {
-      cancelTimerTask()
+      timerFuture.foreach(_.cancel(true))
       ThreadUtils.shutdown(timer)
       super.onStop()
     }
