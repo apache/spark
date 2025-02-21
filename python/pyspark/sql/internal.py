@@ -155,7 +155,7 @@ class InternalFunction:
             i = acc.getField("i")
             j = acc.getField("j")
             return F.when(
-                vv > v,
+                (~vv.isNaN()) & (vv > v),
                 F.struct(vv.alias("v"), j.alias("i"), j + 1),
             ).otherwise(F.struct(v.alias("v"), i.alias("i"), j + 1))
 
