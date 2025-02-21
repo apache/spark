@@ -840,7 +840,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       parameters = Map("methodName" -> "`writeTo`"))
   }
 
-  test("create/replace file source tables") {
+  test("SPARK-51281: create/replace file source tables") {
     Seq(true, false).foreach { ignorePath =>
       withSQLConf(SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION.key -> ignorePath.toString) {
         withTable("t1", "t2") {
