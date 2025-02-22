@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.io.File
 import java.util.ConcurrentModificationException
 
-import scala.language.implicitConversions
-
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
