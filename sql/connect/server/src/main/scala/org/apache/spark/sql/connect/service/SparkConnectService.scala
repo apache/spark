@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import java.net.InetSocketAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 
@@ -39,7 +39,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES, CONNECT_SERVER_IDLE_TIMEOUT}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -304,6 +304,7 @@ object SparkConnectService extends Logging {
   private[connect] def hostAddress: String = {
     Utils.localCanonicalHostName()
   }
+  private val idleMonitorExecutor = Executors.newSingleThreadScheduledExecutor()
 
   private[connect] lazy val executionManager = new SparkConnectExecutionManager()
 
@@ -407,6 +408,27 @@ object SparkConnectService extends Logging {
     val maxRetries: Int = SparkEnv.get.conf.get(CONNECT_GRPC_PORT_MAX_RETRIES)
     Utils.startServiceOnPort[Server](startPort, startServiceFn, maxRetries, getClass.getName)
   }
+  def startIdleMonitor(globalIdleTimeoutMs: Long): Unit = {
+    if (globalIdleTimeoutMs > 0) {
+      idleMonitorExecutor.scheduleAtFixedRate(
+        () => {
+          val lastActivityTime = SparkConnectService.sessionManager.getLastActivityTime
+          val currentTime = System.currentTimeMillis()
+
+          if (currentTime - lastActivityTime > globalIdleTimeoutMs) {
+            logInfo("Global idle timeout reached. Shutting down Spark Connect service.")
+            stop()
+          }
+        },
+        globalIdleTimeoutMs,
+        globalIdleTimeoutMs,
+        TimeUnit.MILLISECONDS)
+    }
+  }
+
+  private def stopIdleMonitor(): Unit = {
+    idleMonitorExecutor.shutdown()
+  }
 
   // Starts the service
   def start(sc: SparkContext): Unit = synchronized {
@@ -414,6 +436,8 @@ object SparkConnectService extends Logging {
       logWarning("The Spark Connect service has already started.")
       return
     }
+    val idleTimeoutMs = SparkEnv.get.conf.get(CONNECT_SERVER_IDLE_TIMEOUT)
+    startIdleMonitor(idleTimeoutMs)
 
     startGRPCService()
     createListenerAndUI(sc)
@@ -433,7 +457,7 @@ object SparkConnectService extends Logging {
       throw new IllegalStateException(
         "Attempting to stop the Spark Connect service that has not been started.")
     }
-
+    stopIdleMonitor()
     if (server != null) {
       if (timeout.isDefined && unit.isDefined) {
         server.shutdown()
