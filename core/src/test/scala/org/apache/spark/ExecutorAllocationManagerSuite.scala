@@ -1911,14 +1911,6 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
    | Helper methods for accessing private methods and fields |
    * ------------------------------------------------------- */
 
-  private val _numExecutorsToAddPerResourceProfileId =
-    PrivateMethod[mutable.HashMap[Int, Int]](
-      Symbol("numExecutorsToAddPerResourceProfileId"))
-  private val _numExecutorsTargetPerResourceProfileId =
-    PrivateMethod[mutable.HashMap[Int, Int]](
-      Symbol("numExecutorsTargetPerResourceProfileId"))
-  private val _maxNumExecutorsNeededPerResourceProfile =
-    PrivateMethod[Int](Symbol("maxNumExecutorsNeededPerResourceProfile"))
   private val _addTime = PrivateMethod[Long](Symbol("addTime"))
   private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
   private val _doUpdateRequest = PrivateMethod[Unit](Symbol("doUpdateRequest"))
@@ -1946,7 +1938,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def numExecutorsToAdd(
       manager: ExecutorAllocationManager,
       rp: ResourceProfile): Int = {
-    val nmap = manager invokePrivate _numExecutorsToAddPerResourceProfileId()
+    val nmap = manager.numExecutorsToAddPerResourceProfileId
     nmap(rp.id)
   }
 
@@ -1963,7 +1955,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def numExecutorsTarget(
       manager: ExecutorAllocationManager,
       rpId: Int): Int = {
-    val numMap = manager invokePrivate _numExecutorsTargetPerResourceProfileId()
+    val numMap = manager.numExecutorsTargetPerResourceProfileId
     numMap(rpId)
   }
 
@@ -1982,7 +1974,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       rp: ResourceProfile
   ): Int = {
     val maxNumExecutorsNeeded =
-      manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
+      manager.maxNumExecutorsNeededPerResourceProfile(rp.id)
     manager invokePrivate
       _addExecutorsToTarget(maxNumExecutorsNeeded, rp.id, updatesNeeded)
   }
@@ -2005,7 +1997,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def maxNumExecutorsNeededPerResourceProfile(
       manager: ExecutorAllocationManager,
       rp: ResourceProfile): Int = {
-    manager invokePrivate _maxNumExecutorsNeededPerResourceProfile(rp.id)
+    manager.maxNumExecutorsNeededPerResourceProfile(rp.id)
   }
 
   private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {
