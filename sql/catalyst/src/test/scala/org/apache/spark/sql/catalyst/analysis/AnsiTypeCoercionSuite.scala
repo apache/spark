@@ -64,26 +64,6 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
 
   override def dateTimeOperationsRule: TypeCoercionRule = AnsiTypeCoercion.DateTimeOperations
 
-  private def shouldCastStringLiteral(to: AbstractDataType, expected: DataType): Unit = {
-    val input = Literal("123")
-    val castResult = AnsiTypeCoercion.implicitCast(input, to)
-    assert(DataTypeUtils.equalsIgnoreCaseAndNullability(
-      castResult.map(_.dataType).orNull, expected),
-      s"Failed to cast String literal to $to")
-  }
-
-  private def shouldNotCastStringLiteral(to: AbstractDataType): Unit = {
-    val input = Literal("123")
-    val castResult = AnsiTypeCoercion.implicitCast(input, to)
-    assert(castResult.isEmpty, s"Should not be able to cast String literal to $to")
-  }
-
-  private def shouldNotCastStringInput(to: AbstractDataType): Unit = {
-    val input = AttributeReference("s", StringType)()
-    val castResult = AnsiTypeCoercion.implicitCast(input, to)
-    assert(castResult.isEmpty, s"Should not be able to cast non-foldable String input to $to")
-  }
-
   private def checkWidenType(
       widenFunc: (DataType, DataType) => Option[DataType],
       t1: DataType,

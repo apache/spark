@@ -31,8 +31,6 @@ import org.apache.spark.util.UninterruptibleThread
 
 class HDFSMetadataLogSuite extends SharedSparkSession {
 
-  private implicit def toOption[A](a: A): Option[A] = Option(a)
-
   test("SPARK-46339: Directory with number name should not be treated as metadata log") {
     withTempDir { temp =>
       val dir = new File(temp, "dir")

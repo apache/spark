@@ -72,16 +72,6 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     runIsotonicRegression(labels, Array.fill(labels.size)(1d).toImmutableArraySeq, isotonic)
   }
 
-  private def runIsotonicRegression(
-      labels: Seq[Double],
-      features: Seq[Double],
-      weights: Seq[Double],
-      isotonic: Boolean): IsotonicRegressionModel = {
-    runIsotonicRegressionOnInput(
-      labels.indices.map(i => (labels(i), features(i), weights(i))),
-      isotonic)
-  }
-
   private def runIsotonicRegressionOnInput(
       input: Seq[(Double, Double, Double)],
       isotonic: Boolean,
