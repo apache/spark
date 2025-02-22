@@ -18,7 +18,6 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
 import org.apache.spark.sql.catalyst.analysis.resolver.{NameScope, NameScopeStack, NameTarget}
 import org.apache.spark.sql.catalyst.expressions.{
@@ -41,7 +40,7 @@ import org.apache.spark.sql.types.{
   StructType
 }
 
-class NameScopeSuite extends PlanTest with SQLConfHelper {
+class NameScopeSuite extends PlanTest {
   private val col1Integer = AttributeReference(name = "col1", dataType = IntegerType)()
   private val col1IntegerOther = AttributeReference(name = "col1", dataType = IntegerType)()
   private val col2Integer = AttributeReference(name = "col2", dataType = IntegerType)()
