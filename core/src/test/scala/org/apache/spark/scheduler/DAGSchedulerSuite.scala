@@ -81,6 +81,15 @@ class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
     }
   }
 
+  def postInCurrentThread(event: DAGSchedulerEvent): Unit = {
+    try {
+      // Forward event to `onReceive` directly to avoid processing event asynchronously.
+      onReceive(event)
+    } catch {
+      case NonFatal(e) => onError(e)
+    }
+  }
+
   override def onError(e: Throwable): Unit = {
     logError("Error in DAGSchedulerEventLoop: ", e)
     dagScheduler.stop()
@@ -174,6 +183,11 @@ class DummyScheduledFuture(
 }
 
 class DAGSchedulerSuiteDummyException extends Exception
+
+trait DagSchedulerInterceptor {
+  def interceptHandleTaskCompletion(event: CompletionEvent): Unit = {}
+  def interceptResubmitFailedStages(): Unit = {}
+}
 
 class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with TimeLimits {
 
@@ -300,6 +314,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   var sparkListener: EventInfoRecordingListener = null
+  var dagSchedulerInterceptor: DagSchedulerInterceptor = null
 
   var blockManagerMaster: BlockManagerMaster = null
   var mapOutputTracker: MapOutputTrackerMaster = null
@@ -367,7 +382,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       env: SparkEnv,
       clock: Clock = new SystemClock(),
       shuffleMergeFinalize: Boolean = true,
-      shuffleMergeRegister: Boolean = true
+      shuffleMergeRegister: Boolean = true,
+      dagSchedulerInterceptorOpt: Option[DagSchedulerInterceptor] = None
   ) extends DAGScheduler(
       sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock) {
     /**
@@ -399,11 +415,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
 
     override private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
+      dagSchedulerInterceptorOpt.foreach(_.interceptHandleTaskCompletion(event))
       super.handleTaskCompletion(event)
       runningTaskInfos.get(event.task.stageId).foreach{ partitions =>
         partitions -= event.task.partitionId
         if (partitions.isEmpty) runningTaskInfos.remove(event.task.stageId)
       }
+    }
+
+    override private[scheduler] def resubmitFailedStages(): Unit = {
+      dagSchedulerInterceptorOpt.foreach(_.interceptResubmitFailedStages())
+      super.resubmitFailedStages()
     }
   }
 
@@ -442,7 +464,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env))
+      sc.env,
+      dagSchedulerInterceptorOpt = Option(dagSchedulerInterceptor)
+    ))
 
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
@@ -453,6 +477,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       dagEventProcessLoopTester.stop()
       mapOutputTracker.stop()
       broadcastManager.stop()
+      this.dagSchedulerInterceptor = null
     } finally {
       super.afterEach()
     }
@@ -479,6 +504,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Ensure the initialization of various components
     sc
     dagEventProcessLoopTester.post(event)
+  }
+
+  private def runEventInCurrentThread(event: DAGSchedulerEvent): Unit = {
+    // Ensure the initialization of various components
+    sc
+    dagEventProcessLoopTester.asInstanceOf[DAGSchedulerEventProcessLoopTester].
+      postInCurrentThread(event)
   }
 
   /**
@@ -3183,6 +3215,88 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // using old protocol.
     assert(failure != null && failure.getMessage.contains(
       "Spark can only do this while using the new shuffle block fetching protocol"))
+  }
+
+  test("SPARK-51272: retry all the succeeding stages when the map stage is indeterminate with" +
+    " concurrent tasks completion") {
+    if (scheduler != null) {
+      this.afterEach()
+    }
+
+    val monitor = new Object()
+    val resubmitFailedStageReached = Array.fill[Boolean](1)(false)
+    this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
+      override def interceptHandleTaskCompletion(event: CompletionEvent): Unit = {
+        event.reason match {
+          case Success if event.task.isInstanceOf[ResultTask[_, _]] =>
+            assert(resubmitFailedStageReached(0))
+            monitor.synchronized {
+              monitor.notify()
+            }
+
+          case _ =>
+        }
+      }
+
+      override def interceptResubmitFailedStages(): Unit = {
+        monitor.synchronized {
+          resubmitFailedStageReached(0) = true
+          monitor.notify()
+          monitor.wait()
+        }
+      }
+    }
+
+    this.beforeEach()
+
+    val numPartitions = 2
+    val (shuffleId1, shuffleId2) = constructTwoIndeterminateStage()
+    completeShuffleMapStageSuccessfully(shuffleId2, 0, numPartitions)
+    val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
+    val activeJob = resultStage.activeJob
+    assert(activeJob.isDefined)
+    // The result stage is still waiting for its 2 tasks to complete
+    assert(resultStage.findMissingPartitions() == Seq.tabulate(numPartitions)(i => i))
+    new Thread(() => {
+      runEventInCurrentThread(
+        makeCompletionEvent(
+          taskSets(2).tasks(0),
+          FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+          null))
+    }).start()
+
+    monitor.synchronized {
+      if (!resubmitFailedStageReached(0)) {
+        monitor.wait()
+      }
+    }
+    assert(resubmitFailedStageReached(0))
+    new Thread(() => {
+      runEventInCurrentThread(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
+    }).start()
+
+    val shuffleStage1 = this.scheduler.shuffleIdToMapStage(shuffleId1)
+    val shuffleStage2 = this.scheduler.shuffleIdToMapStage(shuffleId2)
+    var keepGoing = true
+    while (keepGoing) {
+      Thread.sleep(500)
+      keepGoing = shuffleStage1.latestInfo.attemptNumber() != 1
+    }
+    completeShuffleMapStageSuccessfully(0, 1, numPartitions)
+    keepGoing = true
+    while (keepGoing) {
+      Thread.sleep(500)
+      keepGoing = shuffleStage2.latestInfo.attemptNumber() != 1
+    }
+
+    completeShuffleMapStageSuccessfully(1, 1, numPartitions)
+    keepGoing = true
+    while (keepGoing) {
+      Thread.sleep(500)
+      keepGoing = resultStage.latestInfo.attemptNumber() != 1
+    }
+
+    assert(resultStage.latestInfo.numTasks == 2)
   }
 
   test("SPARK-25341: retry all the succeeding stages when the map stage is indeterminate") {
