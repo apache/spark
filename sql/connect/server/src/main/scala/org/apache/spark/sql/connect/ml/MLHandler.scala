@@ -26,6 +26,7 @@ import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -115,6 +116,7 @@ private[connect] object MLHandler extends Logging {
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
+    val conf = sessionHolder.session.sessionState.conf
 
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
@@ -125,6 +127,15 @@ private[connect] object MLHandler extends Logging {
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
         val estimator =
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
+
+        // pre-training model size check
+        val maxSize = conf.getConf(Connect.CONNECT_SESSION_ML_CACHE_SINGLE_ITEM_SIZE)
+        if (maxSize > 0) {
+          val estimatedSize = estimator.estimateModelSize(dataset)
+          if (estimatedSize > maxSize) {
+            throw MlItemSizeExceededException("fit", estimator.uid, estimatedSize, maxSize)
+          }
+        }
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
         proto.MlCommandResult

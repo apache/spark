@@ -29,6 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /** Params for Multilayer Perceptron. */
@@ -172,6 +173,13 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val topology = FeedForwardTopology.multiLayerPerceptron($(layers), softmaxOnTop = true)
+    val expectedWeightSize = topology.layers.map(_.weightSize).sum
+    SizeEstimator.estimate((this.params, this.uid)) +
+      Vectors.getDenseSize(expectedWeightSize)
+  }
 
   /**
    * Train a model using the given dataset and parameters.
@@ -326,6 +334,10 @@ class MultilayerPerceptronClassificationModel private[ml] (
     val copied = new MultilayerPerceptronClassificationModel(uid, weights)
       .setParent(parent)
     copyValues(copied, extra)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid, this.weights))
   }
 
   @Since("2.0.0")

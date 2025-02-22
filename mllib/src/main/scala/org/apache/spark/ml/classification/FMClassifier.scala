@@ -31,6 +31,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for FMClassifier.
@@ -235,6 +236,13 @@ class FMClassifier @Since("3.0.0") (
     model.setSummary(Some(summary))
   }
 
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    SizeEstimator.estimate((this.params, this.uid)) +
+      Vectors.getDenseSize(numFeatures) +
+      Matrices.getDenseSize(numFeatures, $(factorSize)) + 8
+  }
+
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMClassifier = defaultCopy(extra)
 }
@@ -305,6 +313,11 @@ class FMClassificationModel private[classification] (
         throw new RuntimeException("Unexpected error in FMClassificationModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
+  }
+
+  override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid,
+      this.intercept, this.linear, this.factors))
   }
 
   @Since("3.0.0")

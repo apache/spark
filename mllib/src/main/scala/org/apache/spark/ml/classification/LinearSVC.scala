@@ -41,6 +41,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
@@ -167,6 +168,12 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    SizeEstimator.estimate((this.params, this.uid)) +
+      Vectors.getDenseSize(numFeatures) + 8
+  }
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
@@ -419,6 +426,11 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVCModel = {
     copyValues(new LinearSVCModel(uid, coefficients, intercept), extra).setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    SizeEstimator.estimate((this.params, this.uid,
+      this.coefficients, this.intercept))
   }
 
   @Since("2.2.0")

@@ -18,11 +18,21 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.util.KnownSizeEstimation
 
 /**
+ * For ml connect only.
  * Trait for the Summary
  * All the summaries should extend from this Summary in order to
  * support connect.
  */
 @Since("4.0.0")
-private[spark] trait Summary
+private[spark] trait Summary extends KnownSizeEstimation {
+
+  // A summary is normally a small object, with several RDDs or DataFrame.
+  // The SizeEstimator is likely to overestimate the size of the summary,
+  // because it will also count the underlying SparkSession and/or SparkContext,
+  // which mainly contributes to the size of the summary.
+  // So we set the default size as 256KB.
+  override def estimatedSize: Long = 256 * 1024
+}

@@ -156,6 +156,31 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
 
   @Since("2.0.0")
   override def load(path: String): DecisionTreeRegressor = super.load(path)
+
+  private[ml] def estimateModelSize(
+      maxDepth: Int,
+      maxCategoricalValue: Option[Int]): Long = {
+    // ContinuousSplit (override val featureIndex: Int, val threshold: Double)
+    var maxSplitSize = 12L
+    if (maxCategoricalValue.nonEmpty) {
+      // class CategoricalSplit (override val featureIndex: Int,
+      //                         _leftCategories: Array[Double],
+      //                         val numCategories: Int)
+      maxSplitSize = 8L * maxCategoricalValue.get + 20L
+    }
+
+    // VarianceCalculator(stats: Array[Double], var rawCount: Long)
+    // stats.length == 3
+    // 12 (array header) + 8 * 3 + 8 = 44
+    val impurityStatsSize = 44
+
+    // depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes
+    val numLeave = 1 << maxDepth
+    val numInternalNodes = numLeave - 1
+
+    (16 + impurityStatsSize) * numLeave +
+      (56 + maxSplitSize + impurityStatsSize) * numInternalNodes + 8
+  }
 }
 
 /**
