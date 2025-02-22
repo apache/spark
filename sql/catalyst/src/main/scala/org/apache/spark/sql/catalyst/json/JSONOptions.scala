@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -90,8 +91,31 @@ class JSONOptions(
   val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
+
+  // This option takes in a column name and specifies that the entire JSON record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
+  val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+  // This option only takes effect when `singleVariantColumn` is specified. It defines the column
+  // name for the corrupt record, and the schema will contain exactly two columns: the single
+  // variant column to capture valid data, and the corrupt record column to capture corrupt data.
+  val corruptRecordColumnWithSingleVariantColumn: Option[String] =
+    parameters.get(CORRUPT_RECORD_COLUMN_WITH_SINGLE_VARIANT_COLUMN)
+
   val columnNameOfCorruptRecord =
-    parameters.getOrElse(COLUMN_NAME_OF_CORRUPTED_RECORD, defaultColumnNameOfCorruptRecord)
+    (singleVariantColumn, corruptRecordColumnWithSingleVariantColumn) match {
+      case (Some(singleVariantColumn), Some(corruptRecordColumn)) =>
+        // Ensure the two column names are not the same. This is usually checked at a higher level,
+        // but we also check it here in case the caller doesn't check it. For simplicity, we do not
+        // respect the global case sensitivity config. There is no point in allowing the two columns
+        // have different but case-insensitively equal names.
+        SchemaUtils.checkColumnNameDuplication(
+          Seq(singleVariantColumn, corruptRecordColumn),
+          caseSensitiveAnalysis = false)
+        corruptRecordColumn
+      case _ =>
+        parameters.getOrElse(COLUMN_NAME_OF_CORRUPTED_RECORD, defaultColumnNameOfCorruptRecord)
+    }
 
   // Whether to ignore column of all null values or empty array/struct during schema inference
   val dropFieldIfAllNull = parameters.get(DROP_FIELD_IF_ALL_NULL).map(_.toBoolean).getOrElse(false)
@@ -184,11 +208,6 @@ class JSONOptions(
    */
   val writeNonAsciiCharacterAsCodePoint: Boolean =
     parameters.get(WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT).map(_.toBoolean).getOrElse(false)
-
-  // This option takes in a column name and specifies that the entire JSON record should be stored
-  // as a single VARIANT type column in the table with the given column name.
-  // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
-  val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
   val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
     SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
@@ -288,6 +307,8 @@ object JSONOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
   val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val CORRUPT_RECORD_COLUMN_WITH_SINGLE_VARIANT_COLUMN =
+    newOption("corruptRecordColumnWithSingleVariantColumn")
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   // Options with alternative
   val ENCODING = "encoding"

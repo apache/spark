@@ -450,6 +450,15 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         condition = "INVALID_SINGLE_VARIANT_COLUMN",
         parameters = Map.empty
       )
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format("json").option("singleVariantColumn", "v")
+            .option("corruptRecordColumnWithSingleVariantColumn", "V")
+            .json(file.getAbsolutePath)
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`v`")
+      )
     }
   }
 
@@ -458,6 +467,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       "true",
       """{"a": [], "b": null}""",
       """{"a": 1}""",
+      "a line of invalid JSON",
       "[1, 2, 3]"
     ).mkString("\n").getBytes(StandardCharsets.UTF_8)
 
@@ -469,13 +479,23 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         spark.read.format("json").option("singleVariantColumn", "var")
           .load(file.getAbsolutePath)
           .selectExpr("to_json(var)"),
-        Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row("[1,2,3]"))
+        Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row(null),
+          Row("[1,2,3]"))
+      )
+
+      checkAnswer(
+        spark.read.format("json").option("singleVariantColumn", "var")
+          .option("corruptRecordColumnWithSingleVariantColumn", "c")
+          .load(file.getAbsolutePath)
+          .selectExpr("to_json(var)", "c"),
+        Seq(Row("true", null), Row("""{"a":[],"b":null}""", null), Row("""{"a":1}""", null),
+          Row(null, "a line of invalid JSON"), Row("[1,2,3]", null))
       )
 
       checkAnswer(
         spark.read.format("json").schema("a variant, b variant")
           .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)"),
-        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null))
+        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null), Row(null, null))
       )
     }
 
@@ -487,7 +507,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         spark.read.format("json").option("singleVariantColumn", "var")
           .load(dir.getAbsolutePath).selectExpr("a", "b", "to_json(var)"),
         Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
-          Row(1, 2, "[1,2,3]"))
+          Row(1, 2, null), Row(1, 2, "[1,2,3]"))
       )
     }
   }
