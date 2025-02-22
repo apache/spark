@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
- * Object for grouping error messages from (most) exceptions thrown from State API V2
+ * Object for grouping error messages from (most) exceptions thrown from State Store
  *
  * ERROR_CLASS has a prefix of "STATE_STORE_" to indicate where the error is from
  */
@@ -212,6 +213,22 @@ object StateStoreErrors {
     StateStoreInvalidVariableTypeChange = {
     new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
   }
+
+  def cannotLoadStore(e: Throwable): Throwable = {
+    e match {
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
+          e
+      case e: ConvertableToCannotLoadStoreError =>
+        e.convertToCannotLoadStoreError()
+      case e: Throwable =>
+        QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+}
+
+trait ConvertableToCannotLoadStoreError {
+  def convertToCannotLoadStoreError(): SparkException
 }
 
 class StateStoreDuplicateStateVariableDefined(stateVarName: String)
@@ -414,11 +431,27 @@ class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
     messageParameters = Map("errorMsg" -> errorMsg))
+  with ConvertableToCannotLoadStoreError {
+    override def convertToCannotLoadStoreError(): SparkException = {
+      new SparkException(
+        errorClass = "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE",
+        messageParameters = Map("errorMsg" -> errorMsg),
+        cause = null)
+    }
+  }
 
 class StateStoreValueRowFormatValidationFailure(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
     messageParameters = Map("errorMsg" -> errorMsg))
+  with ConvertableToCannotLoadStoreError {
+    override def convertToCannotLoadStoreError(): SparkException = {
+      new SparkException(
+        errorClass = "CANNOT_LOAD_STATE_STORE.VALUE_ROW_FORMAT_VALIDATION_FAILURE",
+        messageParameters = Map("errorMsg" -> errorMsg),
+        cause = null)
+    }
+  }
 
 class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
   extends SparkUnsupportedOperationException(

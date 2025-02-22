@@ -291,15 +291,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
-      case e: SparkException
-        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
-        throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
           "HDFS_STORE_PROVIDER",
           e)
-      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+      case e: Throwable => throw StateStoreErrors.cannotLoadStore(e)
     }
   }
 
@@ -975,7 +972,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
           stateStoreId.toString,
           "HDFS_STORE_PROVIDER",
           e)
-      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+      case e: Throwable => throw StateStoreErrors.cannotLoadStore(e)
     }
   }
 
