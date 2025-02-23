@@ -1370,18 +1370,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     }
   }
 
-  private def assertOptionEquals[T](
-      opt1: Option[T],
-      opt2: Option[T],
-      assertEquals: (T, T) => Unit): Unit = {
-    if (opt1.isDefined) {
-      assert(opt2.isDefined)
-      assertEquals(opt1.get, opt2.get)
-    } else {
-      assert(opt2.isEmpty)
-    }
-  }
-
   /**
    * Use different names for methods we pass in to assertSeqEquals or assertOptionEquals
    */
@@ -1405,10 +1393,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(ste1.getMethodName === ste2.getMethodName)
     assert(ste1.getLineNumber === ste2.getLineNumber)
     assert(ste1.getFileName === ste2.getFileName)
-  }
-
-  private def assertEquals(rp1: ResourceProfile, rp2: ResourceProfile): Unit = {
-    assert(rp1 === rp2)
   }
 
   /** ----------------------------------- *
