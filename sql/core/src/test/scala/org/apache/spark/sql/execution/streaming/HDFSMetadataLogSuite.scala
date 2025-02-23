@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.io.File
 import java.util.ConcurrentModificationException
 
+import scala.language.implicitConversions
+
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
@@ -28,6 +30,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.UninterruptibleThread
 
 class HDFSMetadataLogSuite extends SharedSparkSession {
+
+  private implicit def toOption[A](a: A): Option[A] = Option(a)
 
   test("SPARK-46339: Directory with number name should not be treated as metadata log") {
     withTempDir { temp =>
