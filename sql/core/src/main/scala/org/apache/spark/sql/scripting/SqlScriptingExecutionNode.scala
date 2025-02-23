@@ -704,6 +704,7 @@ class SimpleCaseStatementExec(
   override def reset(): Unit = {
     state = CaseState.Condition
     isCacheValid = false
+    caseVariableExec.reset()
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
   }

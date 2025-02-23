@@ -220,7 +220,18 @@ case class IterateStatement(label: String) extends CompoundPlanStatement {
 }
 
 /**
- * Logical operator for CASE statement.
+ * Logical operator for CASE statement, SEARCHED variant.<br>
+ * Example:
+ * {{{
+ *   CASE
+ *     WHEN x = 1 THEN
+ *       SELECT 1;
+ *     WHEN x = 2 THEN
+ *       SELECT 2;
+ *     ELSE
+ *       SELECT 3;
+ *   END CASE;
+ * }}}
  * @param conditions Collection of conditions which correspond to WHEN clauses.
  * @param conditionalBodies Collection of bodies that have a corresponding condition,
  *                          in WHEN branches.
@@ -258,7 +269,18 @@ case class SearchedCaseStatement(
 }
 
 /**
- * Logical operator for CASE statement, SIMPLE variant.
+ * Logical operator for CASE statement, SIMPLE variant.<br>
+ * Example:
+ * {{{
+ *   CASE x
+ *     WHEN 1 THEN
+ *       SELECT 1;
+ *     WHEN 2 THEN
+ *       SELECT 2;
+ *     ELSE
+ *       SELECT 3;
+ *   END CASE;
+ * }}}
  * @param caseVariableExpression Expression with which all conditionExpressions will be compared to.
  * @param conditionExpressions Collection of expressions which correspond to WHEN clauses.
  * @param conditionalBodies Collection of bodies that have a corresponding condition,
