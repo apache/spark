@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
 
@@ -28,6 +29,10 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * collation from the corresponding object (table/view -> schema -> catalog).
  */
 object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
+  // Tag to mark expressions that have been cast to a new type so that we can
+  // avoid infinite recursion when resolving the same expression multiple times.
+  private val CAST_ADDED_TAG = new TreeNodeTag[Unit]("defaultStringExpressionCastAdded")
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (isDDLCommand(plan)) {
       transformDDL(plan)
@@ -119,6 +124,22 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+
+    case expression if shouldCastDefaultStringExpr(expression) =>
+      expression.setTagValue(CAST_ADDED_TAG, ())
+      newType => {
+        if (newType == StringType) {
+          expression
+        } else {
+          Cast(expression, replaceDefaultStringType(expression.dataType, newType))
+        }
+      }
+  }
+
+  private def shouldCastDefaultStringExpr(expression: Expression): Boolean = expression match {
+    case ex: DefaultStringProducingExpression =>
+      ex.getTagValue(CAST_ADDED_TAG).isEmpty
+    case _ => false
   }
 
   private def hasDefaultStringType(dataType: DataType): Boolean =

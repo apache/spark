@@ -25,6 +25,13 @@ import org.apache.spark.sql.types.StringType
 
 abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSession {
 
+  val defaultStringProducingExpressions: Seq[String] = Seq(
+    "current_timezone()", "current_database()", "md5('Spark' collate unicode)",
+    "soundex('Spark' collate unicode)", "url_encode('https://spark.apache.org' collate unicode)",
+    "url_decode('https%3A%2F%2Fspark.apache.org')", "uuid()", "chr(65)", "collation('UNICODE')",
+    "version()", "space(5)", "randstr(5, 123)"
+  )
+
   def dataSource: String = "parquet"
   def testTable: String = "test_tbl"
   def testView: String = "test_view"
@@ -252,6 +259,39 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
              |""".stripMargin)
 
       checkAnswer(sql(s"SELECT c1 FROM $testTable"), Seq(Row("hello")))
+    }
+  }
+
+  test("view has utf8 binary collation by default") {
+    withView(testTable) {
+      sql(s"CREATE VIEW $testTable AS SELECT current_database() AS db")
+      assertTableColumnCollation(testTable, "db", "UTF8_BINARY")
+    }
+  }
+
+  test("default string producing expressions in view definition") {
+    val viewDefaultCollation = Seq(
+      "UTF8_BINARY", "UNICODE"
+    )
+
+    viewDefaultCollation.foreach { collation =>
+      withView(testTable) {
+
+        val columns = defaultStringProducingExpressions.zipWithIndex.map {
+          case (expr, index) => s"$expr AS c${index + 1}"
+        }.mkString(", ")
+
+        sql(
+          s"""
+             |CREATE view $testTable
+             |DEFAULT COLLATION $collation
+             |AS SELECT $columns
+             |""".stripMargin)
+
+        (1 to defaultStringProducingExpressions.length).foreach { index =>
+          assertTableColumnCollation(testTable, s"c$index", collation)
+        }
+      }
     }
   }
 
