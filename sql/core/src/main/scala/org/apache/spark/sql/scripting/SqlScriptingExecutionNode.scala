@@ -846,6 +846,8 @@ class ForStatementExec(
           bodyWithVariables = new CompoundBodyExec(
             // NoOpStatementExec appended to end of body to prevent
             // dropping variables before last statement is executed.
+            // This is necessary because we are calling exitScope before returning the last
+            // statement, so we need the last statement to be NoOp.
             statements = variableInitStatements ++ statements :+ new NoOpStatementExec,
             // We generate label name if FOR variable is not specified, similar to how
             // compound bodies have generated label names if label is not specified.
