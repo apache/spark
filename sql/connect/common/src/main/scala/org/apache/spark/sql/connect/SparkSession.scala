@@ -762,6 +762,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
         (remoteString.exists(_.startsWith("local")) ||
           (remoteString.isDefined && isAPIModeConnect)) &&
         maybeConnectStartScript.exists(Files.exists(_))) {
+        val token = java.util.UUID.randomUUID().toString()
         val serverId = UUID.randomUUID().toString
         server = Some {
           val args =
@@ -779,6 +780,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
           pb.environment().put("SPARK_IDENT_STRING", serverId)
           pb.environment().put("HOSTNAME", "local")
+          pb.environment().put("SPARK_CONNECT_AUTHENTICATE_TOKEN", token)
           pb.start()
         }
 
@@ -800,7 +802,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
             }
           }
 
-        System.setProperty("spark.remote", "sc://localhost")
+        System.setProperty("spark.remote", s"sc://localhost/;token=$token")
 
         // scalastyle:off runtimeaddshutdownhook
         Runtime.getRuntime.addShutdownHook(new Thread() {
