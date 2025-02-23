@@ -137,8 +137,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
   }
 
   private def shouldCastDefaultStringExpr(expression: Expression): Boolean = expression match {
-    case ex: DefaultStringProducingExpression =>
-      ex.getTagValue(CAST_ADDED_TAG).isEmpty
+    case ex: DefaultStringProducingExpression => ex.getTagValue(CAST_ADDED_TAG).isEmpty
     case _ => false
   }
 
