@@ -4482,7 +4482,7 @@ object SQLConf {
         """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead."""),
       DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
         s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead."),
-      DeprecatedConfig(PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.alternatives.head, "3.5.4",
+      DeprecatedConfig(PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.alternatives.head, "3.5.5",
         s"Use '${PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key}' instead.")
     )
 
