@@ -468,8 +468,6 @@ object SparkConnectClient {
      * sc://localhost/;token=aaa;use_ssl=true
      * }}}
      *
-     * Throws exception if the token is set but use_ssl=false.
-     *
      * @param inputToken
      *   the user token.
      * @return
@@ -477,11 +475,7 @@ object SparkConnectClient {
      */
     def token(inputToken: String): Builder = {
       require(inputToken != null && inputToken.nonEmpty)
-      if (_configuration.isSslEnabled.contains(false)) {
-        throw new IllegalArgumentException(AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
-      }
-      _configuration =
-        _configuration.copy(token = Option(inputToken), isSslEnabled = Option(true))
+      _configuration = _configuration.copy(token = Option(inputToken))
       this
     }
 
@@ -499,7 +493,6 @@ object SparkConnectClient {
      *   this builder.
      */
     def disableSsl(): Builder = {
-      require(token.isEmpty, AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
       _configuration = _configuration.copy(isSslEnabled = Option(false))
       this
     }
@@ -737,6 +730,8 @@ object SparkConnectClient {
       grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
       grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT) {
 
+    private def isLocal = host.equals("localhost")
+
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
       if (userId != null) {
@@ -749,7 +744,7 @@ object SparkConnectClient {
     }
 
     def credentials: ChannelCredentials = {
-      if (isSslEnabled.contains(true)) {
+      if (isSslEnabled.contains(true) || (token.isDefined && !isLocal)) {
         token match {
           case Some(t) =>
             // With access token added in the http header.
@@ -765,10 +760,18 @@ object SparkConnectClient {
     }
 
     def createChannel(): ManagedChannel = {
-      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, credentials)
+      val creds = credentials
+      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, creds)
 
-      if (metadata.nonEmpty) {
-        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
+      // Workaround LocalChannelCredentials are added in
+      // https://github.com/grpc/grpc-java/issues/9900
+      var metadataWithOptionalToken = metadata
+      if (!isSslEnabled.contains(true) && isLocal && token.isDefined) {
+        metadataWithOptionalToken = metadata + (("Authorization", s"Bearer ${token.get}"))
+      }
+
+      if (metadataWithOptionalToken.nonEmpty) {
+        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadataWithOptionalToken))
       }
 
       interceptors.foreach(channelBuilder.intercept(_))
