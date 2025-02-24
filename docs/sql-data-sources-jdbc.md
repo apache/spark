@@ -96,7 +96,7 @@ logging into the data sources.
             </code></li>
       </ol>
     </td>
-    <td>read/write</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>prepareQuery</code></td>
