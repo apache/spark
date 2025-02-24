@@ -71,7 +71,7 @@ class JSONFormatter(logging.Formatter):
 
             structured_stacktrace = [
                 {
-                    "class": exc_type.__name__ if exc_type else "UnknownException",
+                    "class": None,
                     "method": frame.name,
                     "file": frame.filename,
                     "line": str(frame.lineno),
