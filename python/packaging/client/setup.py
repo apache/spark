@@ -133,7 +133,7 @@ try:
     _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "11.0.0"
-    _minimum_grpc_version = "1.59.3"
+    _minimum_grpc_version = "1.67.0"
     _minimum_googleapis_common_protos_version = "1.65.0"
 
     with open("README.md") as f:
