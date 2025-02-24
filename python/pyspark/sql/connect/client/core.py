@@ -220,7 +220,9 @@ class ChannelBuilder:
 
     @property
     def token(self) -> Optional[str]:
-        return self._params.get(ChannelBuilder.PARAM_TOKEN, None)
+        return self._params.get(
+            ChannelBuilder.PARAM_TOKEN, os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
+        )
 
     def metadata(self) -> Iterable[Tuple[str, str]]:
         """
@@ -326,8 +328,7 @@ class DefaultChannelBuilder(ChannelBuilder):
             # This is only used in the test/development mode.
             session = PySparkSession._instantiatedSession
 
-            # 'spark.local.connect' is set when we use the local mode in Spark Connect.
-            if session is not None and session.conf.get("spark.local.connect", "0") == "1":
+            if session is not None:
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
@@ -411,10 +412,11 @@ class DefaultChannelBuilder(ChannelBuilder):
 
     @property
     def secure(self) -> bool:
-        return (
-            self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
-            or self.token is not None
-        )
+        return self.use_ssl or self.token is not None
+
+    @property
+    def use_ssl(self) -> bool:
+        return self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
 
     @property
     def host(self) -> str:
@@ -440,14 +442,20 @@ class DefaultChannelBuilder(ChannelBuilder):
 
         if not self.secure:
             return self._insecure_channel(self.endpoint)
-        else:
-            ssl_creds = grpc.ssl_channel_credentials()
+        elif not self.use_ssl and self._host == "localhost":
+            creds = grpc.local_channel_credentials()
 
-            if self.token is None:
-                creds = ssl_creds
-            else:
+            if self.token is not None:
                 creds = grpc.composite_channel_credentials(
-                    ssl_creds, grpc.access_token_call_credentials(self.token)
+                    creds, grpc.access_token_call_credentials(self.token)
+                )
+            return self._secure_channel(self.endpoint, creds)
+        else:
+            creds = grpc.ssl_channel_credentials()
+
+            if self.token is not None:
+                creds = grpc.composite_channel_credentials(
+                    creds, grpc.access_token_call_credentials(self.token)
                 )
 
             return self._secure_channel(self.endpoint, creds)

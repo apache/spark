@@ -16,12 +16,16 @@
  */
 package org.apache.spark.sql.connect
 
+import java.io.File
 import java.net.URI
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, FileSystems, Path, Paths, StandardWatchEventKinds}
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -37,7 +41,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.CONFIG
+import org.apache.spark.internal.LogKeys.{CONFIG, PATH}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
@@ -627,6 +631,17 @@ class SparkSession private[sql] (
     }
     allocator.close()
     SparkSession.onSessionClose(this)
+    SparkSession.server.synchronized {
+      if (SparkSession.server.isDefined) {
+        // When local mode is in use, follow the regular Spark session's
+        // behavior by terminating the Spark Connect server,
+        // meaning that you can stop local mode, and restart the Spark Connect
+        // client with a different remote address.
+        new ProcessBuilder(SparkSession.maybeConnectStopScript.get.toString)
+          .start()
+        SparkSession.server = None
+      }
+    }
   }
 
   /** @inheritdoc */
@@ -679,6 +694,10 @@ object SparkSession extends SparkSessionCompanion with Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
+  private val maybeConnectStartScript =
+    Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
+  private val maybeConnectStopScript =
+    Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "stop-connect-server.sh"))
   private[sql] val sparkOptions = sys.props.filter { p =>
     p._1.startsWith("spark.") && p._2.nonEmpty
   }.toMap
@@ -691,60 +710,113 @@ object SparkSession extends SparkSessionCompanion with Logging {
       override def load(c: Configuration): SparkSession = create(c)
     })
 
+  private def waitUntilFileExists(file: File): Unit = {
+    val deadline = 30.seconds.fromNow
+    val watchService = FileSystems.getDefault.newWatchService()
+    try {
+      file.toPath.getParent.register(watchService, StandardWatchEventKinds.ENTRY_CREATE)
+      while (!file.exists() && deadline.hasTimeLeft()) {
+        Option(watchService.poll(deadline.timeLeft.toSeconds + 1, TimeUnit.SECONDS)) match {
+          case Some(key) =>
+            key.pollEvents().forEach { event =>
+              val kind = event.kind()
+              val filename = event.context().asInstanceOf[Path]
+
+              if (kind == StandardWatchEventKinds.ENTRY_CREATE
+                && filename.toString == file.toPath.getFileName.toString) {
+                key.cancel()
+                return
+              }
+            }
+            key.reset()
+          case None =>
+        }
+      }
+    } finally {
+      watchService.close()
+    }
+  }
+
   /**
    * Create a new Spark Connect server to connect locally.
    */
   private[sql] def withLocalConnectServer[T](f: => T): T = {
-    synchronized {
-      lazy val isAPIModeConnect =
-        Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
-          .getOrElse("classic")
-          .toLowerCase(Locale.ROOT) == "connect"
-      val remoteString = sparkOptions
-        .get("spark.remote")
-        .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
-        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
-        .orElse {
-          if (isAPIModeConnect) {
-            sparkOptions.get("spark.master").orElse(sys.env.get("MASTER"))
-          } else {
-            None
-          }
+    lazy val isAPIModeConnect =
+      Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
+        .getOrElse("classic")
+        .toLowerCase(Locale.ROOT) == "connect"
+    val remoteString = sparkOptions
+      .get("spark.remote")
+      .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
+      .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+      .orElse {
+        if (isAPIModeConnect) {
+          sparkOptions.get("spark.master").orElse(sys.env.get("MASTER"))
+        } else {
+          None
         }
+      }
 
-      val maybeConnectScript =
-        Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
-
+    server.synchronized {
       if (server.isEmpty &&
         (remoteString.exists(_.startsWith("local")) ||
           (remoteString.isDefined && isAPIModeConnect)) &&
-        maybeConnectScript.exists(Files.exists(_))) {
+        maybeConnectStartScript.exists(Files.exists(_))) {
+        val token = java.util.UUID.randomUUID().toString()
+        val serverId = UUID.randomUUID().toString
         server = Some {
           val args =
-            Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions
+            Seq(
+              maybeConnectStartScript.get.toString,
+              "--master",
+              remoteString.get) ++ (sparkOptions ++ Map(
+              "spark.sql.artifact.isolation.enabled" -> "true",
+              "spark.sql.artifact.isolation.alwaysApplyClassloader" -> "true"))
               .filter(p => !p._1.startsWith("spark.remote"))
+              .filter(p => !p._1.startsWith("spark.api.mode"))
               .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
+          pb.environment().put("SPARK_IDENT_STRING", serverId)
+          pb.environment().put("HOSTNAME", "local")
+          pb.environment().put("SPARK_CONNECT_AUTHENTICATE_TOKEN", token)
           pb.start()
         }
 
-        // Let the server start. We will directly request to set the configurations
-        // and this sleep makes less noisy with retries.
-        Thread.sleep(2000L)
-        System.setProperty("spark.remote", "sc://localhost")
+        // Let the server start, and wait until the log file is created.
+        Option(System.getenv("SPARK_LOG_DIR"))
+          .orElse(Option(System.getenv("SPARK_HOME")).map(p => Paths.get(p, "logs").toString))
+          .foreach { p =>
+            val logFile = Paths
+              .get(
+                p,
+                s"spark-$serverId-" +
+                  s"org.apache.spark.sql.connect.service.SparkConnectServer-1-local.out")
+              .toFile
+            waitUntilFileExists(logFile)
+            if (logFile.exists()) {
+              logInfo(log"Spark Connect server started with the log file: ${MDC(PATH, logFile)}")
+            } else {
+              logWarning(log"Spark Connect server log not found at ${MDC(PATH, logFile)}")
+            }
+          }
+
+        System.setProperty("spark.remote", s"sc://localhost/;token=$token")
 
         // scalastyle:off runtimeaddshutdownhook
         Runtime.getRuntime.addShutdownHook(new Thread() {
-          override def run(): Unit = if (server.isDefined) {
-            new ProcessBuilder(maybeConnectScript.get.toString)
-              .start()
+          override def run(): Unit = server.synchronized {
+            if (server.isDefined) {
+              new ProcessBuilder(maybeConnectStopScript.get.toString)
+                .start()
+            }
           }
         })
         // scalastyle:on runtimeaddshutdownhook
       }
     }
+
     f
   }
 

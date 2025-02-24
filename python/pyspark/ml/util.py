@@ -462,7 +462,7 @@ class BaseReadWrite:
         Returns the user-specified Spark Session or the default.
         """
         if self._sparkSession is None:
-            self._sparkSession = SparkSession._getActiveSessionOrCreate()
+            self._sparkSession = SparkSession.active()
         assert self._sparkSession is not None
         return self._sparkSession
 
@@ -809,10 +809,10 @@ class DefaultParamsWriter(MLWriter):
             If given, this is saved in the "paramMap" field.
         """
         metadataPath = os.path.join(path, "metadata")
+        spark = cast(SparkSession, sc) if hasattr(sc, "createDataFrame") else SparkSession.active()
         metadataJson = DefaultParamsWriter._get_metadata_to_save(
-            instance, sc, extraMetadata, paramMap
+            instance, spark, extraMetadata, paramMap
         )
-        spark = sc if isinstance(sc, SparkSession) else SparkSession._getActiveSessionOrCreate()
         spark.createDataFrame([(metadataJson,)], schema=["value"]).coalesce(1).write.text(
             metadataPath
         )
@@ -932,7 +932,7 @@ class DefaultParamsReader(MLReader[RL]):
             If non empty, this is checked against the loaded metadata.
         """
         metadataPath = os.path.join(path, "metadata")
-        spark = sc if isinstance(sc, SparkSession) else SparkSession._getActiveSessionOrCreate()
+        spark = cast(SparkSession, sc) if hasattr(sc, "createDataFrame") else SparkSession.active()
         metadataStr = spark.read.text(metadataPath).first()[0]  # type: ignore[index]
         loadedVals = DefaultParamsReader._parseMetaData(metadataStr, expectedClassName)
         return loadedVals

@@ -76,6 +76,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       null
     )
 
+  case class TestIntegerProjection(value: Int, description: String)
+    extends SingleStatementExec(
+      parsedPlan = Project(Seq(Alias(Literal(value), description)()), OneRowRelation()),
+      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      Map.empty,
+      isInternal = false,
+      null
+  )
+
   case class DummyLogicalPlan() extends LeafNode {
     override def output: Seq[Attribute] = Seq.empty
   }
@@ -171,7 +180,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         if createStmt.parsedPlan.isInstanceOf[CreateVariable] => "CreateVariable"
       case setStmt: SingleStatementExec
         if setStmt.parsedPlan.isInstanceOf[SetVariable] => "SetVariable"
-      case _ => fail("Unexpected statement type")
+      case project: SingleStatementExec if project.parsedPlan.isInstanceOf[Project]
+      => "Project"
+      case _ => fail("Unexpected statement: " + statement)
     }
 
   // Tests
@@ -651,7 +662,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter first WHEN clause") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = true, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
@@ -670,7 +681,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter body of the ELSE clause") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1")
         ),
@@ -687,7 +698,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter second WHEN clause") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
@@ -706,7 +717,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - without else (successful check)") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
@@ -725,7 +736,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - without else (unsuccessful checks)") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
@@ -740,6 +751,109 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2"))
+  }
+
+  test("simple case - enter first WHEN clause") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(1, "1"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "body1"))
+  }
+
+  test("simple case - enter body of the ELSE clause") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(2, "2"),
+        conditionExpressions = Seq(
+          Literal(1)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1")))
+        ),
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2")))),
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "body2"))
+  }
+
+  test("simple case - enter second WHEN clause") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(2, "2"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "Project", "body2"))
+  }
+
+  test("simple case - without else (successful check)") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(2, "2"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = None,
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "Project", "body2"))
+  }
+
+  test("simple case - without else (unsuccessful checks)") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(3, "3"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = None,
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "Project"))
   }
 
   test("loop statement with leave") {

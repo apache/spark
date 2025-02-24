@@ -125,7 +125,7 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
       assert(builder.host === "localhost")
       assert(builder.port === 15002)
       assert(builder.userAgent.contains("_SPARK_CONNECT_SCALA"))
-      assert(builder.sslEnabled)
+      assert(!builder.sslEnabled)
       assert(builder.token.contains("thisismysecret"))
       assert(builder.userId.isEmpty)
       assert(builder.userName.isEmpty)

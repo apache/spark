@@ -299,8 +299,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI(s"sc://host:123/;session_id=${UUID.randomUUID().toString}", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=true;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
-    TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),
-    TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=false", isCorrect = false),
+    TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = true),
+    TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=false", isCorrect = true),
     TestPackURI("sc://host:123/;param1=value1;param2=value2", isCorrect = true),
     TestPackURI(
       "sc://SPARK-45486",

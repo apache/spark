@@ -321,7 +321,7 @@ of the most common options to set are:
   <td>2.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.driver.minMemoryOverhead</code></td>
+  <td><code>spark.executor.minMemoryOverhead</code></td>
   <td>384m</td>
   <td>
     The minimum amount of non-heap memory to be allocated per executor process, in MiB unless otherwise specified, if <code>spark.executor.memoryOverhead</code> is not defined.

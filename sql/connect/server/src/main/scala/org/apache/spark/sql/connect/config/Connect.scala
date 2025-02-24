@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.config
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.internal.SQLConf
@@ -313,4 +314,21 @@ object Connect {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
+  val CONNECT_AUTHENTICATE_TOKEN =
+    buildStaticConf("spark.connect.authenticate.token")
+      .doc("A pre-shared token that will be used to authenticate clients. This secret must be" +
+        " passed as a bearer token by for clients to connect.")
+      .version("4.0.0")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val CONNECT_AUTHENTICATE_TOKEN_ENV = "SPARK_CONNECT_AUTHENTICATE_TOKEN"
+
+  def getAuthenticateToken: Option[String] = {
+    SparkEnv.get.conf.get(CONNECT_AUTHENTICATE_TOKEN).orElse {
+      Option(System.getenv.get(CONNECT_AUTHENTICATE_TOKEN_ENV))
+    }
+  }
 }
