@@ -841,20 +841,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("SPARK-51281: create/replace file source tables") {
+    def checkResults(df: DataFrame): Unit = {
+      checkAnswer(df, spark.range(10).toDF())
+    }
+    
     Seq(true, false).foreach { ignorePath =>
       withSQLConf(SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION.key -> ignorePath.toString) {
         withTable("t1", "t2") {
           spark.range(10).writeTo("t1").using("json").create()
-          checkAnswer(spark.table("t1"), spark.range(10).toDF())
+          checkResults(spark.table("t1"))
 
           withTempPath { p =>
             val path = p.getCanonicalPath
             spark.range(10).writeTo("t2").using("json").option("path", path).create()
-            checkAnswer(spark.table("t2"), spark.range(10).toDF())
+            checkResults(spark.table("t2"))
             if (ignorePath) {
               assert(!p.exists())
             } else {
-              checkAnswer(spark.read.json(path), spark.range(10).toDF())
+              checkResults(spark.read.json(path))
             }
           }
         }
