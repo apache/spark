@@ -62,7 +62,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
 
   Seq(
     ("SPARK-51097", "RocksDBStateStoreProvider", classOf[RocksDBStateStoreProvider].getName),
-    ("SPARK-51251", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
+    ("SPARK-51252", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
   ).foreach {
     case (ticketPrefix, providerName, providerClassName) =>
       testWithChangelogCheckpointingEnabled(
@@ -120,7 +120,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
       classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName
     ),
     (
-      "SPARK-51251",
+      "SPARK-51252",
       "HDFSBackedSkipMaintenanceOnCertainPartitionsProvider",
       classOf[HDFSBackedSkipMaintenanceOnCertainPartitionsProvider].getName
     )
@@ -194,7 +194,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
 
   Seq(
     ("SPARK-51097", "RocksDBStateStoreProvider", classOf[RocksDBStateStoreProvider].getName),
-    ("SPARK-51251", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
+    ("SPARK-51252", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
   ).foreach {
     case (ticketPrefix, providerName, providerClassName) =>
       testWithChangelogCheckpointingEnabled(
@@ -261,7 +261,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
       classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName
     ),
     (
-      "SPARK-51251",
+      "SPARK-51252",
       "HDFSBackedSkipMaintenanceOnCertainPartitionsProvider",
       classOf[HDFSBackedSkipMaintenanceOnCertainPartitionsProvider].getName
     )
