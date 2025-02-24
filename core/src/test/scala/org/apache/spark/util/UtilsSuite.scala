@@ -1013,8 +1013,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       Some(2),
       Some(3),
       Some(4),
-      Some(5),
-    ).setCurrentContext()
+      Some(5)).setCurrentContext()
     val expected = s"SPARK_test_app_attempt_JId_1_SId_2_3_TId_4_5_upstream"
     assert(expected === HadoopCallerContext.getCurrent.toString)
     assert(expected === currentAuditContext.get("spark"))
