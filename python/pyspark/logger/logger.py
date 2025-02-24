@@ -27,7 +27,7 @@ SPARK_LOG_SCHEMA = (
     "msg STRING, "
     "context map<STRING, STRING>, "
     "exception STRUCT<class STRING, msg STRING, "
-    "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING, line STRING>>> ,"
+    "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING, line STRING>>>, "
     "logger STRING"
 )
 
