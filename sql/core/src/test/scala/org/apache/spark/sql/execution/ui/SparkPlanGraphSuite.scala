@@ -29,12 +29,14 @@ class SparkPlanGraphSuite extends SparkFunSuite {
         SQLPlanMetric(
           name = "number of output rows",
           accumulatorId = 75,
-          metricType = "sum"
+          metricType = "sum",
+          initValue = 0L
         ),
         SQLPlanMetric(
           name = "JDBC query execution time",
           accumulatorId = 35,
-          metricType = "nsTiming")))
+          metricType = "nsTiming",
+          initValue = -1L)))
     val dotNode = planGraphNode.makeDotNode(Map.empty[Long, String])
     val expectedDotNode = "  24 [id=\"node24\" labelType=\"html\" label=\"" +
       "<br><b>Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1]</b><br><br>\" " +

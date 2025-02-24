@@ -48,7 +48,8 @@ private[spark] object MetricUtils {
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
     */
-  def stringValue(metricsType: String, values: Array[Long], maxMetrics: Array[Long]): String = {
+  def stringValue(metricsType: String, initValue: Long,
+    values: Array[Long], maxMetrics: Array[Long]): String = {
     // taskInfo = "(driver)" OR (stage ${stageId}.${attemptId}: task $taskId)
     val taskInfo = if (maxMetrics.isEmpty) {
       "(driver)"
@@ -59,7 +60,7 @@ private[spark] object MetricUtils {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
     } else if (metricsType == AVERAGE_METRIC) {
-      val validValues = values.filter(_ > 0)
+      val validValues = values.filter(_ > initValue)
       // When there are only 1 metrics value (or None), no need to display max/min/median. This is
       // common for driver-side SQL metrics.
       if (validValues.length <= 1) {
@@ -85,7 +86,7 @@ private[spark] object MetricUtils {
         throw SparkException.internalError(s"unexpected metrics type: $metricsType")
       }
 
-      val validValues = values.filter(_ >= 0)
+      val validValues = values.filter(_ > initValue)
       // When there are only 1 metrics value (or None), no need to display max/min/median. This is
       // common for driver-side SQL metrics.
       if (validValues.length <= 1) {

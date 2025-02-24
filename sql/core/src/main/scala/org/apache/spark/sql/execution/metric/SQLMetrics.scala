@@ -34,7 +34,7 @@ import org.apache.spark.util.AccumulatorContext.internOption
  */
 class SQLMetric(
     val metricType: String,
-    initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+    val initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
   // initValue defines the initial value of the metric. 0 is the lowest value considered valid.
   // If a SQLMetric is invalid, it is set to 0 upon receiving any updates, and it also reports
   // 0 as its value to avoid exposing it to the user programmatically.
