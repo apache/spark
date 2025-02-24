@@ -406,10 +406,6 @@ object SparkConnectClient {
   private val AUTH_TOKEN_META_DATA_KEY: Metadata.Key[String] =
     Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
 
-  private val AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG: String =
-    "Authentication token cannot be passed over insecure connections. " +
-      "Either remove 'token' or set 'use_ssl=true'"
-
   // for internal tests
   private[sql] def apply(channel: ManagedChannel): SparkConnectClient = {
     new SparkConnectClient(Configuration(), channel)
