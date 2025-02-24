@@ -15,21 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.jobs
+package org.apache.spark.sql.catalyst
 
-/**
- * Names of the CSS classes corresponding to each type of task detail. Used to allow users
- * to optionally show/hide columns.
- *
- * If new optional metrics are added here, they should also be added to the end of webui.css
- * to have the style set to "display: none;" by default.
- */
-private[spark] object TaskDetailsClassNames {
-  val SCHEDULER_DELAY = "scheduler_delay"
-  val TASK_DESERIALIZATION_TIME = "deserialization_time"
-  val SHUFFLE_READ_FETCH_WAIT_TIME = "fetch_wait_time"
-  val SHUFFLE_READ_REMOTE_SIZE = "shuffle_read_remote"
-  val RESULT_SERIALIZATION_TIME = "serialization_time"
-  val GETTING_RESULT_TIME = "getting_result_time"
-  val PEAK_EXECUTION_MEMORY = "peak_execution_memory"
+import org.apache.spark.sql.catalyst.catalog.VariableManager
+import org.apache.spark.util.LexicalThreadLocal
+
+object SqlScriptingLocalVariableManager extends LexicalThreadLocal[VariableManager] {
+  def create(variableManager: VariableManager): Handle = createHandle(Option(variableManager))
 }

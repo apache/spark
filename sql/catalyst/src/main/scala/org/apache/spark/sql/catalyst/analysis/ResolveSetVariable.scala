@@ -53,11 +53,12 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
       // Names are normalized when the variables are created.
       // No need for case insensitive comparison here.
       // TODO: we need to group by the qualified variable name once other catalogs support it.
-      val dups = resolvedVars.groupBy(_.identifier.name).filter(kv => kv._2.length > 1)
+      val dups = resolvedVars.groupBy(_.identifier).filter(kv => kv._2.length > 1)
       if (dups.nonEmpty) {
         throw new AnalysisException(
           errorClass = "DUPLICATE_ASSIGNMENTS",
-          messageParameters = Map("nameList" -> dups.keys.map(toSQLId).mkString(", ")))
+          messageParameters = Map("nameList" ->
+            dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
       }
 
       setVariable.copy(targetVariables = resolvedVars)

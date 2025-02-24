@@ -31,6 +31,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, R
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
 import org.apache.spark.sql.connect.common.ForeachWriterPacket
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -135,7 +136,10 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder: SessionHolder): (ForeachBatchFnType, AutoCloseable) = {
 
     val port = SparkConnectService.localPort
-    val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+    var connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+    Connect.getAuthenticateToken.foreach { token =>
+      connectUrl = s"$connectUrl;token=$token"
+    }
     val runner = StreamingPythonRunner(
       pythonFn,
       connectUrl,

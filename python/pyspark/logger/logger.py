@@ -19,7 +19,11 @@
 import logging
 import json
 import traceback
-from typing import cast, Optional
+import sys
+from typing import cast, Mapping, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from logging import _ArgsType, _ExcInfoType
 
 SPARK_LOG_SCHEMA = (
     "ts TIMESTAMP, "
@@ -111,7 +115,7 @@ class PySparkLogger(logging.Logger):
 
     >>> logger.info(
     ...     "This is an informational message",
-    ...     extra={"user": "test_user", "action": "test_action"}
+    ...     user="test_user", action="test_action"
     ... )
     >>> log_output = stream.getvalue().strip().split('\\n')[0]
     >>> log = json.loads(log_output)
@@ -123,10 +127,8 @@ class PySparkLogger(logging.Logger):
       "logger": "ExampleLogger",
       "msg": "This is an informational message",
       "context": {
-        "extra": {
-          "user": "test_user",
-          "action": "test_action"
-        }
+        "user": "test_user",
+        "action": "test_action"
       }
     }
     """
@@ -170,6 +172,17 @@ class PySparkLogger(logging.Logger):
 
         return cast(PySparkLogger, pyspark_logger)
 
+    def debug(self, msg: object, *args: object, **kwargs: object) -> None:
+        """
+        Log 'msg % args' with severity 'DEBUG' in structured JSON format.
+
+        Parameters
+        ----------
+        msg : str
+            The log message.
+        """
+        super().debug(msg, *args, **kwargs)  # type: ignore[arg-type]
+
     def info(self, msg: object, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'INFO' in structured JSON format.
@@ -179,7 +192,7 @@ class PySparkLogger(logging.Logger):
         msg : str
             The log message.
         """
-        super().info(msg, *args, extra={"kwargs": kwargs})
+        super().info(msg, *args, **kwargs)  # type: ignore[arg-type]
 
     def warning(self, msg: object, *args: object, **kwargs: object) -> None:
         """
@@ -190,7 +203,20 @@ class PySparkLogger(logging.Logger):
         msg : str
             The log message.
         """
-        super().warning(msg, *args, extra={"kwargs": kwargs})
+        super().warning(msg, *args, **kwargs)  # type: ignore[arg-type]
+
+    if sys.version_info < (3, 13):
+
+        def warn(self, msg: object, *args: object, **kwargs: object) -> None:
+            """
+            Log 'msg % args' with severity 'WARN' in structured JSON format.
+
+            Parameters
+            ----------
+            msg : str
+                The log message.
+            """
+            super().warn(msg, *args, **kwargs)  # type: ignore[arg-type]
 
     def error(self, msg: object, *args: object, **kwargs: object) -> None:
         """
@@ -201,9 +227,11 @@ class PySparkLogger(logging.Logger):
         msg : str
             The log message.
         """
-        super().error(msg, *args, extra={"kwargs": kwargs})
+        super().error(msg, *args, **kwargs)  # type: ignore[arg-type]
 
-    def exception(self, msg: object, *args: object, **kwargs: object) -> None:
+    def exception(
+        self, msg: object, *args: object, exc_info: "_ExcInfoType" = True, **kwargs: object
+    ) -> None:
         """
         Convenience method for logging an ERROR with exception information.
 
@@ -215,4 +243,70 @@ class PySparkLogger(logging.Logger):
             If True, exception information is added to the logging message.
             This includes the exception type, value, and traceback. Default is True.
         """
-        super().error(msg, *args, exc_info=True, extra={"kwargs": kwargs})
+        super().exception(msg, *args, exc_info=exc_info, **kwargs)  # type: ignore[arg-type]
+
+    def critical(self, msg: object, *args: object, **kwargs: object) -> None:
+        """
+        Log 'msg % args' with severity 'CRITICAL' in structured JSON format.
+
+        Parameters
+        ----------
+        msg : str
+            The log message.
+        """
+        super().critical(msg, *args, **kwargs)  # type: ignore[arg-type]
+
+    def log(self, level: int, msg: object, *args: object, **kwargs: object) -> None:
+        """
+        Log 'msg % args' with the given severity in structured JSON format.
+
+        Parameters
+        ----------
+        level : int
+            The log level.
+        msg : str
+            The log message.
+        """
+        super().log(level, msg, *args, **kwargs)  # type: ignore[arg-type]
+
+    fatal = critical
+
+    def _log(
+        self,
+        level: int,
+        msg: object,
+        args: "_ArgsType",
+        exc_info: Optional["_ExcInfoType"] = None,
+        extra: Optional[Mapping[str, object]] = None,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        **kwargs: object,
+    ) -> None:
+        if extra is not None:
+            kwargs["extra"] = extra
+        super()._log(
+            level=level,
+            msg=msg,
+            args=args,
+            exc_info=exc_info,
+            extra={"kwargs": kwargs},
+            stack_info=stack_info,
+            stacklevel=stacklevel,
+        )
+
+
+def _test() -> None:
+    import doctest
+    import pyspark.logger.logger
+
+    globs = pyspark.logger.logger.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.logger.logger, globs=globs, optionflags=doctest.ELLIPSIS
+    )
+
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

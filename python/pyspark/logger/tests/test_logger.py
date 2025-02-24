@@ -53,6 +53,22 @@ class LoggerTestsMixin:
         )
         self.assertTrue("exception" not in log_json)
 
+    def test_log_info_with_exception(self):
+        # SPARK-51274: PySparkLogger should respect the expected keyword arguments
+        self.logger.info(
+            "This is an info log", exc_info=True, user="test_user_info", action="test_action_info"
+        )
+        log_json = json.loads(self.handler.stream.getvalue().strip())
+
+        self.assertEqual(log_json["msg"], "This is an info log")
+        self.assertEqual(
+            log_json["context"], {"action": "test_action_info", "user": "test_user_info"}
+        )
+        self.assertTrue("exception" in log_json)
+        self.assertTrue("class" in log_json["exception"])
+        self.assertTrue("msg" in log_json["exception"])
+        self.assertTrue("stacktrace" in log_json["exception"])
+
     def test_log_warn(self):
         self.logger.warn("This is an warn log", user="test_user_warn", action="test_action_warn")
         log_json = json.loads(self.handler.stream.getvalue().strip())
