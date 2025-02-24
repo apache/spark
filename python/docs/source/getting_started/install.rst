@@ -96,7 +96,7 @@ If you want to make Spark Connect default, you can install and additional librar
 It will automatically install ``pyspark`` library as well as dependencies that are necessary for Spark Connect.
 If you want to customize ``pyspark``, you need to install ``pyspark`` with the instructions above in advance.
 
-This package supports both ``spark.master`` (``--master``) with a locally running Spark Connect server, and ``spark.remote`` (``--remote``) including ``local*`` as well as connection URIs such as ``sc://localhost``. See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
+This package supports both ``spark.master`` (``--master``) with a locally running Spark Connect server, and ``spark.remote`` (``--remote``) including local clusters, e.g., ``local[*]`` as well as connection URIs such as ``sc://localhost``. See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
 
 
 Python Spark Connect Client
