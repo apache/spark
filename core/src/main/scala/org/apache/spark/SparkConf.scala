@@ -580,6 +580,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     Utils.redact(this, getAll).sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
   }
 
+  /**
+   * Return true if remote shuffle service is enabled.
+   */
+  def isRssEnable(): Boolean = {
+    val shuffleMgr = get("spark.shuffle.manager", "sort")
+    shuffleMgr.contains("RssShuffleManager") || shuffleMgr.contains("UniffleShuffleManager")
+  }
 }
 
 private[spark] object SparkConf extends Logging {
