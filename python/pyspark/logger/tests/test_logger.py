@@ -124,7 +124,11 @@ class LoggerTestsMixin:
             self.assertTrue(
                 log_json["exception"]["class"] in ("Py4JJavaError", "_MultiThreadedRendezvous")
             )
-            self.assertTrue("Traceback" in log_json["exception"]["stacktrace"][0])
+            stacktrace = log_json["exception"]["stacktrace"][0].keys()
+            self.assertTrue("class" in stacktrace)
+            self.assertTrue("method" in stacktrace)
+            self.assertTrue("file" in stacktrace)
+            self.assertTrue("line" in stacktrace)
 
     def test_log_exception_with_stacktrace(self):
         try:
