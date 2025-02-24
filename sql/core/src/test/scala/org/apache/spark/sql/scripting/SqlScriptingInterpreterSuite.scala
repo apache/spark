@@ -879,12 +879,14 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         context = ExpectedContext(fragment = "", start = -1, stop = -1))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val e = intercept[SqlScriptingException](
+        runSqlScript(commands)
+      )
       checkError(
-        exception = intercept[SqlScriptingException](
-          runSqlScript(commands)
-        ),
+        exception = e,
         condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(1 = ONE)"))
+      assert(e.origin.line.contains(3))
     }
   }
 
@@ -914,6 +916,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(NULL = 1)")
       )
+      assert(e.origin.line.contains(4))
     }
   }
 
@@ -942,6 +945,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(1 = NULL)")
       )
+      assert(e.origin.line.contains(3))
     }
   }
 
@@ -970,6 +974,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
         parameters = Map("invalidStatement" -> "(NULL = 1)")
       )
+      assert(e.origin.line.contains(3))
     }
   }
 

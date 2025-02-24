@@ -691,7 +691,8 @@ class SimpleCaseStatementExec(
           condition,
           Origin(sqlText = Some(conditionText),
             startIndex = Some(0),
-            stopIndex = Some(conditionText.length - 1)),
+            stopIndex = Some(conditionText.length - 1),
+            line = caseVariableExec.origin.line),
           Map.empty,
           isInternal = true,
           context = context

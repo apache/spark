@@ -207,7 +207,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           Project(Seq(Alias(caseExpr, "caseVariable")()), OneRowRelation()))
         val caseVarExec = new SingleStatementExec(
           caseValueStmt.parsedPlan,
-          caseValueStmt.origin,
+          caseExpr.origin,
           args,
           isInternal = true,
           context)
