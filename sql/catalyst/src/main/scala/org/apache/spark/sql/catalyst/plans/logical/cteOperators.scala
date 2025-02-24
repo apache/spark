@@ -34,9 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @param id The id of the loop, inherited from [[CTERelationDef]] within which the Union lived.
  * @param anchor The plan of the initial element of the loop.
  * @param recursion The plan that describes the recursion with an [[UnionLoopRef]] node.
- * @param limit In case we have a plan with the limit node, we can push it down first to the
- *              UnionLoop, which will be then transferred to UnionLoopExec to stop the recursion
- *              after specific amount of rows is already generated.
+ * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
  */
 case class UnionLoop(
     id: Long,
