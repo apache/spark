@@ -55,11 +55,9 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
-    is_remote,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
-from pyspark.sql import Column, functions as F
-from pyspark.sql.types import BooleanType
+from pyspark.sql import functions as F
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
