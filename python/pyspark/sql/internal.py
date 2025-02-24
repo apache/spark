@@ -148,6 +148,8 @@ class InternalFunction:
             F.raise_error(F.printf(F.lit("Vector index must be in [0, %s), but got %s"), size, idx))
         )
 
+    # The main different between this function and the `array_max` + `array_position`:
+    # This function ignores NaN/NULL values, while `array_max` treats NaN values as largest values.
     @staticmethod
     def array_argmax(arr: Column) -> Column:
         def merge(acc: Column, vv: Column) -> Column:
@@ -155,7 +157,7 @@ class InternalFunction:
             i = acc.getField("i")
             j = acc.getField("j")
             return F.when(
-                (~vv.isNaN()) & (vv > v),
+                (~vv.isNaN()) & (~vv.isNull()) & (vv > v),
                 F.struct(vv.alias("v"), j.alias("i"), j + 1),
             ).otherwise(F.struct(v.alias("v"), i.alias("i"), j + 1))
 
