@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{HashMap => JHashMap, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -43,7 +44,9 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.hive.thrift.TFilterTransport
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.thrift.transport.{TEndpointTransport, TTransport}
 
 import org.apache.spark.{SparkConf, SparkException, SparkThrowable}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
@@ -1434,40 +1437,56 @@ private[hive] object HiveClientImpl extends Logging {
     field.get(obj).asInstanceOf[T]
   }
 
+  private def getFieldValue[T](obj: Any, clazz: Class[_], fieldName: String): T = {
+    val field = clazz.getDeclaredField(fieldName)
+    field.setAccessible(true)
+    field.get(obj).asInstanceOf[T]
+  }
+
   // SPARK-49489: a surgery for Hive 2.3.10 due to lack of HIVE-26633
   private def configureMaxThriftMessageSize(
       hiveConf: HiveConf, msClient: IMetaStoreClient, maxMessageSize: Int): Unit = try {
     msClient match {
       // Hive uses Java Dynamic Proxy to enhance the MetaStoreClient to support synchronization
-      // and retrying, we should unwrap and access the real MetaStoreClient instance firstly
+      // and retrying, we should unwrap and access the underlying MetaStoreClient instance firstly
       case proxy if JdkProxy.isProxyClass(proxy.getClass) =>
         JdkProxy.getInvocationHandler(proxy) match {
           case syncHandler if syncHandler.getClass.getName.endsWith("SynchronizedHandler") =>
-            val realMsc = getFieldValue[IMetaStoreClient](syncHandler, "client")
-            configureMaxThriftMessageSize(hiveConf, realMsc, maxMessageSize)
+            val wrappedMsc = getFieldValue[IMetaStoreClient](syncHandler, "client")
+            configureMaxThriftMessageSize(hiveConf, wrappedMsc, maxMessageSize)
           case retryHandler: RetryingMetaStoreClient =>
-            val realMsc = getFieldValue[IMetaStoreClient](retryHandler, "base")
-            configureMaxThriftMessageSize(hiveConf, realMsc, maxMessageSize)
+            val wrappedMsc = getFieldValue[IMetaStoreClient](retryHandler, "base")
+            configureMaxThriftMessageSize(hiveConf, wrappedMsc, maxMessageSize)
           case _ =>
         }
       case msc: HiveMetaStoreClient if !msc.isLocalMetaStore =>
-        val tTransport = msc.getTTransport
-        // The method is added in THRIFT-5237 (0.14.0)
-        val tConf = tTransport.getConfiguration
-        val currentMaxMessageSize = tConf.getMaxMessageSize
-        if (currentMaxMessageSize != maxMessageSize) {
-          logDebug("Change the current metastore client thrift max message size from " +
-            s"$currentMaxMessageSize to $maxMessageSize")
-          tConf.setMaxMessageSize(maxMessageSize)
-          // This internally call TEndpointTransport#resetConsumedMessageSize(-1L) to
-          // apply the updated maxMessageSize
-          tTransport.updateKnownMessageSize(0L)
+        @tailrec
+        def configure(t: TTransport): Unit = t match {
+          // Unwrap and access the underlying TTransport when security enabled (Kerberos)
+          case tTransport: TFilterTransport =>
+            val wrappedTTransport = getFieldValue[TTransport](
+              tTransport, classOf[TFilterTransport], "wrapped")
+            configure(wrappedTTransport)
+          case tTransport: TEndpointTransport =>
+            val tConf = tTransport.getConfiguration
+            val currentMaxMessageSize = tConf.getMaxMessageSize
+            if (currentMaxMessageSize != maxMessageSize) {
+              logDebug("Change the current metastore client thrift max message size from " +
+                s"$currentMaxMessageSize to $maxMessageSize")
+              tConf.setMaxMessageSize(maxMessageSize)
+              // This internally call TEndpointTransport#resetConsumedMessageSize(-1L) to
+              // apply the updated maxMessageSize
+              tTransport.updateKnownMessageSize(0L)
+            }
+          case _ =>
         }
+        configure(msc.getTTransport)
       case _ => // do nothing
     }
   } catch {
-    // For Hive versions that use older Thrift library (e.g. Hive 2.3.9 uses Thrift 0.9.3),
-    // which aren't affected by THRIFT-5237 and don't need to apply HIVE-26633
-    case _: NoSuchMethodError => // do nothing
+    // TEndpointTransport is added in THRIFT-5237 (0.14.0), for Hive versions that use older
+    // Thrift library (e.g. Hive 2.3.9 uses Thrift 0.9.3), which aren't affected by THRIFT-5237
+    // and don't need to apply HIVE-26633
+    case _: NoClassDefFoundError => // do nothing
   }
 }
