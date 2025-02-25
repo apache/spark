@@ -262,39 +262,6 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
-  test("view has utf8 binary collation by default") {
-    withView(testTable) {
-      sql(s"CREATE VIEW $testTable AS SELECT current_database() AS db")
-      assertTableColumnCollation(testTable, "db", "UTF8_BINARY")
-    }
-  }
-
-  test("default string producing expressions in view definition") {
-    val viewDefaultCollation = Seq(
-      "UTF8_BINARY", "UNICODE"
-    )
-
-    viewDefaultCollation.foreach { collation =>
-      withView(testTable) {
-
-        val columns = defaultStringProducingExpressions.zipWithIndex.map {
-          case (expr, index) => s"$expr AS c${index + 1}"
-        }.mkString(", ")
-
-        sql(
-          s"""
-             |CREATE view $testTable
-             |DEFAULT COLLATION $collation
-             |AS SELECT $columns
-             |""".stripMargin)
-
-        (1 to defaultStringProducingExpressions.length).foreach { index =>
-          assertTableColumnCollation(testTable, s"c$index", collation)
-        }
-      }
-    }
-  }
-
   // endregion
 }
 
@@ -366,6 +333,39 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
                  |ON $testView.c1 = $joinTableName.c1 COLLATE UNICODE_CI
                  |""".stripMargin),
           Row(fullyQualifiedPrefix + "UNICODE_CI", fullyQualifiedPrefix + "UTF8_LCASE"))
+      }
+    }
+  }
+
+  test("view has utf8 binary collation by default") {
+    withView(testTable) {
+      sql(s"CREATE VIEW $testTable AS SELECT current_database() AS db")
+      assertTableColumnCollation(testTable, "db", "UTF8_BINARY")
+    }
+  }
+
+  test("default string producing expressions in view definition") {
+    val viewDefaultCollation = Seq(
+      "UTF8_BINARY", "UNICODE"
+    )
+
+    viewDefaultCollation.foreach { collation =>
+      withView(testTable) {
+
+        val columns = defaultStringProducingExpressions.zipWithIndex.map {
+          case (expr, index) => s"$expr AS c${index + 1}"
+        }.mkString(", ")
+
+        sql(
+          s"""
+             |CREATE view $testTable
+             |DEFAULT COLLATION $collation
+             |AS SELECT $columns
+             |""".stripMargin)
+
+        (1 to defaultStringProducingExpressions.length).foreach { index =>
+          assertTableColumnCollation(testTable, s"c$index", collation)
+        }
       }
     }
   }
