@@ -699,38 +699,6 @@ Execute DescribeRelationJsonCommand
 
 
 -- !query
-DROP TABLE t
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP VIEW temp_v
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP VIEW temp_Data_Source_View
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP VIEW v
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 CREATE TABLE d (a STRING DEFAULT 'default-value', b INT DEFAULT 42) USING parquet COMMENT 'table_comment'
 -- !query schema
 struct<>
@@ -920,3 +888,51 @@ Location [not included in comparison]/{warehouse_dir}/e
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
+
+
+-- !query
+DROP VIEW temp_v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW temp_Data_Source_View
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE d
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE e
+-- !query schema
+struct<>
+-- !query output
+
