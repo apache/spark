@@ -20,9 +20,10 @@ package org.apache.spark.sql.connect
 import org.apache.spark.sql.{SparkSessionBuilder, StaticProcedureSuiteBase}
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
-class StaticProcedureSuite extends ConnectFunSuite
-  with StaticProcedureSuiteBase
-  with RemoteSparkSession {
+class StaticProcedureSuite
+    extends ConnectFunSuite
+    with StaticProcedureSuiteBase
+    with RemoteSparkSession {
   override protected def configure(builder: SparkSessionBuilder): builder.type = {
     // We need to set this configuration because the port used by the server is random.
     builder.remote(s"sc://localhost:$serverPort")
