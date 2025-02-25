@@ -174,53 +174,53 @@
           <relocations>
             <relocation>
               <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.guava</shadedPattern>
               <includes>
                 <include>com.google.common.**</include>
               </includes>
             </relocation>
             <relocation>
               <pattern>io.grpc</pattern>
-              <shadedPattern>${spark.shade.packageName}.io.grpc</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.io.grpc</shadedPattern>
               <includes>
                 <include>io.grpc.**</include>
               </includes>
             </relocation>
             <relocation>
               <pattern>com.google</pattern>
-              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.com.google</shadedPattern>
               <excludes>
-                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
+                <!-- Guava is relocated to ${spark.shade.packageName}.connect.client.guava -->
                 <exclude>com.google.common.**</exclude>
               </excludes>
             </relocation>
             <relocation>
               <pattern>io.netty</pattern>
-              <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.io.netty</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.checkerframework</pattern>
-              <shadedPattern>${spark.shade.packageName}.org.checkerframework</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.org.checkerframework</shadedPattern>
             </relocation>
             <relocation>
               <pattern>javax.annotation</pattern>
-              <shadedPattern>${spark.shade.packageName}.javax.annotation</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.javax.annotation</shadedPattern>
             </relocation>
             <relocation>
               <pattern>io.perfmark</pattern>
-              <shadedPattern>${spark.shade.packageName}.io.perfmark</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.io.perfmark</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.codehaus</pattern>
-              <shadedPattern>${spark.shade.packageName}.org.codehaus</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.org.codehaus</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.apache.arrow</pattern>
-              <shadedPattern>${spark.shade.packageName}.org.apache.arrow</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.org.apache.arrow</shadedPattern>
             </relocation>
             <relocation>
               <pattern>android.annotation</pattern>
-              <shadedPattern>${spark.shade.packageName}.android.annotation</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.android.annotation</shadedPattern>
             </relocation>
           </relocations>
           <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->

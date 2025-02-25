@@ -857,7 +857,7 @@ object SparkConnectClient {
     },
 
     (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
+      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.client.guava.@1").inAll,
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
       ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
