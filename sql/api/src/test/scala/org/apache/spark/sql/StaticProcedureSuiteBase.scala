@@ -15,17 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect
+package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfter
+// scalastyle:off funsuite
+import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
+trait StaticProcedureSuiteBase extends AnyFunSuite {
+// scalastyle:on
 
-class ProcedureSuite extends QueryTest with RemoteSparkSession with BeforeAndAfter {
+  protected def configure(builder: SparkSessionBuilder): builder.type = builder
 
   test("each call should invoke procedure once") {
-    checkAnswer(sql("CALL testcat.dummy.increment()"), Row(1))
-    checkAnswer(sql("CALL testcat.dummy.increment()"), Row(2))
+    val session: SparkSession = configure(SparkSession.builder()).getOrCreate()
+    assert(session.sql("CALL testcat.dummy.increment()").toDF().head() == Row(1))
+    assert(session.sql("CALL testcat.dummy.increment()").toDF().head() == Row(2))
   }
 }
