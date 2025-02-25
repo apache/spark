@@ -269,7 +269,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   }
 
   object UnboundIncrement extends UnboundProcedure {
-    override def name: String = "increment"
+    override def name: String = "dummy_increment"
     override def description: String = "test method to increment an in-memory counter"
     override def bind(inputType: StructType): BoundProcedure = BoundIncrement
   }

@@ -25,7 +25,7 @@ trait StaticProcedureSuiteBase extends AnyFunSuite {
 
   protected def configure(builder: SparkSessionBuilder): builder.type = builder
 
-  test("each call should invoke procedure once") {
+  test("SPARK-51273: Spark Connect Call Procedure runs the procedure twice") {
     val session: SparkSession = configure(SparkSession.builder()).getOrCreate()
     assert(session.sql("CALL testcat.dummy.increment()").toDF().head() == Row(1))
     assert(session.sql("CALL testcat.dummy.increment()").toDF().head() == Row(2))
