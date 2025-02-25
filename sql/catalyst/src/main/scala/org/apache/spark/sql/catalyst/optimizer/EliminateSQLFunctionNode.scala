@@ -21,6 +21,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * This rule removes [[SQLScalarFunction]] and [[SQLFunctionNode]] wrapper. They are respected
@@ -34,8 +36,8 @@ object EliminateSQLFunctionNode extends Rule[LogicalPlan] {
     plan.transformWithSubqueries {
       case SQLFunctionNode(_, child) => child
       case f: SQLTableFunction =>
-        throw SparkException.internalError(
-          s"SQL table function plan should be rewritten during analysis: $f")
+        throw QueryCompilationErrors.tableValuedArgumentsNotYetImplementedForSqlFunctions(
+          "call", toSQLId(f.name))
       case p: LogicalPlan => p.transformExpressions {
         case f: SQLScalarFunction => f.child
         case f: SQLFunctionExpression =>
