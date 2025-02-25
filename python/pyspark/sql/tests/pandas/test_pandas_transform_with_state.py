@@ -67,7 +67,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
         cfg.set("spark.sql.session.timeZone", "UTC")
-        # TODO SPARK-50180 this config is to stop query from FEB sink gracefully
+        # TODO SPARK-49046 this config is to stop query from FEB sink gracefully
         cfg.set("spark.sql.streaming.noDataMicroBatches.enabled", "false")
         return cfg
 

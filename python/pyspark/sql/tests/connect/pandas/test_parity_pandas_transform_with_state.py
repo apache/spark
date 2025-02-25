@@ -33,9 +33,9 @@ class TransformWithStateInPandasParityTests(
 
     @classmethod
     def conf(cls):
+        # Due to multiple inheritance from the same level, we need to explicitly setting configs in
+        # both TransformWithStateInPandasTestsMixin and ReusedConnectTestCase here
         cfg = SparkConf(loadDefaults=False)
-        # explicitly setting configs in both TransformWithStateInPandasTestsMixin and
-        # ReusedConnectTestCase
         for base in cls.__bases__:
             if hasattr(base, "conf"):
                 parent_cfg = base.conf()
