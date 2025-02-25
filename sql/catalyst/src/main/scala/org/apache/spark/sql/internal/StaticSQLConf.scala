@@ -314,4 +314,12 @@ object StaticSQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ENABLED_REQUIREDBEXISTS =
+    buildStaticConf("spark.sql.requireDbExists.enabled")
+      .internal()
+      .doc("spark sql is need to requireDbExists")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("true")
 }

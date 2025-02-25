@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_REQUIREDBEXISTS
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -6763,4 +6764,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isModifiable(key: String): Boolean = {
     containsConfigKey(key) && !isStaticConfigKey(key)
   }
+
+  def requireDbExistsEnabled: String = getConf(ENABLED_REQUIREDBEXISTS)
 }
