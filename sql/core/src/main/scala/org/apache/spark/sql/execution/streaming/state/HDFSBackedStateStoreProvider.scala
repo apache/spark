@@ -630,7 +630,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
               StateStoreProvider.validateStateRowFormat(
-                keyRow, keySchema, valueRow, valueSchema, storeConf)
+                keyRow, keySchema, valueRow, valueSchema, stateStoreId, storeConf)
               isValidated = true
             }
             map.put(keyRow, valueRow)
@@ -747,7 +747,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
               StateStoreProvider.validateStateRowFormat(
-                keyRow, keySchema, valueRow, valueSchema, storeConf)
+                keyRow, keySchema, valueRow, valueSchema, stateStoreId, storeConf)
               isValidated = true
             }
             map.put(keyRow, valueRow)

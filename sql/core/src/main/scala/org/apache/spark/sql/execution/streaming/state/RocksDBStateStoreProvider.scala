@@ -114,7 +114,7 @@ private[sql] class RocksDBStateStoreProvider
 
       if (!isValidated && value != null && !useColumnFamilies) {
         StateStoreProvider.validateStateRowFormat(
-          key, keySchema, value, valueSchema, storeConf)
+          key, keySchema, value, valueSchema, stateStoreId, storeConf)
         isValidated = true
       }
       value
@@ -194,7 +194,7 @@ private[sql] class RocksDBStateStoreProvider
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
-              rowPair.key, keySchema, rowPair.value, valueSchema, storeConf)
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
             isValidated = true
           }
           rowPair
@@ -205,7 +205,7 @@ private[sql] class RocksDBStateStoreProvider
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
-              rowPair.key, keySchema, rowPair.value, valueSchema, storeConf)
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
             isValidated = true
           }
           rowPair

@@ -40,14 +40,14 @@ object StateStoreErrors {
     )
   }
 
-  def keyRowFormatValidationFailure(errorMsg: String):
+  def keyRowFormatValidationFailure(errorMsg: String, stateStoreID: String):
     StateStoreKeyRowFormatValidationFailure = {
-    new StateStoreKeyRowFormatValidationFailure(errorMsg)
+    new StateStoreKeyRowFormatValidationFailure(errorMsg, stateStoreID)
   }
 
-  def valueRowFormatValidationFailure(errorMsg: String):
+  def valueRowFormatValidationFailure(errorMsg: String, stateStoreID: String):
     StateStoreValueRowFormatValidationFailure = {
-    new StateStoreValueRowFormatValidationFailure(errorMsg)
+    new StateStoreValueRowFormatValidationFailure(errorMsg, stateStoreID)
   }
 
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
@@ -427,28 +427,28 @@ class StateStoreSnapshotPartitionNotFound(
       "operatorId" -> operatorId.toString,
       "checkpointLocation" -> checkpointLocation))
 
-class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
+class StateStoreKeyRowFormatValidationFailure(errorMsg: String, stateStoreID: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
-    messageParameters = Map("errorMsg" -> errorMsg))
+    messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID))
   with ConvertableToCannotLoadStoreError {
     override def convertToCannotLoadStoreError(): SparkException = {
       new SparkException(
         errorClass = "CANNOT_LOAD_STATE_STORE.KEY_ROW_FORMAT_VALIDATION_FAILURE",
-        messageParameters = Map("errorMsg" -> errorMsg),
+        messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID),
         cause = null)
     }
   }
 
-class StateStoreValueRowFormatValidationFailure(errorMsg: String)
+class StateStoreValueRowFormatValidationFailure(errorMsg: String, stateStoreID: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
-    messageParameters = Map("errorMsg" -> errorMsg))
+    messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID))
   with ConvertableToCannotLoadStoreError {
     override def convertToCannotLoadStoreError(): SparkException = {
       new SparkException(
         errorClass = "CANNOT_LOAD_STATE_STORE.VALUE_ROW_FORMAT_VALIDATION_FAILURE",
-        messageParameters = Map("errorMsg" -> errorMsg),
+        messageParameters = Map("errorMsg" -> errorMsg, "stateStoreID" -> stateStoreID),
         cause = null)
     }
   }
