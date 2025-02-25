@@ -2,12 +2,12 @@
 Benchmark Checksum Algorithms
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1017-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Checksum Algorithms:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Adler32                                           11112          11130          20          0.0    10851949.2       1.0X
-CRC32                                              2765           2767           2          0.0     2699749.0       4.0X
-CRC32C                                             2101           2159          54          0.0     2051565.3       5.3X
+Adler32                                           11096          11101           4          0.0    10835715.4       1.0X
+CRC32                                              2715           2716           1          0.0     2651776.1       4.1X
+CRC32C                                             1629           1647          15          0.0     1591225.5       6.8X
 
 

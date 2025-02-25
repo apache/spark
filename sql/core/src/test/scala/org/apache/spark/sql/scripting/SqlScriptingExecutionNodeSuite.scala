@@ -18,10 +18,12 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.ExecuteImmediateQuery
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -36,8 +38,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       statements: Seq[CompoundStatementExec],
       label: Option[String] = None,
       isScope: Boolean = false,
-      context: SqlScriptingExecutionContext = null)
-    extends CompoundBodyExec(statements, label, isScope, context) {
+      context: SqlScriptingExecutionContext = null,
+      triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap = null)
+    extends CompoundBodyExec(statements, label, isScope, context, triggerToExceptionHandlerMap) {
 
     // No-op to remove unnecessary logic for these tests.
     override def enterScope(): Unit = ()
@@ -74,8 +77,26 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       null
     )
 
+  case class TestIntegerProjection(value: Int, description: String)
+    extends SingleStatementExec(
+      parsedPlan = Project(Seq(Alias(Literal(value), description)()), OneRowRelation()),
+      Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      Map.empty,
+      isInternal = false,
+      null
+  )
+
   case class DummyLogicalPlan() extends LeafNode {
     override def output: Seq[Attribute] = Seq.empty
+  }
+
+  case class MockScriptingContext() extends SqlScriptingExecutionContext {
+    override def enterScope(
+      label: String,
+      triggerHandlerMap: TriggerToExceptionHandlerMap
+    ): Unit = ()
+
+    override def exitScope(label: String): Unit = ()
   }
 
   case class TestLoopCondition(
@@ -157,7 +178,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case forStmt: TestForStatement => forStmt.label.get
       case dropStmt: SingleStatementExec if dropStmt.parsedPlan.isInstanceOf[DropVariable]
         => "DropVariable"
-      case _ => fail("Unexpected statement type")
+      case execImm: SingleStatementExec if execImm.parsedPlan.isInstanceOf[ExecuteImmediateQuery]
+        => "ExecuteImmediate"
+      case project: SingleStatementExec if project.parsedPlan.isInstanceOf[Project]
+      => "Project"
+      case _ => fail("Unexpected statement: " + statement)
     }
 
   // Tests
@@ -637,7 +662,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter first WHEN clause") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = true, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
@@ -656,7 +681,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter body of the ELSE clause") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1")
         ),
@@ -673,7 +698,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - enter second WHEN clause") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
@@ -692,7 +717,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - without else (successful check)") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = true, description = "con2")
@@ -711,7 +736,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
 
   test("searched case - without else (unsuccessful checks)") {
     val iter = TestCompoundBody(Seq(
-      new CaseStatementExec(
+      new SearchedCaseStatementExec(
         conditions = Seq(
           TestIfElseCondition(condVal = false, description = "con1"),
           TestIfElseCondition(condVal = false, description = "con2")
@@ -726,6 +751,109 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("con1", "con2"))
+  }
+
+  test("simple case - enter first WHEN clause") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(1, "1"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "body1"))
+  }
+
+  test("simple case - enter body of the ELSE clause") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(2, "2"),
+        conditionExpressions = Seq(
+          Literal(1)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1")))
+        ),
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2")))),
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "body2"))
+  }
+
+  test("simple case - enter second WHEN clause") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(2, "2"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "Project", "body2"))
+  }
+
+  test("simple case - without else (successful check)") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(2, "2"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = None,
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "Project", "body2"))
+  }
+
+  test("simple case - without else (unsuccessful checks)") {
+    val iter = TestCompoundBody(Seq(
+      new SimpleCaseStatementExec(
+        caseVariableExec = TestIntegerProjection(3, "3"),
+        conditionExpressions = Seq(
+          Literal(1),
+          Literal(2)
+        ),
+        conditionalBodies = Seq(
+          TestCompoundBody(Seq(TestLeafStatement("body1"))),
+          TestCompoundBody(Seq(TestLeafStatement("body2")))
+        ),
+        elseBody = None,
+        session = spark,
+        context = MockScriptingContext()
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("Project", "Project"))
   }
 
   test("loop statement with leave") {
@@ -757,8 +885,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -780,8 +908,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "statement2",
       "statement1",
       "statement2",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -822,14 +950,14 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq(
       "body",
       "body",
-      "DropVariable", // drop for query var intCol1
-      "DropVariable", // drop for loop var y
+      "ExecuteImmediate", // drop for query var intCol1
+      "ExecuteImmediate", // drop for loop var y
       "body",
       "body",
-      "DropVariable", // drop for query var intCol1
-      "DropVariable", // drop for loop var y
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol1
+      "ExecuteImmediate", // drop for loop var y
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -846,7 +974,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -865,7 +993,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "statement2", "statement1", "statement2",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -904,10 +1032,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body", "body",
-      "DropVariable", // drop for query var intCol1
+      "ExecuteImmediate", // drop for query var intCol1
       "body", "body",
-      "DropVariable", // drop for query var intCol1
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate", // drop for query var intCol1
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -930,8 +1058,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "lbl1",
       "statement1",
       "lbl1",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -982,8 +1110,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "outer_body",
       "body1",
       "lbl1",
-      "DropVariable", // drop for query var intCol
-      "DropVariable" // drop for loop var x
+      "ExecuteImmediate", // drop for query var intCol
+      "ExecuteImmediate" // drop for loop var x
     ))
   }
 
@@ -1028,7 +1156,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "lbl1", "statement1", "lbl1",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 
@@ -1074,7 +1202,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "outer_body", "body1", "lbl1", "outer_body", "body1", "lbl1",
-      "DropVariable" // drop for query var intCol
+      "ExecuteImmediate" // drop for query var intCol
     ))
   }
 

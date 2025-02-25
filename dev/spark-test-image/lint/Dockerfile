@@ -72,7 +72,7 @@ RUN apt-get update && apt-get install -y python3.9 python3.9-distutils \
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
 RUN python3.9 -m pip install \
-    'black==23.9.1' \
+    'black==23.12.1' \
     'flake8==3.9.0' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \

@@ -15,14 +15,12 @@
 # limitations under the License.
 #
 
-import glob
 import os
 import struct
 import sys
 import unittest
 import difflib
 import functools
-import math
 from decimal import Decimal
 from time import time, sleep
 from typing import (
@@ -37,9 +35,7 @@ from itertools import zip_longest
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
-from pyspark.errors.exceptions.captured import CapturedException
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
@@ -48,17 +44,11 @@ from pyspark.sql.functions import col, when
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
-SPARK_HOME = _find_spark_home()
-
 
 def have_package(name: str) -> bool:
-    try:
-        import importlib
+    import importlib
 
-        importlib.import_module(name)
-        return True
-    except Exception:
-        return False
+    return importlib.util.find_spec(name) is not None
 
 
 have_numpy = have_package("numpy")
@@ -263,31 +253,6 @@ class ByteArrayOutput:
         pass
 
 
-def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
-    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
-    # vary for SBT or Maven specifically. See also SPARK-26856
-    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
-
-    # We should ignore the following jars
-    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-
-    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
-    # build because the artifact jars are in different directories.
-    sbt_build = glob.glob(
-        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
-    )
-    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
-    jar_paths = sbt_build + maven_build
-    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
-
-    if not jars:
-        return None
-    elif len(jars) > 1:
-        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
-    else:
-        return jars[0]
-
-
 def _terminal_color_support():
     try:
         # determine if environment supports color
@@ -360,7 +325,7 @@ class PySparkErrorTestUtils:
 
         # Test error class
         expected = errorClass
-        actual = exception.getErrorClass()
+        actual = exception.getCondition()
         self.assertEqual(
             expected, actual, f"Expected error class was '{expected}', got '{actual}'."
         )

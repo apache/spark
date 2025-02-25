@@ -148,6 +148,22 @@ struct<result:bigint>
 
 
 -- !query
+SELECT uniform(0, cast(10 as tinyint), 0) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+7
+
+
+-- !query
+SELECT uniform(0, cast(10 as smallint), 0) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+7
+
+
+-- !query
 SELECT uniform(0, 10S, 0) AS result
 -- !query schema
 struct<result:int>
@@ -169,6 +185,38 @@ SELECT uniform(10.0F, 20.0F, 0) AS result
 struct<result:float>
 -- !query output
 17.604954
+
+
+-- !query
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), 0) AS result
+-- !query schema
+struct<result:decimal(10,3)>
+-- !query output
+17.605
+
+
+-- !query
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(11, 4)), 0) AS result
+-- !query schema
+struct<result:decimal(11,4)>
+-- !query output
+17.6050
+
+
+-- !query
+SELECT uniform(10, cast(20 as decimal(10, 3)), 0) AS result
+-- !query schema
+struct<result:decimal(10,3)>
+-- !query output
+17.605
+
+
+-- !query
+SELECT uniform(cast(10 as decimal(10, 3)), 20, 0) AS result
+-- !query schema
+struct<result:decimal(10,3)>
+-- !query output
+17.605
 
 
 -- !query
@@ -206,9 +254,49 @@ true
 
 
 -- !query
+SELECT uniform(-10L, 10L, 0) AS result
+-- !query schema
+struct<result:bigint>
+-- !query output
+5
+
+
+-- !query
+SELECT uniform(-20L, -10L, 0) AS result
+-- !query schema
+struct<result:bigint>
+-- !query output
+-12
+
+
+-- !query
+SELECT uniform(-20L, -10L, -10) AS result
+-- !query schema
+struct<result:bigint>
+-- !query output
+-17
+
+
+-- !query
 SELECT uniform(NULL, 1, 0) AS result
 -- !query schema
-struct<result:void>
+struct<result:double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(cast(NULL AS int), 1, 0) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(cast(NULL AS float), 1, 0) AS result
+-- !query schema
+struct<result:float>
 -- !query output
 NULL
 
@@ -216,7 +304,23 @@ NULL
 -- !query
 SELECT uniform(0, NULL, 0) AS result
 -- !query schema
-struct<result:void>
+struct<result:double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(0, cast(NULL AS int), 0) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(0, cast(NULL AS float), 0) AS result
+-- !query schema
+struct<result:float>
 -- !query output
 NULL
 
@@ -224,9 +328,59 @@ NULL
 -- !query
 SELECT uniform(0, 1, NULL) AS result
 -- !query schema
-struct<result:void>
+struct<result:int>
+-- !query output
+0
+
+
+-- !query
+SELECT uniform(NULL, NULL, 0) AS result
+-- !query schema
+struct<result:double>
 -- !query output
 NULL
+
+
+-- !query
+SELECT uniform(NULL, NULL, NULL) AS result
+-- !query schema
+struct<result:double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT uniform(0, 1, cast(NULL as int)) AS result
+-- !query schema
+struct<result:int>
+-- !query output
+0
+
+
+-- !query
+SELECT uniform(0, 1, cast(NULL as float)) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"CAST(NULL AS FLOAT)\"",
+    "inputType" : "\"FLOAT\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(0, 1, CAST(NULL AS FLOAT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "uniform(0, 1, cast(NULL as float))"
+  } ]
+}
 
 
 -- !query
@@ -330,6 +484,162 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT uniform(10.0F, 20.0F, 0.0F) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"0.0\"",
+    "inputType" : "\"FLOAT\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(10.0, 20.0, 0.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "uniform(10.0F, 20.0F, 0.0F)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(10.0F, 20.0F, 0.0D) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"0.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(10.0, 20.0, 0.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "uniform(10.0F, 20.0F, 0.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), cast(0 as decimal(10, 3)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"CAST(0 AS DECIMAL(10,3))\"",
+    "inputType" : "\"DECIMAL(10,3)\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(CAST(10 AS DECIMAL(10,3)), CAST(20 AS DECIMAL(10,3)), CAST(0 AS DECIMAL(10,3)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 97,
+    "fragment" : "uniform(cast(10 as decimal(10, 3)), cast(20 as decimal(10, 3)), cast(0 as decimal(10, 3)))"
+  } ]
+}
+
+
+-- !query
+SELECT uniform('abc', 10, 0) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"abc\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"NUMERIC\"",
+    "sqlExpr" : "\"uniform(abc, 10, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "uniform('abc', 10, 0)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(0, 'def', 0) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"def\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"NUMERIC\"",
+    "sqlExpr" : "\"uniform(0, def, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "uniform(0, 'def', 0)"
+  } ]
+}
+
+
+-- !query
+SELECT uniform(0, 10, 'ghi') AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"ghi\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "third",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"uniform(0, 10, ghi)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "uniform(0, 10, 'ghi')"
+  } ]
+}
+
+
+-- !query
 SELECT randstr(1, 0) AS result
 -- !query schema
 struct<result:string>
@@ -362,6 +672,46 @@ ceV0PXaR2I
 
 
 -- !query
+SELECT randstr(CAST(10 AS TINYINT), 0) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+ceV0PXaR2I
+
+
+-- !query
+SELECT randstr(CAST(10 AS BIGINT), 0) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+ceV0PXaR2I
+
+
+-- !query
+SELECT randstr(1.0F, 0) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+c
+
+
+-- !query
+SELECT randstr(1.0D, 0) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+c
+
+
+-- !query
+SELECT randstr(cast(1 AS DECIMAL(10, 2)), 0) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+c
+
+
+-- !query
 SELECT randstr(10, 0) AS result FROM VALUES (0), (1), (2) tab(col)
 -- !query schema
 struct<result:string>
@@ -380,133 +730,51 @@ true
 
 
 -- !query
+SELECT randstr(1, -1) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+S
+
+
+-- !query
 SELECT randstr(10L, 0) AS result
 -- !query schema
-struct<>
+struct<result:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"10\"",
-    "inputType" : "\"BIGINT\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(10, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "randstr(10L, 0)"
-  } ]
-}
+ceV0PXaR2I
 
 
 -- !query
 SELECT randstr(10.0F, 0) AS result
 -- !query schema
-struct<>
+struct<result:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"10.0\"",
-    "inputType" : "\"FLOAT\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(10.0, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "randstr(10.0F, 0)"
-  } ]
-}
+ceV0PXaR2I
 
 
 -- !query
 SELECT randstr(10.0D, 0) AS result
 -- !query schema
-struct<>
+struct<result:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"10.0\"",
-    "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(10.0, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "randstr(10.0D, 0)"
-  } ]
-}
+ceV0PXaR2I
 
 
 -- !query
 SELECT randstr(NULL, 0) AS result
 -- !query schema
-struct<>
+struct<result:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "first",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(NULL, 0)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 23,
-    "fragment" : "randstr(NULL, 0)"
-  } ]
-}
+
 
 
 -- !query
 SELECT randstr(0, NULL) AS result
 -- !query schema
-struct<>
+struct<result:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "second",
-    "requiredType" : "INT or SMALLINT",
-    "sqlExpr" : "\"randstr(0, NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 23,
-    "fragment" : "randstr(0, NULL)"
-  } ]
-}
+
 
 
 -- !query
@@ -521,7 +789,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"col\"",
     "inputName" : "`length`",
-    "inputType" : "INT or SMALLINT",
+    "inputType" : "integer",
     "sqlExpr" : "\"randstr(col, 0)\""
   },
   "queryContext" : [ {
@@ -546,7 +814,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputExpr" : "\"col\"",
     "inputName" : "`seed`",
-    "inputType" : "INT or SMALLINT",
+    "inputType" : "integer",
     "sqlExpr" : "\"randstr(10, col)\""
   },
   "queryContext" : [ {
@@ -580,5 +848,74 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 8,
     "stopIndex" : 24,
     "fragment" : "randstr(10, 0, 1)"
+  } ]
+}
+
+
+-- !query
+SELECT randstr(-1, 0) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.LENGTH",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`randstr`",
+    "length" : "-1",
+    "parameter" : "`length`"
+  }
+}
+
+
+-- !query
+SELECT randstr(10, "a") AS result FROM VALUES (0) tab(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"a\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"randstr(10, a)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "randstr(10, \"a\")"
+  } ]
+}
+
+
+-- !query
+SELECT randstr(10, 1.5) AS result FROM VALUES (0) tab(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"INT\" or \"BIGINT\")",
+    "sqlExpr" : "\"randstr(10, 1.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "randstr(10, 1.5)"
   } ]
 }

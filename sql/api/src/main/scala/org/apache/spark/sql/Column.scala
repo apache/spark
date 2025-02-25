@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, map}
-import org.apache.spark.sql.internal.ColumnNode
+import org.apache.spark.sql.internal.{ColumnNode, TableValuedFunctionArgument}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -137,7 +137,7 @@ class TypedColumn[-T, U](node: ColumnNode, private[sql] val encoder: Encoder[U])
  * @since 1.3.0
  */
 @Stable
-class Column(val node: ColumnNode) extends Logging {
+class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgument {
   private[sql] def this(name: String, planId: Option[Long]) = this(withOrigin {
     name match {
       case "*" => internal.UnresolvedStar(None, planId)

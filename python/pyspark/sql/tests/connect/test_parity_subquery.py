@@ -45,10 +45,6 @@ class SubqueryParityTests(SubqueryTestsMixin, ReusedConnectTestCase):
     def test_subquery_in_unpivot(self):
         self.check_subquery_in_unpivot(None, None)
 
-    @unittest.skip("SPARK-50601: Fix the SparkConnectPlanner to support this case")
-    def test_subquery_in_with_columns(self):
-        super().test_subquery_in_with_columns()
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_subquery import *  # noqa: F401

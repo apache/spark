@@ -23,6 +23,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.SparkConnectServerTest
+import org.apache.spark.sql.connect.config.Connect
 
 class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
@@ -243,6 +244,49 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         newest_query.hasNext
       }
       assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
+    }
+  }
+
+  test("Client is allowed to reconnect to released session if allow_reconnect is set") {
+    withRawBlockingStub { stub =>
+      val sessionId = UUID.randomUUID.toString()
+      val iter =
+        stub.executePlan(
+          buildExecutePlanRequest(
+            buildPlan("select * from range(1000000)"),
+            sessionId = sessionId))
+      iter.hasNext // guarantees the request was received by server.
+
+      stub.releaseSession(buildReleaseSessionRequest(sessionId, allowReconnect = true))
+
+      val iter2 =
+        stub.executePlan(
+          buildExecutePlanRequest(
+            buildPlan("select * from range(1000000)"),
+            sessionId = sessionId))
+      // guarantees the request was received by server. No exception should be thrown on reuse
+      iter2.hasNext
+    }
+  }
+
+  test("Exceptions thrown in the gRPC response observer does not lead to infinite retries") {
+    withSparkEnvConfs(
+      (Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION.key, "10")) {
+      withClient { client =>
+        val query = client.execute(buildPlan("SELECT 1"))
+        query.hasNext
+        val execution = eventuallyGetExecutionHolder
+        Eventually.eventually(timeout(eventuallyTimeout)) {
+          assert(!execution.isExecuteThreadRunnerAlive())
+        }
+
+        execution.undoResponseObserverCompletion()
+
+        val error = intercept[SparkException] {
+          while (query.hasNext) query.next()
+        }
+        assert(error.getMessage.contains("IllegalStateException"))
+      }
     }
   }
 }

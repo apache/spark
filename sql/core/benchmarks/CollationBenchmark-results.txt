@@ -1,88 +1,88 @@
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - equalsFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 --------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                          1223           1224           1          0.1       12231.5       1.0X
-UTF8_LCASE                                           3280           3281           1          0.0       32803.3       2.7X
-UNICODE                                             17207          17207           0          0.0      172065.7      14.1X
-UNICODE_CI                                          16560          16565           7          0.0      165604.3      13.5X
+UTF8_BINARY                                          1748           1749           2          0.1       17477.9       1.0X
+UTF8_LCASE                                           3373           3375           2          0.0       33732.1       1.9X
+UNICODE                                             19232          19233           2          0.0      192319.1      11.0X
+UNICODE_CI                                          18896          18913          24          0.0      188959.3      10.8X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - compareFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ---------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                           1656           1657           0          0.1       16564.0       1.0X
-UTF8_LCASE                                            3320           3321           0          0.0       33203.0       2.0X
-UNICODE                                              16392          16393           2          0.0      163921.3       9.9X
-UNICODE_CI                                           16314          16319           6          0.0      163143.3       9.8X
+UTF8_BINARY                                           1715           1717           4          0.1       17147.1       1.0X
+UTF8_LCASE                                            4045           4047           2          0.0       40454.0       2.4X
+UNICODE                                              19589          19600          15          0.0      195892.3      11.4X
+UNICODE_CI                                           19460          19460           0          0.0      194603.5      11.3X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - hashFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                        2812           2813           1          0.0       28119.0       1.0X
-UTF8_LCASE                                         5682           5685           4          0.0       56823.2       2.0X
-UNICODE                                           71678          71685          10          0.0      716777.4      25.5X
-UNICODE_CI                                        60660          60670          15          0.0      606597.4      21.6X
+UTF8_BINARY                                        3109           3109           1          0.0       31085.0       1.0X
+UTF8_LCASE                                         6233           6234           1          0.0       62327.7       2.0X
+UNICODE                                           70070          70073           4          0.0      700700.9      22.5X
+UNICODE_CI                                        55403          55421          25          0.0      554030.7      17.8X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - contains:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                        2528           2528           1          0.0       25276.8       1.0X
-UTF8_LCASE                                        28034          28050          24          0.0      280335.5      11.1X
-UNICODE                                          521518         521690         242          0.0     5215184.7     206.3X
-UNICODE_CI                                       508188         508312         176          0.0     5081880.5     201.0X
+UTF8_BINARY                                        2090           2091           1          0.0       20904.2       1.0X
+UTF8_LCASE                                        17807          17821          19          0.0      178073.2       8.5X
+UNICODE                                          308044         308063          27          0.0     3080435.7     147.4X
+UNICODE_CI                                       302806         303040         332          0.0     3028057.0     144.9X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - startsWith:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                        2772           2774           4          0.0       27715.0       1.0X
-UTF8_LCASE                                        27387          27390           4          0.0      273872.8       9.9X
-UNICODE                                          501025         501076          72          0.0     5010249.5     180.8X
-UNICODE_CI                                       506654         506666          16          0.0     5066544.6     182.8X
+UTF8_BINARY                                        2144           2146           2          0.0       21444.5       1.0X
+UTF8_LCASE                                        17296          17304          12          0.0      172957.5       8.1X
+UNICODE                                          298604         298650          65          0.0     2986041.0     139.2X
+UNICODE_CI                                       301846         301963         166          0.0     3018462.2     140.8X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - endsWith:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 ------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                        2886           2888           3          0.0       28858.9       1.0X
-UTF8_LCASE                                        27433          27445          17          0.0      274326.2       9.5X
-UNICODE                                          501068         501186         168          0.0     5010676.2     173.6X
-UNICODE_CI                                       506619         506655          52          0.0     5066185.6     175.6X
+UTF8_BINARY                                        2493           2493           0          0.0       24930.9       1.0X
+UTF8_LCASE                                        17442          17442           1          0.0      174419.9       7.0X
+UNICODE                                          316423         316658         332          0.0     3164234.5     126.9X
+UNICODE_CI                                       319532         319895         514          0.0     3195316.3     128.2X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - initCap using impl execICU:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 --------------------------------------------------------------------------------------------------------------------------------------
-UNICODE                                                           407            411           4          0.2        4065.4       1.0X
-UNICODE_CI                                                        419            423           3          0.2        4194.1       1.0X
+UNICODE                                                           314            314           1          0.3        3136.5       1.0X
+UNICODE_CI                                                        314            314           0          0.3        3137.8       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - initCap using impl execBinaryICU:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 --------------------------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                                             564            565           2          0.2        5639.2       1.0X
-UTF8_LCASE                                                              563            563           0          0.2        5629.0       1.0X
-UNICODE                                                                 563            565           2          0.2        5634.3       1.0X
-UNICODE_CI                                                              564            564           0          0.2        5640.9       1.0X
+UTF8_BINARY                                                             601            602           1          0.2        6012.0       1.0X
+UTF8_LCASE                                                              602            603           1          0.2        6015.2       1.0X
+UNICODE                                                                 601            602           1          0.2        6006.2       1.0X
+UNICODE_CI                                                              598            599           1          0.2        5977.6       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - initCap using impl execBinary:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 -----------------------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                                          165            166           1          0.6        1647.3       1.0X
-UTF8_LCASE                                                           165            165           1          0.6        1646.7       1.0X
-UNICODE                                                              165            165           1          0.6        1646.5       1.0X
-UNICODE_CI                                                           165            166           1          0.6        1648.7       1.0X
+UTF8_BINARY                                                          181            181           1          0.6        1806.9       1.0X
+UTF8_LCASE                                                           181            181           1          0.6        1807.6       1.0X
+UNICODE                                                              181            181           1          0.6        1806.0       1.0X
+UNICODE_CI                                                           181            182           1          0.6        1807.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Linux 6.8.0-1018-aws
-Intel(R) Xeon(R) Platinum 8252C CPU @ 3.80GHz
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - initCap using impl execLowercase:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
 --------------------------------------------------------------------------------------------------------------------------------------------
-UTF8_BINARY                                                             391            399           6          0.3        3912.1       1.0X
-UTF8_LCASE                                                              389            399           7          0.3        3894.2       1.0X
-UNICODE                                                                 383            391           6          0.3        3828.6       1.0X
-UNICODE_CI                                                              383            387           2          0.3        3833.0       1.0X
+UTF8_BINARY                                                             316            317           0          0.3        3164.5       1.0X
+UTF8_LCASE                                                              316            317           0          0.3        3164.3       1.0X
+UNICODE                                                                 316            317           1          0.3        3162.1       1.0X
+UNICODE_CI                                                              316            317           0          0.3        3164.3       1.0X
 

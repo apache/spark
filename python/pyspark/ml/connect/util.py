@@ -15,13 +15,16 @@
 # limitations under the License.
 #
 
-from typing import Any, Union, List, Tuple, Callable, Iterable
+from typing import Any, TypeVar, Callable, List, Tuple, Union, Iterable
 
 import pandas as pd
 
 from pyspark import cloudpickle
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, pandas_udf
+import pyspark.sql.connect.proto as pb2
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def aggregate_dataframe(
@@ -173,3 +176,13 @@ def transform_dataframe_column(
         ).drop(output_col_name)
     else:
         return result_spark_df
+
+
+def _extract_id_methods(obj_identifier: str) -> Tuple[List["pb2.Fetch.Method"], str]:
+    """Extract the obj reference id and the methods. Eg, model.summary"""
+    method_chain = obj_identifier.split(".")
+    obj_ref = method_chain[0]
+    methods: List["pb2.Fetch.Method"] = []
+    if len(method_chain) > 1:
+        methods = [pb2.Fetch.Method(method=m) for m in method_chain[1:]]
+    return methods, obj_ref

@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   MapConcat,
   MapZipWith,
   NaNvl,
+  RandStr,
   RangeFrame,
   ScalaUDF,
   Sequence,
@@ -272,11 +273,13 @@ abstract class TypeCoercionHelper {
         // IN subquery expression.
         if (commonTypes.length == lhs.length) {
           val castedRhs = rhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+            case (e, dt) if e.dataType != dt =>
+              Alias(Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone), e.name)()
             case (e, _) => e
           }
           val newLhs = lhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Cast(e, dt)
+            case (e, dt) if e.dataType != dt =>
+              Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone)
             case (e, _) => e
           }
 
@@ -399,6 +402,11 @@ abstract class TypeCoercionHelper {
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
+
+      case r: RandStr if r.length.dataType != IntegerType =>
+        implicitCast(r.length, IntegerType).map { casted =>
+          r.copy(length = casted)
+        }.getOrElse(r)
 
       case other => other
     }

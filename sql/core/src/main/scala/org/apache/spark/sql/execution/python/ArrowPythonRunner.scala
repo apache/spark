@@ -47,9 +47,12 @@ abstract class BaseArrowPythonRunner(
       funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
@@ -119,6 +122,9 @@ object ArrowPythonRunner {
     val arrowAyncParallelism = conf.pythonUDFArrowConcurrencyLevel.map(v =>
       Seq(SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key -> v.toString)
     ).getOrElse(Seq.empty)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++ arrowAyncParallelism: _*)
+    val useLargeVarTypes = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key ->
+      conf.arrowUseLargeVarTypes.toString)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
+      arrowAyncParallelism ++ useLargeVarTypes: _*)
   }
 }

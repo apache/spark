@@ -188,19 +188,19 @@ autodoc_typehints = "none"
 # a list of builtin themes.
 html_theme = 'pydata_sphinx_theme'
 
-html_context = {
-    # When releasing a new Spark version, please update the file
-    # "site/static/versions.json" under the code repository "spark-website"
-    # (item should be added in order), and also set the local environment
-    # variable "RELEASE_VERSION".
-    "switcher_json_url": "https://spark.apache.org/static/versions.json",
-    "switcher_template_url": "https://spark.apache.org/docs/{version}/api/python/index.html",
-}
-
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    "check_switcher": False,
+    "switcher": {
+        # When releasing a new Spark version, please update the file
+        # "site/static/versions.json" under the code repository "spark-website"
+        # (item should be added in order), and also set the local environment
+        # variable "RELEASE_VERSION".
+        "json_url": "https://spark.apache.org/static/versions.json",
+        "version_match": release,
+    },
     "header_links_before_dropdown": 6,
     "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
     "footer_start": ["spark_footer", "sphinx-version"],

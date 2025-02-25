@@ -162,7 +162,7 @@ package object config {
         "PySpark shell.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
     ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
@@ -1023,8 +1023,7 @@ package object config {
   private[spark] val MAX_EXECUTOR_FAILURES =
     ConfigBuilder("spark.executor.maxNumFailures")
       .doc("The maximum number of executor failures before failing the application. " +
-        "This configuration only takes effect on YARN, or Kubernetes when " +
-        "`spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+        "This configuration only takes effect on YARN and Kubernetes.")
       .version("3.5.0")
       .intConf
       .createOptional
@@ -1032,8 +1031,8 @@ package object config {
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.executor.failuresValidityInterval")
       .doc("Interval after which executor failures will be considered independent and not " +
-        "accumulate towards the attempt count. This configuration only takes effect on YARN, " +
-        "or Kubernetes when `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+        "accumulate towards the attempt count. This configuration only takes effect on YARN " +
+        "and Kubernetes.")
       .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
@@ -1974,7 +1973,7 @@ package object config {
   private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
     .version("1.3.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
     .doc("Specifies the host of the Master REST API endpoint")
@@ -2822,4 +2821,16 @@ package object config {
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val SPARK_API_MODE =
+    ConfigBuilder("spark.api.mode")
+      .doc("For Spark Classic applications, specify whether to automatically use Spark Connect " +
+        "by running a local Spark Connect server dedicated to the application. The server is " +
+        "terminated when the application is terminated. The value can be `classic` or `connect`.")
+      .version("4.0.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("connect", "classic"))
+      .createWithDefault(
+        if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
 }

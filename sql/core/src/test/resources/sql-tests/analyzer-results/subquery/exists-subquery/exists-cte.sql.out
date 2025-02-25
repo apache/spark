@@ -101,7 +101,7 @@ WHERE  a.bonus_amt > 30
                    WHERE  a.emp_name = b.emp_name)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias bonus_cte
 :     +- Project [emp_name#x, bonus_amt#x]
 :        +- Filter exists#x [emp_name#x]
@@ -162,7 +162,7 @@ WHERE  EXISTS (SELECT *
                WHERE  bonus.emp_name = a.emp_name)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias emp_cte
 :     +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 :        +- Filter ((id#x >= 100) AND (id#x <= 300))
@@ -172,7 +172,7 @@ WithCTE
 :                    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 :                       +- SubqueryAlias EMP
 :                          +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias dept_cte
 :     +- Project [dept_id#x, dept_name#x, state#x]
 :        +- Filter (dept_id#x = 10)
@@ -225,7 +225,7 @@ WHERE  e.dept_id = d.dept_id
                    WHERE  e.emp_name = a.emp_name)
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias emp_cte
 :     +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 :        +- Filter ((id#x >= 100) AND (id#x <= 300))
@@ -235,7 +235,7 @@ WithCTE
 :                    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 :                       +- SubqueryAlias EMP
 :                          +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias dept_cte
 :     +- Project [dept_id#x, dept_name#x, state#x]
 :        +- Filter (dept_id#x = 10)
@@ -299,7 +299,7 @@ WHERE  EXISTS (SELECT dept_id,
 GROUP  BY emp_name
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias empdept
 :     +- Project [id#x, salary#x, emp_name#x, dept_id#x]
 :        +- Filter id#x IN (100,200)
@@ -352,7 +352,7 @@ WHERE  NOT EXISTS (SELECT dept_id,
 GROUP  BY emp_name
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias empdept
 :     +- Project [id#x, salary#x, emp_name#x, dept_id#x]
 :        +- Filter id#x IN (100,200)

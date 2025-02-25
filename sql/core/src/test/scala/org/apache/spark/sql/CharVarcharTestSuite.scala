@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -693,6 +694,108 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         sql("INSERT INTO students (address) VALUES ('<unknown>')")
         checkAnswer(sql("SELECT count(*) FROM students"), Row(2))
       }
+    }
+  }
+
+  test(s"insert string literal into char/varchar column when " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c1 CHAR(5), c2 VARCHAR(5)) USING $format")
+        sql("INSERT INTO t VALUES ('1234', '1234')")
+        checkAnswer(spark.table("t"), Row("1234 ", "1234"))
+        assertLengthCheckFailure("INSERT INTO t VALUES ('123456', '1')")
+        assertLengthCheckFailure("INSERT INTO t VALUES ('1', '123456')")
+      }
+    }
+  }
+
+  test(s"insert from string column into char/varchar column when " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      withTable("a", "b") {
+        sql(s"CREATE TABLE a AS SELECT '1234' as c1, '1234' as c2")
+        sql(s"CREATE TABLE b(c1 CHAR(5), c2 VARCHAR(5)) USING $format")
+        sql("INSERT INTO b SELECT * FROM a")
+        checkAnswer(spark.table("b"), Row("1234 ", "1234"))
+        spark.table("b").show()
+      }
+    }
+  }
+
+  test(s"cast from char/varchar when ${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq("char(5)", "varchar(5)").foreach { typ =>
+        Seq(
+          "int" -> ("123", 123),
+          "long" -> ("123 ", 123L),
+          "boolean" -> ("true ", true),
+          "boolean" -> ("false", false),
+          "double" -> ("1.2", 1.2)
+        ).foreach { case (toType, (from, to)) =>
+          assert(sql(s"select cast($from :: $typ as $toType)").collect() === Array(Row(to)))
+        }
+      }
+    }
+  }
+
+  test(s"cast to char/varchar when ${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq("char(10)", "varchar(10)").foreach { typ =>
+        Seq(
+          123 -> "123",
+          123L-> "123",
+          true -> "true",
+          false -> "false",
+          1.2 -> "1.2"
+        ).foreach { case (from, to) =>
+          val paddedTo = if (typ == "char(10)") {
+            to.padTo(10, ' ')
+          } else {
+            to
+          }
+          sql(s"select cast($from as $typ)").collect() === Array(Row(paddedTo))
+        }
+      }
+    }
+  }
+
+  test("implicitly cast char/varchar into atomics") {
+    Seq("char", "varchar").foreach { typ =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(sql(
+          s"""
+             |SELECT
+             |NOT('false'::$typ(5)),
+             |1 + ('4'::$typ(5)),
+             |2L + ('4'::$typ(5)),
+             |3S + ('4'::$typ(5)),
+             |4Y - ('4'::$typ(5)),
+             |1.2 / ('0.6'::$typ(5)),
+             |MINUTE('2009-07-30 12:58:59'::$typ(30)),
+             |if(true, '0'::$typ(5), 1),
+             |if(false, '0'::$typ(5), 1)
+          """.stripMargin), Row(true, 5, 6, 7, 0, 2.0, 58, 0, 1))
+      }
+    }
+  }
+
+  test("SPARK-50847: Deny ApplyCharTypePadding from applying on specific In expressions") {
+    withTable("mytable") {
+      sql(s"CREATE TABLE mytable(col CHAR(10)) USING $format")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM mytable where col IN (ARRAY('a'))")
+        },
+        condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+        parameters = Map(
+          "functionName" -> toSQLId("in"),
+          "dataType" -> "[\"STRING\", \"ARRAY<STRING>\"]",
+          "sqlExpr" -> s""""(col IN (array(a)))""""
+        ),
+        queryContext = Array(ExpectedContext(fragment = "IN (ARRAY('a'))", start = 32, stop = 46))
+      )
     }
   }
 }

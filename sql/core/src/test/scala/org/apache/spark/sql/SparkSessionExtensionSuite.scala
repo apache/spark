@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, Co
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
@@ -243,7 +244,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
           columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
         plan match {
           case a: AdaptiveSparkPlanExec =>
-            findColumnStats(a.executedPlan, columnStats)
+            findColumnStats(stripAQEPlan(a), columnStats)
           case qs: ShuffleQueryStageExec =>
             columnStats += qs.computeStats().get.attributeStats
             findColumnStats(qs.plan, columnStats)
@@ -488,7 +489,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
     def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      stripAQEPlan(df.queryExecution.executedPlan)
     }
     val extensions = create { extensions =>
       extensions.injectRuntimeOptimizerRule(_ => AddLimit)
@@ -549,7 +550,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("custom aggregate hint") {
     // The custom hint allows us to replace the aggregate (without grouping keys) with just
     // Literal.
-    withSession(Seq(_.injectHintResolutionRule(CustomerAggregateHintResolutionRule),
+    withSession(Seq(_.injectHintResolutionRule(CustomAggregateHintResolutionRule),
       _.injectOptimizerRule(CustomAggregateRule))) { session =>
       val res = session.range(10).agg(max("id")).as("max_id")
         .hint("MAX_VALUE", "id", 10)
@@ -562,7 +563,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
 
   test("custom sort hint") {
     // The custom hint allows us to replace the sort with its input
-    withSession(Seq(_.injectHintResolutionRule(CustomerSortHintResolutionRule),
+    withSession(Seq(_.injectHintResolutionRule(CustomSortHintResolutionRule),
       _.injectOptimizerRule(CustomSortRule))) { session =>
       val res = session.range(10).sort("id")
         .hint("INPUT_SORTED")
@@ -1263,7 +1264,7 @@ case class CustomAggHint(attribute: AttributeReference, max: Int) extends Aggreg
 
 // Attaches the CustomAggHint to the aggregate node without grouping keys if the aggregate
 // function is MAX over the specified column.
-case class CustomerAggregateHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+case class CustomAggregateHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
   val MY_HINT_NAME = Set("MAX_VALUE")
 
   def isMax(expr: NamedExpression, attribute: String): Option[AttributeReference] = {
@@ -1316,7 +1317,7 @@ case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
 case class CustomSortHint(inputSorted: Boolean) extends SortHint
 
 // Attaches the CustomSortHint to the sort node.
-case class CustomerSortHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+case class CustomSortHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
   val MY_HINT_NAME = Set("INPUT_SORTED")
 
   private def applySortHint(plan: LogicalPlan): LogicalPlan = plan.transformDown {

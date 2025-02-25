@@ -307,7 +307,7 @@ FROM            (
                            on         cte1.t1b = cte2.t1b) s
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte1
 :     +- Project [t1a#x, t1b#x]
 :        +- Filter named_struct(t1b, t1b#x, t1d, t1d#xL) IN (list#x [t1c#x])

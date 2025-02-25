@@ -321,6 +321,62 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /**
+   * Analyze EXISTS_DEFAULT value.  EXISTS_DEFAULT value was created from CURRENT_DEFAQULT
+   * via [[analyze]] and thus this can skip most of those steps.
+   */
+  private def analyzeExistenceDefaultValue(field: StructField): Expression = {
+    val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+
+    // Parse the expression.
+    val expr = Literal.fromSQL(defaultSQL) match {
+      // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
+      // hence we need to add timezone to the cast if necessary
+      case c: Cast if c.needsTimeZone =>
+        c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
+      case e: Expression => e
+    }
+
+    // Check invariants
+    if (expr.containsPattern(PLAN_EXPRESSION)) {
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+        "", field.name, defaultSQL)
+    }
+
+    val resolvedExpr = expr match {
+      case _: ExprLiteral => expr
+      case c: Cast if c.resolved => expr
+      case _ =>
+        fallbackResolveExistenceDefaultValue(field)
+    }
+
+    coerceDefaultValue(resolvedExpr, field.dataType, "", field.name, defaultSQL)
+  }
+
+  // In most cases, column existsDefault should already be persisted as resolved
+  // and constant-folded literal sql, but because they are fetched from external catalog,
+  // it is possible that this assumption does not hold, so we fallback to full analysis
+  // if we encounter an unresolved existsDefault
+  private def fallbackResolveExistenceDefaultValue(
+      field: StructField): Expression = {
+    field.getExistenceDefaultValue().map { defaultSQL: String =>
+
+      logWarning(log"Encountered unresolved exists default value: " +
+        log"'${MDC(COLUMN_DEFAULT_VALUE, defaultSQL)}' " +
+        log"for column ${MDC(COLUMN_NAME, field.name)} " +
+        log"with ${MDC(COLUMN_DATA_TYPE_SOURCE, field.dataType)}, " +
+        log"falling back to full analysis.")
+
+      val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val literal = expr match {
+        case _: ExprLiteral | _: Cast => expr
+        case _ => throw SparkException.internalError(s"parse existence default as literal err," +
+          s" field name: ${field.name}, value: $defaultSQL")
+      }
+      literal
+    }.orNull
+  }
+
+  /**
    * If the provided default value is a literal of a wider type than the target column,
    * but the literal value fits within the narrower type, just coerce it for convenience.
    * Exclude boolean/array/struct/map types from consideration for this type coercion to
@@ -405,19 +461,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
   def getExistenceDefaultValues(schema: StructType): Array[Any] = {
     schema.fields.map { field: StructField =>
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
-      defaultValue.map { text: String =>
-        val expr = try {
-          val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-          expr match {
-            case _: ExprLiteral | _: Cast => expr
-          }
-        } catch {
-          // AnalysisException thrown from analyze is already formatted, throw it directly.
-          case ae: AnalysisException => throw ae
-          case _: MatchError =>
-            throw SparkException.internalError(s"parse existence default as literal err," +
-            s" field name: ${field.name}, value: $text")
-        }
+      defaultValue.map { _: String =>
+        val expr = analyzeExistenceDefaultValue(field)
+
         // The expression should be a literal value by this point, possibly wrapped in a cast
         // function. This is enforced by the execution of commands that assign default values.
         expr.eval()

@@ -42,6 +42,7 @@ from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
+from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
 
@@ -754,6 +755,10 @@ class DataFrame:
         Returns
         -------
         :class:`DataFrame`
+
+        See Also
+        --------
+        DataFrame.subtract : Similar to `exceptAll`, but eliminates duplicates.
 
         Examples
         --------
@@ -2277,6 +2282,28 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def metadataColumn(self, colName: str) -> Column:
+        """
+        Selects a metadata column based on its logical column name and returns it as a
+        :class:`Column`.
+
+        A metadata column can be accessed this way even if the underlying data source defines a data
+        column with a conflicting name.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        colName : str
+            string, metadata column name
+
+        Returns
+        -------
+        :class:`Column`
+        """
+        ...
+
+    @dispatch_df_method
     def colRegex(self, colName: str) -> Column:
         """
         Selects column based on the column name specified as a regex and returns it
@@ -2713,11 +2740,10 @@ class DataFrame:
         >>> customers.alias("c").lateralJoin(
         ...     orders.alias("o")
         ...     .where(sf.col("o.customer_id") == sf.col("c.customer_id").outer())
+        ...     .select("order_id", "order_date")
         ...     .orderBy(sf.col("order_date").desc())
         ...     .limit(2),
         ...     how="left"
-        ... ).select(
-        ...     "c.customer_id", "name", "order_id", "order_date"
         ... ).orderBy("customer_id", "order_id").show()
         +-----------+-------+--------+----------+
         |customer_id|   name|order_id|order_date|
@@ -4740,6 +4766,10 @@ class DataFrame:
         -----
         This is equivalent to `EXCEPT DISTINCT` in SQL.
 
+        See Also
+        --------
+        DataFrame.exceptAll : Similar to `subtract`, but preserves duplicates.
+
         Examples
         --------
         Example 1: Subtracting two DataFrames with the same schema
@@ -6579,6 +6609,30 @@ class DataFrame:
         """
         ...
 
+    def asTable(self) -> TableArg:
+        """
+        Converts the DataFrame into a :class:`table_arg.TableArg` object, which can
+        be used as a table argument in a TVF(Table-Valued Function) including UDTF
+        (User-Defined Table Function).
+
+        After obtaining a TableArg from a DataFrame using this method, you can specify partitioning
+        and ordering for the table argument by calling methods such as `partitionBy`, `orderBy`, and
+        `withSinglePartition` on the `TableArg` instance.
+        - partitionBy: Partitions the data based on the specified columns. This method cannot
+        be called after withSinglePartition() has been called.
+        - orderBy: Orders the data within partitions based on the specified columns.
+        - withSinglePartition: Indicates that the data should be treated as a single partition.
+        This method cannot be called after partitionBy() has been called.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`table_arg.TableArg`
+            A `TableArg` object representing a table argument.
+        """
+        ...
+
     def scalar(self) -> Column:
         """
         Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
@@ -6774,13 +6828,13 @@ class DataFrame:
     @property
     def plot(self) -> "PySparkPlotAccessor":
         """
-        Returns a :class:`PySparkPlotAccessor` for plotting functions.
+        Returns a :class:`plot.core.PySparkPlotAccessor` for plotting functions.
 
         .. versionadded:: 4.0.0
 
         Returns
         -------
-        :class:`PySparkPlotAccessor`
+        :class:`plot.core.PySparkPlotAccessor`
 
         Notes
         -----

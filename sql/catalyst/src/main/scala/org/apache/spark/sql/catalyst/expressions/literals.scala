@@ -40,9 +40,11 @@ import scala.util.Try
 import org.apache.commons.codec.binary.{Hex => ApacheHex}
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, FunctionIdentifier, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
@@ -204,7 +206,7 @@ object Literal {
     case VarcharType(length) =>
       create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), length),
         dataType)
-    case st: StringType if st.constraint == NoConstraint => Literal(UTF8String.fromString(""), st)
+    case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
     case arr: ArrayType => create(Array(), arr)
@@ -265,6 +267,22 @@ object Literal {
       s"Literal must have a corresponding value to ${dataType.catalogString}, " +
       s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
+
+  /**
+   * Inverse of [[Literal.sql]]
+   */
+  def fromSQL(sql: String): Expression = {
+    CatalystSqlParser.parseExpression(sql).transformUp {
+      case u: UnresolvedFunction =>
+        assert(u.nameParts.length == 1)
+        assert(!u.isDistinct)
+        assert(u.filter.isEmpty)
+        assert(!u.ignoreNulls)
+        assert(u.orderingWithinGroup.isEmpty)
+        assert(!u.isInternal)
+        FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
+    }
+  }
 }
 
 /**
@@ -312,6 +330,26 @@ object DoubleLiteral {
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Short literals.
+ */
+object ShortLiteral {
+  def unapply(a: Any): Option[Short] = a match {
+    case Literal(a: Short, ShortType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Byte literals.
+ */
+object ByteLiteral {
+  def unapply(a: Any): Option[Byte] = a match {
+    case Literal(a: Byte, ByteType) => Some(a)
     case _ => None
   }
 }

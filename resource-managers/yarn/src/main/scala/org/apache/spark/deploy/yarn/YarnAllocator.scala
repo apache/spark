@@ -820,6 +820,7 @@ private[yarn] class YarnAllocator(
         logInfo(log"Skip launching executorRunnable as running executors count: " +
           log"${MDC(LogKeys.COUNT, rpRunningExecs)} reached target executors count: " +
           log"${MDC(LogKeys.NUM_EXECUTOR_TARGET, getOrUpdateTargetNumExecutorsForRPId(rpId))}.")
+        internalReleaseContainer(container)
       }
     }
   }

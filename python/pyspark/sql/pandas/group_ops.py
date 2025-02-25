@@ -36,7 +36,7 @@ from pyspark.sql.streaming.stateful_processor import (
 )
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
@@ -348,9 +348,9 @@ class PandasGroupedOpsMixin:
         ]
 
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
         if isinstance(stateStructType, str):
-            stateStructType = cast(StructType, _parse_datatype_string(stateStructType))
+            stateStructType = cast(StructType, self._df._session._parse_ddl(stateStructType))
 
         udf = pandas_udf(
             func,  # type: ignore[call-overload]
@@ -502,7 +502,7 @@ class PandasGroupedOpsMixin:
         if initialState is not None:
             assert isinstance(initialState, GroupedData)
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
 
         def handle_pre_init(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -566,8 +566,8 @@ class PandasGroupedOpsMixin:
                     statefulProcessorApiClient.set_implicit_key(key_obj)
                     for pd in statefulProcessor.handleExpiredTimer(
                         key=key_obj,
-                        timer_values=TimerValues(batch_timestamp, watermark_timestamp),
-                        expired_timer_info=ExpiredTimerInfo(expiry_timestamp),
+                        timerValues=TimerValues(batch_timestamp, watermark_timestamp),
+                        expiredTimerInfo=ExpiredTimerInfo(expiry_timestamp),
                     ):
                         yield pd
                     statefulProcessorApiClient.delete_timer(expiry_timestamp)
@@ -681,7 +681,7 @@ class PandasGroupedOpsMixin:
             return result
 
         if isinstance(outputStructType, str):
-            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+            outputStructType = cast(StructType, self._df._session._parse_ddl(outputStructType))
 
         df = self._df
 

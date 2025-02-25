@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 import os
+import platform
 import shutil
 import tempfile
 import unittest
+import time
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
@@ -27,6 +29,7 @@ from pyspark.errors import (
     PySparkTypeError,
     AnalysisException,
     PySparkPicklingError,
+    IllegalArgumentException,
 )
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
@@ -1055,6 +1058,15 @@ class BaseUDTFTestsMixin:
             [Row(a=6), Row(a=7)],
         )
 
+    def test_df_asTable(self):
+        func = self.udtf_for_table_argument()
+        self.spark.udtf.register("test_udtf", func)
+        df = self.spark.range(8)
+        assertDataFrameEqual(
+            func(df.asTable()),
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))"),
+        )
+
     def udtf_for_table_argument(self):
         class TestUDTF:
             def eval(self, row: Row):
@@ -1063,6 +1075,108 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int")
         return func
+
+    def test_df_asTable_chaining_methods(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                yield row["key"], row["value"]
+
+        func = udtf(TestUDTF, returnType="key: int, value: string")
+        df = self.spark.createDataFrame(
+            [(1, "a", 3), (1, "b", 3), (2, "c", 4), (2, "d", 4)], ["key", "value", "number"]
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy(["key", "number"]).orderBy(df.value)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(df.value.desc())),
+            [
+                Row(key=1, value="b"),
+                Row(key=1, value="a"),
+                Row(key=2, value="d"),
+                Row(key=2, value="c"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy("key").orderBy(["number", "value"])),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+            checkRowOrder=True,
+        )
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition()),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+
+        assertDataFrameEqual(
+            func(df.asTable().withSinglePartition().orderBy("value")),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
+        )
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call withSinglePartition\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().partitionBy(df.key).withSinglePartition()
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().withSinglePartition().partitionBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Please call partitionBy\(\) or withSinglePartition\(\) before orderBy\(\)",
+        ):
+            df.asTable().orderBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Please call partitionBy\(\) or withSinglePartition\(\) before orderBy\(\)",
+        ):
+            df.asTable().partitionBy().orderBy(df.key)
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call partitionBy\(\) after partitionBy\(\)"
+            r" or withSinglePartition\(\) has been called",
+        ):
+            df.asTable().partitionBy(df.key).partitionBy()
 
     def test_udtf_with_int_and_table_argument_query(self):
         class TestUDTF:
@@ -2648,6 +2762,85 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
         res = self.spark.sql("select i, to_json(v['v1']) from test_udtf_struct(8)")
         assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(99 + n)}"}}') for n in range(8)])
+
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
+    def test_udtf_segfault(self):
+        for enabled, expected in [
+            (True, "Segmentation fault"),
+            (False, "Consider setting .* for the better Python traceback."),
+        ]:
+            with self.subTest(enabled=enabled), self.sql_conf(
+                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            ):
+                with self.subTest(method="eval"):
+
+                    class TestUDTF:
+                        def eval(self):
+                            import ctypes
+
+                            yield ctypes.string_at(0),
+
+                    self._check_result_or_exception(
+                        TestUDTF, "x: string", expected, err_type=Exception
+                    )
+
+                with self.subTest(method="analyze"):
+
+                    class TestUDTFWithAnalyze:
+                        @staticmethod
+                        def analyze():
+                            import ctypes
+
+                            ctypes.string_at(0)
+                            return AnalyzeResult(StructType().add("x", StringType()))
+
+                        def eval(self):
+                            yield "x",
+
+                    self._check_result_or_exception(
+                        TestUDTFWithAnalyze, None, expected, err_type=Exception
+                    )
+
+    def test_udtf_kill_on_timeout(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "1s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+            with self.subTest(method="eval"):
+
+                class TestUDTF:
+                    def eval(self):
+                        time.sleep(2)
+                        yield "x"
+
+                self._check_result_or_exception(
+                    TestUDTF,
+                    "x: string",
+                    "Python worker exited unexpectedly",
+                    err_type=Exception,
+                )
+
+            with self.subTest(method="analyze"):
+
+                class TestUDTFWithAnalyze:
+                    @staticmethod
+                    def analyze():
+                        time.sleep(2)
+                        return AnalyzeResult(StructType().add("x", StringType()))
+
+                    def eval(self):
+                        yield "x",
+
+                self._check_result_or_exception(
+                    TestUDTFWithAnalyze,
+                    None,
+                    "Python worker exited unexpectedly",
+                    err_type=Exception,
+                )
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

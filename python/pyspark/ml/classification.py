@@ -22,6 +22,7 @@ import uuid
 import warnings
 from abc import ABCMeta, abstractmethod
 from multiprocessing.pool import ThreadPool
+from functools import cached_property
 from typing import (
     Any,
     Dict,
@@ -35,6 +36,8 @@ from typing import (
     cast,
     overload,
     TYPE_CHECKING,
+    Tuple,
+    Callable,
 )
 
 from pyspark import keyword_only, since, inheritable_thread_target
@@ -85,6 +88,9 @@ from pyspark.ml.util import (
     MLWriter,
     MLWritable,
     HasTrainingSummary,
+    try_remote_read,
+    try_remote_write,
+    try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
@@ -93,6 +99,7 @@ from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import P, ParamMap
@@ -336,6 +343,7 @@ class _ClassificationSummary(JavaWrapper):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Dataframe outputted by the model's `transform` method.
@@ -521,6 +529,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         return self._call_java("scoreCol")
 
     @property
+    @try_remote_attribute_relation
     def roc(self) -> DataFrame:
         """
         Returns the receiver operating characteristic (ROC) curve,
@@ -546,6 +555,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def pr(self) -> DataFrame:
         """
         Returns the precision-recall curve, which is a Dataframe
@@ -556,6 +566,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def fMeasureByThreshold(self) -> DataFrame:
         """
         Returns a dataframe with two fields (threshold, F-Measure) curve
@@ -565,6 +576,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def precisionByThreshold(self) -> DataFrame:
         """
         Returns a dataframe with two fields (threshold, precision) curve.
@@ -575,6 +587,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     @property
     @since("3.1.0")
+    @try_remote_attribute_relation
     def recallByThreshold(self) -> DataFrame:
         """
         Returns a dataframe with two fields (threshold, recall) curve.
@@ -2278,10 +2291,12 @@ class RandomForestClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeClassificationModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeClassificationModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -2766,10 +2781,12 @@ class GBTClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame) -> List[float]:
@@ -3565,31 +3582,45 @@ class OneVsRest(
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
-        def trainSingleClass(index: int) -> CM:
-            binaryLabelCol = "mc2b$" + str(index)
-            trainingDataset = multiclassLabeled.withColumn(
-                binaryLabelCol,
-                when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
-            )
-            paramMap = dict(
-                [
-                    (classifier.labelCol, binaryLabelCol),
-                    (classifier.featuresCol, featuresCol),
-                    (classifier.predictionCol, predictionCol),
-                ]
-            )
-            if weightCol:
-                paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
-            return classifier.fit(trainingDataset, paramMap)
+        def _oneClassFitTasks(numClasses: int) -> List[Callable[[], Tuple[int, CM]]]:
+            indices = iter(range(numClasses))
 
+            def trainSingleClass() -> Tuple[int, CM]:
+                index = next(indices)
+
+                binaryLabelCol = "mc2b$" + str(index)
+                trainingDataset = multiclassLabeled.withColumn(
+                    binaryLabelCol,
+                    when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
+                )
+                paramMap = dict(
+                    [
+                        (classifier.labelCol, binaryLabelCol),
+                        (classifier.featuresCol, featuresCol),
+                        (classifier.predictionCol, predictionCol),
+                    ]
+                )
+                if weightCol:
+                    paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
+                return index, classifier.fit(trainingDataset, paramMap)
+
+            return [trainSingleClass] * numClasses
+
+        tasks = map(
+            inheritable_thread_target(dataset.sparkSession),
+            _oneClassFitTasks(numClasses),
+        )
         pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
-        models = pool.map(inheritable_thread_target(trainSingleClass), range(numClasses))
+        subModels = [None] * numClasses
+        for j, subModel in pool.imap_unordered(lambda f: f(), tasks):
+            assert subModels is not None
+            subModels[j] = subModel
 
         if handlePersistence:
             multiclassLabeled.unpersist()
 
-        return self._copyValues(OneVsRestModel(models=models))
+        return self._copyValues(OneVsRestModel(models=cast(List[ClassificationModel], subModels)))
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "OneVsRest":
         """
@@ -3664,9 +3695,11 @@ class OneVsRest(
         return _java_obj
 
     @classmethod
+    @try_remote_read
     def read(cls) -> "OneVsRestReader":
         return OneVsRestReader(cls)
 
+    @try_remote_write
     def write(self) -> MLWriter:
         if isinstance(self.getClassifier(), JavaMLWritable):
             return JavaMLWriter(self)  # type: ignore[arg-type]
@@ -3777,11 +3810,12 @@ class OneVsRestModel(
 
     def __init__(self, models: List[ClassificationModel]):
         super(OneVsRestModel, self).__init__()
+        self.models = models
+        if is_remote() or not isinstance(models[0], JavaMLWritable):
+            return
+
         from pyspark.core.context import SparkContext
 
-        self.models = models
-        if not isinstance(models[0], JavaMLWritable):
-            return
         # set java instance
         java_models = [cast(_JavaClassificationModel, model)._to_java() for model in self.models]
         sc = SparkContext._active_spark_context
@@ -3801,12 +3835,13 @@ class OneVsRestModel(
         )
 
     def _transform(self, dataset: DataFrame) -> DataFrame:
+        # TODO(SPARK-48515): Use Arrow Python UDF
         # determine the input columns: these need to be passed through
         origCols = dataset.columns
 
         # add an accumulator column to store predictions of all the models
         accColName = "mbc$acc" + str(uuid.uuid4())
-        initUDF = udf(lambda _: [], ArrayType(DoubleType()))
+        initUDF = udf(lambda _: [], ArrayType(DoubleType()), useArrow=False)
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
         # persist if underlying dataset is not persistent.
@@ -3826,6 +3861,7 @@ class OneVsRestModel(
             updateUDF = udf(
                 lambda predictions, prediction: predictions + [prediction.tolist()[1]],
                 ArrayType(DoubleType()),
+                useArrow=False,
             )
             transformedDataset = model.transform(aggregatedDataset).select(*columns)
             updatedDataset = transformedDataset.withColumn(
@@ -3850,7 +3886,7 @@ class OneVsRestModel(
                     predArray.append(x)
                 return Vectors.dense(predArray)
 
-            rawPredictionUDF = udf(func, VectorUDT())
+            rawPredictionUDF = udf(func, VectorUDT(), useArrow=False)
             aggregatedDataset = aggregatedDataset.withColumn(
                 self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName])
             )
@@ -3862,6 +3898,7 @@ class OneVsRestModel(
                     max(enumerate(predictions), key=operator.itemgetter(1))[0]
                 ),
                 DoubleType(),
+                useArrow=False,
             )
             aggregatedDataset = aggregatedDataset.withColumn(
                 self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])
@@ -3948,9 +3985,11 @@ class OneVsRestModel(
         return _java_obj
 
     @classmethod
+    @try_remote_read
     def read(cls) -> "OneVsRestModelReader":
         return OneVsRestModelReader(cls)
 
+    @try_remote_write
     def write(self) -> MLWriter:
         if all(
             map(
@@ -4006,7 +4045,9 @@ class OneVsRestModelWriter(MLWriter):
         )
         for idx in range(numClasses):
             subModelPath = os.path.join(path, f"model_{idx}")
-            cast(MLWritable, instance.models[idx]).save(subModelPath)
+            cast(MLWritable, instance.models[idx]).write().session(self.sparkSession).save(
+                subModelPath
+            )
 
 
 @inherit_doc
