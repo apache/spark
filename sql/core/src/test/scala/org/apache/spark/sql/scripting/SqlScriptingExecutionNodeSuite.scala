@@ -19,9 +19,8 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.ExecuteImmediateQuery
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LeafNode, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LeafNode, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -35,7 +34,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSession {
   // Helpers
   case class TestCompoundBody(
-      statements: Seq[CompoundStatementExec],
+      override val statements: Seq[CompoundStatementExec],
       label: Option[String] = None,
       isScope: Boolean = false,
       context: SqlScriptingExecutionContext = null,
@@ -55,11 +54,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       body: CompoundBodyExec,
       override val label: Option[String],
       session: SparkSession,
-      context: SqlScriptingExecutionContext = null)
+      context: SqlScriptingExecutionContext = MockScriptingContext())
     extends ForStatementExec(
       query,
       variableName,
-      body,
+      body.statements,
       label,
       session,
       context)
@@ -176,10 +175,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case leaveStmt: LeaveStatementExec => leaveStmt.label
       case iterateStmt: IterateStatementExec => iterateStmt.label
       case forStmt: TestForStatement => forStmt.label.get
-      case dropStmt: SingleStatementExec if dropStmt.parsedPlan.isInstanceOf[DropVariable]
-        => "DropVariable"
-      case execImm: SingleStatementExec if execImm.parsedPlan.isInstanceOf[ExecuteImmediateQuery]
-        => "ExecuteImmediate"
+      case _: NoOpStatementExec => "NOOP"
+      case createStmt: SingleStatementExec
+        if createStmt.parsedPlan.isInstanceOf[CreateVariable] => "CreateVariable"
+      case setStmt: SingleStatementExec
+        if setStmt.parsedPlan.isInstanceOf[SetVariable] => "SetVariable"
       case project: SingleStatementExec if project.parsedPlan.isInstanceOf[Project]
       => "Project"
       case _ => fail("Unexpected statement: " + statement)
@@ -884,9 +884,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
       "body",
-      "ExecuteImmediate", // drop for query var intCol
-      "ExecuteImmediate" // drop for loop var x
+      "NOOP"
     ))
   }
 
@@ -904,12 +905,16 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
       "statement1",
       "statement2",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
       "statement1",
       "statement2",
-      "ExecuteImmediate", // drop for query var intCol
-      "ExecuteImmediate" // drop for loop var x
+      "NOOP"
     ))
   }
 
@@ -948,16 +953,28 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     ).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
+      "CreateVariable",
+      "SetVariable",
       "body",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
       "body",
-      "ExecuteImmediate", // drop for query var intCol1
-      "ExecuteImmediate", // drop for loop var y
+      "NOOP",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
+      "CreateVariable",
+      "SetVariable",
       "body",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
       "body",
-      "ExecuteImmediate", // drop for query var intCol1
-      "ExecuteImmediate", // drop for loop var y
-      "ExecuteImmediate", // drop for query var intCol
-      "ExecuteImmediate" // drop for loop var x
+      "NOOP",
+      "NOOP"
     ))
   }
 
@@ -973,8 +990,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
       "body",
-      "ExecuteImmediate" // drop for query var intCol
+      "NOOP"
     ))
   }
 
@@ -992,8 +1011,16 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "statement1", "statement2", "statement1", "statement2",
-      "ExecuteImmediate" // drop for query var intCol
+      "CreateVariable",
+      "SetVariable",
+      "statement1",
+      "statement2",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
+      "statement1",
+      "statement2",
+      "NOOP"
     ))
   }
 
@@ -1031,11 +1058,28 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "body", "body",
-      "ExecuteImmediate", // drop for query var intCol1
-      "body", "body",
-      "ExecuteImmediate", // drop for query var intCol1
-      "ExecuteImmediate" // drop for query var intCol
+      "CreateVariable",
+      "SetVariable",
+      "CreateVariable",
+      "SetVariable",
+      "body",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
+      "body",
+      "NOOP",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
+      "CreateVariable",
+      "SetVariable",
+      "body",
+      "NOOP",
+      "CreateVariable",
+      "SetVariable",
+      "body",
+      "NOOP",
+      "NOOP"
     ))
   }
 
@@ -1054,12 +1098,14 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
       "statement1",
       "lbl1",
+      "CreateVariable",
+      "SetVariable",
       "statement1",
-      "lbl1",
-      "ExecuteImmediate", // drop for query var intCol
-      "ExecuteImmediate" // drop for loop var x
+      "lbl1"
     ))
   }
 
@@ -1077,7 +1123,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("statement1", "lbl1"))
+    assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
+      "statement1",
+      "lbl1"))
   }
 
   test("for statement - nested - iterate outer loop") {
@@ -1104,14 +1154,20 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
       "outer_body",
+      "CreateVariable",
+      "SetVariable",
       "body1",
       "lbl1",
+      "CreateVariable",
+      "SetVariable",
       "outer_body",
+      "CreateVariable",
+      "SetVariable",
       "body1",
-      "lbl1",
-      "ExecuteImmediate", // drop for query var intCol
-      "ExecuteImmediate" // drop for loop var x
+      "lbl1"
     ))
   }
 
@@ -1137,7 +1193,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("body1", "lbl1"))
+    assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
+      "CreateVariable",
+      "SetVariable",
+      "body1",
+      "lbl1"))
   }
 
   test("for statement no variable - iterate") {
@@ -1155,8 +1217,14 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "statement1", "lbl1", "statement1", "lbl1",
-      "ExecuteImmediate" // drop for query var intCol
+      "CreateVariable",
+      "SetVariable",
+      "statement1",
+      "lbl1",
+      "CreateVariable",
+      "SetVariable",
+      "statement1",
+      "lbl1"
     ))
   }
 
@@ -1174,7 +1242,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("statement1", "lbl1"))
+    assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
+      "statement1",
+      "lbl1"))
   }
 
   test("for statement no variable - nested - iterate outer loop") {
@@ -1201,8 +1273,19 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "outer_body", "body1", "lbl1", "outer_body", "body1", "lbl1",
-      "ExecuteImmediate" // drop for query var intCol
+      "CreateVariable",
+      "SetVariable",
+      "outer_body",
+      "CreateVariable",
+      "SetVariable",
+      "body1", "lbl1",
+      "CreateVariable",
+      "SetVariable",
+      "outer_body",
+      "CreateVariable",
+      "SetVariable",
+      "body1",
+      "lbl1"
     ))
   }
 
@@ -1228,6 +1311,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("body1", "lbl1"))
+    assert(statements === Seq(
+      "CreateVariable",
+      "SetVariable",
+      "CreateVariable",
+      "SetVariable",
+      "body1",
+      "lbl1"))
   }
 }
