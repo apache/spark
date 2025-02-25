@@ -844,7 +844,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     def checkResults(df: DataFrame): Unit = {
       checkAnswer(df, spark.range(10).toDF())
     }
-    
+
     Seq(true, false).foreach { ignorePath =>
       withSQLConf(SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION.key -> ignorePath.toString) {
         withTable("t1", "t2") {
