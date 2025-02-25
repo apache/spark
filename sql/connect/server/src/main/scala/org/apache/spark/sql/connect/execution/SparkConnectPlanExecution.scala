@@ -266,8 +266,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       dataframe: DataFrame): Option[ExecutePlanResponse] = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
       case (name, row) if !executeHolder.observations.contains(name) =>
-        val values = (0 until row.length).map { i =>
-          (if (row.schema != null) Some(row.schema.fieldNames(i)) else None, row(i))
+        val values = if (row.schema == null) {
+          (0 until row.length).map { i => (None, row(i)) }
+        } else {
+          (0 until row.length).map { i => (Some(row.schema.fieldNames(i)), row(i)) }
         }
         name -> values
     }

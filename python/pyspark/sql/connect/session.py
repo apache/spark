@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import uuid
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -1030,6 +1031,8 @@ class SparkSession:
 
         2. Starts a regular Spark session that automatically starts a Spark Connect server
            via ``spark.plugins`` feature.
+
+        Returns the authentication token that should be used to connect to this session.
         """
         from pyspark import SparkContext, SparkConf
 
@@ -1048,6 +1051,13 @@ class SparkSession:
                 del overwrite_conf["spark.remote"]
             if "spark.api.mode" in overwrite_conf:
                 del overwrite_conf["spark.api.mode"]
+
+            # Check for a user provided authentication token, creating a new one if not,
+            # and make sure it's set in the environment,
+            if "SPARK_CONNECT_AUTHENTICATE_TOKEN" not in os.environ:
+                os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = opts.get(
+                    "spark.connect.authenticate.token", str(uuid.uuid4())
+                )
 
             # Configurations to be set if unset.
             default_conf = {
@@ -1081,7 +1091,6 @@ class SparkSession:
                 new_opts = {k: opts[k] for k in opts if k in runtime_conf_keys}
                 opts.clear()
                 opts.update(new_opts)
-
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote

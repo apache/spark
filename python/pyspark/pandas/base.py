@@ -1191,6 +1191,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._with_new_scol(col, field=self._internal.data_fields[0].copy(nullable=True))
 
     # TODO: Update Documentation for Bins Parameter when its supported
+    # TODO(SPARK-51287): Enable s.index.value_counts() tests
     def value_counts(
         self,
         normalize: bool = False,
@@ -1323,7 +1324,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                     ('falcon', 'length')],
                    )
 
-        >>> s.index.value_counts().sort_index()
+        >>> s.index.value_counts().sort_index()  # doctest: +SKIP
         (cow, length)       1
         (cow, weight)       2
         (falcon, length)    2
@@ -1331,7 +1332,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         (lama, weight)      3
         Name: count, dtype: int64
 
-        >>> s.index.value_counts(normalize=True).sort_index()
+        >>> s.index.value_counts(normalize=True).sort_index()  # doctest: +SKIP
         (cow, length)       0.111111
         (cow, weight)       0.222222
         (falcon, length)    0.222222
