@@ -260,9 +260,7 @@ private[spark] class SparkSubmit extends Logging {
           case m if m.startsWith("spark") => STANDALONE
           case m if m.startsWith("k8s") => KUBERNETES
           case m if m.startsWith("local") => LOCAL
-          case _ =>
-            error("Master must either be yarn or start with spark, k8s, or local")
-            -1
+          case _ => EXTERNAL
         }
       case None => LOCAL // default master or remote mode.
     }
@@ -332,6 +330,7 @@ private[spark] class SparkSubmit extends Logging {
       !sparkConf.get(ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE) &&
       args.proxyUser != null &&
       (isYarnCluster || isStandAloneCluster || isKubernetesCluster)
+    val isExternalCluster = clusterManager == EXTERNAL && deployMode == CLUSTER
 
     if (!isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -377,6 +376,38 @@ private[spark] class SparkSubmit extends Logging {
     args.toSparkConf(Option(sparkConf))
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
     val targetDir = Utils.createTempDir()
+
+    if (clusterManager == EXTERNAL) {
+      val loader = getSubmitClassLoader(sparkConf)
+      sparkConf
+        .get(EXTERNAL_CLUSTER_MANAGER_JARS)
+        .foreach(_
+          .split(",")
+          .map(downloadFile(_, targetDir, sparkConf, hadoopConf))
+          .foreach(addJarToClasspath(_, loader))
+        )
+
+      val maybeSubmitClass = sparkConf.get(EXTERNAL_CLUSTER_SUBMIT_CLASS)
+      if (maybeSubmitClass.isEmpty) {
+        error(
+          "External cluster submit class must be specified when running in external cluster mode."
+        )
+      }
+      maybeSubmitClass.foreach { submitClass =>
+        if (!Utils.classIsLoadable(submitClass) && !Utils.isTesting) {
+          error(
+            s"Could not load external cluster submit class: $submitClass. " +
+              "Make sure the classes are included in the classpath")
+        }
+      }
+      args.maybeMaster match {
+        case Some(url) if SparkContext.getClusterManager(url).isEmpty =>
+          error(s"Master URL is not recognized: $url")
+        case Some(_) =>
+        case None =>
+          error("Master URL must be specified when running in external cluster mode.")
+      }
+    }
 
     // Kerberos is not supported in standalone mode
     if (clusterManager != STANDALONE
@@ -688,24 +719,28 @@ private[spark] class SparkSubmit extends Logging {
         mergeFn = Some(mergeFileLists(_, _))),
 
       // Other options
-      OptionAssigner(args.numExecutors, YARN | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.numExecutors, YARN | KUBERNETES | EXTERNAL, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_INSTANCES.key),
-      OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(
+        args.executorCores, STANDALONE | YARN | KUBERNETES | EXTERNAL, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_CORES.key),
-      OptionAssigner(args.executorMemory, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(
+        args.executorMemory, STANDALONE | YARN | KUBERNETES | EXTERNAL, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_MEMORY.key),
       OptionAssigner(args.totalExecutorCores, STANDALONE, ALL_DEPLOY_MODES,
         confKey = CORES_MAX.key),
-      OptionAssigner(args.files, LOCAL | STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(
+        args.files, LOCAL | STANDALONE | KUBERNETES | EXTERNAL, ALL_DEPLOY_MODES,
         confKey = FILES.key),
-      OptionAssigner(args.archives, LOCAL | STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(
+        args.archives, LOCAL | STANDALONE | KUBERNETES | EXTERNAL, ALL_DEPLOY_MODES,
         confKey = ARCHIVES.key),
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = JARS.key),
-      OptionAssigner(args.jars, STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.jars, STANDALONE | KUBERNETES | EXTERNAL, ALL_DEPLOY_MODES,
         confKey = JARS.key),
-      OptionAssigner(args.driverMemory, STANDALONE | YARN | KUBERNETES, CLUSTER,
+      OptionAssigner(args.driverMemory, STANDALONE | YARN | KUBERNETES | EXTERNAL, CLUSTER,
         confKey = DRIVER_MEMORY.key),
-      OptionAssigner(args.driverCores, STANDALONE | YARN | KUBERNETES, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | YARN | KUBERNETES | EXTERNAL, CLUSTER,
         confKey = DRIVER_CORES.key),
       OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
         confKey = DRIVER_SUPERVISE.key),
@@ -831,8 +866,15 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    if (isKubernetesCluster) {
-      childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
+    if (isKubernetesCluster || isExternalCluster) {
+      childMainClass =
+        if (isKubernetesCluster) KUBERNETES_CLUSTER_SUBMIT_CLASS
+        else sparkConf
+          .get(EXTERNAL_CLUSTER_SUBMIT_CLASS)
+          .getOrElse(
+            throw new SparkException(
+              s"Config option ${EXTERNAL_CLUSTER_SUBMIT_CLASS} must be set when " +
+                s"using an external cluster manager like ${args.maybeMaster.get}"))
       if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
         if (args.isPython) {
           childArgs ++= Array("--primary-py-file", args.primaryResource)
@@ -1066,7 +1108,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val STANDALONE = 2
   private val LOCAL = 8
   private val KUBERNETES = 16
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | LOCAL | KUBERNETES
+  private val EXTERNAL = 32
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | LOCAL | KUBERNETES | EXTERNAL
 
   // Deploy modes
   private val CLIENT = 1
