@@ -167,6 +167,10 @@
               <include>org.apache.spark:spark-sql-api_${scala.binary.version}</include>
             </includes>
           </artifactSet>
+          <!--
+          SPARK-51308: When adding a new relocation rule,
+          you also need to add it to `SparkBuild.scala`.
+          -->
           <relocations>
             <relocation>
               <pattern>com.google.common</pattern>
