@@ -1323,13 +1323,3 @@ LongAdder), which was released with the following comments:
     Written by Doug Lea with assistance from members of JCP JSR-166
     Expert Group and released to the public domain, as explained at
     http://creativecommons.org/publicdomain/zero/1.0/
-
-
-This product optionally depends on 'Bouncy Castle Crypto APIs' to generate
-a temporary self-signed X.509 certificate when the JVM does not provide the
-equivalent functionality.  It can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE-bouncycastle.html (MIT License)
-  * HOMEPAGE:
-    * https://www.bouncycastle.org/
