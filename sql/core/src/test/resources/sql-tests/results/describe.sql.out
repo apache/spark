@@ -929,7 +929,7 @@ DESC TABLE EXTENDED f PARTITION (B='SPARK', C=TIMESTAMP'2018-11-17 13:33:33') AS
 -- !query schema
 struct<json_metadata:string>
 -- !query output
-{"table_name":"f","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"A","type":{"name":"string"},"nullable":true},{"name":"B","type":{"name":"binary"},"nullable":true},{"name":"C","type":{"name":"timestamp_ltz"},"nullable":true}],"partition_values":{"B":"SPARK","C":"2018-11-17 13:33:33"},"location":"file:[not included in comparison]/{warehouse_dir}/f/B=SPARK/C=2018-11-17 13%3A33%3A33","partition_parameters":{"numFiles":"1","totalSize":"486","transient_lastDdlTime":"1740462706"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["B","C"]}
+{"table_name":"f","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"A","type":{"name":"string"},"nullable":true},{"name":"B","type":{"name":"binary"},"nullable":true},{"name":"C","type":{"name":"timestamp_ltz"},"nullable":true}],"partition_values":{"B":"SPARK","C":"2018-11-17 13:33:33"},"location":"file:[not included in comparison]/{warehouse_dir}/f/B=SPARK/C=2018-11-17 13%3A33%3A33","partition_parameters":{"numFiles":"1","totalSize":"486","transient_lastDdlTime [not included in comparison]":"None"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["B","C"]}
 
 
 -- !query
