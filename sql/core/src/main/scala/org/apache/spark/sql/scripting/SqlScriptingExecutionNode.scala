@@ -208,7 +208,7 @@ class TriggerToExceptionHandlerMap(
 }
 
 object TriggerToExceptionHandlerMap {
-  def createEmptyMap: TriggerToExceptionHandlerMap = new TriggerToExceptionHandlerMap(
+  def createEmptyMap(): TriggerToExceptionHandlerMap = new TriggerToExceptionHandlerMap(
     Map.empty[String, ExceptionHandlerExec],
     Map.empty[String, ExceptionHandlerExec],
     None,
@@ -982,7 +982,7 @@ class ForStatementExec(
             label = variableName.orElse(Some(UUID.randomUUID().toString.toLowerCase(Locale.ROOT))),
             isScope = true,
             context = context,
-            triggerToExceptionHandlerMap = TriggerToExceptionHandlerMap.createEmptyMap
+            triggerToExceptionHandlerMap = TriggerToExceptionHandlerMap.createEmptyMap()
           )
 
           state = ForState.Body
