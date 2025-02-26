@@ -865,7 +865,7 @@
   },
   "RESPONSE_ALREADY_RECEIVED": {
     "message": [
-      "OPERATION_NOT_FOUND on the server but responses were already received from it."
+      "<error_type> on the server but responses were already received from it."
     ]
   },
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
