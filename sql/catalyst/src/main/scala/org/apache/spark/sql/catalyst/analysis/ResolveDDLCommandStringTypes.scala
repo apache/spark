@@ -48,12 +48,18 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
       case createView: CreateView if createView.collation.isDefined =>
         StringType(createView.collation.get)
       case alterTable: AlterTableCommand if alterTable.table.resolved =>
-        val collation = Option(alterTable
-          .table.asInstanceOf[ResolvedTable]
-          .table.properties.get(TableCatalog.PROP_COLLATION))
-        if (collation.isDefined) {
-          StringType(collation.get)
+        if (alterTable.table.isInstanceOf[ResolvedTable]) {
+          val collation = Option(alterTable
+            .table.asInstanceOf[ResolvedTable]
+            .table.properties.get(TableCatalog.PROP_COLLATION))
+          if (collation.isDefined) {
+            StringType(collation.get)
+          } else {
+            StringType(defaultCollation)
+          }
         } else {
+          // Object level collation is not supported for materialized views (instance of
+          // ResolvedPersistentView) for now.
           StringType(defaultCollation)
         }
       case _ => StringType(defaultCollation)
