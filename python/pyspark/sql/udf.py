@@ -17,8 +17,6 @@
 """
 User-defined function related classes and functions
 """
-from inspect import getfullargspec
-
 import functools
 import inspect
 import sys

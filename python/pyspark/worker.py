@@ -183,7 +183,7 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
     if zero_arg_exec:
 
         def get_args(*args: pd.Series):
-            return [() for _ in range(len(args[0]))]
+            return [() for _ in args[0]]
 
     else:
 
