@@ -516,6 +516,7 @@ public class VariantUtil {
     int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
     if (basicType != PRIMITIVE || typeInfo != UUID) throw unexpectedType(Type.UUID);
     int start = pos + 1;
+    checkIndex(start + 15, value.length);
     // UUID values are big-endian, so we can't use VariantUtil.readLong().
     ByteBuffer bb = ByteBuffer.wrap(value, start, 16).order(ByteOrder.BIG_ENDIAN);
     return new UUID(bb.getLong(), bb.getLong());
