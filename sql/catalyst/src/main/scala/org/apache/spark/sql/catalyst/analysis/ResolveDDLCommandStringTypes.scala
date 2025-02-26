@@ -45,17 +45,22 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
     table match {
       case createTable: CreateTable if createTable.tableSpec.collation.isDefined =>
         StringType(createTable.tableSpec.collation.get)
+
       case createView: CreateView if createView.collation.isDefined =>
         StringType(createView.collation.get)
+
       case alterTable: AlterTableCommand if alterTable.table.resolved =>
-        val collation = Option(alterTable
-          .table.asInstanceOf[ResolvedTable]
-          .table.properties.get(TableCatalog.PROP_COLLATION))
-        if (collation.isDefined) {
-          StringType(collation.get)
-        } else {
-          StringType(defaultCollation)
+        alterTable.table match {
+          case resolvedTbl: ResolvedTable =>
+            val collation = resolvedTbl.table.properties.getOrDefault(
+              TableCatalog.PROP_COLLATION, defaultCollation)
+            StringType(collation)
+
+          case _ =>
+            // As a safeguard, use the default collation for unknown cases.
+            StringType(defaultCollation)
         }
+
       case _ => StringType(defaultCollation)
     }
   }

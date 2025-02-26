@@ -16,7 +16,6 @@
 #
 
 import os
-import operator
 import sys
 import uuid
 import warnings
@@ -27,7 +26,6 @@ from typing import (
     Any,
     Dict,
     Generic,
-    Iterable,
     List,
     Optional,
     Type,
@@ -41,7 +39,7 @@ from typing import (
 )
 
 from pyspark import keyword_only, since, inheritable_thread_target
-from pyspark.ml import Estimator, Predictor, PredictionModel, Model
+from pyspark.ml import Estimator, Predictor, PredictionModel, Model, functions as MF
 from pyspark.ml.param.shared import (
     HasRawPredictionCol,
     HasProbabilityCol,
@@ -94,10 +92,9 @@ from pyspark.ml.util import (
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.linalg import Matrix, Vector, Vectors, VectorUDT
-from pyspark.sql import DataFrame, Row, SparkSession
-from pyspark.sql.functions import udf, when
-from pyspark.sql.types import ArrayType, DoubleType
+from pyspark.ml.linalg import Matrix, Vector
+from pyspark.sql import DataFrame, Row, SparkSession, functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.utils import is_remote
 
@@ -3591,7 +3588,7 @@ class OneVsRest(
                 binaryLabelCol = "mc2b$" + str(index)
                 trainingDataset = multiclassLabeled.withColumn(
                     binaryLabelCol,
-                    when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
+                    F.when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
                 )
                 paramMap = dict(
                     [
@@ -3835,14 +3832,12 @@ class OneVsRestModel(
         )
 
     def _transform(self, dataset: DataFrame) -> DataFrame:
-        # TODO(SPARK-48515): Use Arrow Python UDF
         # determine the input columns: these need to be passed through
         origCols = dataset.columns
 
         # add an accumulator column to store predictions of all the models
         accColName = "mbc$acc" + str(uuid.uuid4())
-        initUDF = udf(lambda _: [], ArrayType(DoubleType()), useArrow=False)
-        newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
+        newDataset = dataset.withColumn(accColName, F.array().cast("array<double>"))
 
         # persist if underlying dataset is not persistent.
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
@@ -3858,15 +3853,10 @@ class OneVsRestModel(
 
             # add temporary column to store intermediate scores and update
             tmpColName = "mbc$tmp" + str(uuid.uuid4())
-            updateUDF = udf(
-                lambda predictions, prediction: predictions + [prediction.tolist()[1]],
-                ArrayType(DoubleType()),
-                useArrow=False,
-            )
             transformedDataset = model.transform(aggregatedDataset).select(*columns)
             updatedDataset = transformedDataset.withColumn(
                 tmpColName,
-                updateUDF(transformedDataset[accColName], transformedDataset[rawPredictionCol]),
+                F.array_append(accColName, SF.vector_get(F.col(rawPredictionCol), F.lit(1))),
             )
             newColumns = origCols + [tmpColName]
 
@@ -3879,29 +3869,14 @@ class OneVsRestModel(
             newDataset.unpersist()
 
         if self.getRawPredictionCol():
-
-            def func(predictions: Iterable[float]) -> Vector:
-                predArray: List[float] = []
-                for x in predictions:
-                    predArray.append(x)
-                return Vectors.dense(predArray)
-
-            rawPredictionUDF = udf(func, VectorUDT(), useArrow=False)
             aggregatedDataset = aggregatedDataset.withColumn(
-                self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName])
+                self.getRawPredictionCol(), MF.array_to_vector(F.col(accColName))
             )
 
         if self.getPredictionCol():
             # output the index of the classifier with highest confidence as prediction
-            labelUDF = udf(
-                lambda predictions: float(
-                    max(enumerate(predictions), key=operator.itemgetter(1))[0]
-                ),
-                DoubleType(),
-                useArrow=False,
-            )
             aggregatedDataset = aggregatedDataset.withColumn(
-                self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])
+                self.getPredictionCol(), SF.array_argmax(F.col(accColName)).cast("double")
             )
         return aggregatedDataset.drop(accColName)
 
