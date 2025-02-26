@@ -455,15 +455,12 @@ object DeserializerBuildHelper {
     case TransformingEncoder(tag, _, codec, _) if codec == KryoSerializationCodec =>
       DecodeUsingSerializer(path, tag, kryo = true)
 
-    case TransformingEncoder(tag, encoder, provider, nullable) =>
+    case TransformingEncoder(tag, encoder, provider, _) =>
       Invoke(
         Literal.create(provider(), ObjectType(classOf[Codec[_, _]])),
         "decode",
         ObjectType(tag.runtimeClass),
-        createDeserializer(encoder, path, walkedTypePath) :: Nil,
-        propagateNull = nullable,
-        returnNullable = nullable
-      )
+        createDeserializer(encoder, path, walkedTypePath) :: Nil)
   }
 
   private def deserializeArray(
