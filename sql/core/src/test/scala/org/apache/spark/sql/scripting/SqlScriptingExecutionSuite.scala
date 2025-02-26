@@ -24,7 +24,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
-import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLType
+import org.apache.spark.sql.exceptions.{SqlScriptingException, SqlScriptingRuntimeException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -72,6 +73,222 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       case (actualAnswer, expectedAnswer) =>
         assert(actualAnswer.sameElements(expectedAnswer))
     }
+  }
+
+  // Signal tests
+  test("signal statement - condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  SIGNAL TEST_CONDITION;
+        |END
+        |""".stripMargin
+    val exception = intercept[SqlScriptingRuntimeException] {
+      verifySqlScriptResult(sqlScript, Seq.empty)
+    }
+    checkError(
+      exception = exception,
+      condition = "TEST_CONDITION",
+      sqlState = Some("12345"),
+      parameters = Map.empty)
+    assert(exception.origin.line.contains(4))
+  }
+
+  test("signal statement - MESSAGE_ARGS") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  declare or replace var args MAP<STRING, STRING>;
+        |  set args = map('errorMessage', 'This is user raised error.');
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_ARGUMENTS = args;
+        |END
+        |""".stripMargin
+    val exception = intercept[SqlScriptingRuntimeException] {
+      verifySqlScriptResult(sqlScript, Seq.empty)
+    }
+    checkError(
+      exception = exception,
+      condition = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "This is user raised error."))
+    assert(exception.origin.line.contains(5))
+  }
+
+  test("signal statement - MESSAGE_ARGS null variable") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  declare or replace var args MAP<STRING, STRING>;
+        |  set args = null;
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_ARGUMENTS = args;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "NULL_VARIABLE_SIGNAL_STATEMENT",
+      parameters = Map("varName" -> toSQLId("args")))
+  }
+
+  test("signal statement - MESSAGE_ARGS variable invalid type") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  declare or replace var args STRING;
+        |  set args = "string_type_variable";
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_ARGUMENTS = args;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "INVALID_VARIABLE_TYPE_FOR_SIGNAL_STATEMENT",
+      parameters = Map("varType" -> toSQLType("STRING")))
+  }
+
+  test("signal statement - MESSAGE_TEXT") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  SIGNAL TEST_CONDITION SET MESSAGE_TEXT = 'This is message text.';
+        |END
+        |""".stripMargin
+    val exception = intercept[SqlScriptingRuntimeException] {
+      verifySqlScriptResult(sqlScript, Seq.empty)
+    }
+    checkError(
+      exception = exception,
+      condition = "TEST_CONDITION",
+      sqlState = Some("12345"),
+      parameters = Map.empty)
+    exception.getMessage.contains("This is message text.")
+    assert(exception.origin.line.contains(4))
+  }
+
+  test("signal statement - MESSAGE_TEXT null variable") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  declare or replace var msgText STRING;
+        |  set msgText = null;
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_TEXT = msgText;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "NULL_VARIABLE_SIGNAL_STATEMENT",
+      parameters = Map("varName" -> toSQLId("msgText")))
+  }
+
+  test("signal statement - MESSAGE_TEXT variable invalid type") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  declare or replace var msgText INT;
+        |  set msgText = 1;
+        |  signal USER_RAISED_EXCEPTION SET MESSAGE_TEXT = msgText;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "INVALID_VARIABLE_TYPE_FOR_SIGNAL_STATEMENT",
+      parameters = Map("varType" -> toSQLType("INT")))
+  }
+
+  test("signal statement - sqlstate") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  SIGNAL SQLSTATE '12345';
+        |END
+        |""".stripMargin
+    val exception = intercept[SqlScriptingRuntimeException] {
+      verifySqlScriptResult(sqlScript, Seq.empty)
+    }
+    checkError(
+      exception = exception,
+      condition = "USER_RAISED_EXCEPTION",
+      sqlState = Some("12345"),
+      parameters = Map.empty)
+    assert(exception.origin.line.contains(3))
+  }
+
+  test("signal statement - sqlstate with MESSAGE_TEXT") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  SIGNAL SQLSTATE '12345' SET MESSAGE_TEXT = 'This is message text.';
+        |END
+        |""".stripMargin
+    val exception = intercept[SqlScriptingRuntimeException] {
+      verifySqlScriptResult(sqlScript, Seq.empty)
+    }
+    checkError(
+      exception = exception,
+      condition = "USER_RAISED_EXCEPTION",
+      sqlState = Some("12345"),
+      parameters = Map.empty)
+    exception.getMessage.contains("This is message text.")
+    assert(exception.origin.line.contains(3))
+  }
+
+  test("signal statement - handle with catch-all handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  SIGNAL SQLSTATE '12345' SET MESSAGE_TEXT = 'This is message text.';
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1 from handler body
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("signal (sqlstate) statement - handle with sqlstate handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  SIGNAL SQLSTATE '12345' SET MESSAGE_TEXT = 'This is message text.';
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1 from handler body
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("signal (condition) statement - handle with sqlstate handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  SIGNAL TEST_CONDITION;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1 from handler body
+    )
+    verifySqlScriptResult(sqlScript, expected)
   }
 
   // Handler tests

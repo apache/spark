@@ -112,13 +112,13 @@ class SqlScriptingExecution(
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
       currentStatement match {
+        case Some(signalStatementExec: SignalStatementExec) =>
+          throw signalStatementExec.getException
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
-          withErrorHandling {
-            val df = stmt.buildDataFrame(session)
-            df.logicalPlan match {
-              case _: CommandResult => // pass
-              case _ => return Some(df) // If the statement is a result, return it to the caller.
-            }
+          val df = stmt.buildDataFrame(session)
+          df.logicalPlan match {
+            case _: CommandResult => // pass
+            case _ => return Some(df) // If the statement is a result, return it to the caller.
           }
         case _ => // pass
       }

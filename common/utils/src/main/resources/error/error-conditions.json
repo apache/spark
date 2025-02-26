@@ -3607,6 +3607,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "INVALID_VARIABLE_TYPE_FOR_SIGNAL_STATEMENT" : {
+    "message" : [
+      "Variable type must be \"MAP<STRING, STRING>\" type but got <varType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_VARIANT_CAST" : {
     "message" : [
       "The variant value `<value>` cannot be cast into `<dataType>`. Please use `try_variant_get` instead."
@@ -4201,6 +4207,12 @@
   "NULL_QUERY_STRING_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Execute immediate requires a non-null variable as the query string, but the provided variable <varName> is null."
+    ],
+    "sqlState" : "22004"
+  },
+  "NULL_VARIABLE_SIGNAL_STATEMENT" : {
+    "message" : [
+      "Signal statement requires a non-null variable, but the provided variable <varName> is null."
     ],
     "sqlState" : "22004"
   },

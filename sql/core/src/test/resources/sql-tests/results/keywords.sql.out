@@ -201,6 +201,8 @@ MACRO	false
 MAP	false
 MATCHED	false
 MERGE	false
+MESSAGE_ARGUMENTS	false
+MESSAGE_TEXT	false
 MICROSECOND	false
 MICROSECONDS	false
 MILLISECOND	false
@@ -296,6 +298,7 @@ SET	false
 SETS	false
 SHORT	false
 SHOW	false
+SIGNAL	false
 SINGLE	false
 SKEWED	false
 SMALLINT	false

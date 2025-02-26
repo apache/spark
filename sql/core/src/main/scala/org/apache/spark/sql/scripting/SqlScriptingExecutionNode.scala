@@ -23,14 +23,18 @@ import java.util.{Locale, UUID}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, EqualTo, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.analysis.{ColumnResolutionHelper, NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, EqualTo, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.errors.SqlScriptingErrors
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
+import org.apache.spark.sql.exceptions.SqlScriptingRuntimeException
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, MapType, StringType}
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -1087,4 +1091,108 @@ class ExceptionHandlerExec(
   override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
 
   override def reset(): Unit = body.reset()
+}
+
+/**
+ * Executable node for Signal Statement.
+ * @param errorCondition Name of the error condition/SQL State for error that will be thrown.
+ * @param sqlState SQL State of the error that will be thrown.
+ * @param message Error message (either string or variable name).
+ * @param isBuiltinError Whether the error condition is a builtin condition.
+ * @param msgArguments Error message parameters for builtin conditions.
+ * @param session Spark session that SQL script is executed within.
+ * @param origin Origin descriptor for the statement.
+ */
+class SignalStatementExec(
+    val errorCondition: String,
+    val sqlState: String,
+    val message: Either[String, UnresolvedAttribute],
+    val msgArguments: Option[UnresolvedAttribute],
+    val isBuiltinError: Boolean,
+    val session: SparkSession,
+    override val origin: Origin)
+  extends LeafStatementExec
+  with ColumnResolutionHelper with WithOrigin {
+
+  override def catalogManager: CatalogManager = session.sessionState.catalogManager
+  override def conf: SQLConf = session.sessionState.conf
+
+  def getMessageArgs: Map[String, String] = {
+    msgArguments match {
+      case Some(args) =>
+        val argsReference = getVariableReference(args, args.nameParts)
+
+        if (!argsReference.dataType.sameType(MapType(StringType, StringType))) {
+          throw SqlScriptingErrors
+            .invalidSignalStatementVariableType(origin, argsReference.dataType)
+        }
+
+        val argsValue = argsReference.eval(null)
+
+        if (argsValue == null) {
+          throw SqlScriptingErrors.nullVariableSignalStatement(origin, args.name)
+        }
+
+        val mapData = argsValue.asInstanceOf[MapData]
+        (0 until mapData.numElements()).map { index =>
+          (
+            mapData.keyArray().get(index, StringType).toString,
+            mapData.valueArray().get(index, StringType).toString
+          )
+        }.toMap
+      case None =>
+        Map.empty
+    }
+  }
+
+  def getMessageText: String = {
+    message match {
+      case Left(v) => v
+      case Right(u) =>
+        val varReference = getVariableReference(u, u.nameParts)
+
+        if (!varReference.dataType.sameType(StringType)) {
+          throw SqlScriptingErrors
+            .invalidSignalStatementVariableType(origin, varReference.dataType)
+        }
+
+        // Call eval with null value passed instead of a row.
+        // This is ok as this is variable and invoking eval should
+        // be independent of row value.
+        val varReferenceValue = varReference.eval(null)
+
+        if (varReferenceValue == null) {
+          throw SqlScriptingErrors
+            .nullVariableSignalStatement(origin, u.name)
+        }
+
+        varReferenceValue.toString
+    }
+  }
+
+  private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
+    lookupVariable(nameParts) match {
+      case Some(variable) => variable
+      case _ =>
+        throw QueryCompilationErrors
+          .unresolvedVariableError(
+            nameParts,
+            Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE),
+            expr.origin)
+    }
+  }
+
+  private[scripting] def getException: SqlScriptingRuntimeException = {
+    new SqlScriptingRuntimeException(
+      condition = errorCondition,
+      sqlState = sqlState,
+      message = getMessageText,
+      cause = null,
+      origin = origin,
+      messageParameters = getMessageArgs,
+      isBuiltinError = isBuiltinError
+    )
+  }
+
+  override def reset(): Unit = ()
 }

@@ -288,6 +288,57 @@ class AstBuilder extends DataTypeAstBuilder
     ExceptionHandler(exceptionHandlerTriggers, body, handlerType)
   }
 
+  override def visitSignalStatementWithCondition(
+      ctx: SignalStatementWithConditionContext): SignalStatement = {
+    // Parse message text value which can either be a string literal or variable.
+    val messageString = Option(ctx.msgStr)
+      .map(sl => Left(string(visitStringLit(sl))))
+    val messageVariable = Option(ctx.msgVar)
+      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
+    // Parse message arguments which are represented by a variable of type "MAP<STRING, STRING>".
+    val messageArguments = Option(ctx.argVar)
+      .map(mpi => UnresolvedAttribute(visitMultipartIdentifier(mpi)))
+
+    // Parse error condition identifier to get string value.
+    val errorCondition = visitMultipartIdentifier(ctx.conditionName)
+      .mkString(".").toUpperCase(Locale.ROOT)
+
+    // isBuiltinError is false because we need to resolve it based on the value of errorCondition.
+    // sqlState is None because we need to resolve it based on the value of errorCondition.
+    // This is done in visitCompoundBodyImpl once all conditions have been resolved.
+    SignalStatement(
+      isBuiltinError = false,
+      errorCondition = errorCondition,
+          tate = None,
+      message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
+      messageArguments = messageArguments
+    )
+  }
+
+  override def visitSignalStatementWithSqlState(
+      ctx: SignalStatementWithSqlStateContext): SignalStatement = {
+    // Parse SQLSTATE value.
+    val sqlState = string(visitStringLit(ctx.sqlState))
+    assertSqlState(sqlState)
+
+    // Parse message text value which can either be a string literal or variable.
+    val messageString = Option(ctx.msgStr)
+      .map(sl => Left(string(visitStringLit(sl))))
+    val messageVariable = Option(ctx.msgVar)
+      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
+    // isBuiltinError is false because user can override sqlState of the
+    // predefined USER_RAISED_EXCEPTION.
+    SignalStatement(
+      isBuiltinError = false,
+      errorCondition = "USER_RAISED_EXCEPTION",
+      sqlState = Some(sqlState.toUpperCase(Locale.ROOT)),
+      message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
+      messageArguments = None
+    )
+  }
+
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
@@ -329,6 +380,32 @@ class AstBuilder extends DataTypeAstBuilder
               .duplicateConditionInScope(CurrentOrigin.get, condition.conditionName)
           }
           conditions += condition.conditionName -> condition.sqlState
+        case signalStatement: SignalStatement if signalStatement.sqlState.isEmpty =>
+          // Set the CurrentOrigin to origin of SIGNAL statement so we can copy it properly.
+          CurrentOrigin.withOrigin(signalStatement.origin) {
+            // If SQLSTATE is not already resolved, we need to resolve sqlState for the given
+            // error condition. First try to get sqlState if condition is user defined.
+            val (sqlState, isBuiltinError) = conditions.get(signalStatement.errorCondition)
+              .map(state => (Some(state), false))
+              // If condition is not user defined, check if it is a spark defined error condition,
+              // and get appropriate SQLSTATE.
+              .getOrElse {
+                if (SparkThrowableHelper.isValidErrorClass(signalStatement.errorCondition)) {
+                  (Some(SparkThrowableHelper.getSqlState(signalStatement.errorCondition)), true)
+                } else {
+                  throw SqlScriptingErrors
+                    .conditionNotFound(CurrentOrigin.get, signalStatement.errorCondition)
+                }
+              }
+
+            // Create new instance of SignalStatement with resolved isBuiltinError, and sqlState.
+            val resolvedSignalStatement = signalStatement.copy(
+              isBuiltinError = isBuiltinError,
+              sqlState = sqlState)
+
+            scriptingParserContext.statement()
+            buff += resolvedSignalStatement
+          }
         case statement =>
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
