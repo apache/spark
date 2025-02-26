@@ -840,7 +840,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       parameters = Map("methodName" -> "`writeTo`"))
   }
 
-  test("SPARK-51281: create/replace file source tables") {
+  test("SPARK-51281: DataFrameWriterV2 should respect the path option") {
     def checkResults(df: DataFrame): Unit = {
       checkAnswer(df, spark.range(10).toDF())
     }
