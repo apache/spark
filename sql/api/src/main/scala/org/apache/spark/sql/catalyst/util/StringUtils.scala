@@ -83,7 +83,8 @@ object SparkStringUtils extends Logging {
       start: String,
       sep: String,
       end: String,
-      maxFields: Int): String = {
+      maxFields: Int,
+      customToString: Option[T => String] = None): String = {
     if (seq.length > maxFields) {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(
@@ -94,9 +95,17 @@ object SparkStringUtils extends Logging {
       val restNum = seq.length - numFields
       val ending = (if (numFields == 0) "" else sep) +
         (if (restNum == 0) "" else s"... $restNum more fields") + end
-      seq.take(numFields).mkString(start, sep, ending)
+      if (customToString.isDefined) {
+        seq.take(numFields).map(customToString.get).mkString(start, sep, ending)
+      } else {
+        seq.take(numFields).mkString(start, sep, ending)
+      }
     } else {
-      seq.mkString(start, sep, end)
+      if (customToString.isDefined) {
+        seq.map(customToString.get).mkString(start, sep, end)
+      } else {
+        seq.mkString(start, sep, end)
+      }
     }
   }
 

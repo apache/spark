@@ -51,7 +51,7 @@ case class StateStoreMetadataV2(
     storeName: String,
     numColsPrefixKey: Int,
     numPartitions: Int,
-    stateSchemaFilePath: String)
+    stateSchemaFilePaths: List[String])
   extends StateStoreMetadata with Serializable
 
 object StateStoreMetadataV2 {
@@ -458,21 +458,9 @@ class OperatorStateMetadataV2FileManager(
         fm.delete(batchFile.getPath)
       }
     }
-    val latestMetadata = OperatorStateMetadataReader.createReader(
-      stateOpIdPath,
-      hadoopConf,
-      2,
-      latestBatchId
-    ).read()
 
-    // find the batchId of the earliest schema file we need to keep
-    val earliestBatchToKeep = latestMetadata match {
-      case Some(OperatorStateMetadataV2(_, stateStoreInfo, _)) =>
-        val schemaFilePath = stateStoreInfo.head.stateSchemaFilePath
-        new Path(schemaFilePath).getName.split("_").head.toLong
-      case _ => 0
-    }
-
-    earliestBatchToKeep
+    // TODO: Implement state schema file purging logic once we have
+    // enabled full-rewrite.
+    0
   }
 }

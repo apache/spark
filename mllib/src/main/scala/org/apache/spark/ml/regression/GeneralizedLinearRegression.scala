@@ -1009,6 +1009,9 @@ class GeneralizedLinearRegressionModel private[ml] (
   with GeneralizedLinearRegressionBase with MLWritable
   with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary] {
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN)
+
   /**
    * Sets the link prediction (linear predictor) column name.
    *
@@ -1182,7 +1185,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 @Since("2.0.0")
 class GeneralizedLinearRegressionSummary private[regression] (
     dataset: Dataset[_],
-    origModel: GeneralizedLinearRegressionModel) extends Serializable {
+    origModel: GeneralizedLinearRegressionModel) extends Summary with Serializable {
 
   import GeneralizedLinearRegression._
 

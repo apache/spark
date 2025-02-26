@@ -105,29 +105,6 @@ class StorageSuite extends SparkFunSuite {
     assert(status.diskUsed === actualDiskUsed)
   }
 
-  // For testing StorageUtils.updateRddInfo and StorageUtils.getRddBlockLocations
-  private def stockStorageStatuses: Seq[StorageStatus] = {
-    val status1 = new StorageStatus(BlockManagerId("big", "dog", 1), 1000L, Some(1000L), Some(0L))
-    val status2 = new StorageStatus(BlockManagerId("fat", "duck", 2), 2000L, Some(2000L), Some(0L))
-    val status3 = new StorageStatus(BlockManagerId("fat", "cat", 3), 3000L, Some(3000L), Some(0L))
-    status1.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 1L, 2L))
-    status1.addBlock(RDDBlockId(0, 1), BlockStatus(memAndDisk, 1L, 2L))
-    status2.addBlock(RDDBlockId(0, 2), BlockStatus(memAndDisk, 1L, 2L))
-    status2.addBlock(RDDBlockId(0, 3), BlockStatus(memAndDisk, 1L, 2L))
-    status2.addBlock(RDDBlockId(1, 0), BlockStatus(memAndDisk, 1L, 2L))
-    status2.addBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 1L, 2L))
-    status3.addBlock(RDDBlockId(0, 4), BlockStatus(memAndDisk, 1L, 2L))
-    status3.addBlock(RDDBlockId(1, 2), BlockStatus(memAndDisk, 1L, 2L))
-    Seq(status1, status2, status3)
-  }
-
-  // For testing StorageUtils.updateRddInfo
-  private def stockRDDInfos: Seq[RDDInfo] = {
-    val info0 = new RDDInfo(0, "0", 10, memAndDisk, false, Seq(3))
-    val info1 = new RDDInfo(1, "1", 3, memAndDisk, false, Seq(4))
-    Seq(info0, info1)
-  }
-
   private val offheap = StorageLevel.OFF_HEAP
   // For testing add, update, remove, get, and contains etc. for both RDD and non-RDD onheap
   // and offheap blocks

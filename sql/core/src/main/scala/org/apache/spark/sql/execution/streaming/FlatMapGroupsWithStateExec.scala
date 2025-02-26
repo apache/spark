@@ -52,6 +52,7 @@ trait FlatMapGroupsWithStateExecBase
   protected val initialStateDataAttrs: Seq[Attribute]
   protected val initialState: SparkPlan
   protected val hasInitialState: Boolean
+  protected val skipEmittingInitialStateKeys: Boolean
 
   val stateInfo: Option[StatefulOperatorStateInfo]
   protected val stateEncoder: ExpressionEncoder[Any]
@@ -145,7 +146,8 @@ trait FlatMapGroupsWithStateExecBase
 
     val processedOutputIterator = initialStateIterOption match {
       case Some(initStateIter) if initStateIter.hasNext =>
-        processor.processNewDataWithInitialState(filteredIter, initStateIter)
+        processor.processNewDataWithInitialState(filteredIter, initStateIter,
+          skipEmittingInitialStateKeys)
       case _ => processor.processNewData(filteredIter)
     }
 
@@ -196,8 +198,8 @@ trait FlatMapGroupsWithStateExecBase
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      groupingAttributes.toStructType, stateManager.stateSchema))
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+      groupingAttributes.toStructType, 0, stateManager.stateSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -244,6 +246,7 @@ trait FlatMapGroupsWithStateExecBase
             NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
             stateInfo.get.storeVersion,
             stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
+            None,
             useColumnFamilies = false,
             storeConf, hadoopConfBroadcast.value.value)
           val processor = createInputProcessor(store)
@@ -300,7 +303,8 @@ trait FlatMapGroupsWithStateExecBase
      */
     def processNewDataWithInitialState(
         childDataIter: Iterator[InternalRow],
-        initStateIter: Iterator[InternalRow]
+        initStateIter: Iterator[InternalRow],
+        skipEmittingInitialStateKeys: Boolean
       ): Iterator[InternalRow] = {
 
       if (!childDataIter.hasNext && !initStateIter.hasNext) return Iterator.empty
@@ -311,7 +315,8 @@ trait FlatMapGroupsWithStateExecBase
       val groupedInitialStateIter =
         GroupedIterator(initStateIter, initialStateGroupAttrs, initialState.output)
 
-      // Create a CoGroupedIterator that will group the two iterators together for every key group.
+      // Create a CoGroupedIterator that will group the two iterators together for every
+      // key group.
       new CoGroupedIterator(
           groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
         case (keyRow, valueRowIter, initialStateRowIter) =>
@@ -325,12 +330,17 @@ trait FlatMapGroupsWithStateExecBase
             val initStateObj = getStateObj.get(initialStateRow)
             stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
           }
-          // We apply the values for the key after applying the initial state.
-          callFunctionAndUpdateState(
-            stateManager.getState(store, keyUnsafeRow),
+
+          if (skipEmittingInitialStateKeys && valueRowIter.isEmpty) {
+            // If the user has specified to skip emitting the keys that only have initial state
+            // and no data, then we should not call the function for such keys.
+            Iterator.empty
+          } else {
+            callFunctionAndUpdateState(
+              stateManager.getState(store, keyUnsafeRow),
               valueRowIter,
-              hasTimedOut = false
-          )
+              hasTimedOut = false)
+          }
       }
     }
 
@@ -387,6 +397,7 @@ trait FlatMapGroupsWithStateExecBase
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param initialState the user specified initial state
  * @param hasInitialState indicates whether the initial state is provided or not
+ * @param skipEmittingInitialStateKeys whether to skip emitting initial state df keys
  * @param child the physical plan for the underlying data
  */
 case class FlatMapGroupsWithStateExec(
@@ -409,6 +420,7 @@ case class FlatMapGroupsWithStateExec(
     eventTimeWatermarkForEviction: Option[Long],
     initialState: SparkPlan,
     hasInitialState: Boolean,
+    skipEmittingInitialStateKeys: Boolean,
     child: SparkPlan)
   extends FlatMapGroupsWithStateExecBase with BinaryExecNode with  ObjectProducerExec {
   import GroupStateImpl._
@@ -532,6 +544,7 @@ object FlatMapGroupsWithStateExec {
       outputObjAttr: Attribute,
       timeoutConf: GroupStateTimeout,
       hasInitialState: Boolean,
+      skipEmittingInitialStateKeys: Boolean,
       initialState: SparkPlan,
       child: SparkPlan): SparkPlan = {
     if (hasInitialState) {
@@ -540,27 +553,31 @@ object FlatMapGroupsWithStateExec {
         case _ => false
       }
       val func = (keyRow: Any, values: Iterator[Any], states: Iterator[Any]) => {
-        // Check if there is only one state for every key.
-        var foundInitialStateForKey = false
-        val optionalStates = states.map { stateValue =>
-          if (foundInitialStateForKey) {
-            foundDuplicateInitialKeyException()
-          }
-          foundInitialStateForKey = true
-          stateValue
-        }.toArray
+        if (skipEmittingInitialStateKeys && values.isEmpty) {
+          Iterator.empty
+        } else {
+          // Check if there is only one state for every key.
+          var foundInitialStateForKey = false
+          val optionalStates = states.map { stateValue =>
+            if (foundInitialStateForKey) {
+              foundDuplicateInitialKeyException()
+            }
+            foundInitialStateForKey = true
+            stateValue
+          }.toArray
 
-        // Create group state object
-        val groupState = GroupStateImpl.createForStreaming(
-          optionalStates.headOption,
-          System.currentTimeMillis,
-          GroupStateImpl.NO_TIMESTAMP,
-          timeoutConf,
-          hasTimedOut = false,
-          watermarkPresent)
+          // Create group state object
+          val groupState = GroupStateImpl.createForStreaming(
+            optionalStates.headOption,
+            System.currentTimeMillis,
+            GroupStateImpl.NO_TIMESTAMP,
+            timeoutConf,
+            hasTimedOut = false,
+            watermarkPresent)
 
-        // Call user function with the state and values for this key
-        userFunc(keyRow, values, groupState)
+          // Call user function with the state and values for this key
+          userFunc(keyRow, values, groupState)
+        }
       }
       CoGroupExec(
         func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,

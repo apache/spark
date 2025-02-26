@@ -122,7 +122,7 @@ case class StructField(
   }
 
   private def schemaCollationValue(dt: DataType): String = dt match {
-    case st: StringType =>
+    case st: StringType if st != IndeterminateStringType =>
       val collation = CollationFactory.fetchCollation(st.collationId)
       collation.identifier().toStringWithoutVersion()
     case _ =>
