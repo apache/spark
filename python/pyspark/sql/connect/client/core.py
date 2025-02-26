@@ -220,7 +220,9 @@ class ChannelBuilder:
 
     @property
     def token(self) -> Optional[str]:
-        return self._params.get(ChannelBuilder.PARAM_TOKEN, None)
+        return self._params.get(
+            ChannelBuilder.PARAM_TOKEN, os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
+        )
 
     def metadata(self) -> Iterable[Tuple[str, str]]:
         """
@@ -326,8 +328,7 @@ class DefaultChannelBuilder(ChannelBuilder):
             # This is only used in the test/development mode.
             session = PySparkSession._instantiatedSession
 
-            # 'spark.local.connect' is set when we use the local mode in Spark Connect.
-            if session is not None and session.conf.get("spark.local.connect", "0") == "1":
+            if session is not None:
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
@@ -411,10 +412,11 @@ class DefaultChannelBuilder(ChannelBuilder):
 
     @property
     def secure(self) -> bool:
-        return (
-            self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
-            or self.token is not None
-        )
+        return self.use_ssl or self.token is not None
+
+    @property
+    def use_ssl(self) -> bool:
+        return self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
 
     @property
     def host(self) -> str:
@@ -440,14 +442,20 @@ class DefaultChannelBuilder(ChannelBuilder):
 
         if not self.secure:
             return self._insecure_channel(self.endpoint)
-        else:
-            ssl_creds = grpc.ssl_channel_credentials()
+        elif not self.use_ssl and self._host == "localhost":
+            creds = grpc.local_channel_credentials()
 
-            if self.token is None:
-                creds = ssl_creds
-            else:
+            if self.token is not None:
                 creds = grpc.composite_channel_credentials(
-                    ssl_creds, grpc.access_token_call_credentials(self.token)
+                    creds, grpc.access_token_call_credentials(self.token)
+                )
+            return self._secure_channel(self.endpoint, creds)
+        else:
+            creds = grpc.ssl_channel_credentials()
+
+            if self.token is not None:
+                creds = grpc.composite_channel_credentials(
+                    creds, grpc.access_token_call_credentials(self.token)
                 )
 
             return self._secure_channel(self.endpoint, creds)
@@ -933,33 +941,39 @@ class SparkConnectClient(object):
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
-        # Rename columns to avoid duplicated column names.
-        renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+        # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
+        # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
+        # DataFrame manually with the correct schema.
+        if table.num_rows == 0:
+            pdf = pd.DataFrame(columns=schema.names)
+        else:
+            # Rename columns to avoid duplicated column names.
+            renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
-        pandas_options = {}
-        if self_destruct:
-            # Configure PyArrow to use as little memory as possible:
-            # self_destruct - free columns as they are converted
-            # split_blocks - create a separate Pandas block for each column
-            # use_threads - convert one column at a time
-            pandas_options.update(
-                {
-                    "self_destruct": True,
-                    "split_blocks": True,
-                    "use_threads": False,
-                }
-            )
-        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-            # A legacy option to coerce date32, date64, duration, and timestamp
-            # time units to nanoseconds when converting to pandas.
-            # This option can only be added since 13.0.0.
-            pandas_options.update(
-                {
-                    "coerce_temporal_nanoseconds": True,
-                }
-            )
-        pdf = renamed_table.to_pandas(**pandas_options)
-        pdf.columns = schema.names
+            pandas_options = {}
+            if self_destruct:
+                # Configure PyArrow to use as little memory as possible:
+                # self_destruct - free columns as they are converted
+                # split_blocks - create a separate Pandas block for each column
+                # use_threads - convert one column at a time
+                pandas_options.update(
+                    {
+                        "self_destruct": True,
+                        "split_blocks": True,
+                        "use_threads": False,
+                    }
+                )
+            if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+                # A legacy option to coerce date32, date64, duration, and timestamp
+                # time units to nanoseconds when converting to pandas.
+                # This option can only be added since 13.0.0.
+                pandas_options.update(
+                    {
+                        "coerce_temporal_nanoseconds": True,
+                    }
+                )
+            pdf = renamed_table.to_pandas(**pandas_options)
+            pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
             timezone: Optional[str] = None

@@ -1043,11 +1043,12 @@ message TransformWithStateInfo {
   // (Required) Time mode string for transformWithState.
   string time_mode = 1;
 
-  // (Required) Output mode string for transformWithState.
-  string output_mode = 2;
-
   // (Optional) Event time column name.
-  optional string event_time_column_name = 3;
+  optional string event_time_column_name = 2;
+
+  // (Optional) Schema for the output DataFrame.
+  // Only required used for TransformWithStateInPandas.
+  optional DataType output_schema = 3;
 }
 
 message CoGroupMap {

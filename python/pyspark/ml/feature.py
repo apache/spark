@@ -54,10 +54,9 @@ from pyspark.ml.util import (
     JavaMLReadable,
     JavaMLWritable,
     try_remote_attribute_relation,
-    ML_CONNECT_HELPER_ID,
+    invoke_helper_attr,
 )
 from pyspark.ml.wrapper import (
-    JavaWrapper,
     JavaEstimator,
     JavaModel,
     JavaParams,
@@ -1225,8 +1224,7 @@ class CountVectorizerModel(
 
         if is_remote():
             model = CountVectorizerModel()
-            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            model._java_obj = helper._call_java(
+            model._java_obj = invoke_helper_attr(
                 "countVectorizerModelFromVocabulary",
                 model.uid,
                 list(vocabulary),
@@ -4845,8 +4843,7 @@ class StringIndexerModel(
         """
         if is_remote():
             model = StringIndexerModel()
-            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            model._java_obj = helper._call_java(
+            model._java_obj = invoke_helper_attr(
                 "stringIndexerModelFromLabels",
                 model.uid,
                 (list(labels), ArrayType(StringType())),
@@ -4885,8 +4882,7 @@ class StringIndexerModel(
         """
         if is_remote():
             model = StringIndexerModel()
-            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            model._java_obj = helper._call_java(
+            model._java_obj = invoke_helper_attr(
                 "stringIndexerModelFromLabelsArray",
                 model.uid,
                 (
@@ -5142,8 +5138,7 @@ class StopWordsRemover(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
         if is_remote():
-            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            locale = helper._call_java("stopWordsRemoverGetDefaultOrUS")
+            locale = invoke_helper_attr("stopWordsRemoverGetDefaultOrUS")
         else:
             locale = self._java_obj.getLocale()
 
@@ -5274,8 +5269,7 @@ class StopWordsRemover(
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
         if is_remote():
-            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
-            stopWords = helper._call_java("stopWordsRemoverLoadDefaultStopWords", language)
+            stopWords = invoke_helper_attr("stopWordsRemoverLoadDefaultStopWords", language)
             return list(stopWords)
 
         else:

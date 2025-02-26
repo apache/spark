@@ -445,7 +445,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSearchedCaseStatementImpl(
       ctx: SearchedCaseStatementContext,
-      labelCtx: SqlScriptingLabelContext): CaseStatement = {
+      labelCtx: SqlScriptingLabelContext): SearchedCaseStatement = {
     val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
       SingleStatement(
         Project(
@@ -464,7 +464,7 @@ class AstBuilder extends DataTypeAstBuilder
           s" ${conditionalBodies.length} in case statement")
     }
 
-    CaseStatement(
+    SearchedCaseStatement(
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
@@ -475,30 +475,31 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSimpleCaseStatementImpl(
       ctx: SimpleCaseStatementContext,
-      labelCtx: SqlScriptingLabelContext): CaseStatement = {
-    // uses EqualTo to compare the case variable(the main case expression)
-    // to the WHEN clause expressions
-    val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
-      SingleStatement(
-        Project(
-          Seq(Alias(EqualTo(expression(ctx.caseVariable), expression(expr)), "condition")()),
-          OneRowRelation()))
-    })
+      labelCtx: SqlScriptingLabelContext): SimpleCaseStatement = {
+    val caseVariableExpr = withOrigin(ctx.caseVariable) {
+      expression(ctx.caseVariable)
+    }
+    val conditionExpressions =
+      ctx.conditionExpressions.asScala.toList
+        .map(exprCtx => withOrigin(exprCtx) {
+          expression(exprCtx)
+        })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
         body =>
           visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
 
-    if (conditions.length != conditionalBodies.length) {
+    if (conditionExpressions.length != conditionalBodies.length) {
       throw SparkException.internalError(
-        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+        s"Mismatched number of conditions ${conditionExpressions.length} and condition bodies" +
           s" ${conditionalBodies.length} in case statement")
     }
 
-    CaseStatement(
-      conditions = conditions,
-      conditionalBodies = conditionalBodies,
+    SimpleCaseStatement(
+      caseVariableExpr,
+      conditionExpressions,
+      conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
         body =>
           visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
@@ -669,6 +670,10 @@ class AstBuilder extends DataTypeAstBuilder
    * Plan parsing
    * ******************************************************************************************** */
   protected def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
+
+  override def visitSingleQuery(ctx: SingleQueryContext): LogicalPlan = withOrigin(ctx) {
+    visitQuery(ctx.query())
+  }
 
   /**
    * Create a top-level plan with Common Table Expressions.
@@ -1214,7 +1219,7 @@ class AstBuilder extends DataTypeAstBuilder
         } else {
           // TODO For v2 commands, we will cast the string back to its actual value,
           //  which is a waste and can be improved in the future.
-          Cast(l, conf.defaultStringType, Some(conf.sessionLocalTimeZone)).eval().toString
+          Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
         }
       case other =>
         throw new SparkIllegalArgumentException(
@@ -2345,48 +2350,12 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (canEagerlyEvaluateInlineTable(ctx, unresolvedTable)) {
+    val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
       EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
     }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
-  }
-
-  /**
-   * Determines if the inline table can be eagerly evaluated.
-   */
-  private def canEagerlyEvaluateInlineTable(
-      ctx: InlineTableContext,
-      table: UnresolvedInlineTable): Boolean = {
-    if (!conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
-      return false
-    } else if (!ResolveDefaultStringTypes.needsResolution(table.expressions)) {
-      // if there are no strings to be resolved we can always evaluate eagerly
-      return true
-    }
-
-    val isSessionCollationSet = conf.defaultStringType != StringType
-
-    // if either of these are true we need to resolve
-    // the string types first
-    !isSessionCollationSet && !contextInsideCreate(ctx)
-  }
-
-  private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {
-    var currentContext: RuleContext = ctx
-
-    while (currentContext != null) {
-      if (currentContext.isInstanceOf[CreateTableContext] ||
-          currentContext.isInstanceOf[ReplaceTableContext] ||
-          currentContext.isInstanceOf[CreateViewContext]) {
-        return true
-      }
-
-      currentContext = currentContext.parent
-    }
-
-    false
   }
 
   /**

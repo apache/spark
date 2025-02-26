@@ -26,7 +26,7 @@ import org.apache.orc.OrcConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -229,17 +229,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   private def getCachedDataSourceTable(table: TableIdentifier) = {
     spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
       .getCachedDataSourceTable(table)
-  }
-
-  private def checkCached(tableIdentifier: TableIdentifier): Unit = {
-    getCachedDataSourceTable(tableIdentifier) match {
-      case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
-      case LogicalRelationWithTable(_: HadoopFsRelation, _) => // OK
-      case other =>
-        fail(
-          s"The cached ${tableIdentifier.table} should be a HadoopFsRelation. " +
-            s"However, $other is returned form the cache.")
-    }
   }
 
   test("SPARK-28573 ORC conversation could be applied for partitioned table insertion") {

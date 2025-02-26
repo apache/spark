@@ -349,7 +349,8 @@ class RFormulaModel private[feature](
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
-  private[ml] def this() = this(Identifiable.randomUID("rFormula"), null, null)
+  // For ml connect only
+  private[ml] def this() = this("", null, null)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

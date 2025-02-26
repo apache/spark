@@ -1922,6 +1922,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkFiltersRemoved(df8)
     checkPushedInfo(df8, "[(CONCAT(NAME, ',', CAST(SALARY AS string))) = 'cathy,9000.00']")
     checkAnswer(df8, Seq(Row(1, "cathy", 9000, 1200, false)))
+
+    val df9 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "lpad(name, 5, '*') = '**amy'")
+    checkPushedInfo(df9, "[NAME IS NOT NULL, (LPAD(NAME, 5, '*')) = '**amy']")
+    checkAnswer(df9, Seq(Row(1, "amy", 10000, 1000, true)))
+
+    val df10 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "rpad(name, 5, '*') = 'jen**'")
+    checkPushedInfo(df10, "[NAME IS NOT NULL, (RPAD(NAME, 5, '*')) = 'jen**']")
+    checkAnswer(df10, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
   test("scan with aggregate push-down: MAX AVG with filter and group by") {
