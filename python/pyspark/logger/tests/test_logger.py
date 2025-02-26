@@ -179,9 +179,9 @@ class LoggerTestsMixin:
                         "msg",
                         sf.col("exception.class").alias("exception_class"),
                         sf.col("exception.msg").alias("exception_msg"),
-                        (sf.size(sf.col("exception.stacktrace")) > 0).alias(
-                            "exception_stacktrace_is_not_empty"
-                        ),
+                        sf.col("exception.stacktrace.class").alias("exception_stacktrace_class"),
+                        sf.col("exception.stacktrace.method").alias("exception_stacktrace_method"),
+                        sf.col("exception.stacktrace.file").alias("exception_stacktrace_file"),
                     ),
                     [
                         Row(
@@ -190,7 +190,9 @@ class LoggerTestsMixin:
                             msg="Test logging structure.",
                             exception_class=None,
                             exception_msg=None,
-                            exception_stacktrace_is_not_empty=None,
+                            exception_stacktrace_class=None,
+                            exception_stacktrace_method=None,
+                            exception_stacktrace_file=None,
                         ),
                         Row(
                             ts_is_not_null=True,
@@ -198,7 +200,9 @@ class LoggerTestsMixin:
                             msg="Exception occurred.",
                             exception_class="ZeroDivisionError",
                             exception_msg="division by zero",
-                            exception_stacktrace_is_not_empty=True,
+                            exception_stacktrace_class=[None],
+                            exception_stacktrace_method=["test_apply_schema"],
+                            exception_stacktrace_file=[__file__],
                         ),
                     ],
                 )
