@@ -48,6 +48,8 @@ class JSONFormatter(logging.Formatter):
     - kwargs: Any additional keyword arguments passed to the logger.
     """
 
+    default_msec_format = "%s.%03d"
+
     def format(self, record: logging.LogRecord) -> str:
         """
         Format the specified record as a JSON string.

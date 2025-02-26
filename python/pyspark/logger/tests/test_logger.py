@@ -18,9 +18,12 @@
 import logging
 import unittest
 import json
+import tempfile
 from io import StringIO
 from pyspark.errors import ArithmeticException
-from pyspark.logger.logger import PySparkLogger
+from pyspark.logger.logger import PySparkLogger, SPARK_LOG_SCHEMA
+from pyspark.sql import Row, functions as sf
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -152,6 +155,55 @@ class LoggerTestsMixin:
             self.assertTrue("method" in frame)
             self.assertTrue("file" in frame)
             self.assertTrue("line" in frame)
+
+    def test_apply_schema(self):
+        with tempfile.TemporaryDirectory(prefix="test_apply_schema") as d:
+            logfile = f"{d}/log"
+            handler = logging.FileHandler(logfile)
+            try:
+                self.logger.addHandler(handler)
+
+                self.logger.info("Test logging structure.")
+                try:
+                    1 / 0
+                except ZeroDivisionError:
+                    self.logger.exception("Exception occurred.")
+
+                assertDataFrameEqual(
+                    self.spark.read.format("json")
+                    .schema(SPARK_LOG_SCHEMA)
+                    .load(logfile)
+                    .select(
+                        sf.col("ts").isNotNull().alias("ts_is_not_null"),
+                        "level",
+                        "msg",
+                        sf.col("exception.class").alias("exception_class"),
+                        sf.col("exception.msg").alias("exception_msg"),
+                        (sf.size(sf.col("exception.stacktrace")) > 0).alias(
+                            "exception_stacktrace_is_not_empty"
+                        ),
+                    ),
+                    [
+                        Row(
+                            ts_is_not_null=True,
+                            level="INFO",
+                            msg="Test logging structure.",
+                            exception_class=None,
+                            exception_msg=None,
+                            exception_stacktrace_is_not_empty=None,
+                        ),
+                        Row(
+                            ts_is_not_null=True,
+                            level="ERROR",
+                            msg="Exception occurred.",
+                            exception_class="ZeroDivisionError",
+                            exception_msg="division by zero",
+                            exception_stacktrace_is_not_empty=True,
+                        ),
+                    ],
+                )
+            finally:
+                self.logger.removeHandler(handler)
 
 
 class LoggerTests(LoggerTestsMixin, ReusedSQLTestCase):
