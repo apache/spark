@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.time.{ZoneId, ZoneOffset}
+import java.util.Date
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -27,7 +28,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.lang3.StringUtils
-import org.json4s.JsonAST.{JArray, JBool, JDouble, JInt, JNull, JObject, JString, JValue}
+import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JInt, JLong, JNull, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
@@ -60,40 +61,63 @@ trait MetadataMapSupport {
     jsonToString(toJsonLinkedHashMap)
   }
 
+  /**
+   * Some fields from JsonLinkedHashMap are reformatted for human readability in `describe table`.
+   * If a field does not require special re-formatting, it is simply handled by `jsonToString`.
+   */
+  private def jsonToStringReformat(key: String, jValue: JValue): Option[(String, String)] = {
+    val reformattedValue: Option[String] = key match {
+      case "Statistics" =>
+        jValue match {
+          case JObject(fields) =>
+            Some(fields.flatMap {
+              case ("size_in_bytes", JDecimal(bytes)) => Some(s"$bytes bytes")
+              case ("num_rows", JDecimal(rows)) => Some(s"$rows rows")
+              case _ => None
+            }.mkString(", "))
+          case _ => Some(jValue.values.toString)
+        }
+      case "Created Time" | "Last Access" =>
+        jValue match {
+          case JLong(value) => Some(new Date(value).toString)
+          case _ => Some(jValue.values.toString)
+        }
+      case _ => None
+    }
+    reformattedValue.map(value => key -> value)
+  }
+
   protected def jsonToString(
       jsonMap: mutable.LinkedHashMap[String, JValue]): mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
     jsonMap.foreach { case (key, jValue) =>
-      val stringValue = jValue match {
-        case JString(value) => value
-        case JArray(values) =>
-          values.map(_.values)
-            .map {
-              case str: String => quoteIdentifier(str)
-              case other => other.toString
-            }
-            .mkString("[", ", ", "]")
-        case JObject(fields) =>
-          fields.map { case (k, v) =>
-            s"$k=${v.values.toString}"
+      jsonToStringReformat(key, jValue) match {
+        case Some((formattedKey, formattedValue)) =>
+          map.put(formattedKey, formattedValue)
+        case None =>
+          val stringValue = jValue match {
+            case JString(value) => value
+            case JArray(values) =>
+              values.map(_.values)
+                .map {
+                  case str: String => quoteIdentifier(str)
+                  case other => other.toString
+                }
+                .mkString("[", ", ", "]")
+            case JObject(fields) =>
+              fields.map { case (k, v) =>
+                s"$k=${v.values.toString}"
+              }.mkString("[", ", ", "]")
+            case JInt(value) => value.toString
+            case JDouble(value) => value.toString
+            case JLong(value) => value.toString
+            case _ => jValue.values.toString
           }
-            .mkString("[", ", ", "]")
-        case JInt(value) => value.toString
-        case JDouble(value) => value.toString
-        case _ => jValue.values.toString
+          map.put(key, stringValue)
       }
-      map.put(key, stringValue)
     }
     map
   }
-
-  val timestampFormatter = new Iso8601TimestampFormatter(
-    pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
-    zoneId = ZoneId.of("UTC"),
-    locale = DateFormatter.defaultLocale,
-    legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
-    isParsing = true
-  )
 }
 
 
@@ -191,12 +215,10 @@ case class CatalogTablePartition(
       map += ("Partition Parameters" -> paramsJson)
     }
 
-    map += ("Created Time" -> JString(
-      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime))))
+    map += ("Created Time" -> JLong(createTime))
 
     val lastAccess = if (lastAccessTime <= 0) JString("UNKNOWN")
-    else JString(
-      timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
+    else JLong(lastAccessTime)
     map += ("Last Access" -> lastAccess)
 
     stats.foreach(s => map += ("Partition Statistics" -> JString(s.simpleString)))
@@ -605,7 +627,7 @@ case class CatalogTable(
 
     val lastAccess: JValue =
       if (lastAccessTime <= 0) JString("UNKNOWN")
-      else JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
+      else JLong(lastAccessTime)
 
     val viewQueryOutputColumns: JValue =
       if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
@@ -617,8 +639,7 @@ case class CatalogTable(
     if (identifier.database.isDefined) map += "Database" -> JString(identifier.database.get)
     map += "Table" -> JString(identifier.table)
     if (Option(owner).exists(_.nonEmpty)) map += "Owner" -> JString(owner)
-    map += "Created Time" ->
-      JString(timestampFormatter.format(DateTimeUtils.millisToMicros(createTime)))
+    map += "Created Time" -> JLong(createTime)
     if (lastAccess != JNull) map += "Last Access" -> lastAccess
     map += "Created By" -> JString(s"Spark $createVersion")
     map += "Type" -> JString(tableType.name)
@@ -645,7 +666,9 @@ case class CatalogTable(
       map += "View Query Output Columns" -> viewQueryOutputColumns
     }
     if (tableProperties != JNull) map += "Table Properties" -> tableProperties
-    if (stats.isDefined) map += "Statistics" -> JString(stats.get.simpleString)
+    stats.foreach { s =>
+      map += "Statistics" -> JObject(s.jsonString.toList)
+    }
     map ++= storage.toJsonLinkedHashMap.map { case (k, v) => k -> v }
     if (tracksPartitionsInCatalog) map += "Partition Provider" -> JString("Catalog")
     if (partitionColumns != JNull) map += "Partition Columns" -> partitionColumns
@@ -813,6 +836,14 @@ case class CatalogStatistics(
   def simpleString: String = {
     val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
     s"$sizeInBytes bytes$rowCountString"
+  }
+
+  def jsonString: Map[String, JValue] = {
+    val rowCountInt: BigInt = rowCount.getOrElse(0L)
+    Map(
+      "size_in_bytes" -> JDecimal(BigDecimal(sizeInBytes)),
+      "num_rows" -> JDecimal(BigDecimal(rowCountInt))
+    )
   }
 }
 

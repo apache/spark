@@ -28,81 +28,37 @@ option go_package = "internal/generated";
 // MlParams stores param settings for ML Estimator / Transformer / Evaluator
 message MlParams {
   // User-supplied params
-  map<string, Param> params = 1;
-}
-
-// Represents the parameter type of the ML instance, or the returned value
-// of the attribute
-message Param {
-  oneof param_type {
-    Expression.Literal literal = 1;
-    Vector vector = 2;
-    Matrix matrix = 3;
-  }
+  map<string, Expression.Literal> params = 1;
 }
 
 // MLOperator represents the ML operators like (Estimator, Transformer or Evaluator)
 message MlOperator {
-  // The qualified name of the ML operator.
+  // (Required) The qualified name of the ML operator.
   string name = 1;
-  // Unique id of the ML operator
+
+  // (Required) Unique id of the ML operator
   string uid = 2;
-  // Represents what the ML operator is
+
+  // (Required) Represents what the ML operator is
   OperatorType type = 3;
+
   enum OperatorType {
-    UNSPECIFIED = 0;
-    ESTIMATOR = 1;
-    TRANSFORMER = 2;
-    EVALUATOR = 3;
-    MODEL = 4;
+    OPERATOR_TYPE_UNSPECIFIED = 0;
+    // ML estimator
+    OPERATOR_TYPE_ESTIMATOR = 1;
+    // ML transformer (non-model)
+    OPERATOR_TYPE_TRANSFORMER = 2;
+    // ML evaluator
+    OPERATOR_TYPE_EVALUATOR = 3;
+    // ML model
+    OPERATOR_TYPE_MODEL = 4;
   }
 }
 
 // Represents a reference to the cached object which could be a model
 // or summary evaluated by a model
 message ObjectRef {
-  // The ID is used to lookup the object on the server side.
+  // (Required) The ID is used to lookup the object on the server side.
+  // Note it is different from the 'uid' of a ML object.
   string id = 1;
-}
-
-// See pyspark.ml.linalg.Vector
-message Vector {
-  oneof vector_type {
-    Dense dense = 1;
-    Sparse sparse = 2;
-  }
-  // See pyspark.ml.linalg.DenseVector
-  message Dense {
-    repeated double value = 1;
-  }
-  // See pyspark.ml.linalg.SparseVector
-  message Sparse {
-    int32 size = 1;
-    repeated int32 index = 2;
-    repeated double value = 3;
-  }
-}
-
-// See pyspark.ml.linalg.Matrix
-message Matrix {
-  oneof matrix_type {
-    Dense dense = 1;
-    Sparse sparse = 2;
-  }
-  // See pyspark.ml.linalg.DenseMatrix
-  message Dense {
-    int32 num_rows = 1;
-    int32 num_cols = 2;
-    repeated double value = 3;
-    bool is_transposed = 4;
-  }
-  // See pyspark.ml.linalg.SparseMatrix
-  message Sparse {
-    int32 num_rows = 1;
-    int32 num_cols = 2;
-    repeated int32 colptr = 3;
-    repeated int32 row_index = 4;
-    repeated double value = 5;
-    bool is_transposed = 6;
-  }
 }

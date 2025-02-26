@@ -4643,6 +4643,18 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0Q": {
+        "description": "Invalid handler declaration.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0R": {
+        "description": "Invalid condition declaration.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",

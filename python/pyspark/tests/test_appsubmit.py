@@ -23,7 +23,7 @@ import tempfile
 import unittest
 import zipfile
 
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
 
 
 class SparkSubmitTests(unittest.TestCase):

@@ -29,6 +29,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
@@ -1460,6 +1461,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
     sc.stop()
   }
+
+  test("SPARK-51095: Test caller context initialization") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    sc = new SparkContext(conf)
+    val hadoopCallerContext = HadoopCallerContext.getCurrent()
+    assert(hadoopCallerContext.getContext().startsWith("SPARK_DRIVER"))
+    sc.stop()
+  }
+
 }
 
 object SparkContextSuite {

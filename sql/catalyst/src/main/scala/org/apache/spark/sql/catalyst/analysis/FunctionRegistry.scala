@@ -613,6 +613,7 @@ object FunctionRegistry {
     expression[MakeValidUTF8]("make_valid_utf8"),
     expression[ValidateUTF8]("validate_utf8"),
     expression[TryValidateUTF8]("try_validate_utf8"),
+    expression[Quote]("quote"),
 
     // url functions
     expression[UrlEncode]("url_encode"),
@@ -905,7 +906,7 @@ object FunctionRegistry {
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 
-  private def registerInternalExpression[T <: Expression : ClassTag](
+  private[spark] def registerInternalExpression[T <: Expression : ClassTag](
       name: String,
       setAlias: Boolean = false): Unit = {
     val (info, builder) = FunctionRegistryBase.build[T](name, None)

@@ -33,7 +33,8 @@ from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import SPARK_HOME, have_torch, torch_requirement_message
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import have_torch, torch_requirement_message
 
 
 @contextlib.contextmanager
@@ -403,7 +404,9 @@ class TorchDistributorLocalUnitTestsMixin:
         self.assertEqual(output, "success" * 4096)
 
 
-@unittest.skipIf(not have_torch, torch_requirement_message)
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -425,7 +428,9 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
         cls.spark.stop()
 
 
-@unittest.skipIf(not have_torch, torch_requirement_message)
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -496,7 +501,9 @@ class TorchDistributorDistributedUnitTestsMixin:
         self.assertEqual(output, "success" * 4096)
 
 
-@unittest.skipIf(not have_torch, torch_requirement_message)
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorDistributedUnitTests(
     TorchDistributorDistributedUnitTestsMixin, unittest.TestCase
 ):

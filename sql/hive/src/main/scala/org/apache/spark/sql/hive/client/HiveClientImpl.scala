@@ -49,6 +49,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkThrowable}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionsAlreadyExistException}
@@ -584,7 +585,6 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
-    verifyColumnDataType(table.dataSchema)
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
@@ -604,7 +604,6 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
-    verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
@@ -628,7 +627,6 @@ private[hive] class HiveClientImpl(
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = shim.getTable(client, dbName, tableName)
-    verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
@@ -861,8 +859,10 @@ private[hive] class HiveClientImpl(
 
   /**
    * Runs the specified SQL query using Hive.
+   * This should be used only in testing environment.
    */
   override def runSqlHive(sql: String): Seq[String] = {
+    assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
     val maxResults = 100000
     val results = runHive(sql, maxResults)
     // It is very confusing when you only get back some of the results...
@@ -1132,10 +1132,6 @@ private[hive] object HiveClientImpl extends Logging {
       dataType = columnType,
       nullable = true)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
-  }
-
-  private def verifyColumnDataType(schema: StructType): Unit = {
-    schema.foreach(col => getSparkSQLDataType(toHiveColumn(col)))
   }
 
   private def toInputFormat(name: String) =
