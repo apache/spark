@@ -2780,18 +2780,16 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-51312: createDataFrame should work with both Date and LocalDate") {
-    val testCases = Seq(
-      ("true", Array(Row(java.time.LocalDate.of(2020, 5, 13)),
-        Row(java.time.LocalDate.of(2020, 5, 13)))),
-      ("false", Array(Row(java.sql.Date.valueOf("2020-05-13")),
-        Row(java.sql.Date.valueOf("2020-05-13"))))
-    )
-    for ((confVal, expected) <- testCases) {
+    for (confVal <- Seq("true", "false")) {
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> confVal) {
-        val schema = new org.apache.spark.sql.types.StructType().add("a", "date")
-        val rdd = spark.sparkContext.parallelize(Row(java.time.LocalDate.of(2020, 5, 13)) ::
-          Row(java.sql.Date.valueOf("2020-05-13")) :: Nil)
-        assert(spark.createDataFrame(rdd, schema).collect() sameElements expected)
+        val schema = new org.apache.spark.sql.types.StructType().add("a", "date").add("b", "date")
+        val rdd = spark.sparkContext.parallelize(
+          Seq(Row(java.time.LocalDate.of(2020, 5, 13), java.sql.Date.valueOf("2020-05-13")))
+        )
+        checkAnswer(
+          spark.createDataFrame(rdd, schema),
+          sql("select date'2020-05-13' as a, date'2020-05-13' as b")
+        )
       }
     }
   }
