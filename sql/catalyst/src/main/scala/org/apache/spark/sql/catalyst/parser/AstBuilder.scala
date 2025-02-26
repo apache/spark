@@ -310,7 +310,7 @@ class AstBuilder extends DataTypeAstBuilder
     SignalStatement(
       isBuiltinError = false,
       errorCondition = errorCondition,
-          tate = None,
+      sqlState = None,
       message = messageVariable.getOrElse(messageString.getOrElse(Left(""))),
       messageArguments = messageArguments
     )
