@@ -205,7 +205,7 @@ class MapInArrowWithArrowBatchSlicingTestsAndReducedBatchSizeTests(MapInArrowTes
         MapInArrowTests.setUpClass()
         # Set it to a small odd value to exercise batching logic for all test cases
         cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
-        cls.spark.conf.set("spark.sql.execution.arrow.maxBytesPerBatch", "1000")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxBytesPerBatch", "10")
 
 
 if __name__ == "__main__":
