@@ -1509,6 +1509,27 @@ class Expression(google.protobuf.message.Message):
 
 global___Expression = Expression
 
+class ExpressionSet(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EXPRESSIONS_FIELD_NUMBER: builtins.int
+    @property
+    def expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Expression
+    ]: ...
+    def __init__(
+        self,
+        *,
+        expressions: collections.abc.Iterable[global___Expression] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["expressions", b"expressions"]
+    ) -> None: ...
+
+global___ExpressionSet = ExpressionSet
+
 class ExpressionCommon(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

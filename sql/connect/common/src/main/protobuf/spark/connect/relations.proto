@@ -80,6 +80,7 @@ message Relation {
     Transpose transpose = 42;
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
+    CoGroupMapV2 co_group_map_v2 = 45;
 
     // NA functions
     NAFill fill_na = 90;
@@ -1034,6 +1035,8 @@ message GroupMap {
 }
 
 message CoGroupMap {
+  option deprecated = true;
+
   // (Required) One input relation for CoGroup Map API - applyInPandas.
   Relation input = 1;
 
@@ -1054,6 +1057,20 @@ message CoGroupMap {
 
   // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
   repeated Expression other_sorting_expressions = 7;
+}
+
+message CoGroupMapV2 {
+  // (Required) Input relations for cogroup, cogroupSorted, applyInPandas, and applyInArrow.
+  repeated Relation relations = 1;
+
+  // Expressions sets for grouping keys of the input relations.
+  repeated ExpressionSet grouping_expression_sets = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Optional) Expressions sets for sorting (cogroupSorted).
+  repeated ExpressionSet sorting_expression_sets = 4;
 }
 
 message ApplyInPandasWithState {

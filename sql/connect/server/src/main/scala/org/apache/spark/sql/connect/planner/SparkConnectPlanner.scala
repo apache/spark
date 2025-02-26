@@ -210,6 +210,8 @@ class SparkConnectPlanner(
           transformGroupMap(rel.getGroupMap)
         case proto.Relation.RelTypeCase.CO_GROUP_MAP =>
           transformCoGroupMap(rel.getCoGroupMap)
+        case proto.Relation.RelTypeCase.CO_GROUP_MAP_V2 =>
+          transformCoGroupMapV2(rel.getCoGroupMapV2)
         case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
           transformApplyInPandasWithState(rel.getApplyInPandasWithState)
         case proto.Relation.RelTypeCase.COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION =>
@@ -825,24 +827,55 @@ class SparkConnectPlanner(
       rel.getOther,
       rel.getOtherGroupingExpressionsList,
       rel.getOtherSortingExpressionsList)
-
+    val function =
+      udf.function.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any]]
     val mapped = CoGroup(
-      udf.function.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any]],
+      (k, vs) => function(k, vs(0), vs(1)),
       // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
       // resolve the `keyDeserializer` based on either of them, here we pick the left one.
       udf.inputDeserializer(left.groupingAttributes),
-      left.valueDeserializer,
-      right.valueDeserializer,
-      left.groupingAttributes,
-      right.groupingAttributes,
-      left.dataAttributes,
-      right.dataAttributes,
-      left.sortOrder,
-      right.sortOrder,
+      Seq(left.valueDeserializer, right.valueDeserializer),
+      Seq(left.groupingAttributes, right.groupingAttributes),
+      Seq(left.dataAttributes, right.dataAttributes),
+      Seq(left.sortOrder, right.sortOrder),
       udf.outputObjAttr,
-      left.analyzed,
-      right.analyzed)
+      Seq(left.analyzed, right.analyzed))
     SerializeFromObject(udf.outputNamedExpression, mapped)
+  }
+
+  private def transformCoGroupMapV2(rel: proto.CoGroupMapV2): LogicalPlan = {
+    rel.getFunc.getFunctionCase match {
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+        val relations = rel.getRelationsList.asScala.toSeq
+        val groupingExpressionSets = rel.getGroupingExpressionSetsList.asScala.toSeq
+        val udf = TypedScalaUdf(rel.getFunc)
+        val sortingExpressionSets = rel.getSortingExpressionSetsList.asScala.toSeq
+
+        val children = relations.zip(groupingExpressionSets).zip(sortingExpressionSets).map {
+          case ((relation, groupingExpressions), sortingExpressions) =>
+            UntypedKeyValueGroupedDataset(
+              relation,
+              groupingExpressions.getExpressionsList,
+              sortingExpressions.getExpressionsList)
+        }
+
+        val cogroup = CoGroup(
+          udf.function.asInstanceOf[(Any, Seq[Iterator[Any]]) => IterableOnce[Any]],
+          // The children groupingAttributes are guaranteed te be of same schema, so it's safe to
+          // resolve the `keyDeserializer` based on any of them, here we pick the head.
+          udf.inputDeserializer(children.head.groupingAttributes),
+          children.map(_.valueDeserializer),
+          children.map(_.groupingAttributes),
+          children.map(_.dataAttributes),
+          children.map(_.sortOrder),
+          udf.outputObjAttr,
+          children.map(_.analyzed))
+        SerializeFromObject(udf.outputNamedExpression, cogroup)
+
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${rel.getFunc.getFunctionCase.getNumber} is not supported")
+    }
   }
 
   /**

@@ -366,6 +366,10 @@ message Expression {
   }
 }
 
+message ExpressionSet {
+  repeated Expression expressions = 1;
+}
+
 message ExpressionCommon {
   // (Required) Keep the information of the origin for this expression such as stacktrace.
   Origin origin = 1;
