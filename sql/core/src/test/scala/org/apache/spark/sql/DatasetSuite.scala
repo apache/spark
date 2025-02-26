@@ -2815,7 +2815,7 @@ class DatasetSuite extends QueryTest
     within SerializerBuildHelper and DeserializerBuildHelper will trigger MatchErrors
      */
     val ds1 = Seq(1, 1, 2).toDS()
-    val ds2 = SparkSession.active.createDataset[ClassData](Seq(ClassData("a", 1),
+    val ds2 = spark.createDataset[ClassData](Seq(ClassData("a", 1),
       ClassData("b", 2)))(CustomPathEncoder.custClassDataEnc)
 
     checkAnswer(
@@ -2862,69 +2862,53 @@ class DatasetSuite extends QueryTest
   }
 
   // below tests are related to SPARK-49960 and TransformingEncoder usage
-  test("Incorrect derived nullability with TransformingEncoder - non nullable") {
-    val sparkI = spark
-    type T = Tuple2[Seq[Seq[Int]], Seq[Int]]
-    val data: Seq[T] = Seq( ( Seq( Seq(1, 2, 3) ), Seq(1, 2, 3) ) )
-    // for reference only
-    val sparkDataTypeOG = {
-      import sparkI.implicits._
-      val ds = spark.createDataset[Tuple2[Seq[Seq[Int]], Seq[Int]]](data)
-      ds.schema
-    }
+  test("""Encoder with OptionEncoder of transformation""".stripMargin) {
+    type T = Option[V[V[Int]]]
+    val data: Seq[T] = Seq(None, Some(V(V(1))))
 
-    val provider = () =>
-      new Codec[Seq[Int], Seq[Int]]{
-        override def encode(in: Seq[Int]): Seq[Int] = in
-        override def decode(out: Seq[Int]): Seq[Int] = out
-      }
-
-    val transformingSeq =
-      TransformingEncoder[Seq[Int], Seq[Int]](
-        implicitly[ClassTag[Seq[Int]]],
-        IterableEncoder[Seq[Int], Int](implicitly[ClassTag[Seq[Int]]],
-          PrimitiveIntEncoder, false, false),
-        provider
-      )
-
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
     val enc =
-      ProductEncoder(
-        implicitly[ClassTag[T]],
-        Seq(
-          EncoderField("_1",
-            IterableEncoder[Seq[Seq[Int]], Seq[Int]](implicitly[ClassTag[Seq[Seq[Int]]]],
-              transformingSeq, false, false), false, Metadata.empty),
-          EncoderField( "_2", transformingSeq, false, Metadata.empty)
-        ),
-        None
+      OptionEncoder(
+        transforming(
+          V_OF_INT,
+          true
+        )
       )
+
     val sparkViaAgnostic = {
       val ds = spark.createDataset(data)(enc)
       ds.schema
     }
-    // the nullability without TransformingEncoder nullability (SerializerBuilderHelper)
-    // is incorrect (_2 is inferred as nullable)
-    assert(enc.dataType === sparkViaAgnostic)
+
+    /* The schema has been changed to just the Product V[Int], the wrapping Option value
+        struct has been removed - it should not have been */
+    assert(sparkViaAgnostic === enc.schema)
+
+    val ds = spark.createDataset(data)(enc)
+    assert(ds.collect().toVector === data.toVector)
   }
 
   def provider[A]: () => Codec[V[A], A] = () =>
     new Codec[V[A], A]{
       override def encode(in: V[A]): A = in.v
-      override def decode(out: A): V[A] = V(out)
+      override def decode(out: A): V[A] = if (out == null) null else V(out)
     }
 
-  def transforming[A](underlying: AgnosticEncoder[A]): TransformingEncoder[V[A], A] =
+  def transforming[A](underlying: AgnosticEncoder[A],
+                      useUnderyling: Boolean = false): TransformingEncoder[V[A], A] =
     TransformingEncoder[V[A], A](
       implicitly[ClassTag[V[A]]],
       underlying,
-      provider
+      provider,
+      if (useUnderyling) {
+        underlying.nullable
+      } else {
+        false
+      }
     )
 
-  val V_INT = StructType(Seq(StructField("v", IntegerType, nullable = false)))
-
-  // "value" usage for single field, a wrapping nullable type is required
-  val OPTION_OF_V_INT = StructType(Seq(StructField("value",
-    V_INT, nullable = true)))
+  val V_INT = StructType(Seq(StructField("v", IntegerType, nullable = true)))
 
   // product encoder for a non-nullable V
   val V_OF_INT =
@@ -2935,15 +2919,8 @@ class DatasetSuite extends QueryTest
     )
 
   test("""Encoder derivation with nested TransformingEncoder of OptionEncoder""".stripMargin) {
-    val sparkI = spark
     type T = V[V[Option[V[Int]]]]
     val data: Seq[T] = Seq(V(V(None)), V(V(Some(V(1)))))
-    // for reference - datatype will introduce nested classes as expected
-    val sparkDataTypeOG = {
-      import sparkI.implicits._
-      val ds = spark.createDataset[V[V[Option[V[Int]]]]](data)
-      ds.schema
-    }
 
     /* attempt to behave as if value class semantics except the last product,
       using a final transforming instead of a product serializes */
@@ -2951,15 +2928,10 @@ class DatasetSuite extends QueryTest
       transforming(
         transforming(
           OptionEncoder(
-            // works
-            // transforming(PrimitiveIntEncoder)
-            // does not work
             V_OF_INT
           )
         )
       )
-
-    assert(enc.schema === OPTION_OF_V_INT)
 
     val sparkViaAgnostic = {
       val ds = spark.createDataset(data)(enc)
@@ -2975,29 +2947,17 @@ class DatasetSuite extends QueryTest
   }
 
   test("""Encoder derivation with TransformingEncoder of OptionEncoder""".stripMargin) {
-    val sparkI = spark
     type T = V[Option[V[Int]]]
     val data: Seq[T] = Seq(V(None), V(Some(V(1))))
-    // for reference - datatype will introduce nested classes as expected
-    val sparkDataTypeOG = {
-      import sparkI.implicits._
-      val ds = spark.createDataset[V[Option[V[Int]]]](data)
-      ds.schema
-    }
 
     /* attempt to behave as if value class semantics except the last product,
       using a final transforming instead of a product serializes */
     val enc =
       transforming(
         OptionEncoder(
-          // works
-          // transforming(PrimitiveIntEncoder)
-          // does not work
           V_OF_INT
         )
       )
-
-    assert(enc.schema === OPTION_OF_V_INT)
 
     val sparkViaAgnostic = {
       val ds = spark.createDataset(data)(enc)
@@ -3025,15 +2985,8 @@ class DatasetSuite extends QueryTest
     )
 
   test("""TransformingEncoder as Iterable""".stripMargin) {
-    val sparkI = spark
     type T = Seq[V[Long]]
     val data: Seq[T] = Seq(Seq(V(0)), Seq(V(1), V(2)))
-    // for reference - datatype will introduce nested classes as expected
-    val sparkDataTypeOG = {
-      import sparkI.implicits._
-      val ds = spark.createDataset[Seq[V[Long]]](data)
-      ds.schema
-    }
 
     /* requires validateAndSerializeElement to test for TransformingEncoder */
     val enc: AgnosticEncoder[T] =
@@ -3057,15 +3010,8 @@ class DatasetSuite extends QueryTest
   }
 
   test("""TransformingEncoder as Map Key/Value""".stripMargin) {
-    val sparkI = spark
     type T = Map[V[Long], V[Long]]
     val data: Seq[T] = Seq(Map(V(0L) -> V(0L)), Map(V(1L) -> V(1L)), Map(V(2L) -> V(2L)))
-    // for reference - datatype will introduce nested classes as expected
-    val sparkDataTypeOG = {
-      import sparkI.implicits._
-      val ds = spark.createDataset[Map[V[Long], V[Long]]](data)
-      ds.schema
-    }
 
     /* requires validateAndSerializeElement to test for TransformingEncoder */
     val enc: AgnosticEncoder[T] =

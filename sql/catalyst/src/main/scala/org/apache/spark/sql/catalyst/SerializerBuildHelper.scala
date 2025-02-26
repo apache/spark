@@ -419,13 +419,13 @@ object SerializerBuildHelper {
       }
       createSerializerForObject(input, serializedFields)
 
-    case TransformingEncoder(_, _, codec) if codec == JavaSerializationCodec =>
+    case TransformingEncoder(_, _, codec, _) if codec == JavaSerializationCodec =>
       EncodeUsingSerializer(input, kryo = false)
 
-    case TransformingEncoder(_, _, codec) if codec == KryoSerializationCodec =>
+    case TransformingEncoder(_, _, codec, _) if codec == KryoSerializationCodec =>
       EncodeUsingSerializer(input, kryo = true)
 
-    case TransformingEncoder(_, encoder, codecProvider) =>
+    case TransformingEncoder(_, encoder, codecProvider, _) =>
       val encoded = Invoke(
         Literal(codecProvider(), ObjectType(classOf[Codec[_, _]])),
         "encode",
@@ -490,7 +490,7 @@ object SerializerBuildHelper {
       nullable: Boolean): Expression => Expression = { input =>
     val expected = enc match {
       case OptionEncoder(_) => lenientExternalDataTypeFor(enc)
-      case TransformingEncoder(_, transformed, _) => lenientExternalDataTypeFor(transformed)
+      case TransformingEncoder(_, transformed, _, _) => lenientExternalDataTypeFor(transformed)
       case _ => enc.dataType
     }
 

@@ -449,20 +449,20 @@ object DeserializerBuildHelper {
       val result = InitializeJavaBean(newInstance, setters.toMap)
       exprs.If(IsNull(path), exprs.Literal.create(null, ObjectType(cls)), result)
 
-    case TransformingEncoder(tag, _, codec) if codec == JavaSerializationCodec =>
+    case TransformingEncoder(tag, _, codec, _) if codec == JavaSerializationCodec =>
       DecodeUsingSerializer(path, tag, kryo = false)
 
-    case TransformingEncoder(tag, _, codec) if codec == KryoSerializationCodec =>
+    case TransformingEncoder(tag, _, codec, _) if codec == KryoSerializationCodec =>
       DecodeUsingSerializer(path, tag, kryo = true)
 
-    case TransformingEncoder(tag, encoder, provider) =>
+    case TransformingEncoder(tag, encoder, provider, nullable) =>
       Invoke(
         Literal.create(provider(), ObjectType(classOf[Codec[_, _]])),
         "decode",
         ObjectType(tag.runtimeClass),
         createDeserializer(encoder, path, walkedTypePath) :: Nil,
-        propagateNull = enc.nullable,
-        returnNullable = enc.nullable
+        propagateNull = nullable,
+        returnNullable = nullable
       )
   }
 
