@@ -36,7 +36,6 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
-from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -1180,6 +1179,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         this function works in overall.
         """
         import pyarrow as pa
+        from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 
         def generate_data_batches(batches):
             """
@@ -1235,6 +1235,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
     def load_stream(self, stream):
         import pyarrow as pa
+        from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 
         def generate_data_batches(batches):
             """
