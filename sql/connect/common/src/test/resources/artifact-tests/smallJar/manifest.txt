@@ -1,0 +1,1 @@
+Main-Class: org.apache.test.jar.HelloWorld
