@@ -369,6 +369,25 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       }
     }
   }
+
+  test("default string producing expressions in view definition - nested in expr tree") {
+    withView(testTable) {
+      sql(
+        s"""
+           |CREATE view $testTable
+           |DEFAULT COLLATION UNICODE AS SELECT
+           |SUBSTRING(current_database(), 1, 1) AS c1,
+           |SUBSTRING(SUBSTRING(current_database(), 1, 2), 1, 1) AS c2,
+           |SUBSTRING(current_database()::STRING, 1, 1) AS c3,
+           |SUBSTRING(CAST(current_database() AS STRING COLLATE UTF8_BINARY), 1, 1) AS c4
+           |""".stripMargin)
+
+      assertTableColumnCollation(testTable, "c1", "UNICODE")
+      assertTableColumnCollation(testTable, "c2", "UNICODE")
+      assertTableColumnCollation(testTable, "c3", "UNICODE")
+      assertTableColumnCollation(testTable, "c4", "UTF8_BINARY")
+    }
+  }
 }
 
 class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with DatasourceV2SQLBase {

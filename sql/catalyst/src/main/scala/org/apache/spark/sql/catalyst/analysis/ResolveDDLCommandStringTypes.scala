@@ -28,7 +28,6 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * collation from the corresponding object (table/view -> schema -> catalog).
  */
 object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
-
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (isDDLCommand(plan)) {
       transformDDL(plan)
@@ -130,20 +129,21 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
   private def castDefaultStringExpressions(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     if (newType == StringType) return plan
 
-    plan.mapChildren { operator =>
-      operator.mapExpressions { expression =>
-        expression.mapChildren {
-          // Skip if we already added a cast in the previous pass.
-          case cast @ Cast(_: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
-            cast
+    def inner(ex: Expression): Expression = ex match {
+      // Skip if we already added a cast in the previous pass.
+      case cast @ Cast(e: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
+        cast.copy(child = e.withNewChildren(e.children.map(inner)))
 
-          case e: DefaultStringProducingExpression =>
-            Cast(e, replaceDefaultStringType(e.dataType, newType))
+      // Add cast on top of [[DefaultStringProducingExpression]].
+      case e: DefaultStringProducingExpression =>
+        Cast(e.withNewChildren(e.children.map(inner)), newType)
 
-          case other =>
-            other
-        }
-      }
+      case other =>
+        other.withNewChildren(other.children.map(inner))
+    }
+
+    plan resolveOperators { operator =>
+      operator.mapExpressions(inner)
     }
   }
 
