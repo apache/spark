@@ -312,6 +312,70 @@ class EqualTo(Filter):
     value: Any
 
 
+@dataclass(frozen=True)
+class EqualNullSafe(Filter):
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class GreaterThan(Filter):
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class GreaterThanOrEqual(Filter):
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class LessThan(Filter):
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class LessThanOrEqual(Filter):
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class In(Filter):
+    attribute: ColumnPath
+    value: Tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class IsNull(Filter):
+    attribute: ColumnPath
+
+
+@dataclass(frozen=True)
+class IsNotNull(Filter):
+    attribute: ColumnPath
+
+
+@dataclass(frozen=True)
+class StringStartsWith(Filter):
+    attribute: ColumnPath
+    value: str
+
+
+@dataclass(frozen=True)
+class StringEndsWith(Filter):
+    attribute: ColumnPath
+    value: str
+
+
+@dataclass(frozen=True)
+class StringContains(Filter):
+    attribute: ColumnPath
+    value: str
+
+
 class InputPartition:
     """
     A base class representing an input partition returned by the `partitions()`

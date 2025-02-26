@@ -236,7 +236,9 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
          |        return [InputPartition(i) for i in range(2)]
          |
          |    def pushFilters(self, filters):
-         |        yield filters[filters.index(EqualTo(("id",), 1))]
+         |        for filter in filters:
+         |            if filter != EqualTo(("partition",), 0):
+         |                yield filter
          |
          |    def read(self, partition):
          |        yield (0, partition.value)
