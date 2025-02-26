@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS

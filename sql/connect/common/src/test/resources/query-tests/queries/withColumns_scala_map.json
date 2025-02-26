@@ -15,6 +15,23 @@
       "expr": {
         "literal": {
           "string": "redacted"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.functions$",
+                "methodName": "lit",
+                "fileName": "functions.scala"
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "~~trimmed~anonfun~~",
+                "fileName": "PlanGenerationTestSuite.scala"
+              }]
+            }
+          }
         }
       },
       "name": ["b"]
@@ -22,6 +39,23 @@
       "expr": {
         "expressionString": {
           "expression": "a + 100"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.functions$",
+                "methodName": "expr",
+                "fileName": "functions.scala"
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                "methodName": "~~trimmed~anonfun~~",
+                "fileName": "PlanGenerationTestSuite.scala"
+              }]
+            }
+          }
         }
       },
       "name": ["z"]

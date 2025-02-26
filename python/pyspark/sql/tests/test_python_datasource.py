@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import platform
 import tempfile
 import unittest
 from typing import Callable, Union
@@ -36,8 +37,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.testing.sqlutils import ReusedSQLTestCase, SPARK_HOME
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -508,6 +508,129 @@ class BasePythonDataSourceTestsMixin:
             r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceWriter",
         ):
             df.write.format("test").mode("append").saveAsTable("test_table")
+
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
+    def test_data_source_segfault(self):
+        import ctypes
+
+        for enabled, expected in [
+            (True, "Segmentation fault"),
+            (False, "Consider setting .* for the better Python traceback."),
+        ]:
+            with self.subTest(enabled=enabled), self.sql_conf(
+                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            ):
+                with self.subTest(worker="pyspark.sql.worker.create_data_source"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return ctypes.string_at(0)
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.sql.worker.plan_data_source_read"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return "x string"
+
+                        def reader(self, schema):
+                            return TestReader()
+
+                    class TestReader(DataSourceReader):
+                        def partitions(self):
+                            ctypes.string_at(0)
+                            return []
+
+                        def read(self, partition):
+                            return []
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.worker"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return "x string"
+
+                        def reader(self, schema):
+                            return TestReader()
+
+                    class TestReader(DataSourceReader):
+                        def read(self, partition):
+                            ctypes.string_at(0)
+                            yield "x",
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.sql.worker.write_into_data_source"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def writer(self, schema, overwrite):
+                            return TestWriter()
+
+                    class TestWriter(DataSourceWriter):
+                        def write(self, iterator):
+                            ctypes.string_at(0)
+                            return WriterCommitMessage()
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
+                            "test_table"
+                        )
+
+                with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def writer(self, schema, overwrite):
+                            return TestWriter()
+
+                    class TestWriter(DataSourceWriter):
+                        def write(self, iterator):
+                            return WriterCommitMessage()
+
+                        def commit(self, messages):
+                            ctypes.string_at(0)
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
+                            "test_table"
+                        )
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

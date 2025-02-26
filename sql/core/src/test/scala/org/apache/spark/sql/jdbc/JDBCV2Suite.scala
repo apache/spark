@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
@@ -396,7 +396,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("pushDownOffset", null)
       .table("h2.test.employee")
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkIllegalArgumentException] {
         df.collect()
       },
       condition = "NULL_DATA_SOURCE_OPTION",
@@ -1922,6 +1922,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkFiltersRemoved(df8)
     checkPushedInfo(df8, "[(CONCAT(NAME, ',', CAST(SALARY AS string))) = 'cathy,9000.00']")
     checkAnswer(df8, Seq(Row(1, "cathy", 9000, 1200, false)))
+
+    val df9 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "lpad(name, 5, '*') = '**amy'")
+    checkPushedInfo(df9, "[NAME IS NOT NULL, (LPAD(NAME, 5, '*')) = '**amy']")
+    checkAnswer(df9, Seq(Row(1, "amy", 10000, 1000, true)))
+
+    val df10 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "rpad(name, 5, '*') = 'jen**'")
+    checkPushedInfo(df10, "[NAME IS NOT NULL, (RPAD(NAME, 5, '*')) = 'jen**']")
+    checkAnswer(df10, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
   test("scan with aggregate push-down: MAX AVG with filter and group by") {
@@ -3097,4 +3107,21 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(rows.contains(Row(null)))
     assert(rows.contains(Row("a a a")))
   }
+
+  test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
+    val tableName = "h2.test.binary_literal"
+    withTable(tableName) {
+      // Create a table with binary column
+      val binary = "X'123456'"
+
+      sql(s"CREATE TABLE $tableName (binary_col BINARY)")
+      sql(s"INSERT INTO $tableName VALUES ($binary)")
+
+      val df = sql(s"SELECT * FROM $tableName WHERE binary_col = $binary")
+      checkFiltersRemoved(df)
+      checkPushedInfo(df, "PushedFilters: [binary_col IS NOT NULL, binary_col = 0x123456]")
+      checkAnswer(df, Row(Array(18, 52, 86)))
+    }
+  }
+
 }

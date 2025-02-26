@@ -21,15 +21,17 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.sql.{sources, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedProjection, JoinedRow, Literal, Predicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.Utils
 
 class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   override def shortName(): String = "test"
@@ -96,8 +98,9 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       // Uses a simple projection to simulate column pruning
       val projection = new InterpretedProjection(outputAttributes, inputAttributes)
 
-      val unsafeRowIterator =
-        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map { line =>
+      val unsafeRowIterator = Utils.createResourceUninterruptiblyIfInTaskThread(
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      ).map { line =>
           val record = line.toString
           new GenericInternalRow(record.split(",", -1).zip(fieldTypes).map {
             case (v, dataType) =>

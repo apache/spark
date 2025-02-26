@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.errors.ExecutionErrors
@@ -99,5 +97,4 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     )
   }
 
-  private def clsName[T : ClassTag]: String = implicitly[ClassTag[T]].runtimeClass.getName
 }

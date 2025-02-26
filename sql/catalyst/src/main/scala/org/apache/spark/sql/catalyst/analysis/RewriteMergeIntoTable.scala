@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Instruction, Keep, ROW_ID, Split}
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.OPERATION_COLUMN
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{OPERATION_COLUMN, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
@@ -180,7 +180,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    ReplaceData(writeRelation, pushableCond, mergeRowsPlan, relation, groupFilterCond)
+    val projections = buildReplaceDataProjections(mergeRowsPlan, relation.output, metadataAttrs)
+    ReplaceData(writeRelation, pushableCond, mergeRowsPlan, relation, projections, groupFilterCond)
   }
 
   private def buildReplaceDataMergeRowsPlan(
@@ -197,7 +198,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // that's why an extra unconditional instruction that would produce the original row is added
     // as the last MATCHED and NOT MATCHED BY SOURCE instruction
     // this logic is specific to data sources that replace groups of data
-    val keepCarryoverRowsInstruction = Keep(TrueLiteral, targetTable.output)
+    val carryoverRowsOutput = Literal(WRITE_WITH_METADATA_OPERATION) +: targetTable.output
+    val keepCarryoverRowsInstruction = Keep(TrueLiteral, carryoverRowsOutput)
 
     val matchedInstructions = matchedActions.map { action =>
       toInstruction(action, metadataAttrs)
@@ -218,7 +220,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       notMatchedInstructions.flatMap(_.outputs) ++
       notMatchedBySourceInstructions.flatMap(_.outputs)
 
-    val attrs = targetTable.output
+    val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
+    val attrs = operationTypeAttr +: targetTable.output
 
     MergeRows(
       isSourceRowPresent = IsNotNull(rowFromSourceAttr),
@@ -430,15 +433,18 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   private def toInstruction(action: MergeAction, metadataAttrs: Seq[Attribute]): Instruction = {
     action match {
       case UpdateAction(cond, assignments) =>
-        val output = assignments.map(_.value) ++ metadataAttrs
+        val rowValues = assignments.map(_.value)
+        val metadataValues = nullifyMetadataOnUpdate(metadataAttrs)
+        val output = Seq(Literal(WRITE_WITH_METADATA_OPERATION)) ++ rowValues ++ metadataValues
         Keep(cond.getOrElse(TrueLiteral), output)
 
       case DeleteAction(cond) =>
         Discard(cond.getOrElse(TrueLiteral))
 
       case InsertAction(cond, assignments) =>
+        val rowValues = assignments.map(_.value)
         val metadataValues = metadataAttrs.map(attr => Literal(null, attr.dataType))
-        val output = assignments.map(_.value) ++ metadataValues
+        val output = Seq(Literal(WRITE_OPERATION)) ++ rowValues ++ metadataValues
         Keep(cond.getOrElse(TrueLiteral), output)
 
       case other =>
@@ -460,7 +466,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     action match {
       case UpdateAction(cond, assignments) if splitUpdates =>
         val output = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues)
-        val otherOutput = deltaInsertOutput(assignments, metadataAttrs, originalRowIdValues)
+        val otherOutput = deltaReinsertOutput(assignments, metadataAttrs, originalRowIdValues)
         Split(cond.getOrElse(TrueLiteral), output, otherOutput)
 
       case UpdateAction(cond, assignments) =>

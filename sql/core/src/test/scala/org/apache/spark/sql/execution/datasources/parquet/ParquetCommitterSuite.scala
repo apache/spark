@@ -24,7 +24,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.ExtendedSQLTest

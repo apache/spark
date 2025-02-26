@@ -27,9 +27,7 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.streaming.StreamingQuery
-import org.apache.spark.sql.streaming.StreamingQueryManager
+import org.apache.spark.sql.classic.{SparkSession, StreamingQuery, StreamingQueryManager}
 import org.apache.spark.util.ManualClock
 
 class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSugar {

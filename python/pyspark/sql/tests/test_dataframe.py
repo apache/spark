@@ -44,12 +44,12 @@ from pyspark.errors import (
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
+    SPARK_HOME,
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import SPARK_HOME
 
 
 class DataFrameTestsMixin:
