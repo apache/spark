@@ -58,8 +58,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
             StringType(defaultCollation)
           }
         } else {
-          // Object level collation is not supported for materialized views (instance of
-          // ResolvedPersistentView) for now.
+          // As a safeguard, use the default collation for unknown cases.
           StringType(defaultCollation)
         }
       case _ => StringType(defaultCollation)
