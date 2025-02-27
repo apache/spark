@@ -1034,6 +1034,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+    if (expr.plan.isStreaming) {
+      plan.failAnalysis("INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY", Map.empty)
+    }
     checkAnalysis0(expr.plan)
     ValidateSubqueryExpression(plan, expr)
   }

@@ -108,10 +108,9 @@ class ArrowEvalPythonEvaluatorFactory(
 
     val outputTypes = output.drop(childOutput.length).map(_.dataType)
 
-    // DO NOT use iter.grouped(). See BatchIterator.
-    val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
+    val batchIter = Iterator(iter)
 
-    val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
+    val pyRunner = new ArrowPythonWithNamedArgumentRunner(
       funcs,
       evalType,
       argMetas,
@@ -121,7 +120,8 @@ class ArrowEvalPythonEvaluatorFactory(
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
-      profiler).compute(batchIter, context.partitionId(), context)
+      profiler) with BatchedPythonArrowInput
+    val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())

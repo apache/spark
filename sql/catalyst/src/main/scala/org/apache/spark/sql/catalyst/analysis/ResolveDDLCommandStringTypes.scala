@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -105,11 +105,13 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
    * new type instead of the default string type.
    */
   private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
-    plan resolveExpressionsUp { expression =>
+    val transformedPlan = plan resolveExpressionsUp { expression =>
       transformExpression
         .andThen(_.apply(newType))
         .applyOrElse(expression, identity[Expression])
     }
+
+    castDefaultStringExpressions(transformedPlan, newType)
   }
 
   /**
@@ -124,6 +126,30 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+  }
+
+  /**
+   * Casts [[DefaultStringProducingExpression]] in the plan to the `newType`.
+   */
+  private def castDefaultStringExpressions(plan: LogicalPlan, newType: StringType): LogicalPlan = {
+    if (newType == StringType) return plan
+
+    def inner(ex: Expression): Expression = ex match {
+      // Skip if we already added a cast in the previous pass.
+      case cast @ Cast(e: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
+        cast.copy(child = e.withNewChildren(e.children.map(inner)))
+
+      // Add cast on top of [[DefaultStringProducingExpression]].
+      case e: DefaultStringProducingExpression =>
+        Cast(e.withNewChildren(e.children.map(inner)), newType)
+
+      case other =>
+        other.withNewChildren(other.children.map(inner))
+    }
+
+    plan resolveOperators { operator =>
+      operator.mapExpressions(inner)
+    }
   }
 
   private def hasDefaultStringType(dataType: DataType): Boolean =
