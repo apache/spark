@@ -87,7 +87,7 @@ Arguments: [ws_order_number#4 ASC NULLS FIRST], false, 0
 (7) Scan parquet spark_catalog.default.web_sales
 Output [3]: [ws_warehouse_sk#14, ws_order_number#15, ws_sold_date_sk#16]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/web_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ws_order_number), IsNotNull(ws_warehouse_sk)]
 ReadSchema: struct<ws_warehouse_sk:int,ws_order_number:int>
 
