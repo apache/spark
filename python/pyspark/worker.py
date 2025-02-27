@@ -160,6 +160,10 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
     import pandas as pd
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+    zero_arg_exec = False
+    if len(args_kwargs_offsets) == 0:
+        args_kwargs_offsets = (0,)  # Series([pyspark._NoValue, ...]) is used for 0-arg execution.
+        zero_arg_exec = True
 
     arrow_return_type = to_arrow_type(
         return_type, prefers_large_types=use_large_var_types(runner_conf)
@@ -176,6 +180,16 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
+    if zero_arg_exec:
+
+        def get_args(*args: pd.Series):
+            return [() for _ in args[0]]
+
+    else:
+
+        def get_args(*args: pd.Series):
+            return zip(*args)
+
     if "spark.sql.execution.pythonUDF.arrow.concurrency.level" in runner_conf:
         from concurrent.futures import ThreadPoolExecutor
 
@@ -184,13 +198,15 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
         @fail_on_stopiteration
         def evaluate(*args: pd.Series) -> pd.Series:
             with ThreadPoolExecutor(max_workers=c) as pool:
-                return pd.Series(list(pool.map(lambda row: result_func(func(*row)), zip(*args))))
+                return pd.Series(
+                    list(pool.map(lambda row: result_func(func(*row)), get_args(*args)))
+                )
 
     else:
 
         @fail_on_stopiteration
         def evaluate(*args: pd.Series) -> pd.Series:
-            return pd.Series([result_func(func(*row)) for row in zip(*args)])
+            return pd.Series([result_func(func(*row)) for row in get_args(*args)])
 
     def verify_result_length(result, length):
         if len(result) != length:
