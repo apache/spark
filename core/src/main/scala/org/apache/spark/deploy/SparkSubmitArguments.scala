@@ -253,8 +253,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (args.length == 0) {
       printUsageAndExit(-1)
     }
-    if (!sparkProperties.contains("spark.local.connect") &&
-        maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
+    if (maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
       error("Remote cannot be specified with master and/or deploy mode.")
     }
     if (primaryResource == null) {

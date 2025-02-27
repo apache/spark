@@ -445,7 +445,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSearchedCaseStatementImpl(
       ctx: SearchedCaseStatementContext,
-      labelCtx: SqlScriptingLabelContext): CaseStatement = {
+      labelCtx: SqlScriptingLabelContext): SearchedCaseStatement = {
     val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
       SingleStatement(
         Project(
@@ -464,7 +464,7 @@ class AstBuilder extends DataTypeAstBuilder
           s" ${conditionalBodies.length} in case statement")
     }
 
-    CaseStatement(
+    SearchedCaseStatement(
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
@@ -475,30 +475,31 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSimpleCaseStatementImpl(
       ctx: SimpleCaseStatementContext,
-      labelCtx: SqlScriptingLabelContext): CaseStatement = {
-    // uses EqualTo to compare the case variable(the main case expression)
-    // to the WHEN clause expressions
-    val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
-      SingleStatement(
-        Project(
-          Seq(Alias(EqualTo(expression(ctx.caseVariable), expression(expr)), "condition")()),
-          OneRowRelation()))
-    })
+      labelCtx: SqlScriptingLabelContext): SimpleCaseStatement = {
+    val caseVariableExpr = withOrigin(ctx.caseVariable) {
+      expression(ctx.caseVariable)
+    }
+    val conditionExpressions =
+      ctx.conditionExpressions.asScala.toList
+        .map(exprCtx => withOrigin(exprCtx) {
+          expression(exprCtx)
+        })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
         body =>
           visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
 
-    if (conditions.length != conditionalBodies.length) {
+    if (conditionExpressions.length != conditionalBodies.length) {
       throw SparkException.internalError(
-        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+        s"Mismatched number of conditions ${conditionExpressions.length} and condition bodies" +
           s" ${conditionalBodies.length} in case statement")
     }
 
-    CaseStatement(
-      conditions = conditions,
-      conditionalBodies = conditionalBodies,
+    SimpleCaseStatement(
+      caseVariableExpr,
+      conditionExpressions,
+      conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
         body =>
           visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)

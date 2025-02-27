@@ -64,10 +64,15 @@ object SparkConnectServerUtils {
     val connectJar =
       findJar("sql/connect/server", "spark-connect-assembly", "spark-connect").getCanonicalPath
 
+    // To find InMemoryTableCatalog for V2 writer tests
+    val catalystTestJar =
+      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
+
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"
     command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
+    command += "--jars" += catalystTestJar
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
     command ++= debugConfigs
@@ -94,10 +99,6 @@ object SparkConnectServerUtils {
    * configs, we add them here
    */
   private def testConfigs: Seq[String] = {
-    // To find InMemoryTableCatalog for V2 writer tests
-    val catalystTestJar =
-      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
-
     val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
     } else {
@@ -114,7 +115,7 @@ object SparkConnectServerUtils {
       IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
       "in-memory"
     }
-    val confs = Seq(
+    Seq(
       // Use InMemoryTableCatalog for V2 writer tests
       "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
       // Try to use the hive catalog, fallback to in-memory if it is not there.
@@ -126,8 +127,7 @@ object SparkConnectServerUtils {
       // Testing SPARK-49673, setting maxBatchSize to 10MiB
       s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
       // Disable UI
-      "spark.ui.enabled=false")
-    Seq("--jars", catalystTestJar) ++ confs.flatMap(v => "--conf" :: v :: Nil)
+      "spark.ui.enabled=false").flatMap(v => "--conf" :: v :: Nil)
   }
 
   def start(): Unit = {
