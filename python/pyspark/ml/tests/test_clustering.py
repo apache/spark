@@ -73,11 +73,9 @@ class ClusteringTestsMixin:
 
         centers = model.clusterCenters()
         self.assertEqual(len(centers), 2)
+        self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(centers[0], [-0.372, -0.338], atol=1e-3), centers[0])
         self.assertTrue(np.allclose(centers[1], [0.8625, 0.83375], atol=1e-3), centers[1])
-
-        # TODO: support KMeansModel.numFeatures in Python
-        # self.assertEqual(model.numFeatures, 2)
 
         output = model.transform(df)
         expected_cols = ["weight", "features", "prediction"]
@@ -148,11 +146,9 @@ class ClusteringTestsMixin:
 
         centers = model.clusterCenters()
         self.assertEqual(len(centers), 2)
+        self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(centers[0], [-0.372, -0.338], atol=1e-3), centers[0])
         self.assertTrue(np.allclose(centers[1], [0.8625, 0.83375], atol=1e-3), centers[1])
-
-        # TODO: support KMeansModel.numFeatures in Python
-        # self.assertEqual(model.numFeatures, 2)
 
         output = model.transform(df)
         expected_cols = ["weight", "features", "prediction"]
@@ -224,8 +220,7 @@ class ClusteringTestsMixin:
 
         model = gmm.fit(df)
         self.assertEqual(gmm.uid, model.uid)
-        # TODO: support GMM.numFeatures in Python
-        # self.assertEqual(model.numFeatures, 2)
+        self.assertEqual(model.numFeatures, 2)
         self.assertEqual(len(model.weights), 2)
         self.assertTrue(
             np.allclose(model.weights, [0.541014115744985, 0.4589858842550149], atol=1e-4),
