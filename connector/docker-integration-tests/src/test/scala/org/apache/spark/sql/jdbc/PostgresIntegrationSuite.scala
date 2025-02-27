@@ -620,4 +620,22 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       checkAnswer(df6, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
     }
   }
+
+  test("SPARK-51321: RPAD expression is pushed down on Postgres when used in WHERE clause") {
+    // In table "bar", c0 contains "hello".
+    // Applying RPAD('hello', 8, 'x') yields "helloxxx" (since "hello" padded to length 8).
+    val query = "SELECT * FROM bar WHERE RPAD(c0, 8, 'x') = 'helloxxx'"
+
+    val df = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+
+    val results = df.collect()
+    // Only the row with c0 = "hello" should satisfy the condition.
+    assert(results.length == 1)
+    val row = results.head
+    assert(row.getAs[String]("c0").trim == "hello")
+  }
 }
