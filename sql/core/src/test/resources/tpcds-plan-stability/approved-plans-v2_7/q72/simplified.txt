@@ -46,7 +46,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                                   InputAdapter
                                                                     BroadcastExchange #4
                                                                       WholeStageCodegen (1)
-                                                                        Filter [inv_quantity_on_hand,inv_item_sk,inv_warehouse_sk]
+                                                                        Filter [inv_item_sk,inv_quantity_on_hand,inv_warehouse_sk]
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
@@ -92,7 +92,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                       InputAdapter
                                         BroadcastExchange #10
                                           WholeStageCodegen (8)
-                                            Filter [d_date,d_date_sk]
+                                            Filter [d_date_sk,d_date]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]

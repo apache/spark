@@ -202,7 +202,7 @@ Arguments: [cs_order_number#2 ASC NULLS FIRST, cs_item_sk#1 ASC NULLS FIRST], fa
 Output [5]: [cr_item_sk#15, cr_order_number#16, cr_return_quantity#17, cr_return_amount#18, cr_returned_date_sk#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
-PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
+PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (17) ColumnarToRow [codegen id : 5]
@@ -210,7 +210,7 @@ Input [5]: [cr_item_sk#15, cr_order_number#16, cr_return_quantity#17, cr_return_
 
 (18) Filter [codegen id : 5]
 Input [5]: [cr_item_sk#15, cr_order_number#16, cr_return_quantity#17, cr_return_amount#18, cr_returned_date_sk#19]
-Condition : (isnotnull(cr_order_number#16) AND isnotnull(cr_item_sk#15))
+Condition : (isnotnull(cr_item_sk#15) AND isnotnull(cr_order_number#16))
 
 (19) Project [codegen id : 5]
 Output [4]: [cr_item_sk#15, cr_order_number#16, cr_return_quantity#17, cr_return_amount#18]
@@ -287,7 +287,7 @@ Arguments: [ss_ticket_number#23 ASC NULLS FIRST, ss_item_sk#22 ASC NULLS FIRST],
 Output [5]: [sr_item_sk#34, sr_ticket_number#35, sr_return_quantity#36, sr_return_amt#37, sr_returned_date_sk#38]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
+PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (36) ColumnarToRow [codegen id : 12]
@@ -295,7 +295,7 @@ Input [5]: [sr_item_sk#34, sr_ticket_number#35, sr_return_quantity#36, sr_return
 
 (37) Filter [codegen id : 12]
 Input [5]: [sr_item_sk#34, sr_ticket_number#35, sr_return_quantity#36, sr_return_amt#37, sr_returned_date_sk#38]
-Condition : (isnotnull(sr_ticket_number#35) AND isnotnull(sr_item_sk#34))
+Condition : (isnotnull(sr_item_sk#34) AND isnotnull(sr_ticket_number#35))
 
 (38) Project [codegen id : 12]
 Output [4]: [sr_item_sk#34, sr_ticket_number#35, sr_return_quantity#36, sr_return_amt#37]
@@ -372,7 +372,7 @@ Arguments: [ws_order_number#42 ASC NULLS FIRST, ws_item_sk#41 ASC NULLS FIRST], 
 Output [5]: [wr_item_sk#53, wr_order_number#54, wr_return_quantity#55, wr_return_amt#56, wr_returned_date_sk#57]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
-PushedFilters: [IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
+PushedFilters: [IsNotNull(wr_item_sk), IsNotNull(wr_order_number)]
 ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
 
 (55) ColumnarToRow [codegen id : 19]
@@ -380,7 +380,7 @@ Input [5]: [wr_item_sk#53, wr_order_number#54, wr_return_quantity#55, wr_return_
 
 (56) Filter [codegen id : 19]
 Input [5]: [wr_item_sk#53, wr_order_number#54, wr_return_quantity#55, wr_return_amt#56, wr_returned_date_sk#57]
-Condition : (isnotnull(wr_order_number#54) AND isnotnull(wr_item_sk#53))
+Condition : (isnotnull(wr_item_sk#53) AND isnotnull(wr_order_number#54))
 
 (57) Project [codegen id : 19]
 Output [4]: [wr_item_sk#53, wr_order_number#54, wr_return_quantity#55, wr_return_amt#56]

@@ -21,7 +21,6 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
 
-
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 
   /**
@@ -29,18 +28,18 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    * example, if this set contains the expression `a = 2` then that expression is guaranteed to
    * evaluate to `true` for all rows produced.
    */
-  lazy val constraints: ExpressionSet = {
+  lazy val constraints: ExpressionSet =
     if (conf.constraintPropagationEnabled) {
-      validConstraints
+      val newConstraints = validConstraints
         .union(inferAdditionalConstraints(validConstraints))
-        .union(constructIsNotNullConstraints(validConstraints, output))
-        .filter { c =>
-          c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
-        }
+        .union(constructIsNotNullConstraints(
+          validConstraints.getConstraintsWithDecanonicalizedNullIntolerant, output))
+      // Removed the criteria  c.references.nonEmpty as it was causing a constraint of the
+      // of the form literal true or false being eliminated, causing idempotency check failure
+      newConstraints.filter(c => c.references.subsetOf(outputSet) && c.deterministic)
     } else {
-      ExpressionSet()
+      ExpressionSet(Set.empty)
     }
-  }
 
   /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
@@ -50,7 +49,14 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    *
    * See [[Expression#canonicalized]] for more details.
    */
-  protected lazy val validConstraints: ExpressionSet = ExpressionSet()
+  protected lazy val validConstraints: ExpressionSet = if (conf.constraintPropagationEnabled) {
+    new ConstraintSet()
+  } else {
+    ExpressionSet(Set.empty[Expression])
+  }
+
+  // For testing purposes
+  def getValidConstraints: ExpressionSet = validConstraints
 }
 
 trait ConstraintHelper {
@@ -68,13 +74,16 @@ trait ConstraintHelper {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         // Also remove EqualNullSafe with the same l and r to avoid Once strategy's idempotence
         // is broken. l = r and l <=> r can infer l <=> l and r <=> r which is useless.
-        val candidateConstraints = predicates - eq - EqualNullSafe(l, r)
+        val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), r, l)
+        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), l, r)
+        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+
       case _ => // No inference
     }
     inferredConstraints -- constraints
@@ -83,9 +92,10 @@ trait ConstraintHelper {
   private def replaceConstraints(
       constraints: ExpressionSet,
       source: Expression,
-      destination: Expression): ExpressionSet = constraints.map(_ transform {
-    case e: Expression if e.semanticEquals(source) => destination
-  })
+      destination: Expression): ExpressionSet =
+    constraints.map(_ transform {
+      case e: Expression if e.semanticEquals(source) => destination
+    })
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
@@ -110,7 +120,7 @@ trait ConstraintHelper {
    * Infer the Attribute-specific IsNotNull constraints from the null intolerant child expressions
    * of constraints.
    */
-  private def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
+  def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
       // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
       // expressions
