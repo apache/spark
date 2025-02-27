@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, PythonUDF, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, BinaryExpression, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, Join, Project, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
 import org.apache.spark.sql.classic.{Dataset => DatasetImpl}
 import org.apache.spark.sql.expressions.Window
@@ -99,7 +99,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   private def assertCorrectResolution(
-      df: => DataFrame,
+      df: => classic.DataFrame,
       leftResolution: Resolution.Resolution,
       rightResolution: Resolution.Resolution): Unit = {
     val join = df.queryExecution.analyzed.asInstanceOf[Join]
