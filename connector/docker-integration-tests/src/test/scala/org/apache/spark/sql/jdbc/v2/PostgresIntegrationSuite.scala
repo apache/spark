@@ -139,6 +139,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       .executeUpdate()
     connection.prepareStatement("INSERT INTO unsupported_array_of_array_of_int " +
       "VALUES (array[array[1],array[2]]), (array[3])").executeUpdate()
+
+    connection.prepareStatement(
+      "CREATE TABLE employee_rpad_test (dept INTEGER, name VARCHAR(32))").executeUpdate()
+    connection.prepareStatement("INSERT INTO employee_rpad_test VALUES (1, 'Alice')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO employee_rpad_test VALUES (2, 'xxxx')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO employee_rpad_test VALUES (3, 'xxxxxxxxxx')")
+      .executeUpdate()
   }
 
   test("Test multi-dimensional column types") {
@@ -354,5 +363,23 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
       parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\"")
     )
+  }
+
+  test("SPARK-51321: Postgres pushdown for RPAD expression on string column") {
+    // Execute the query filtering on the RPAD expression.
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee_rpad_test
+          |WHERE rpad(name, 10, 'x') = 'xxxxxxxxxx'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+
+    val rows = df.collect()
+    // We expect only the rows with names 'xxxx' and 'xxxxxxxxxx' to match.
+    assert(rows.length == 2)
+
+    // Extract the 'name' column from the results and verify that they are as expected.
+    val names = rows.map(row => row.getString(row.fieldIndex("name"))).toSet
+    assert(names == Set("xxxx", "xxxxxxxxxx"))
   }
 }
