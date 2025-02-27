@@ -18,10 +18,8 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
@@ -49,15 +47,6 @@ case class FlatMapGroupsInArrowExec(
   extends FlatMapGroupsInBatchExec {
 
   protected val pythonEvalType: Int = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
-
-  override protected def groupedData(iter: Iterator[InternalRow], attrs: Seq[Attribute]):
-      Iterator[Iterator[InternalRow]] =
-    super.groupedData(iter, attrs)
-      // Here we wrap it via another row so that Python sides understand it as a DataFrame.
-      .map(_.map(InternalRow(_)))
-
-  override protected def groupedSchema(attrs: Seq[Attribute]): StructType =
-    StructType(StructField("struct", super.groupedSchema(attrs)) :: Nil)
 
   override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInArrowExec =
     copy(child = newChild)
