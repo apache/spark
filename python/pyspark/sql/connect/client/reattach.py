@@ -272,7 +272,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 ),
                 None,
             )
-            if unexpected_error != None:
+            if unexpected_error is not None:
                 if self._last_returned_response_id is not None:
                     raise PySparkRuntimeError(
                         errorClass="RESPONSE_ALREADY_RECEIVED",
