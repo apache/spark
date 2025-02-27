@@ -20,12 +20,12 @@ package org.apache.spark.sql.types
 import org.apache.spark.annotation.Unstable
 
 /**
- * The time type represents a time value with fields hour, minute, second, up to microseconds.
- * The range of times supported is 00:00:00.000000 to 23:59:59.999999.
+ * The time type represents a time value with fields hour, minute, second, up to microseconds. The
+ * range of times supported is 00:00:00.000000 to 23:59:59.999999.
  *
- * @param precision The time fractional seconds precision which indicates the number of decimal
- *                  digits maintained following the decimal point in the seconds value.
- *                  The valid range is [0, 6].
+ * @param precision
+ *   The time fractional seconds precision which indicates the number of decimal digits maintained
+ *   following the decimal point in the seconds value. The valid range is [0, 6].
  *
  * @since 4.1.0
  */
