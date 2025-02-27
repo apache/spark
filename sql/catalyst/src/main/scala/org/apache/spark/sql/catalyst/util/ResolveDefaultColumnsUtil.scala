@@ -459,15 +459,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
    *         Any type suitable for assigning into a row using the InternalRow.update method.
    */
   def getExistenceDefaultValues(schema: StructType): Array[Any] = {
-    schema.fields.map { field: StructField =>
-      val defaultValue: Option[String] = field.getExistenceDefaultValue()
-      defaultValue.map { _: String =>
-        val expr = analyzeExistenceDefaultValue(field)
+    schema.fields.map(getExistenceDefaultValue)
+  }
 
-        // The expression should be a literal value by this point, possibly wrapped in a cast
-        // function. This is enforced by the execution of commands that assign default values.
-        expr.eval()
-      }.orNull
+  def getExistenceDefaultValue(field: StructField): Any = {
+    if (field.hasExistenceDefaultValue) {
+      val expr = analyzeExistenceDefaultValue(field)
+      // The expression should be a literal value by this point, possibly wrapped in a cast
+      // function. This is enforced by the execution of commands that assign default values.
+      expr.eval()
+    } else {
+      null
     }
   }
 
