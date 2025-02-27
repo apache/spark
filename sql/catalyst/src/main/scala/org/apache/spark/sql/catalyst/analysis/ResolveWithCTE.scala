@@ -157,7 +157,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case ref: CTERelationRef if !ref.resolved =>
         cteDefMap.get(ref.cteId).map { cteDef =>
           // cteDef is certainly resolved, otherwise it would not have been in the map.
-          CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+          CTERelationRef(
+            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows)
         }.getOrElse {
           ref
         }

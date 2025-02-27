@@ -5575,6 +5575,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val CTE_RELATION_DEF_MAX_ROWS =
+    buildConf("spark.sql.cteRelationDefMaxRows.enabled")
+      .internal()
+      .doc(
+        "When set to true, CTERelationDef.maxRows would output the correct value from the " +
+        "child plan. This is necessary for correct scalar subquery validation in the " +
+        "single-pass Analyzer."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *

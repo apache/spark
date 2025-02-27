@@ -439,7 +439,8 @@ class Resolver(
       _resolved = true,
       isStreaming = unresolvedCteRelationDef.isStreaming,
       output = unresolvedCteRelationDef.output,
-      recursive = false
+      recursive = false,
+      maxRows = unresolvedCteRelationDef.maxRows
     )
 
     handleLeafOperator(cteRelationRef)
