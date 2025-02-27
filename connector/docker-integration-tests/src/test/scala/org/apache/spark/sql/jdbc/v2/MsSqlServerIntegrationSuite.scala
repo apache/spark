@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.util.Locale
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.rdd.RDD
@@ -223,6 +224,46 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE ("name" IS NOT NULL) AND ((CASE WHEN "name" = 'Legolas' THEN CASE WHEN "name" = 'Elf' THEN 'Elf' ELSE 'Wizard' END ELSE 'Sauron' END) = "name")  """
     )
     // scalastyle:on
+    df.collect()
+  }
+
+  test("SPARK-51321: SQLServer pushdown for RPAD expression on string column") {
+    // Query that applies RPAD on the "name" column, expecting a padded result of 10 characters.
+    val df = sql(s"SELECT * FROM $catalogName.employee WHERE rpad(name, 10, 'x') = 'xxxxxxxxxx'")
+    val pushedQuery = getExternalEngineQuery(df.queryExecution.executedPlan)
+      .toLowerCase(Locale.ROOT)
+
+    // Check that the pushed-down query contains the expected function calls.
+    assert(pushedQuery.contains("left("),
+      s"Expected LEFT function call in the pushed-down query, but got: $pushedQuery")
+    assert(pushedQuery.contains("concat("),
+      s"Expected CONCAT function call in the pushed-down query, but got: $pushedQuery")
+    assert(pushedQuery.contains("replicate("),
+      s"Expected REPLICATE function call in the pushed-down query, but got: $pushedQuery")
+
+    assert(!pushedQuery.contains("filterexec"),
+      s"Expected the filter to be pushed down, but found a Spark-side filter in: $pushedQuery")
+
+    df.collect()
+  }
+
+  test("SPARK-51321: SQLServer pushdown for LPAD expression on string column") {
+    // Query that applies LPAD on the "name" column, expecting a padded result of 10 characters.
+    val df = sql(s"SELECT * FROM $catalogName.employee WHERE lpad(name, 10, 'x') = 'xxxxxxxxxx'")
+    val pushedQuery = getExternalEngineQuery(df.queryExecution.executedPlan)
+      .toLowerCase(Locale.ROOT)
+
+    // Check that the pushed-down query contains the expected function calls.
+    assert(pushedQuery.contains("right("),
+      s"Expected RIGHT function call in the pushed-down query, but got: $pushedQuery")
+    assert(pushedQuery.contains("concat("),
+      s"Expected CONCAT function call in the pushed-down query, but got: $pushedQuery")
+    assert(pushedQuery.contains("replicate("),
+      s"Expected REPLICATE function call in the pushed-down query, but got: $pushedQuery")
+
+    assert(!pushedQuery.contains("filterexec"),
+      s"Expected the filter to be pushed down, but found a Spark-side filter in: $pushedQuery")
+
     df.collect()
   }
 }
