@@ -147,6 +147,9 @@ class StandardScalerModel private[ml] (
 
   import StandardScalerModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Vectors.empty)
+
   /** @group setParam */
   @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

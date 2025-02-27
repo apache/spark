@@ -959,7 +959,7 @@ class DataFrameSetOperationsSuite extends QueryTest
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - deep expr") {
-    def nestedDf(depth: Int, numColsAtEachDepth: Int): DataFrame = {
+    def nestedDf(depth: Int, numColsAtEachDepth: Int): classic.DataFrame = {
       val initialNestedStructType = StructType(
         (0 to numColsAtEachDepth).map(i =>
           StructField(s"nested${depth}Col$i", IntegerType, nullable = false))

@@ -25,7 +25,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.LogKeys.{CHECKPOINT_LOCATION, CHECKPOINT_ROOT, CONFIG, PATH}
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -38,7 +37,7 @@ import org.apache.spark.util.Utils
 /**
  * Replaces logical [[WriteToStreamStatement]] operator with an [[WriteToStream]] operator.
  */
-object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
+object ResolveWriteToStream extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
     case s: WriteToStreamStatement =>
       val (resolvedCheckpointLocation, deleteCheckpointOnStop) = resolveCheckpointLocation(s)

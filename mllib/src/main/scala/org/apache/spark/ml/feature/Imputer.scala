@@ -246,6 +246,9 @@ class ImputerModel private[ml] (
 
   import ImputerModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", null)
+
   /** @group setParam */
   @Since("3.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

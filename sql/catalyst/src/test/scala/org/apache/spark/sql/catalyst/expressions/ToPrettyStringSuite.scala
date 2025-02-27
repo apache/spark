@@ -128,4 +128,10 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
     val v = new VariantVal(Array[Byte](1, 2, 3), Array[Byte](1, 1))
     checkEvaluation(ToPrettyString(Literal(v)), UTF8String.fromString(v.toString))
   }
+
+  test("sql method is equalivalent to child's sql") {
+    val child = Literal(1)
+    val prettyString = ToPrettyString(child)
+    assert(prettyString.sql === child.sql)
+  }
 }

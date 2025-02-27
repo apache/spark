@@ -223,6 +223,9 @@ class FPGrowthModel private[ml] (
     private val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
+  // For ml connect only
+  private[ml] def this() = this("", null, Map.empty, -1L)
+
   /** @group setParam */
   @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)

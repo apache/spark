@@ -62,11 +62,12 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
-has_numpy: bool = False
-try:
-    import numpy as np  # noqa: F401
 
-    has_numpy = True
+has_arrow: bool = False
+try:
+    import pyarrow  # noqa: F401
+
+    has_arrow = True
 except ImportError:
     pass
 
@@ -438,6 +439,26 @@ def dispatch_window_method(f: FuncT) -> FuncT:
             from pyspark.sql.classic.window import Window as ClassicWindow
 
             return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def dispatch_table_arg_method(f: FuncT) -> FuncT:
+    """
+    Dispatches TableArg method calls to either ConnectTableArg or ClassicTableArg
+    based on the execution environment.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.table_arg import TableArg as ConnectTableArg
+
+            return getattr(ConnectTableArg, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.table_arg import TableArg as ClassicTableArg
+
+            return getattr(ClassicTableArg, f.__name__)(*args, **kwargs)
 
     return cast(FuncT, wrapped)
 
