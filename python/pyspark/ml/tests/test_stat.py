@@ -18,6 +18,7 @@
 import numpy as np
 import unittest
 
+from pyspark.errors import PySparkException
 from pyspark.ml.linalg import Vectors, DenseVector
 from pyspark.ml.stat import (
     ChiSquareTest,
@@ -191,6 +192,18 @@ class StatTestsMixin:
             np.allclose(row2.statistic, 0.1746780794018764, atol=1e-4),
             row2.statistic,
         )
+
+    def test_illegal_argument(self):
+        spark = self.spark
+        data = [
+            [0, Vectors.dense([0, 1, 2])],
+            [1, Vectors.dense([1, 1, 1])],
+            [2, Vectors.dense([2, 1, 0])],
+        ]
+        df = spark.createDataFrame(data, ["label", "feat"])
+
+        with self.assertRaisesRegex(PySparkException, "No such struct field"):
+            ChiSquareTest.test(df, "feat", "labelx").count()
 
 
 class StatTests(StatTestsMixin, ReusedSQLTestCase):
