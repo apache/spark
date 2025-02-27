@@ -552,6 +552,21 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     sc.stop()
   }
 
+  /**
+   * Shut down the SparkContext with exit code that will passed to scheduler backend.
+   * In client mode, client side may call `SparkContext.stop()` to clean up but exit with
+   * code not equal to 0. This behavior cause resource scheduler such as `ApplicationMaster`
+   * exit with success status but client side exited with failed status. Spark can call
+   * this method to stop SparkContext and pass client side correct exit code to scheduler backend.
+   * Then scheduler backend should send the exit code to corresponding resource scheduler
+   * to keep consistent.
+   *
+   * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
+   */
+  def stop(exitCode: Int): Unit = {
+    sc.stop(exitCode)
+  }
+
   override def close(): Unit = stop()
 
   /**

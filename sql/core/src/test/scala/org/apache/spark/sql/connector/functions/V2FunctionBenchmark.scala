@@ -65,7 +65,8 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       N: Long,
       codegenEnabled: Boolean,
       resultNullable: Boolean): Unit = {
-    import spark.toRichColumn
+    val classicSession = castToImpl(spark)
+    import classicSession.toRichColumn
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
       createFunction("java_long_add_default",
         new JavaLongAdd(new JavaLongAddDefault(resultNullable)))

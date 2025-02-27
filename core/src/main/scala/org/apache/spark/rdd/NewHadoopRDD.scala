@@ -244,11 +244,13 @@ class NewHadoopRDD[K, V](
       private var finished = false
       private var reader =
         try {
-          Utils.tryInitializeResource(
-            format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
-          ) { reader =>
-            reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-            reader
+          Utils.createResourceUninterruptiblyIfInTaskThread {
+            Utils.tryInitializeResource(
+              format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
+            ) { reader =>
+              reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+              reader
+            }
           }
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>

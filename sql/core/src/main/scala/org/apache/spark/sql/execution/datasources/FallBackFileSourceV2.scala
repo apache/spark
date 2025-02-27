@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 
 /**

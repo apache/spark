@@ -23,7 +23,7 @@ import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -276,6 +277,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
+        SchemaUtils.checkIndeterminateCollationInSchema(analyzedQuery.schema)
 
         val output = analyzedQuery.output
 
@@ -295,6 +297,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
         DDLUtils.checkTableColumns(tableDesc)
+
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
         val normalizedSchemaByName = HashMap(normalizedTable.schema.map(s => s.name -> s): _*)

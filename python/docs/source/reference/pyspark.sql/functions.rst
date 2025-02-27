@@ -645,3 +645,24 @@ UDF, UDTF and UDT
     udtf
     unwrap_udt
 
+
+Table-Valued Functions
+----------------------
+.. currentmodule:: pyspark.sql.tvf
+
+.. autosummary::
+    :toctree: api/
+
+    TableValuedFunction.collations
+    TableValuedFunction.explode
+    TableValuedFunction.explode_outer
+    TableValuedFunction.inline
+    TableValuedFunction.inline_outer
+    TableValuedFunction.json_tuple
+    TableValuedFunction.posexplode
+    TableValuedFunction.posexplode_outer
+    TableValuedFunction.range
+    TableValuedFunction.sql_keywords
+    TableValuedFunction.stack
+    TableValuedFunction.variant_explode
+    TableValuedFunction.variant_explode_outer

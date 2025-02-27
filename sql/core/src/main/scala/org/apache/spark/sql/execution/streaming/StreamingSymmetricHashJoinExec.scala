@@ -224,11 +224,11 @@ case class StreamingSymmetricHashJoinExec(
 
   override def shortName: String = "symmetricHashJoin"
 
-  private val stateStoreNames =
+  override val stateStoreNames: Seq[String] =
     SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
 
   override def operatorStateMetadata(
-      stateSchemaPaths: List[String] = List.empty): OperatorStateMetadata = {
+      stateSchemaPaths: List[List[String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
@@ -263,8 +263,10 @@ case class StreamingSymmetricHashJoinExec(
 
     // validate and maybe evolve schema for all state stores across both sides of the join
     result.map { case (stateStoreName, (keySchema, valueSchema)) =>
-      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        keySchema, valueSchema))
+      // we have to add the default column family schema because the RocksDBStateEncoder
+      // expects this entry to be present in the stateSchemaProvider.
+      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
+        keySchema, 0, valueSchema))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
     }.toList
@@ -525,9 +527,8 @@ case class StreamingSymmetricHashJoinExec(
           (leftSideJoiner.numUpdatedStateRows + rightSideJoiner.numUpdatedStateRows)
         numTotalStateRows += combinedMetrics.numKeys
         stateMemory += combinedMetrics.memoryUsedBytes
-        combinedMetrics.customMetrics.foreach { case (metric, value) =>
-          longMetric(metric.name) += value
-        }
+        setStoreCustomMetrics(combinedMetrics.customMetrics)
+        setStoreInstanceMetrics(combinedMetrics.instanceMetrics)
       }
 
       val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide);
