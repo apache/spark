@@ -20,9 +20,11 @@ package org.apache.spark.sql.errors
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
@@ -262,5 +264,21 @@ private[sql] object SqlScriptingErrors {
       errorClass = "INVALID_HANDLER_DECLARATION.CONDITION_NOT_FOUND",
       cause = null,
       messageParameters = Map("condition" -> condition))
+  }
+
+  def nullVariableSignalStatement(origin: Origin, varName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "NULL_VARIABLE_SIGNAL_STATEMENT",
+      cause = null,
+      messageParameters = Map("varName" -> toSQLId(varName)))
+  }
+
+  def invalidSignalStatementVariableType(origin: Origin, dataType: DataType): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_VARIABLE_TYPE_FOR_SIGNAL_STATEMENT",
+      cause = null,
+      messageParameters = Map("varType" -> toSQLType(dataType)))
   }
 }
