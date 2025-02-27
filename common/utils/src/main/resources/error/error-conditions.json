@@ -3486,6 +3486,11 @@
         "message" : [
           "Scalar subquery must return only one column, but got <number>."
         ]
+      },
+      "STREAMING_QUERY" : {
+        "message" : [
+          "Streaming query is not allowed in subquery expressions."
+        ]
       }
     },
     "sqlState" : "42823"
