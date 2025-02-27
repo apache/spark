@@ -22,29 +22,27 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.apache.avro.file.*;
+import org.apache.avro.file.DataFileConstants;
 
 /**
  * A mapper class from Spark supported avro compression codecs to avro compression codecs.
  */
 public enum AvroCompressionCodec {
-  UNCOMPRESSED(DataFileConstants.NULL_CODEC, false, -1),
-  DEFLATE(DataFileConstants.DEFLATE_CODEC, true, CodecFactory.DEFAULT_DEFLATE_LEVEL),
-  SNAPPY(DataFileConstants.SNAPPY_CODEC, false, -1),
-  BZIP2(DataFileConstants.BZIP2_CODEC, false, -1),
-  XZ(DataFileConstants.XZ_CODEC, true, CodecFactory.DEFAULT_XZ_LEVEL),
-  ZSTANDARD(DataFileConstants.ZSTANDARD_CODEC, true, CodecFactory.DEFAULT_ZSTANDARD_LEVEL);
+  UNCOMPRESSED(DataFileConstants.NULL_CODEC, false),
+  DEFLATE(DataFileConstants.DEFLATE_CODEC, true),
+  SNAPPY(DataFileConstants.SNAPPY_CODEC, false),
+  BZIP2(DataFileConstants.BZIP2_CODEC, false),
+  XZ(DataFileConstants.XZ_CODEC, true),
+  ZSTANDARD(DataFileConstants.ZSTANDARD_CODEC, true);
 
   private final String codecName;
   private final boolean supportCompressionLevel;
-  private final int defaultCompressionLevel;
 
   AvroCompressionCodec(
       String codecName,
-      boolean supportCompressionLevel, int defaultCompressionLevel) {
+      boolean supportCompressionLevel) {
     this.codecName = codecName;
     this.supportCompressionLevel = supportCompressionLevel;
-    this.defaultCompressionLevel = defaultCompressionLevel;
   }
 
   public String getCodecName() {
@@ -53,10 +51,6 @@ public enum AvroCompressionCodec {
 
   public boolean getSupportCompressionLevel() {
     return this.supportCompressionLevel;
-  }
-
-  public int getDefaultCompressionLevel() {
-    return this.defaultCompressionLevel;
   }
 
   private static final Map<String, String> codecNameMap =
