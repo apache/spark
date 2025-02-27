@@ -692,7 +692,7 @@ private[ml] object MLUtils {
     try {
       invokeMethod(obj, methodName)
     } catch {
-      case e: InvocationTargetException =>
+      case e: InvocationTargetException if e.getCause != null =>
         throw e.getCause
     }
   }
@@ -706,7 +706,7 @@ private[ml] object MLUtils {
     try {
       invokeMethod(obj, methodName, args, parameterTypes)
     } catch {
-      case e: InvocationTargetException =>
+      case e: InvocationTargetException if e.getCause != null =>
         throw e.getCause
     }
   }
