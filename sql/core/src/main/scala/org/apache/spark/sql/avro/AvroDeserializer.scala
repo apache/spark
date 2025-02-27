@@ -52,7 +52,7 @@ private[sql] class AvroDeserializer(
     filters: StructFilters,
     useStableIdForUnionType: Boolean,
     stableIdPrefixForUnionType: String,
-    recursiveFieldMaxDepth: Int) {
+    recursiveFieldMaxDepth: Int) extends AvroSchemaNullResolver {
 
   def this(
       rootAvroType: Schema,
@@ -90,7 +90,8 @@ private[sql] class AvroDeserializer(
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
         val fieldUpdater = new RowUpdater(resultRow)
         val applyFilters = filters.skipRow(resultRow, _)
-        val writer = getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters)
+        val avroType = resolveNullableType(rootAvroType, nullable = false)
+        val writer = getRecordWriter(avroType, st, Nil, Nil, applyFilters)
         (data: Any) => {
           val record = data.asInstanceOf[GenericRecord]
           val skipRow = writer(fieldUpdater, record)
