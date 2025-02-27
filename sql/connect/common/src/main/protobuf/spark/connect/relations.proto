@@ -1013,14 +1013,13 @@ message GroupMap {
   // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
   repeated Expression sorting_expressions = 4;
 
-  // Below fields are used by (Flat)MapGroupsWithState and TransformWithState.
+  // Below fields are only used by (Flat)MapGroupsWithState
   // (Optional) Input relation for initial State.
   Relation initial_input = 5;
 
   // (Optional) Expressions for grouping keys of the initial state input relation.
   repeated Expression initial_grouping_expressions = 6;
 
-  // Below fields are only used by (Flat)MapGroupsWithState
   // (Optional) True if MapGroupsWithState, false if FlatMapGroupsWithState.
   optional bool is_map_groups_with_state = 7;
 
