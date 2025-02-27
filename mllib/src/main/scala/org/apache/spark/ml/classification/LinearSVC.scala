@@ -365,6 +365,9 @@ class LinearSVCModel private[classification] (
   extends ClassificationModel[Vector, LinearSVCModel]
   with LinearSVCParams with MLWritable with HasTrainingSummary[LinearSVCTrainingSummary] {
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN)
+
   @Since("2.2.0")
   override val numClasses: Int = 2
 

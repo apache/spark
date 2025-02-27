@@ -289,6 +289,9 @@ class UnivariateFeatureSelectorModel private[ml](
   extends Model[UnivariateFeatureSelectorModel] with UnivariateFeatureSelectorParams
     with MLWritable {
 
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyIntArray)
+
   /** @group setParam */
   @Since("3.1.1")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)

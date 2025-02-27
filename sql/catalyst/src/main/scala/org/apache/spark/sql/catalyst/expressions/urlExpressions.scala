@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, ObjectType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, ObjectType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -49,12 +49,15 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class UrlEncode(child: Expression)
-  extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
+  extends RuntimeReplaceable
+  with UnaryLike[Expression]
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
 
   override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
-      SQLConf.get.defaultStringType,
+      dataType,
       "encode",
       Seq(child),
       Seq(StringTypeWithCollation(supportsTrimCollation = true)))
@@ -87,14 +90,17 @@ case class UrlEncode(child: Expression)
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class UrlDecode(child: Expression, failOnError: Boolean = true)
-  extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
+  extends RuntimeReplaceable
+  with UnaryLike[Expression]
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
 
   def this(child: Expression) = this(child, true)
 
   override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
-      SQLConf.get.defaultStringType,
+      dataType,
       "decode",
       Seq(child, Literal(failOnError)),
       Seq(StringTypeWithCollation(supportsTrimCollation = true), BooleanType))
@@ -207,14 +213,14 @@ case class ParseUrl(
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends Expression
   with ExpectsInputTypes
-  with RuntimeReplaceable {
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
 
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(children.size)(StringTypeWithCollation(supportsTrimCollation = true))
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 
   override def checkInputDataTypes(): TypeCheckResult = {

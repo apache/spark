@@ -50,6 +50,14 @@ Then enable the profiling in the configuration.
 <table class="spark-config">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
+  <td><code>spark.profiler.driver.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, turn on profiling in driver.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.profiler.executor.enabled</code></td>
   <td><code>false</code></td>
   <td>

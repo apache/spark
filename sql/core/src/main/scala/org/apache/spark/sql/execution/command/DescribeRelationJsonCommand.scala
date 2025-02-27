@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.time.ZoneOffset
+
 import scala.collection.mutable
 
 import org.json4s._
@@ -29,7 +31,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, Se
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -50,6 +53,8 @@ case class DescribeRelationJsonCommand(
         nullable = false,
         new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()
     )) extends UnaryRunnableCommand {
+  private lazy val timestampFormatter =
+    TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss'Z'", ZoneOffset.UTC, isParsing = false)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val jsonMap = mutable.LinkedHashMap[String, JValue]()
@@ -106,11 +111,22 @@ case class DescribeRelationJsonCommand(
       "outputformat" -> "output_format"
     )
 
+    val timestampKeys = Set("created_time", "last_access")
+
     val normalizedKey = key.toLowerCase().replace(" ", "_")
     val renamedKey = renames.getOrElse(normalizedKey, normalizedKey)
 
     if (!jsonMap.contains(renamedKey) && !excludedKeys.contains(renamedKey)) {
-      jsonMap += renamedKey -> value
+      val formattedValue = if (timestampKeys.contains(renamedKey)) {
+        value match {
+          case JLong(timestamp) =>
+            JString(timestampFormatter.format(DateTimeUtils.millisToMicros(timestamp)))
+          case _ => value
+        }
+      } else {
+        value
+      }
+      jsonMap += renamedKey -> formattedValue
     }
   }
 

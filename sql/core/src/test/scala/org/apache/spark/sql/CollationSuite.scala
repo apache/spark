@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -132,20 +132,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       StringType("UTF8_LCASE"))
     assert(sql(s"select collate('aaa', 'utf8_lcase_rtrim')").schema(0).dataType ==
       StringType("UTF8_LCASE_RTRIM"))
-  }
-
-  test("collate function syntax with default collation set") {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-      assert(
-        sql(s"select collate('aaa', 'utf8_lcase')").schema(0).dataType ==
-        StringType("UTF8_LCASE")
-      )
-      assert(sql(s"select collate('aaa', 'UNICODE')").schema(0).dataType == StringType("UNICODE"))
-      assert(
-        sql(s"select collate('aaa', 'UNICODE_RTRIM')").schema(0).dataType ==
-        StringType("UNICODE_RTRIM")
-      )
-    }
   }
 
   test("collate function syntax invalid arg count") {
@@ -822,31 +808,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       Seq(Row(fullyQualifiedPrefix + "UTF8_BINARY"))
     )
 
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(
-          """EXECUTE IMMEDIATE stmtStr1 USING
-            | 'a' AS var1,
-            | 'b' AS var2;""".stripMargin),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE"))
-      )
-    }
-
     checkAnswer(
       sql(
         """EXECUTE IMMEDIATE stmtStr2 USING
           | 'a' AS var1;""".stripMargin),
       Seq(Row(fullyQualifiedPrefix + "UNICODE"))
     )
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(
-          """EXECUTE IMMEDIATE stmtStr2 USING
-            | 'a' AS var1;""".stripMargin),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE"))
-      )
-    }
   }
 
   test("SPARK-47210: Cast of default collated strings in IN expression") {
@@ -1009,12 +976,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           "generation expression cannot contain non utf8 binary collated string type"))
   }
 
-  test("SPARK-47431: Default collation set to UNICODE, literal test") {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row(fullyQualifiedPrefix + "UNICODE")))
-    }
-  }
-
   test("Cast expression for collations") {
     checkAnswer(
       sql(s"SELECT collation(cast('a' as string collate utf8_lcase))"),
@@ -1026,15 +987,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
     checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(s"SELECT collation(cast(1 as string collate unicode))"),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE")))
-      checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
-      checkAnswer(sql(s"SELECT collation(cast(1 as string))"),
-        Seq(Row(fullyQualifiedPrefix + "UNICODE")))
-    }
   }
 
   test("cast using the dataframe api") {
@@ -1922,12 +1874,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       HllSketchAggTestCase("UNICODE_CI_RTRIM", 3)
     )
     testCases.foreach(t => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.c) {
-        val q = "SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM " +
-          "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
-        val df = sql(q)
-        checkAnswer(df, Seq(Row(t.result)))
-      }
+      val q = s"SELECT hll_sketch_estimate(hll_sketch_agg(col collate ${t.c})) FROM " +
+        "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
+      val df = sql(q)
+      checkAnswer(df, Seq(Row(t.result)))
     })
   }
 
@@ -1957,10 +1907,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withTable("tbl") {
         checkCacheTable(s"'a' COLLATE $collation")
       }
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        withTable("tbl") {
-          checkCacheTable("'a'")
-        }
+      withTable("tbl") {
+        checkCacheTable("'a'")
       }
     }
   }
@@ -1974,48 +1922,66 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(df,
       Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),
+        Row("SYSTEM", "BUILTIN", "UTF8_BINARY_RTRIM", null, null,
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", null),
         Row("SYSTEM", "BUILTIN", "UTF8_LCASE", null, null,
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", null),
+        Row("SYSTEM", "BUILTIN", "UTF8_LCASE_RTRIM", null, null,
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", null),
         Row("SYSTEM", "BUILTIN", "UNICODE", null, null,
           "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "UNICODE_AI", null, null,
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "UNICODE_AI_RTRIM", null, null,
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "UNICODE_CI", null, null,
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "UNICODE_CI_AI", null, null,
           "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af", "Afrikaans", null,
-          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af_AI", "Afrikaans", null,
-          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af_CI", "Afrikaans", null,
-          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
-        Row("SYSTEM", "BUILTIN", "af_CI_AI", "Afrikaans", null,
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+        Row("SYSTEM", "BUILTIN", "UNICODE_CI_AI_RTRIM", null, null,
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE NAME LIKE '%UTF8_BINARY%'"),
-      Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
-        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null))
+      Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),
+      Row("SYSTEM", "BUILTIN", "UTF8_BINARY_RTRIM", null, null,
+        "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", null)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE NAME LIKE '%zh_Hant_HKG%'"),
       Seq(Row("SYSTEM", "BUILTIN", "zh_Hant_HKG", "Chinese", "Hong Kong SAR China",
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI", "Chinese", "Hong Kong SAR China",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_AI_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI", "Chinese", "Hong Kong SAR China",
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI", "Chinese", "Hong Kong SAR China",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_AI_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_CI_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hant_HKG_RTRIM", "Chinese", "Hong Kong SAR China",
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE COUNTRY = 'Singapore'"),
       Seq(Row("SYSTEM", "BUILTIN", "zh_Hans_SGP", "Chinese", "Singapore",
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_AI", "Chinese", "Singapore",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_AI_RTRIM", "Chinese", "Singapore",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI", "Chinese", "Singapore",
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI_AI", "Chinese", "Singapore",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI_AI_RTRIM", "Chinese", "Singapore",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_CI_RTRIM", "Chinese", "Singapore",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "zh_Hans_SGP_RTRIM", "Chinese", "Singapore",
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT * FROM collations() WHERE LANGUAGE = 'English' " +
       "and COUNTRY = 'United States'"),
@@ -2023,20 +1989,33 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "en_USA_AI", "English", "United States",
           "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_AI_RTRIM", "English", "United States",
+          "ACCENT_INSENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion),
         Row("SYSTEM", "BUILTIN", "en_USA_CI", "English", "United States",
           "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
         Row("SYSTEM", "BUILTIN", "en_USA_CI_AI", "English", "United States",
-          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion)))
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "NO_PAD", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_CI_AI_RTRIM", "English", "United States",
+          "ACCENT_INSENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_CI_RTRIM", "English", "United States",
+          "ACCENT_SENSITIVE", "CASE_INSENSITIVE", "RTRIM", icvVersion),
+        Row("SYSTEM", "BUILTIN", "en_USA_RTRIM", "English", "United States",
+          "ACCENT_SENSITIVE", "CASE_SENSITIVE", "RTRIM", icvVersion)))
 
     checkAnswer(sql("SELECT NAME, LANGUAGE, ACCENT_SENSITIVITY, CASE_SENSITIVITY " +
       "FROM collations() WHERE COUNTRY = 'United States'"),
       Seq(Row("en_USA", "English", "ACCENT_SENSITIVE", "CASE_SENSITIVE"),
         Row("en_USA_AI", "English", "ACCENT_INSENSITIVE", "CASE_SENSITIVE"),
+        Row("en_USA_AI_RTRIM", "English", "ACCENT_INSENSITIVE", "CASE_SENSITIVE"),
         Row("en_USA_CI", "English", "ACCENT_SENSITIVE", "CASE_INSENSITIVE"),
-        Row("en_USA_CI_AI", "English", "ACCENT_INSENSITIVE", "CASE_INSENSITIVE")))
+        Row("en_USA_CI_AI", "English", "ACCENT_INSENSITIVE", "CASE_INSENSITIVE"),
+        Row("en_USA_CI_AI_RTRIM", "English", "ACCENT_INSENSITIVE", "CASE_INSENSITIVE"),
+        Row("en_USA_CI_RTRIM", "English", "ACCENT_SENSITIVE", "CASE_INSENSITIVE"),
+        Row("en_USA_RTRIM", "English", "ACCENT_SENSITIVE", "CASE_SENSITIVE")))
 
     checkAnswer(sql("SELECT NAME FROM collations() WHERE ICU_VERSION is null"),
-      Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE")))
+      Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE"), Row("UTF8_BINARY_RTRIM"),
+        Row("UTF8_LCASE_RTRIM")))
   }
 
   test("fully qualified name") {

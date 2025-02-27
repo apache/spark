@@ -15,6 +15,23 @@
     "groupingExpressions": [{
       "unresolvedAttribute": {
         "unparsedIdentifier": "id"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column$",
+              "methodName": "apply",
+              "fileName": "Column.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
       }
     }],
     "aggregateExpressions": [{
@@ -23,9 +40,43 @@
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "b"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column$",
+                  "methodName": "apply",
+                  "fileName": "Column.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
+                }]
+              }
+            }
           }
         }],
         "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "count",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
       }
     }],
     "pivot": {
@@ -33,6 +84,23 @@
         "unresolvedAttribute": {
           "unparsedIdentifier": "a",
           "planId": "0"
+        },
+        "common": {
+          "origin": {
+            "jvmOrigin": {
+              "stackTrace": [{
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.connect.Dataset",
+                "methodName": "col",
+                "fileName": "Dataset.scala"
+              }, {
+                "classLoaderName": "app",
+                "declaringClass": "org.apache.spark.sql.RelationalGroupedDataset",
+                "methodName": "pivot",
+                "fileName": "RelationalGroupedDataset.scala"
+              }]
+            }
+          }
         }
       },
       "values": [{

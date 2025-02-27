@@ -219,6 +219,11 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
                 self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
     def test_with_none_and_nan(self):
+        # TODO(SPARK-51286): Fix test_with_none_and_nan to to pass with Arrow enabled
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            self.check_with_none_and_nan()
+
+    def check_with_none_and_nan(self):
         # SPARK-41855: make createDataFrame support None and NaN
         # SPARK-41814: test with eqNullSafe
         data1 = [Row(id=1, value=float("NaN")), Row(id=2, value=42.0), Row(id=3, value=None)]

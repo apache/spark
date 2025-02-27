@@ -280,6 +280,9 @@ class ALSModel private[ml] (
     @transient val itemFactors: DataFrame)
   extends Model[ALSModel] with ALSModelParams with MLWritable {
 
+  // For ml connect only
+  private[ml] def this() = this("", -1, null, null)
+
   /** @group setParam */
   @Since("1.4.0")
   def setUserCol(value: String): this.type = set(userCol, value)

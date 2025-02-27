@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{Schema, SchemaFormatter}
 import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
@@ -44,6 +44,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 private[sql] object AvroUtils extends Logging {
+
+  val JSON_INLINE_FORMAT: String = "json/inline"
+  val JSON_PRETTY_FORMAT: String = "json/pretty"
+
   def inferSchema(
       spark: SparkSession,
       options: Map[String, String],
@@ -71,7 +75,7 @@ private[sql] object AvroUtils extends Logging {
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
            |
-           |${avroSchema.toString(true)}
+           |${SchemaFormatter.format(JSON_PRETTY_FORMAT, avroSchema)}
            |""".stripMargin)
     }
   }

@@ -95,9 +95,11 @@ object RequestedVariantField {
   def fullVariant: RequestedVariantField =
     RequestedVariantField(VariantMetadata("$", failOnError = true, "UTC"), VariantType)
 
-  def apply(v: VariantGet): RequestedVariantField =
+  def apply(v: VariantGet): RequestedVariantField = {
+    assert(v.path.foldable)
     RequestedVariantField(
       VariantMetadata(v.path.eval().toString, v.failOnError, v.timeZoneId.get), v.dataType)
+  }
 
   def apply(c: Cast): RequestedVariantField =
     RequestedVariantField(
@@ -212,7 +214,7 @@ class VariantInRelation {
   // fields, which also changes the struct type containing it, and it is difficult to reconstruct
   // the original struct value. This is not a big loss, because we need the full variant anyway.
   def collectRequestedFields(expr: Expression): Unit = expr match {
-    case v@VariantGet(StructPathToVariant(fields), _, _, _, _) =>
+    case v@VariantGet(StructPathToVariant(fields), path, _, _, _) if path.foldable =>
       addField(fields, RequestedVariantField(v))
     case c@Cast(StructPathToVariant(fields), _, _, _) => addField(fields, RequestedVariantField(c))
     case IsNotNull(StructPath(_, _)) | IsNull(StructPath(_, _)) =>
@@ -240,7 +242,7 @@ class VariantInRelation {
 
     // Rewrite patterns should be consistent with visit patterns in `collectRequestedFields`.
     expr.transformDown {
-      case g@VariantGet(v@StructPathToVariant(fields), _, _, _, _) =>
+      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _) if path.foldable =>
         // Rewrite the attribute in advance, rather than depending on the last branch to rewrite it.
         // Ww need to avoid the `v@StructPathToVariant(fields)` branch to rewrite the child again.
         GetStructField(rewriteAttribute(v), fields(RequestedVariantField(g)))

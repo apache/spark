@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, Java
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, NewInstance}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -200,8 +200,7 @@ case class ExpressionEncoder[T](
           UnresolvedAttribute.quoted(part.toString)
         case GetStructField(GetColumnByOrdinal(0, dt), ordinal, _) =>
           GetColumnByOrdinal(ordinal, dt)
-        case If(IsNull(GetColumnByOrdinal(0, _)), _, n: NewInstance) => n
-        case If(IsNull(GetColumnByOrdinal(0, _)), _, i: InitializeJavaBean) => i
+        case If(IsNull(GetColumnByOrdinal(0, _)), _, e) => e
       }
     } else {
       // For other input objects like primitive, array, map, etc., we deserialize the first column

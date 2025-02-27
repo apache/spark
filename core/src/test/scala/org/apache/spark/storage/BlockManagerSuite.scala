@@ -851,8 +851,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
-    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
+    val locations = blockManager.sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
 
@@ -874,8 +873,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     blockManager.blockManagerId =
       BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
-    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
+    val locations = blockManager.sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
     assert(locations.flatMap(_.topologyInfo)
       === Seq(localRack, localRack, localRack, otherRack, otherRack))

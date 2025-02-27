@@ -24,9 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -82,13 +81,13 @@ object MaskExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] = {
     val strArg = InputParameter("str")
     val upperCharArg = InputParameter("upperChar",
-      Some(Literal.create(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_UPPERCASE, StringType)))
     val lowerCharArg = InputParameter("lowerChar",
-      Some(Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_LOWERCASE, StringType)))
     val digitCharArg = InputParameter("digitChar",
-      Some(Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_DIGIT, StringType)))
     val otherCharArg = InputParameter("otherChar",
-      Some(Literal.create(Mask.MASKED_IGNORE, SQLConf.get.defaultStringType)))
+      Some(Literal.create(Mask.MASKED_IGNORE, StringType)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
     Some(functionSignature)
@@ -113,17 +112,17 @@ case class Mask(
   def this(input: Expression) =
     this(
       input,
-      Literal.create(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType),
-      Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
-      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_UPPERCASE, StringType),
+      Literal.create(Mask.MASKED_LOWERCASE, StringType),
+      Literal.create(Mask.MASKED_DIGIT, StringType),
       Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression) =
     this(
       input,
       upperChar,
-      Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
-      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_LOWERCASE, StringType),
+      Literal.create(Mask.MASKED_DIGIT, StringType),
       Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression, lowerChar: Expression) =
@@ -131,7 +130,7 @@ case class Mask(
       input,
       upperChar,
       lowerChar,
-      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_DIGIT, StringType),
       Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(

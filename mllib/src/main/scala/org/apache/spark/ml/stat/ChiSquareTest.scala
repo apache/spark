@@ -22,9 +22,8 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.test.{ChiSqTest => OldChiSqTest}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-
 
 /**
  * Chi-square hypothesis testing for categorical data.
