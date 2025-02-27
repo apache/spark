@@ -52,6 +52,9 @@ case class SparkShreddedRow(row: SpecializedGetters) extends ShreddingUtils.Shre
     SparkShreddedRow(row.getStruct(ordinal, numFields))
   override def getArray(ordinal: Int): SparkShreddedRow =
     SparkShreddedRow(row.getArray(ordinal))
+  override def getUuid(ordinal: Int): java.util.UUID =
+    // Spark currently does not shred UUID.
+    throw QueryExecutionErrors.malformedVariant()
   override def numElements(): Int = row.asInstanceOf[ArrayData].numElements()
 }
 
