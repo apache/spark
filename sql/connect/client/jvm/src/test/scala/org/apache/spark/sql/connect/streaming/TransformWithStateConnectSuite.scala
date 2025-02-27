@@ -341,9 +341,10 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
         val curTime = System.currentTimeMillis
         val file1 = prepareInputData(path + "/text-test3.csv", Seq("a", "b"), Seq(10, 15))
         file1.setLastModified(curTime + 2L)
-        prepareInputData(path + "/text-test4.csv", Seq("a", "c"), Seq(11, 25))
-        val file2 = prepareInputData(path + "/text-test1.csv", Seq("a"), Seq(5))
+        val file2 = prepareInputData(path + "/text-test4.csv", Seq("a", "c"), Seq(11, 25))
         file2.setLastModified(curTime + 4L)
+        val file3 = prepareInputData(path + "/text-test1.csv", Seq("a"), Seq(5))
+        file3.setLastModified(curTime + 6L)
 
         val q = buildTestDf(path, spark)
           .select(col("key").as("key"), timestamp_seconds(col("value")).as("eventTime"))
