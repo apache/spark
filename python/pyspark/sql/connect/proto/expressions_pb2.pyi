@@ -1289,7 +1289,6 @@ class Expression(google.protobuf.message.Message):
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
     MERGE_ACTION_FIELD_NUMBER: builtins.int
     TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
-    LAZY_EXPRESSION_FIELD_NUMBER: builtins.int
     SUBQUERY_EXPRESSION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
@@ -1335,8 +1334,6 @@ class Expression(google.protobuf.message.Message):
     @property
     def typed_aggregate_expression(self) -> global___TypedAggregateExpression: ...
     @property
-    def lazy_expression(self) -> global___LazyExpression: ...
-    @property
     def subquery_expression(self) -> global___SubqueryExpression: ...
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
@@ -1367,7 +1364,6 @@ class Expression(google.protobuf.message.Message):
         named_argument_expression: global___NamedArgumentExpression | None = ...,
         merge_action: global___MergeAction | None = ...,
         typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
-        lazy_expression: global___LazyExpression | None = ...,
         subquery_expression: global___SubqueryExpression | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
@@ -1392,8 +1388,6 @@ class Expression(google.protobuf.message.Message):
             b"extension",
             "lambda_function",
             b"lambda_function",
-            "lazy_expression",
-            b"lazy_expression",
             "literal",
             b"literal",
             "merge_action",
@@ -1445,8 +1439,6 @@ class Expression(google.protobuf.message.Message):
             b"extension",
             "lambda_function",
             b"lambda_function",
-            "lazy_expression",
-            b"lazy_expression",
             "literal",
             b"literal",
             "merge_action",
@@ -1500,7 +1492,6 @@ class Expression(google.protobuf.message.Message):
             "named_argument_expression",
             "merge_action",
             "typed_aggregate_expression",
-            "lazy_expression",
             "subquery_expression",
             "extension",
         ]
@@ -1930,25 +1921,6 @@ class MergeAction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["condition"] | None: ...
 
 global___MergeAction = MergeAction
-
-class LazyExpression(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    CHILD_FIELD_NUMBER: builtins.int
-    @property
-    def child(self) -> global___Expression:
-        """(Required) The expression to be marked as lazy."""
-    def __init__(
-        self,
-        *,
-        child: global___Expression | None = ...,
-    ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["child", b"child"]
-    ) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["child", b"child"]) -> None: ...
-
-global___LazyExpression = LazyExpression
 
 class SubqueryExpression(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

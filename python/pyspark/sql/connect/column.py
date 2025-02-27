@@ -44,7 +44,6 @@ from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
     UnresolvedExtractValue,
-    LazyExpression,
     LiteralExpression,
     CaseWhen,
     SortOrder,
@@ -459,7 +458,7 @@ class Column(ParentColumn):
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
     def outer(self) -> ParentColumn:
-        return Column(LazyExpression(self._expr))
+        return Column(self._expr)
 
     def isin(self, *cols: Any) -> ParentColumn:
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
