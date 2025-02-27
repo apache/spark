@@ -29,6 +29,7 @@ private[protobuf] object SQLPlanMetricSerializer {
     setStringField(metric.name, builder.setName)
     builder.setAccumulatorId(metric.accumulatorId)
     setStringField(metric.metricType, builder.setMetricType)
+    builder.setInitValue(metric.initValue)
     builder.build()
   }
 
@@ -36,7 +37,8 @@ private[protobuf] object SQLPlanMetricSerializer {
     SQLPlanMetric(
       name = getStringField(metrics.hasName, () => weakIntern(metrics.getName)),
       accumulatorId = metrics.getAccumulatorId,
-      metricType = getStringField(metrics.hasMetricType, () => weakIntern(metrics.getMetricType))
+      metricType = getStringField(metrics.hasMetricType, () => weakIntern(metrics.getMetricType)),
+      initValue = metrics.getInitValue
     )
   }
 }
