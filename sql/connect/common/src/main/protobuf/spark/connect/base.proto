@@ -261,6 +261,8 @@ message AnalyzePlanResponse {
 
   message SparkVersion {
     string version = 1;
+    string java_version = 2;
+    string scala_version = 3;
   }
 
   message DDLParse {
