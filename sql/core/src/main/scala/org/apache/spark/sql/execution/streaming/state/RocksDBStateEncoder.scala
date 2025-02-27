@@ -896,6 +896,40 @@ class AvroStateEncoder(
   }
 
   /**
+   * Prepends a version byte to the beginning of a byte array.
+   * This is used to maintain backward compatibility and version control of
+   * the state encoding format.
+   *
+   * @param bytesToEncode The original byte array to prepend the version byte to
+   * @return A new byte array with the version byte prepended at the beginning
+   */
+  private[sql] def prependVersionByte(bytesToEncode: Array[Byte]): Array[Byte] = {
+    val encodedBytes = new Array[Byte](bytesToEncode.length + STATE_ENCODING_NUM_VERSION_BYTES)
+    Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
+    Platform.copyMemory(
+      bytesToEncode, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+      bytesToEncode.length)
+    encodedBytes
+  }
+
+  /**
+   * Removes the version byte from the beginning of a byte array.
+   * This is used when decoding state data to get back to the original encoded format.
+   *
+   * @param bytes The byte array containing the version byte at the start
+   * @return A new byte array with the version byte removed
+   */
+  private[sql] def removeVersionByte(bytes: Array[Byte]): Array[Byte] = {
+    val resultBytes = new Array[Byte](bytes.length - STATE_ENCODING_NUM_VERSION_BYTES)
+    Platform.copyMemory(
+      bytes, STATE_ENCODING_NUM_VERSION_BYTES + Platform.BYTE_ARRAY_OFFSET,
+      resultBytes, Platform.BYTE_ARRAY_OFFSET, resultBytes.length
+    )
+    resultBytes
+  }
+
+  /**
    * This method takes a byte array written using Avro encoding, and
    * deserializes to an UnsafeRow using the Avro deserializer
    */
@@ -956,7 +990,7 @@ class AvroStateEncoder(
   private val out = new ByteArrayOutputStream
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    keyStateEncoderSpec match {
+    val keyBytes = keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(_) =>
         val avroRow =
           encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
@@ -967,6 +1001,7 @@ class AvroStateEncoder(
         encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, prefixKeyAvroType, out)
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeKey")
     }
+    prependVersionByte(keyBytes)
   }
 
   override def encodeRemainingKey(row: UnsafeRow): Array[Byte] = {
@@ -978,8 +1013,8 @@ class AvroStateEncoder(
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeRemainingKey")
     }
     // prepend stateSchemaId to the remaining key portion
-    encodeWithStateSchemaId(
-      StateSchemaIdRow(currentKeySchemaId, avroRow))
+    prependVersionByte(encodeWithStateSchemaId(
+      StateSchemaIdRow(currentKeySchemaId, avroRow)))
   }
 
   /**
@@ -1118,16 +1153,18 @@ class AvroStateEncoder(
     val encoder = EncoderFactory.get().binaryEncoder(out, null)
     writer.write(record, encoder)
     encoder.flush()
-    out.toByteArray
+    prependVersionByte(out.toByteArray)
   }
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
     val avroRow = encodeUnsafeRowToAvro(row, avroEncoder.valueSerializer, valueAvroType, out)
     // prepend stateSchemaId to the Avro-encoded value portion
-    encodeWithStateSchemaId(StateSchemaIdRow(currentValSchemaId, avroRow))
+    prependVersionByte(
+      encodeWithStateSchemaId(StateSchemaIdRow(currentValSchemaId, avroRow)))
   }
 
-  override def decodeKey(bytes: Array[Byte]): UnsafeRow = {
+  override def decodeKey(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(_) =>
         val schemaIdRow = decodeStateSchemaIdRow(bytes)
@@ -1141,7 +1178,8 @@ class AvroStateEncoder(
   }
 
 
-  override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = {
+  override def decodeRemainingKey(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
     keyStateEncoderSpec match {
       case PrefixKeyScanStateEncoderSpec(_, _) =>
@@ -1174,7 +1212,8 @@ class AvroStateEncoder(
    * @throws UnsupportedOperationException if a field's data type is not supported for range
    *                                       scan decoding
    */
-  override def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow = {
+  override def decodePrefixKeyForRangeScan(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     val reader = new GenericDatumReader[GenericRecord](rangeScanAvroType)
     val decoder = DecoderFactory.get().binaryDecoder(bytes, 0, bytes.length, null)
     val record = reader.read(null, decoder)
@@ -1257,7 +1296,8 @@ class AvroStateEncoder(
     rowWriter.getRow()
   }
 
-  override def decodeValue(bytes: Array[Byte]): UnsafeRow = {
+  override def decodeValue(rowBytes: Array[Byte]): UnsafeRow = {
+    val bytes = removeVersionByte(rowBytes)
     val schemaIdRow = decodeStateSchemaIdRow(bytes)
     val writerSchema = getStateSchemaProvider.getSchemaMetadataValue(
       StateSchemaMetadataKey(
@@ -1648,45 +1688,11 @@ class NoPrefixKeyStateEncoder(
   extends RocksDBKeyStateEncoder with Logging {
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    if (!useColumnFamilies) {
-      dataEncoder.encodeKey(row)
-    } else {
-      // First encode the row with the data encoder
-      val rowBytes = dataEncoder.encodeKey(row)
-
-      // Create data array with version byte
-      val dataWithVersion = new Array[Byte](STATE_ENCODING_NUM_VERSION_BYTES + rowBytes.length)
-      Platform.putByte(dataWithVersion, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
-      Platform.copyMemory(
-        rowBytes, Platform.BYTE_ARRAY_OFFSET,
-        dataWithVersion, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
-        rowBytes.length
-      )
-
-      dataWithVersion
-    }
+    dataEncoder.encodeKey(row)
   }
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    if (!useColumnFamilies) {
-      dataEncoder.decodeKey(keyBytes)
-    } else if (keyBytes == null) {
-      null
-    } else {
-      val dataWithVersion = keyBytes
-
-      // Skip version byte to get to actual data
-      val dataLength = dataWithVersion.length - STATE_ENCODING_NUM_VERSION_BYTES
-
-      // Extract data bytes and decode using data encoder
-      val dataBytes = new Array[Byte](dataLength)
-      Platform.copyMemory(
-        dataWithVersion, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
-        dataBytes, Platform.BYTE_ARRAY_OFFSET,
-        dataLength
-      )
-      dataEncoder.decodeKey(dataBytes)
-    }
+    dataEncoder.decodeKey(keyBytes)
   }
 
   override def supportPrefixKeyScan: Boolean = false

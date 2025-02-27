@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.time.ZoneId
+import java.time.ZoneOffset
 
 import scala.collection.mutable
 
@@ -31,13 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, Se
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.{
-  quoteIfNeeded,
-  DateFormatter,
-  DateTimeUtils,
-  Iso8601TimestampFormatter,
-  LegacyDateFormats
-}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
@@ -59,13 +53,8 @@ case class DescribeRelationJsonCommand(
         nullable = false,
         new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()
     )) extends UnaryRunnableCommand {
-  private lazy val timestampFormatter = new Iso8601TimestampFormatter(
-    pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
-    zoneId = ZoneId.of("UTC"),
-    locale = DateFormatter.defaultLocale,
-    legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
-    isParsing = true
-  )
+  private lazy val timestampFormatter =
+    TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss'Z'", ZoneOffset.UTC, isParsing = false)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val jsonMap = mutable.LinkedHashMap[String, JValue]()

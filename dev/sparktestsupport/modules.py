@@ -1095,6 +1095,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1471,6 +1472,8 @@ pyspark_logger = Module(
     dependencies=[],
     source_file_regexes=["python/pyspark/logger"],
     python_test_goals=[
+        # doctests
+        "pyspark.logger.logger",
         # unittests
         "pyspark.logger.tests.test_logger",
         "pyspark.logger.tests.connect.test_parity_logger",

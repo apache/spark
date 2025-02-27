@@ -148,16 +148,16 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    lazy val currentNamespace = catalogManager.currentNamespace.quoted
+    lazy val currentCatalog = catalogManager.currentCatalog.name()
+    lazy val currentUser = CurrentUserContext.getCurrentUser
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
-        val currentNamespace = catalogManager.currentNamespace.quoted
         Literal.create(currentNamespace, StringType)
       case CurrentCatalog() =>
-        val currentCatalog = catalogManager.currentCatalog.name()
         Literal.create(currentCatalog, StringType)
       case CurrentUser() =>
-        val currentUser = CurrentUserContext.getCurrentUser
         Literal.create(currentUser, StringType)
     }
   }
