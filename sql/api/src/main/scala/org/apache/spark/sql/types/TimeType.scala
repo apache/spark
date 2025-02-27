@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
  * The time type represents a time value with fields hour, minute, second, up to microseconds. The
@@ -25,12 +26,16 @@ import org.apache.spark.annotation.Unstable
  *
  * @param precision
  *   The time fractional seconds precision which indicates the number of decimal digits maintained
- *   following the decimal point in the seconds value. The valid range is [0, 6].
+ *   following the decimal point in the seconds value. The supported range is [0, 6].
  *
  * @since 4.1.0
  */
 @Unstable
-case class TimeType(precision: Byte) extends DatetimeType {
+case class TimeType(precision: Int) extends DatetimeType {
+
+  if (precision < 0 || precision > 6) {
+    throw DataTypeErrors.unsupportedTimePrecisionError(precision)
+  }
 
   /**
    * The default size of a value of the TimeType is 8 bytes.

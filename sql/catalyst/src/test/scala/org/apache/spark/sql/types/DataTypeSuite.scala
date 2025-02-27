@@ -1373,4 +1373,18 @@ class DataTypeSuite extends SparkFunSuite {
     }
     assert(exception.getMessage.contains("The length of varchar type cannot be negative."))
   }
+
+  test("precisions of the TIME data type") {
+    0 to 6 foreach { p => assert(TimeType(p).sql == s"TIME($p)") }
+
+    Seq(Int.MinValue, -1, 7, Int.MaxValue).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          TimeType(p)
+        },
+        condition = "UNSUPPORTED_TIME_PRECISION",
+        parameters = Map("precision" -> p.toString)
+      )
+    }
+  }
 }
