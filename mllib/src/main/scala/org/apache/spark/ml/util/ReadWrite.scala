@@ -486,8 +486,8 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue]): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
-    val params = instance.paramMap.toSeq
-    val defaultParams = instance.defaultParamMap.toSeq
+    val params = instance.paramMap.toSeq.sortBy(_.param.name)
+    val defaultParams = instance.defaultParamMap.toSeq.sortBy(_.param.name)
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
@@ -754,7 +754,7 @@ private[ml] object MetaAlgorithmReadWrite {
   }
 }
 
-private[ml] class FileSystemOverwrite extends Logging {
+private[spark] class FileSystemOverwrite extends Logging {
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
     val hadoopConf = session.sessionState.newHadoopConf()

@@ -45,3 +45,5 @@ jobs:
         {
           "pyspark": "true"
         }
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}

@@ -448,6 +448,23 @@ case class UnresolvedScalarSubqueryPlanId(planId: Long)
   }
 }
 
+case class UnresolvedTableArgPlanId(
+    planId: Long,
+    partitionSpec: Seq[Expression] = Seq.empty,
+    orderSpec: Seq[SortOrder] = Seq.empty,
+    withSinglePartition: Boolean = false
+) extends UnresolvedPlanId {
+
+  override def withPlan(plan: LogicalPlan): Expression = {
+    FunctionTableSubqueryArgumentExpression(
+      plan,
+      partitionByExpressions = partitionSpec,
+      orderByExpressions = orderSpec,
+      withSinglePartition = withSinglePartition
+    )
+  }
+}
+
 /**
  * A subquery that can return multiple rows and columns. This should be rewritten as a join
  * with the outer query during the optimization phase.

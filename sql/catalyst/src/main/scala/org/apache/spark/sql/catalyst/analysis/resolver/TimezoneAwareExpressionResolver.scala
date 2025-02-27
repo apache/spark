@@ -55,11 +55,14 @@ class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expre
    * @param timeZoneId The timezone ID to apply.
    * @return A new [[TimeZoneAwareExpression]] with the specified timezone and original tags.
    */
-  def withResolvedTimezoneCopyTags(expression: Expression, timeZoneId: String): Expression = {
-    val withTimeZone = withResolvedTimezone(expression, timeZoneId)
-    withTimeZone.copyTagsFrom(expression)
-    withTimeZone
-  }
+  def withResolvedTimezoneCopyTags(expression: Expression, timeZoneId: String): Expression =
+    expression match {
+      case timezoneExpression: TimeZoneAwareExpression if timezoneExpression.timeZoneId.isEmpty =>
+        val withTimezone = timezoneExpression.withTimeZone(timeZoneId)
+        withTimezone.copyTagsFrom(timezoneExpression)
+        withTimezone
+      case other => other
+    }
 
   /**
    * Apply timezone to [[TimeZoneAwareExpression]] expressions.

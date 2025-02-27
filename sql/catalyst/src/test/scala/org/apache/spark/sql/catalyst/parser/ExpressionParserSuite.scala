@@ -26,7 +26,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1150,11 +1150,16 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual(complexName2.quotedString, UnresolvedAttribute(Seq("fo``o", "ba``r")))
   }
 
-  test("SPARK-19526 Support ignore nulls keywords for first and last") {
+  test("SPARK-19526: Support ignore nulls keywords for first and last") {
     assertEqual("first(a ignore nulls)", First($"a", true).toAggregateExpression())
     assertEqual("first(a)", First($"a", false).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last($"a", true).toAggregateExpression())
     assertEqual("last(a)", Last($"a", false).toAggregateExpression())
+  }
+
+  test("SPARK-51241: Add test cases with ignore nulls for ANY_VALUE") {
+    assertEqual("any_value(a ignore nulls)", AnyValue($"a", true).toAggregateExpression())
+    assertEqual("any_value(a)", AnyValue($"a", false).toAggregateExpression())
   }
 
   test("timestamp literals") {

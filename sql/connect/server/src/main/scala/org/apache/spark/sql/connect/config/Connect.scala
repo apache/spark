@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.config
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.internal.SQLConf
@@ -214,6 +215,18 @@ object Connect {
       .toSequence
       .createWithDefault(Nil)
 
+  val CONNECT_ML_BACKEND_CLASSES =
+    buildConf("spark.connect.ml.backend.classes")
+      .doc("""
+             |Comma separated list of classes that implement the trait
+             |org.apache.spark.sql.connect.plugin.MLBackendPlugin to replace the
+             |specified Spark ML operators with a backend-specific implementation.
+             |""".stripMargin)
+      .version("4.0.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val CONNECT_JVM_STACK_TRACE_MAX_SIZE =
     buildStaticConf("spark.connect.jvmStacktrace.maxSize")
       .doc("""
@@ -301,4 +314,21 @@ object Connect {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
+  val CONNECT_AUTHENTICATE_TOKEN =
+    buildStaticConf("spark.connect.authenticate.token")
+      .doc("A pre-shared token that will be used to authenticate clients. This secret must be" +
+        " passed as a bearer token by for clients to connect.")
+      .version("4.0.0")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val CONNECT_AUTHENTICATE_TOKEN_ENV = "SPARK_CONNECT_AUTHENTICATE_TOKEN"
+
+  def getAuthenticateToken: Option[String] = {
+    SparkEnv.get.conf.get(CONNECT_AUTHENTICATE_TOKEN).orElse {
+      Option(System.getenv.get(CONNECT_AUTHENTICATE_TOKEN_ENV))
+    }
+  }
 }

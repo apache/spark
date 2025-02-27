@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
+import org.apache.spark.sql.catalyst.analysis.resolver.{LogicalPlanResolver, ResolverExtension}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan}
+import org.apache.spark.sql.classic.SparkSession
 
 /**
  * The [[FileResolver]] is a [[MetadataResolver]] extension that resolves [[UnresolvedRelation]]
@@ -48,8 +48,12 @@ class FileResolver(sparkSession: SparkSession) extends ResolverExtension {
   /**
    * Reuse [[ResolveSQLOnFile]] code to resolve [[UnresolvedRelation]] made out of file.
    */
-  override def resolveOperator: PartialFunction[LogicalPlan, LogicalPlan] = {
+  override def resolveOperator(
+      operator: LogicalPlan,
+      resolver: LogicalPlanResolver): Option[LogicalPlan] = operator match {
     case UnresolvedRelationResolution(resolvedRelation) =>
-      resolvedRelation
+      Some(resolvedRelation)
+    case _ =>
+      None
   }
 }

@@ -214,7 +214,6 @@ common/network-common/src/main/java/org/apache/spark/network/util/LimitedInputSt
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
 core/src/main/resources/org/apache/spark/ui/static/vis*
-docs/js/vendor/bootstrap.js
 connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
 core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
 core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
@@ -244,9 +243,11 @@ core/src/main/resources/org/apache/spark/ui/static/*dataTables*
 core/src/main/resources/org/apache/spark/ui/static/graphlib-dot.min.js
 core/src/main/resources/org/apache/spark/ui/static/jquery*
 core/src/main/resources/org/apache/spark/ui/static/sorttable.js
+docs/js/vendor/bootstrap*
 docs/js/vendor/anchor.min.js
 docs/js/vendor/jquery*
 docs/js/vendor/modernizer*
+docs/js/vendor/docsearch.min.js
 
 ISC License
 -----------

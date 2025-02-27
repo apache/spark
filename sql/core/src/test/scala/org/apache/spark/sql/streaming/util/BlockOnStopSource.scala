@@ -22,7 +22,9 @@ import java.util.concurrent.CountDownLatch
 
 import org.apache.zookeeper.KeeperException.UnimplementedException
 
-import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession, SQLContext}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.CONTINUOUS_READ
 import org.apache.spark.sql.connector.read.{streaming, InputPartition, Scan, ScanBuilder}
@@ -85,7 +87,7 @@ class BlockOnStopSource(spark: SparkSession, latch: CountDownLatch) extends Sour
   override val schema: StructType = BlockOnStopSourceProvider.schema
   override def getOffset: Option[Offset] = Some(LongOffset(0))
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
+    spark.createDataFrame(util.Collections.emptyList[Row](), schema)
   }
 }
 

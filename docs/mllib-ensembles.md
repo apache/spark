@@ -198,18 +198,18 @@ Notation: $N$ = number of instances. $y_i$ = label of instance $i$.  $x_i$ = fea
   <tbody>
     <tr>
       <td>Log Loss</td>
-	  <td>Classification</td>
-	  <td>$2 \sum_{i=1}^{N} \log(1+\exp(-2 y_i F(x_i)))$</td><td>Twice binomial negative log likelihood.</td>
+      <td>Classification</td>
+      <td>$2 \sum_{i=1}^{N} \log(1+\exp(-2 y_i F(x_i)))$</td><td>Twice binomial negative log likelihood.</td>
     </tr>
     <tr>
       <td>Squared Error</td>
-	  <td>Regression</td>
-	  <td>$\sum_{i=1}^{N} (y_i - F(x_i))^2$</td><td>Also called L2 loss.  Default loss for regression tasks.</td>
+      <td>Regression</td>
+      <td>$\sum_{i=1}^{N} (y_i - F(x_i))^2$</td><td>Also called L2 loss.  Default loss for regression tasks.</td>
     </tr>
     <tr>
       <td>Absolute Error</td>
-	  <td>Regression</td>
-     <td>$\sum_{i=1}^{N} |y_i - F(x_i)|$</td><td>Also called L1 loss.  Can be more robust to outliers than Squared Error.</td>
+      <td>Regression</td>
+      <td>$\sum_{i=1}^{N} |y_i - F(x_i)|$</td><td>Also called L1 loss.  Can be more robust to outliers than Squared Error.</td>
     </tr>
   </tbody>
 </table>

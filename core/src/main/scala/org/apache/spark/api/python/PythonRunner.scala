@@ -23,17 +23,18 @@ import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files => JavaFiles, Path}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys.TASK_NAME
-import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
+import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
@@ -90,12 +91,43 @@ private[spark] object PythonEvalType {
   }
 }
 
-private object BasePythonRunner {
+private[spark] object BasePythonRunner extends Logging {
 
-  private lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
+  private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
-  private def faultHandlerLogPath(pid: Int): Path = {
+  private[spark] def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
+  }
+
+  private[spark] def pythonWorkerStatusMessageWithContext(
+      handle: Option[ProcessHandle],
+      worker: PythonWorker,
+      hasInputs: Boolean): MessageWithContext = {
+    log"handle.map(_.isAlive) = " +
+    log"${MDC(LogKeys.PYTHON_WORKER_IS_ALIVE, handle.map(_.isAlive))}, " +
+    log"channel.isConnected = " +
+    log"${MDC(LogKeys.PYTHON_WORKER_CHANNEL_IS_CONNECTED, worker.channel.isConnected)}, " +
+    log"channel.isBlocking = " +
+    log"${
+      MDC(LogKeys.PYTHON_WORKER_CHANNEL_IS_BLOCKING_MODE,
+        worker.channel.isBlocking)
+    }, " +
+      (if (!worker.channel.isBlocking) {
+        log"selector.isOpen = " +
+        log"${MDC(LogKeys.PYTHON_WORKER_SELECTOR_IS_OPEN, worker.selector.isOpen)}, " +
+        log"selectionKey.isValid = " +
+        log"${
+          MDC(LogKeys.PYTHON_WORKER_SELECTION_KEY_IS_VALID,
+            worker.selectionKey.isValid)
+        }, " +
+        (Try(worker.selectionKey.interestOps()) match {
+          case Success(ops) =>
+            log"selectionKey.interestOps = " +
+              log"${MDC(LogKeys.PYTHON_WORKER_SELECTION_KEY_INTERESTS, ops)}, "
+          case _ => log""
+        })
+      } else log"") +
+    log"hasInputs = ${MDC(LogKeys.PYTHON_WORKER_HAS_INPUTS, hasInputs)}"
   }
 }
 
@@ -112,6 +144,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val jobArtifactUUID: Option[String],
     protected val metrics: Map[String, AccumulatorV2[Long, Long]])
   extends Logging {
+  import BasePythonRunner._
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
@@ -122,6 +155,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
+  protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
+  protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
+  protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
   // All the Python functions should have the same exec, version and envvars.
@@ -199,6 +235,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
+    if (hideTraceback) {
+      envVars.put("SPARK_HIDE_TRACEBACK", "1")
+    }
     if (simplifiedTraceback) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
     }
@@ -212,14 +251,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     if (faultHandlerEnabled) {
-      envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
+      envVars.put("PYTHON_FAULTHANDLER_DIR", faultHandlerLogDir.toString)
     }
     // allow the user to set the batch size for the BatchedSerializer on UDFs
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
-    val (worker: PythonWorker, pid: Option[Int]) = env.createPythonWorker(
+    val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
@@ -252,10 +291,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val dataIn = new DataInputStream(
-      new BufferedInputStream(new ReaderInputStream(worker, writer), bufferSize))
+    val dataIn = new DataInputStream(new BufferedInputStream(
+      new ReaderInputStream(worker, writer, handle, idleTimeoutSeconds, killOnIdleTimeout),
+      bufferSize))
     val stdoutIterator = newReaderIterator(
-      dataIn, writer, startTime, env, worker, pid, releasedOrClosed, context)
+      dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
   }
 
@@ -568,21 +608,21 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         throw writer.exception.get
 
       case e: IOException if faultHandlerEnabled && pid.isDefined &&
-          JavaFiles.exists(BasePythonRunner.faultHandlerLogPath(pid.get)) =>
-        val path = BasePythonRunner.faultHandlerLogPath(pid.get)
+          JavaFiles.exists(faultHandlerLogPath(pid.get)) =>
+        val path = faultHandlerLogPath(pid.get)
         val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
         JavaFiles.deleteIfExists(path)
         throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
 
-      case eof: EOFException if !faultHandlerEnabled =>
+      case e: IOException if !faultHandlerEnabled =>
         throw new SparkException(
           s"Python worker exited unexpectedly (crashed). " +
             "Consider setting 'spark.sql.execution.pyspark.udf.faulthandler.enabled' or" +
-            s"'${Python.PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for" +
-            "the better Python traceback.", eof)
+            s"'${PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for " +
+            "the better Python traceback.", e)
 
-      case eof: EOFException =>
-        throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+      case e: IOException =>
+        throw new SparkException("Python worker exited unexpectedly (crashed)", e)
     }
   }
 
@@ -636,7 +676,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
   }
 
-  class ReaderInputStream(worker: PythonWorker, writer: Writer) extends InputStream {
+  class ReaderInputStream(
+      worker: PythonWorker,
+      writer: Writer,
+      handle: Option[ProcessHandle],
+      idleTimeoutSeconds: Long,
+      killOnIdleTimeout: Boolean) extends InputStream {
     private[this] var writerIfbhThreadLocalValue: Object = null
     private[this] val temp = new Array[Byte](1)
     private[this] val bufferStream = new DirectByteBufferOutputStream()
@@ -661,6 +706,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         temp(0) & 0xff
       }
     }
+
+    private[this] val idleTimeoutMillis: Long = TimeUnit.SECONDS.toMillis(idleTimeoutSeconds)
+    private[this] var pythonWorkerKilled: Boolean = false
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
       // The code below manipulates the InputFileBlockHolder thread local in order
@@ -695,7 +743,35 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val buf = ByteBuffer.wrap(b, off, len)
       var n = 0
       while (n == 0) {
-        worker.selector.select()
+        val start = System.currentTimeMillis()
+        val selected = worker.selector.select(idleTimeoutMillis)
+        val end = System.currentTimeMillis()
+        if (selected == 0
+          // Avoid logging if no timeout or the selector doesn't wait for the idle timeout
+          // as it can return 0 in some case.
+          && idleTimeoutMillis > 0 && (end - start) >= idleTimeoutMillis) {
+          if (pythonWorkerKilled) {
+            logWarning(
+              log"Waiting for Python worker process to terminate after idle timeout: " +
+              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+          } else {
+            logWarning(
+              log"Idle timeout reached for Python worker (timeout: " +
+              log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+              log"No data received from the worker process: " +
+              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+            if (killOnIdleTimeout) {
+              handle.foreach { handle =>
+                if (handle.isAlive) {
+                  logWarning(
+                    log"Terminating Python worker process due to idle timeout (timeout: " +
+                    log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds)")
+                  pythonWorkerKilled = handle.destroy()
+                }
+              }
+            }
+          }
+        }
         if (worker.selectionKey.isReadable) {
           n = worker.channel.read(buf)
         }

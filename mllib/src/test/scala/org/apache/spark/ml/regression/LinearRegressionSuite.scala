@@ -1165,7 +1165,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(fields(0).getOpType() == OpType.CONTINUOUS)
       val pmmlRegressionModel = pmml.getModels().get(0).asInstanceOf[PMMLRegressionModel]
       val pmmlPredictors = pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors
-      val pmmlWeights = pmmlPredictors.asScala.map(_.getCoefficient()).toList
+      val pmmlWeights = pmmlPredictors.asScala.map(_.getCoefficient().doubleValue()).toList
       assert(pmmlWeights(0) ~== model.coefficients(0) relTol 1E-3)
       assert(pmmlWeights(1) ~== model.coefficients(1) relTol 1E-3)
     }

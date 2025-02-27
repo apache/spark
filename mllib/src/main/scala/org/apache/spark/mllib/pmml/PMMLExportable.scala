@@ -20,7 +20,7 @@ package org.apache.spark.mllib.pmml
 import java.io.{File, OutputStream, StringWriter}
 import javax.xml.transform.stream.StreamResult
 
-import org.jpmml.model.JAXBUtil
+import org.jpmml.model.JAXBSerializer
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -39,7 +39,8 @@ trait PMMLExportable {
    */
   private def toPMML(streamResult: StreamResult): Unit = {
     val pmmlModelExport = PMMLModelExportFactory.createPMMLModelExport(this)
-    JAXBUtil.marshalPMML(pmmlModelExport.getPmml(), streamResult)
+    val jaxbSerializer = new JAXBSerializer()
+    jaxbSerializer.marshalPretty(pmmlModelExport.getPmml(), streamResult)
   }
 
   /**

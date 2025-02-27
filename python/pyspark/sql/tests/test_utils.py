@@ -1763,7 +1763,7 @@ class UtilsTestsMixin:
             exception = e
 
         self.assertIsNotNone(exception)
-        self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+        self.assertEqual(exception.getCondition(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
         self.assertEqual(exception.getSqlState(), "42703")
         self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
         self.assertIn(
@@ -1785,7 +1785,7 @@ class UtilsTestsMixin:
         try:
             self.spark.sql("""SELECT assert_true(FALSE)""")
         except AnalysisException as e:
-            self.assertIsNone(e.getErrorClass())
+            self.assertIsNone(e.getCondition())
             self.assertIsNone(e.getSqlState())
             self.assertEqual(e.getMessageParameters(), {})
             self.assertEqual(e.getMessage(), "")
@@ -1797,7 +1797,7 @@ class UtilsTestsMixin:
         try:
             assertDataFrameEqual(df1, df2)
         except PySparkAssertionError as e:
-            self.assertEqual(e.getErrorClass(), "UNSUPPORTED_OPERATION")
+            self.assertEqual(e.getCondition(), "UNSUPPORTED_OPERATION")
             exception_thrown = True
 
         self.assertTrue(exception_thrown)
