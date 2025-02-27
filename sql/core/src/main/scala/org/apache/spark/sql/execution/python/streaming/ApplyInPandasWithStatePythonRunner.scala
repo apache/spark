@@ -134,7 +134,7 @@ class ApplyInPandasWithStatePythonRunner(
    *
    * See [[ApplyInPandasWithStateWriter]] for more details.
    */
-  protected def writeNextInputToArrowStream(
+  protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,

@@ -44,7 +44,7 @@ class ArrowPythonUDTFRunner(
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
       jobArtifactUUID, pythonMetrics)
-  with BasicPythonArrowInput
+  with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
