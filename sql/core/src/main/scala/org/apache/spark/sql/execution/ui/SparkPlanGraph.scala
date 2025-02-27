@@ -106,7 +106,7 @@ object SparkPlanGraph {
           buildSparkPlanGraphNode(
             planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
         }
-      case "TableCacheQueryStage" =>
+      case "TableCacheQueryStage" | "ResultQueryStage" =>
         buildSparkPlanGraphNode(
           planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
       case "Subquery" if subgraph != null =>

@@ -37,11 +37,246 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.sql.types._
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
+}
+
+case class TwoLongs(
+    value1: Long,
+    value2: Long
+)
+
+case class ReorderedLongs(
+    value2: Long,
+    value1: Long
+)
+
+case class RenamedFields(
+    value4: Long,
+    value2: Long
+)
+
+// Initial state with basic fields
+case class BasicState(
+    id: Int,
+    name: String
+)
+
+// Evolved state with just primitive types
+case class EvolvedState(
+    id: Int,
+    name: String,
+    count: Long,             // Should default to 0
+    active: Boolean,         // Should default to false
+    score: Double           // Should default to 0.0
+)
+
+// Processor with initial schema
+class DefaultValueInitialProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+
+    rows.map { value =>
+      val stateValue = BasicState(value.hashCode, value)
+      state.update(stateValue)
+      (key, stateValue)
+    }
+  }
+}
+
+// Evolved processor with additional primitive fields
+class DefaultValueEvolvedProcessor
+  extends StatefulProcessor[String, String, (String, EvolvedState)] {
+
+  @transient var state: ValueState[EvolvedState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[EvolvedState](
+      "testState",
+      Encoders.product[EvolvedState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, EvolvedState)] = {
+
+    rows.map { value =>
+      val current = Option(state.get()).getOrElse {
+        // If no state exists, create new state
+        EvolvedState(
+          value.hashCode, value, 100L, true, 99.9
+        )
+      }
+      (key, current)
+    }
+  }
+}
+
+// First schema - String field
+case class StateV1(value1: String)
+class ProcessorV1 extends StatefulProcessor[String, String, String] {
+  @transient var state: ValueState[StateV1] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[StateV1](
+      "testState",
+      Encoders.product[StateV1],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    rows.map { value =>
+      state.update(StateV1(value))
+      value
+    }
+  }
+}
+
+// Second schema - Long field
+case class StateV2(value2: Long)
+class ProcessorV2 extends StatefulProcessor[String, String, String] {
+  @transient var state: ValueState[StateV2] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[StateV2](
+      "testState",
+      Encoders.product[StateV2],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    rows.map { value =>
+      state.update(StateV2(value.length))
+      value
+    }
+  }
+}
+
+// Third schema - Int field (incompatible with previous Long)
+case class StateV3(value1: Int)
+class ProcessorV3 extends StatefulProcessor[String, String, String] {
+  @transient var state: ValueState[StateV3] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[StateV3](
+      "testState",
+      Encoders.product[StateV3],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    rows.map { value =>
+      state.update(StateV3(value.length))
+      value
+    }
+  }
+}
+
+class RunningCountStatefulProcessorInitialOrder
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[TwoLongs] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[TwoLongs]("countState",
+      Encoders.product[TwoLongs], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = Option(_countState.get()).getOrElse(TwoLongs(0L, -1L)).value1 + 1
+
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(TwoLongs(count, -1L))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+// Evolved processor with renamed field
+class RenameEvolvedProcessor extends StatefulProcessor[String, String, (String, String)] {
+  @transient protected var _countState: ValueState[RenamedFields] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[RenamedFields](
+      "countState",
+      Encoders.product[RenamedFields],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = Option(_countState.get()).getOrElse(RenamedFields(0L, -1L)).value4 + 1
+
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(RenamedFields(count, -1L))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+class RunningCountStatefulProcessorReorderedFields
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[ReorderedLongs] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[ReorderedLongs]("countState",
+      Encoders.product[ReorderedLongs], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = Option(_countState.get()).getOrElse(ReorderedLongs(-1L, 0L)).value1 + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      // And update value1 here
+      _countState.update(ReorderedLongs(-1L, count))
+      Iterator((key, count.toString))
+    }
+  }
 }
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
@@ -59,7 +294,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+    val count = Option(_countState.get()).getOrElse(0L) + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -69,6 +305,67 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
     }
   }
 }
+
+case class NestedLongs(
+    value: Long,
+    value2: TwoLongs
+)
+
+class RunningCountStatefulProcessorTwoLongs
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[TwoLongs] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[TwoLongs]("countState",
+      Encoders.product[TwoLongs], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = Option(_countState.get()).getOrElse(TwoLongs(0L, 0L)).value1 + 1
+
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(TwoLongs(count, -1))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+class RunningCountStatefulProcessorNestedLongs
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[NestedLongs] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[NestedLongs]("countState",
+      Encoders.product[NestedLongs], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = Option(_countState.get()).getOrElse(
+      NestedLongs(0L, TwoLongs(0L, 0L))).value + 1
+
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(NestedLongs(count, TwoLongs(0L, 0L)))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
 
 class RunningCountStatefulProcessorWithTTL
   extends StatefulProcessor[String, String, (String, String)]
@@ -87,7 +384,8 @@ class RunningCountStatefulProcessorWithTTL
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+    val count = Option(_countState.get()).getOrElse(0L) + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -135,7 +433,8 @@ class RunningCountStatefulProcessorInt
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0) + 1
+    val count = Option(_countState.get()).getOrElse(0) + 1
+
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -153,7 +452,8 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
+
     if (currCount == 0 && (key == "a" || key == "c")) {
       getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
         + 5000)
@@ -216,7 +516,8 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
+
     val count = currCount + inputRows.size
     processUnexpiredRows(key, currCount, count, timerValues)
     Iterator((key, count.toString))
@@ -238,7 +539,7 @@ class RunningCountStatefulProcessorWithMultipleTimers
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
     val count = currCount + inputRows.size
     _countState.update(count)
     if (getHandle.listTimers().isEmpty) {
@@ -254,7 +555,7 @@ class RunningCountStatefulProcessorWithMultipleTimers
       key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
     if (getHandle.listTimers().size == 1) {
       _countState.clear()
     }
@@ -282,7 +583,7 @@ class MaxEventTimeStatefulProcessor
     val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
     _maxEventTimeState.update(maxEventTimeSec)
 
-    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    val registeredTimerMs: Long = Option(_timerState.get()).getOrElse(0L)
     if (registeredTimerMs < timeoutTimestampMs) {
       getHandle.deleteTimer(registeredTimerMs)
       getHandle.registerTimer(timeoutTimestampMs)
@@ -296,7 +597,7 @@ class MaxEventTimeStatefulProcessor
       timerValues: TimerValues): Iterator[(String, Int)] = {
     val valuesSeq = inputRows.toSeq
     val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-      _maxEventTimeState.getOption().getOrElse(0L))
+      Option(_maxEventTimeState.get()).getOrElse(0L))
     processUnexpiredRows(maxEventTimeSec)
     Iterator((key, maxEventTimeSec.toInt))
   }
@@ -329,8 +630,8 @@ class RunningCountMostRecentStatefulProcessor
       key: String,
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
-    val mostRecent = _mostRecent.getOption().getOrElse("")
+    val count = Option(_countState.get()).getOrElse(0L) + 1
+    val mostRecent = Option(_mostRecent.get()).getOrElse("")
 
     var output = List[(String, String, String)]()
     inputRows.foreach { row =>
@@ -359,7 +660,7 @@ class MostRecentStatefulProcessorWithDeletion
       key: String,
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val mostRecent = _mostRecent.getOption().getOrElse("")
+    val mostRecent = Option(_mostRecent.get()).getOrElse("")
 
     var output = List[(String, String)]()
     inputRows.foreach { row =>
@@ -442,9 +743,8 @@ class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
 /**
  * Class that adds tests for transformWithState stateful streaming operator
  */
-@SlowSQLTest
-class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
+abstract class TransformWithStateSuite extends StateStoreMetricsTest
+  with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 
@@ -1052,86 +1352,108 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  Seq(false, true).foreach { useImplicits =>
-    test("transformWithState - verify StateSchemaV3 writes " +
-      s"correct SQL schema of key/value with useImplicits=$useImplicits") {
-      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.SHUFFLE_PARTITIONS.key ->
-          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-        withTempDir { checkpointDir =>
-          val metadataPathPostfix = "state/0/_stateSchema/default"
-          val stateSchemaPath = new Path(checkpointDir.toString,
-            s"$metadataPathPostfix")
-          val hadoopConf = spark.sessionState.newHadoopConf()
-          val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
+  Seq("unsaferow", "avro").foreach { encoding =>
+    Seq(false, true).foreach { useImplicits =>
+      test("transformWithState - verify StateSchemaV3 writes " +
+        s"correct SQL schema of key/value with useImplicits=$useImplicits " +
+        s"(encoding = $encoding)") {
+        withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[RocksDBStateStoreProvider].getName,
+          SQLConf.SHUFFLE_PARTITIONS.key ->
+            TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+          SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+          withTempDir { checkpointDir =>
+            // When Avro is used, we want to set the StructFields to nullable
+            val shouldBeNullable = encoding == "avro"
+            val metadataPathPostfix = "state/0/_stateSchema/default"
+            val stateSchemaPath = new Path(checkpointDir.toString,
+              s"$metadataPathPostfix")
+            val hadoopConf = spark.sessionState.newHadoopConf()
+            val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
-          val keySchema = new StructType().add("value", StringType)
-          val schema0 = StateStoreColFamilySchema(
-            "countState",
-            keySchema,
-            new StructType().add("value", LongType, false),
-            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-            None
-          )
-          val schema1 = StateStoreColFamilySchema(
-            "listState",
-            keySchema,
-            new StructType()
-              .add("id", LongType, false)
-              .add("name", StringType),
-            Some(NoPrefixKeyStateEncoderSpec(keySchema)),
-            None
-          )
+            val keySchema = new StructType().add("value", StringType)
+            val schema0 = StateStoreColFamilySchema(
+              "countState", 0,
+              keySchema, 0,
+              new StructType().add("value", LongType, nullable = shouldBeNullable),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
+            val schema1 = StateStoreColFamilySchema(
+              "listState", 0,
+              keySchema, 0,
+              new StructType()
+                .add("id", LongType, nullable = shouldBeNullable)
+                .add("name", StringType),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
 
-          val userKeySchema = new StructType()
-            .add("id", IntegerType, false)
-            .add("name", StringType)
-          val compositeKeySchema = new StructType()
-            .add("key", new StructType().add("value", StringType))
-            .add("userKey", userKeySchema)
-          val schema2 = StateStoreColFamilySchema(
-            "mapState",
-            compositeKeySchema,
-            new StructType().add("value", StringType),
-            Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-            Option(userKeySchema)
-          )
+            val userKeySchema = new StructType()
+              .add("id", IntegerType, false)
+              .add("name", StringType)
+            val compositeKeySchema = new StructType()
+              .add("key", new StructType().add("value", StringType))
+              .add("userKey", userKeySchema)
+            val schema2 = StateStoreColFamilySchema(
+              "mapState", 0,
+              compositeKeySchema, 0,
+              new StructType().add("value", StringType),
+              Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
+              Option(userKeySchema)
+            )
 
-          val inputData = MemoryStream[String]
-          val result = inputData.toDS()
-            .groupByKey(x => x)
-            .transformWithState(new StatefulProcessorWithCompositeTypes(useImplicits),
-              TimeMode.None(),
-              OutputMode.Update())
+            val schema3 = StateStoreColFamilySchema(
+              "$rowCounter_listState", 0,
+              keySchema, 0,
+              new StructType().add("count", LongType, nullable = true),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
 
-          testStream(result, OutputMode.Update())(
-            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-            AddData(inputData, "a", "b"),
-            CheckNewAnswer(("a", "1"), ("b", "1")),
-            Execute { q =>
-              q.lastProgress.runId
-              val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-              val providerId = StateStoreProviderId(StateStoreId(
-                checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
-              val checker = new StateSchemaCompatibilityChecker(providerId,
-                hadoopConf, Some(schemaFilePath))
-              val colFamilySeq = checker.readSchemaFile()
+            val schema4 = StateStoreColFamilySchema(
+              "default", 0,
+              keySchema, 0,
+              new StructType().add("value", BinaryType),
+              Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              None
+            )
 
-              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-                q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
-              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-                q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
-              assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-                q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
+            val inputData = MemoryStream[String]
+            val result = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new StatefulProcessorWithCompositeTypes(useImplicits),
+                TimeMode.None(),
+                OutputMode.Update())
 
-              assert(colFamilySeq.length == 3)
-              assert(colFamilySeq.map(_.toString).toSet == Set(
-                schema0, schema1, schema2
-              ).map(_.toString))
-            },
-            StopStream
-          )
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+              AddData(inputData, "a", "b"),
+              CheckNewAnswer(("a", "1"), ("b", "1")),
+              Execute { q =>
+                q.lastProgress.runId
+                val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+                val providerId = StateStoreProviderId(StateStoreId(
+                  checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
+                val checker = new StateSchemaCompatibilityChecker(providerId,
+                  hadoopConf, List(schemaFilePath))
+                val colFamilySeq = checker.readSchemaFile()
+
+                assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                  q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
+                assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                  q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
+                assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                  q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
+
+                assert(colFamilySeq.length == 5)
+                assert(colFamilySeq.map(_.toString).toSet == Set(
+                  schema0, schema1, schema2, schema3, schema4
+                ).map(_.toString))
+              },
+              StopStream
+            )
+          }
         }
       }
     }
@@ -1177,43 +1499,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         assert(operatorProperties.outputMode == "Update")
         assert(operatorProperties.stateVariables.length == 1)
         assert(operatorProperties.stateVariables.head.stateName == "countState")
-      }
-    }
-  }
-
-  test("test that invalid schema evolution fails query for column family") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { checkpointDir =>
-        val inputData = MemoryStream[String]
-        val result1 = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result1, OutputMode.Update())(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "1")),
-          StopStream
-        )
-        val result2 = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorInt(),
-            TimeMode.None(),
-            OutputMode.Update())
-        testStream(result2, OutputMode.Update())(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          ExpectFailure[StateStoreValueSchemaNotCompatible] {
-            (t: Throwable) => {
-              assert(t.getMessage.contains("Please check number and type of fields."))
-            }
-          }
-        )
       }
     }
   }
@@ -1350,60 +1635,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("test that introducing TTL after restart fails query") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { checkpointDir =>
-        val inputData = MemoryStream[String]
-        val clock = new StreamManualClock
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
-
-        testStream(result, OutputMode.Update())(
-          StartStream(
-            trigger = Trigger.ProcessingTime("1 second"),
-            checkpointLocation = checkpointDir.getCanonicalPath,
-            triggerClock = clock),
-          AddData(inputData, "a"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "1")),
-          AdvanceManualClock(1 * 1000),
-          StopStream
-        )
-        val result2 = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorWithTTL(),
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
-        testStream(result2, OutputMode.Update())(
-          StartStream(
-            trigger = Trigger.ProcessingTime("1 second"),
-            checkpointLocation = checkpointDir.getCanonicalPath,
-            triggerClock = clock),
-          AddData(inputData, "a"),
-          AdvanceManualClock(1 * 1000),
-          ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
-            checkError(
-              t.asInstanceOf[SparkUnsupportedOperationException],
-              condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
-              parameters = Map(
-                "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
-                "newValueSchema" ->
-                  ("StructType(StructField(value,StructType(StructField(value,LongType,false))," +
-                    "true),StructField(ttlExpirationMs,LongType,true))")
-              )
-            )
-          }
-        )
-      }
-    }
-  }
-
   test("test query restart with new state variable succeeds") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -1445,6 +1676,55 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("a", "2")),
           StopStream
+        )
+      }
+    }
+  }
+
+  test("test exceeding schema file threshold throws error") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.STREAMING_MAX_NUM_STATE_SCHEMA_FILES.key -> 1.toString) {
+      withTempDir { dirPath =>
+        val inputData = MemoryStream[(String, String)]
+        // First run with both count and mostRecent states
+        val stream1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(stream1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          StopStream
+        )
+
+        // Second run deletes count state but keeps mostRecent
+        val stream2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(stream2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath.getCanonicalPath),
+          AddData(inputData, ("a", "str2"), ("b", "str3")),
+          ExpectFailure[StateStoreStateSchemaFilesThresholdExceeded] { t =>
+            checkError(
+              t.asInstanceOf[StateStoreStateSchemaFilesThresholdExceeded],
+              condition = "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED",
+              parameters = Map(
+                "numStateSchemaFiles" -> "2",
+                "maxStateSchemaFiles" -> "1",
+                "removedColumnFamilies" -> "(countState)",
+                "addedColumnFamilies" -> "()"
+              )
+            )
+          }
         )
       }
     }
@@ -1535,7 +1815,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
-  test("transformWithState - verify that metadata and schema logs are purged") {
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
+  ignore("transformWithState - verify that metadata and schema logs are purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1626,7 +1907,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify that schema file " +
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
+  ignore("transformWithState - verify that schema file " +
     "is kept after metadata is purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -1844,7 +2126,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify that all metadata and schema logs are not purged") {
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
+  ignore("transformWithState - verify that all metadata and schema logs are not purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1919,7 +2202,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify that no metadata and schema logs are purged after" +
+  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
+  ignore("transformWithState - verify that no metadata and schema logs are purged after" +
     " removing column family") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,

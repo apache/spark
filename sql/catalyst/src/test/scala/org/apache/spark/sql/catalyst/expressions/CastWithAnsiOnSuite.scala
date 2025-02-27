@@ -303,10 +303,6 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     s"cannot be cast to ${toSQLType(to)} because it is malformed."
   }
 
-  private def castErrMsg(l: Literal, to: DataType): String = {
-    castErrMsg(l, to, l.dataType)
-  }
-
   test("cast from invalid string to numeric should throw NumberFormatException") {
     def check(value: String, dataType: DataType): Unit = {
       checkExceptionInExpression[NumberFormatException](cast(value, dataType),

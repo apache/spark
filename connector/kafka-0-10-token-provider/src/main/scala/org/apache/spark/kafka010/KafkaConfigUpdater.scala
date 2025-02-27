@@ -57,8 +57,14 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
   }
 
   def setAuthenticationConfigIfNeeded(): this.type = {
+    val bootstrapServers = kafkaParams
+      .get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+      .map(_.asInstanceOf[String])
+      .getOrElse(throw KafkaTokenProviderExceptions.missingKafkaOption(
+        CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG))
+
     val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
-      kafkaParams(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+      bootstrapServers)
     setAuthenticationConfigIfNeeded(clusterConfig)
   }
 

@@ -34,7 +34,7 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.Utils
 
 private[spark] object PythonUtils extends Logging {
-  val PY4J_ZIP_NAME = "py4j-0.10.9.8-src.zip"
+  val PY4J_ZIP_NAME = "py4j-0.10.9.9-src.zip"
 
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
   def sparkPythonPath: String = {

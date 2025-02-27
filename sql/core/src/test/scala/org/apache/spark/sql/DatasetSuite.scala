@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -1461,7 +1462,7 @@ class DatasetSuite extends QueryTest
     checkAnswer(df.map(row => row)(ExpressionEncoder(df.schema)).select("b", "a"), Row(2, 1))
   }
 
-  private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
+  private def checkShowString[T](ds: classic.Dataset[T], expected: String): Unit = {
     val numRows = expected.split("\n").length - 4
     val actual = ds.showString(numRows, truncate = 20)
 
@@ -2429,9 +2430,9 @@ class DatasetSuite extends QueryTest
   }
 
   test("SparkSession.active should be the same instance after dataset operations") {
-    val active = SparkSession.getActiveSession.get
+    val active = classic.SparkSession.getActiveSession.get
     val clone = active.cloneSession()
-    val ds = new Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
+    val ds = new classic.Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
 
     ds.queryExecution.analyzed
 
@@ -2778,6 +2779,21 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-51312: createDataFrame should work with both Date and LocalDate") {
+    for (confVal <- Seq("true", "false")) {
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> confVal) {
+        val schema = new org.apache.spark.sql.types.StructType().add("a", "date").add("b", "date")
+        val rdd = spark.sparkContext.parallelize(
+          Seq(Row(java.time.LocalDate.of(2020, 5, 13), java.sql.Date.valueOf("2020-05-13")))
+        )
+        checkAnswer(
+          spark.createDataFrame(rdd, schema),
+          sql("select date'2020-05-13' as a, date'2020-05-13' as b")
+        )
+      }
+    }
+  }
+
   test("SPARK-46791: Dataset with set field") {
     val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
     checkDataset(ds.map(t => t),
@@ -2801,6 +2817,44 @@ class DatasetSuite extends QueryTest
         assert(jobCounter === 0)
       }
     }
+  }
+
+  test("SPARK-49961: transform type should be consistent (classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: classic.Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (base to classic)") {
+    val ds = Seq(1, 2).toDS()
+    val f: Dataset[Int] => classic.Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-49961: transform type should be consistent (as base)") {
+    val ds = Seq(1, 2).toDS().asInstanceOf[Dataset[Int]]
+    val f: Dataset[Int] => Dataset[Int] =
+      d => d.selectExpr("(value + 1) value").as[Int]
+    val transformed = ds.transform(f)
+    assert(transformed.collect().sorted === Array(2, 3))
+  }
+
+  test("SPARK-51070: array/seq/map of mutable set") {
+    val set: collection.Set[Int] = mutable.Set(1, 2)
+
+    implicit val arrayEncoder = ExpressionEncoder[Array[collection.Set[Int]]]()
+
+    val arrayMutableSet = Array(set)
+    val seqMutableSet = Seq(set)
+    val mapMutableSet = Map(1 -> set)
+
+    checkDataset(Seq(arrayMutableSet).toDS(), arrayMutableSet)
+    checkDataset(Seq(seqMutableSet).toDS(), seqMutableSet)
+    checkDataset(Seq(mapMutableSet).toDS(), mapMutableSet)
   }
 }
 
@@ -2922,7 +2976,7 @@ object JavaData {
 
 /** Used to test importing dataset.spark.implicits._ */
 object DatasetTransform {
-  def addOne(ds: Dataset[Int]): Dataset[Int] = {
+  def addOne(ds: classic.Dataset[Int]): Dataset[Int] = {
     import ds.sparkSession.implicits._
     ds.map(_ + 1)
   }
