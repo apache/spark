@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
@@ -847,8 +848,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkToJson(Array(primitiveHeader(UUID),
       0, 17, 34, 51, 68, 85, 102, 119, -120, -103, -86, -69, -52, -35, -18, -1),
       "\"00112233-4455-6677-8899-aabbccddeeff\"")
-    checkCast(Array(primitiveHeader(UUID),
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16), StringType,
+    // Test cast to string. Incidentally, also test construction of UUID via VariantBuilder
+    // interface, since we can't currently do it as a Spark cast.
+    val uuid = java.util.UUID.fromString("01020304-0506-0708-090a-0b0c0d0e0f10")
+    val builder = new VariantBuilder(false)
+    builder.appendUuid(uuid)
+    val bytes = builder.result().getValue
+    checkCast(bytes, StringType,
       "01020304-0506-0708-090a-0b0c0d0e0f10")
   }
 

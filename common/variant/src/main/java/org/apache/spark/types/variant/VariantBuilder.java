@@ -249,8 +249,8 @@ public class VariantBuilder {
     // UUID is stored big-endian, so don't use writeLong.
     ByteBuffer buffer = ByteBuffer.wrap(writeBuffer, writePos, 16);
     buffer.order(ByteOrder.BIG_ENDIAN);
-    buffer.putLong(0, uuid.getMostSignificantBits());
-    buffer.putLong(8, uuid.getLeastSignificantBits());
+    buffer.putLong(writePos, uuid.getMostSignificantBits());
+    buffer.putLong(writePos + 8, uuid.getLeastSignificantBits());
     writePos += 16;
   }
 
