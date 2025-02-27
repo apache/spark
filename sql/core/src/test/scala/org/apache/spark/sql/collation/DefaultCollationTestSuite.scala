@@ -25,6 +25,13 @@ import org.apache.spark.sql.types.StringType
 
 abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSession {
 
+  val defaultStringProducingExpressions: Seq[String] = Seq(
+    "current_timezone()", "current_database()", "md5('Spark' collate unicode)",
+    "soundex('Spark' collate unicode)", "url_encode('https://spark.apache.org' collate unicode)",
+    "url_decode('https%3A%2F%2Fspark.apache.org')", "uuid()", "chr(65)", "collation('UNICODE')",
+    "version()", "space(5)", "randstr(5, 123)"
+  )
+
   def dataSource: String = "parquet"
   def testTable: String = "test_tbl"
   def testView: String = "test_view"
@@ -327,6 +334,58 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
                  |""".stripMargin),
           Row(fullyQualifiedPrefix + "UNICODE_CI", fullyQualifiedPrefix + "UTF8_LCASE"))
       }
+    }
+  }
+
+  test("view has utf8 binary collation by default") {
+    withView(testTable) {
+      sql(s"CREATE VIEW $testTable AS SELECT current_database() AS db")
+      assertTableColumnCollation(testTable, "db", "UTF8_BINARY")
+    }
+  }
+
+  test("default string producing expressions in view definition") {
+    val viewDefaultCollation = Seq(
+      "UTF8_BINARY", "UNICODE"
+    )
+
+    viewDefaultCollation.foreach { collation =>
+      withView(testTable) {
+
+        val columns = defaultStringProducingExpressions.zipWithIndex.map {
+          case (expr, index) => s"$expr AS c${index + 1}"
+        }.mkString(", ")
+
+        sql(
+          s"""
+             |CREATE view $testTable
+             |DEFAULT COLLATION $collation
+             |AS SELECT $columns
+             |""".stripMargin)
+
+        (1 to defaultStringProducingExpressions.length).foreach { index =>
+          assertTableColumnCollation(testTable, s"c$index", collation)
+        }
+      }
+    }
+  }
+
+  test("default string producing expressions in view definition - nested in expr tree") {
+    withView(testTable) {
+      sql(
+        s"""
+           |CREATE view $testTable
+           |DEFAULT COLLATION UNICODE AS SELECT
+           |SUBSTRING(current_database(), 1, 1) AS c1,
+           |SUBSTRING(SUBSTRING(current_database(), 1, 2), 1, 1) AS c2,
+           |SUBSTRING(current_database()::STRING, 1, 1) AS c3,
+           |SUBSTRING(CAST(current_database() AS STRING COLLATE UTF8_BINARY), 1, 1) AS c4
+           |""".stripMargin)
+
+      assertTableColumnCollation(testTable, "c1", "UNICODE")
+      assertTableColumnCollation(testTable, "c2", "UNICODE")
+      assertTableColumnCollation(testTable, "c3", "UNICODE")
+      assertTableColumnCollation(testTable, "c4", "UTF8_BINARY")
     }
   }
 }
