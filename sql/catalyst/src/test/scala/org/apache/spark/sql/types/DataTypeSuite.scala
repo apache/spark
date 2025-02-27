@@ -380,6 +380,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(VarcharType(10), 10)
   yearMonthIntervalTypes.foreach(checkDefaultSize(_, 4))
   dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
+  checkDefaultSize(TimeType(0), 8)
+  checkDefaultSize(TimeType(6), 8)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
