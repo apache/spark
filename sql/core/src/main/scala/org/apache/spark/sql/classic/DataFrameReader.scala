@@ -106,7 +106,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     Dataset.ofRows(
       sparkSession,
       UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, isStreaming = false, paths)
-    )
+    )(Set.empty)
   }
 
   /** @inheritdoc */
@@ -317,7 +317,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     val multipartIdentifier =
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
-      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))(Set.empty)
   }
 
   /** @inheritdoc */

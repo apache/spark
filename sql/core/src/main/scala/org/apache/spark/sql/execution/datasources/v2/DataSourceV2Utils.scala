@@ -26,7 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
+import org.apache.spark.sql.catalyst.analysis.{RelationWrapper, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -148,6 +148,7 @@ private[sql] object DataSourceV2Utils extends Logging {
         (tbl, None, None)
     }
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     table match {
       case _: SupportsRead if table.supports(BATCH_READ) =>
         Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions))

@@ -95,7 +95,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
       override def getBatch(start: Option[Offset], end: Offset): classic.DataFrame = {
-        ofRows(spark.sparkSession, LocalRelation(schema).copy(isStreaming = true))
+        ofRows(spark.sparkSession, LocalRelation(schema).copy(isStreaming = true))(Set.empty)
       }
 
       override def stop(): Unit = {}
