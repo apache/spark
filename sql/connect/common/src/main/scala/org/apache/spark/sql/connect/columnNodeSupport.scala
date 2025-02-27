@@ -46,24 +46,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
   override def apply(node: ColumnNode): Expression = apply(node, None)
 
-  /**
-   * Transform a column into an expression, with additional transformation rules that will be
-   * applied to each ColumnNode before converting it.
-   */
-  private[sql] def toExprWithTransformation(
-      node: ColumnNode,
-      encoder: Option[Encoder[_]],
-      additionalTransformation: ColumnNode => ColumnNode): proto.Expression = {
-    apply(node, encoder, Some(additionalTransformation))
-  }
-
-  private def apply(
-      node: ColumnNode,
-      e: Option[Encoder[_]],
-      additionalTransformation: Option[ColumnNode => ColumnNode] = None): proto.Expression = {
+  private def apply(node: ColumnNode, e: Option[Encoder[_]]): proto.Expression = {
     val builder = proto.Expression.newBuilder()
-    val n = additionalTransformation.map(_(node)).getOrElse(node)
-    n match {
+    node match {
       case Literal(value, None, _) =>
         builder.setLiteral(toLiteralProtoBuilder(value))
 
@@ -102,17 +87,17 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
-          .addAllArguments(arguments.map(apply(_, e, additionalTransformation)).asJava)
+          .addAllArguments(arguments.map(apply(_, e)).asJava)
           .setIsInternal(isInternal)
 
       case Alias(child, name, metadata, _) =>
-        val b = builder.getAliasBuilder.setExpr(apply(child, e, additionalTransformation))
+        val b = builder.getAliasBuilder.setExpr(apply(child, e))
         name.foreach(b.addName)
         metadata.foreach(m => b.setMetadata(m.json))
 
       case Cast(child, dataType, evalMode, _) =>
         val b = builder.getCastBuilder
-          .setExpr(apply(child, e, additionalTransformation))
+          .setExpr(apply(child, e))
           .setType(DataTypeProtoConverter.toConnectProtoType(dataType))
         evalMode.foreach { mode =>
           val convertedMode = mode match {
@@ -131,9 +116,8 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case Window(windowFunction, windowSpec, _) =>
         val b = builder.getWindowBuilder
-          .setWindowFunction(apply(windowFunction, e, additionalTransformation))
-          .addAllPartitionSpec(
-            windowSpec.partitionColumns.map(apply(_, e, additionalTransformation)).asJava)
+          .setWindowFunction(apply(windowFunction, e))
+          .addAllPartitionSpec(windowSpec.partitionColumns.map(apply(_, e)).asJava)
           .addAllOrderSpec(windowSpec.sortColumns.map(convertSortOrder(_, e)).asJava)
         windowSpec.frame.foreach { frame =>
           b.getFrameSpecBuilder
@@ -147,72 +131,56 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case UnresolvedExtractValue(child, extraction, _) =>
         builder.getUnresolvedExtractValueBuilder
-          .setChild(apply(child, e, additionalTransformation))
-          .setExtraction(apply(extraction, e, additionalTransformation))
+          .setChild(apply(child, e))
+          .setExtraction(apply(extraction, e))
 
       case UpdateFields(structExpression, fieldName, valueExpression, _) =>
         val b = builder.getUpdateFieldsBuilder
-          .setStructExpression(apply(structExpression, e, additionalTransformation))
+          .setStructExpression(apply(structExpression, e))
           .setFieldName(fieldName)
-        valueExpression.foreach(v => b.setValueExpression(apply(v, e, additionalTransformation)))
+        valueExpression.foreach(v => b.setValueExpression(apply(v, e)))
 
       case v: UnresolvedNamedLambdaVariable =>
         builder.setUnresolvedNamedLambdaVariable(convertNamedLambdaVariable(v))
 
       case LambdaFunction(function, arguments, _) =>
         builder.getLambdaFunctionBuilder
-          .setFunction(apply(function, e, additionalTransformation))
+          .setFunction(apply(function, e))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
-      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
       case InvokeInlineUserDefinedFunction(
             a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
             Nil,
             isDistinct,
             _) =>
-        // TODO we should probably 'just' detect this particular scenario
-        //  in the planner instead of wrapping it in a separate method.
         val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get), Nil, isDistinct)
         builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
 
-      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
-      case f @ InvokeInlineUserDefinedFunction(
-            a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
-            args,
-            false,
-            _) if args.nonEmpty =>
-        // Translate Aggregator (UserDefinedFunctionLike) into UserDefinedFunction, and
-        // send it over to the next "match" to process.
-        builder.mergeFrom(
-          apply(f.copy(function = UserDefinedAggregator(a, e.get)), e, additionalTransformation))
-
-      case InvokeInlineUserDefinedFunction(
-            udaf: UserDefinedAggregateFunction,
-            arguments,
-            isDistinct,
-            _) =>
-        val wrapped = UserDefinedAggregator(
-          aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
-          inputEncoder = RowEncoder.encoderFor(udaf.inputSchema),
-          deterministic = udaf.deterministic)
-        builder.setCommonInlineUserDefinedFunction(
-          UdfToProtoUtils.toProto(wrapped, arguments.map(apply(_, e)), isDistinct))
-
-      case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, isDistinct, _) =>
+      case InvokeInlineUserDefinedFunction(f, args, isDistinct, _) =>
+        val udf = f match {
+          case f: UserDefinedFunction => f
+          case udaf: UserDefinedAggregateFunction =>
+            UserDefinedAggregator(
+              aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
+              inputEncoder = RowEncoder.encoderFor(udaf.inputSchema),
+              deterministic = udaf.deterministic)
+          case _ =>
+            throw SparkException.internalError("Unsupported UDF type: " + f)
+        }
         builder.setCommonInlineUserDefinedFunction(
           UdfToProtoUtils
-            .toProto(udf, args.map(apply(_, e, additionalTransformation)), isDistinct))
+            .toProto(udf, args.map(apply(_, e)), isDistinct))
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
           .setIsInternal(false)
         branches.foreach { case (condition, value) =>
-          b.addArguments(apply(condition, e, additionalTransformation))
-          b.addArguments(apply(value, e, additionalTransformation))
+          b.addArguments(apply(condition, e))
+          b.addArguments(apply(value, e))
         }
         otherwise.foreach { value =>
-          b.addArguments(apply(value, e, additionalTransformation))
+          b.addArguments(apply(value, e))
         }
 
       case LazyExpression(child, _) =>

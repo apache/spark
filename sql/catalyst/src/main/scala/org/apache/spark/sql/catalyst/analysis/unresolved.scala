@@ -1022,10 +1022,24 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
     copy(deserializer = newChild)
 }
 
-case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
+case class GetColumnByOrdinal(
+    ordinal: Int)(
+    val explicitDataType: Option[DataType]) extends LeafExpression
   with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = explicitDataType.getOrElse(
+    throw new UnresolvedException("dataType"))
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = explicitDataType.toSeq
+}
+
+object GetColumnByOrdinal {
+  def apply(ordinal: Int, dataType: DataType): GetColumnByOrdinal =
+    GetColumnByOrdinal(ordinal)(Option(dataType))
+
+  def unapply(e: GetColumnByOrdinal): Option[(Int, DataType)] =
+    e.explicitDataType.map(dt => e.ordinal -> dt)
 }
 
 case class GetViewColumnByNameAndOrdinal(

@@ -447,21 +447,14 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
   test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
     val ds = Seq(1, 2, 3).toDS()
     assert(ds.groupByKey(x => x).count().schema.head.name == "key")
-
-    // Enable legacy flag to follow previous Spark behavior
-    withSQLConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue" -> "true") {
-      assert(ds.groupByKey(x => x).count().schema.head.name == "value")
-    }
+    assert(ds.groupByKey(x => x).mapValues(x => x).count().schema.head.name == "key")
   }
 
-  // TODO(SPARK-50837): "ds.schema" is wrong: the column is named as "iv.key".
-  ignore(
-    "SPARK-26085: fix key attribute name for atomic type for typed aggregation - mapValues") {
-    val ds = Seq(1, 2, 3).toDS()
-    assert(ds.groupByKey(x => x).mapValues(x => x).count().schema.head.name == "key")
-
-    // Enable legacy flag to follow previous Spark behavior
+  // TODO(SPARK-50837): Support fallback.
+  ignore("SPARK-26085: fix key attribute name for atomic type for typed aggregation - legacy") {
     withSQLConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue" -> "true") {
+      val ds = Seq(1, 2, 3).toDS()
+      assert(ds.groupByKey(x => x).count().schema.head.name == "value")
       assert(ds.groupByKey(x => x).mapValues(x => x).count().schema.head.name == "value")
     }
   }
@@ -514,7 +507,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
   test("agg with mapValues (RGDS to KVDS)") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val values = ds
-      .groupBy($"_1")
+      .groupBy(expr("_1"))
       .as[String, (String, Int)]
       .mapValues(_._2 * 2) // value *= 2 to make sure `mapValues` is really applied
       .agg(count("*"), IntSumAgg.toColumn)
