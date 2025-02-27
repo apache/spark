@@ -417,8 +417,9 @@ data between Java and Python processes. Apache Arrow is disabled by default for 
 
 Arrow can improve performance when each input row generates a large result table from the UDTF.
 
-To enable Arrow optimization, set the ``spark.sql.execution.pythonUDTF.arrow.enabled``
-configuration to ``true``. You can also enable it by specifying the ``useArrow`` parameter
+This is enabled by default with ``spark.sql.execution.pythonUDTF.arrow.enabled`` set ``true``.
+To disable Arrow optimization, set the ``spark.sql.execution.pythonUDTF.arrow.enabled``
+configuration to ``false``. You can also disable it by specifying the ``useArrow`` parameter
 when declaring the UDTF.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
