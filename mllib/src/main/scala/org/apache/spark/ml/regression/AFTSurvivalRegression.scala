@@ -42,6 +42,7 @@ import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for accelerated failure time (AFT) regression.
@@ -350,6 +351,15 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): AFTSurvivalRegression = defaultCopy(extra)
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = SizeEstimator.estimate((this.params, this.uid))
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size += java.lang.Double.BYTES * 2 // intercept, scale
+    size
+  }
 }
 
 @Since("1.6.0")
@@ -467,6 +477,15 @@ class AFTSurvivalRegressionModel private[ml] (
   override def copy(extra: ParamMap): AFTSurvivalRegressionModel = {
     copyValues(new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale), extra)
       .setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = SizeEstimator.estimate((this.params, this.uid))
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size += java.lang.Double.BYTES * 2 // intercept, scale
+    size
   }
 
   @Since("1.6.0")

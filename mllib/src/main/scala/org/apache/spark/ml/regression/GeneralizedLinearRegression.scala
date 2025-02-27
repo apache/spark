@@ -41,6 +41,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for Generalized Linear Regression.
@@ -445,6 +446,15 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GeneralizedLinearRegression = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = SizeEstimator.estimate((this.params, this.uid))
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size += java.lang.Double.BYTES // intercept
+    size
+  }
 }
 
 @Since("2.0.0")
@@ -1103,6 +1113,15 @@ class GeneralizedLinearRegressionModel private[ml] (
     val copied = copyValues(new GeneralizedLinearRegressionModel(uid, coefficients, intercept),
       extra)
     copied.setSummary(trainingSummary).setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = SizeEstimator.estimate((this.params, this.uid))
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size += java.lang.Double.BYTES // intercept
+    size
   }
 
   /**

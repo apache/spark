@@ -43,4 +43,23 @@ abstract class Model[M <: Model[M]] extends Transformer {
   def hasParent: Boolean = parent != null
 
   override def copy(extra: ParamMap): M
+
+  /**
+   * For ml connect only.
+   * Estimate the size of this model in bytes.
+   * This is an approximation, the real size might be different.
+   * 1, Only driver side memory usage is counted, distributed objects (like DataFrame,
+   * RDD, Graph, Summary) are ignored.
+   * 2, Lazy vals are not counted, e.g., an auxiliary object used in prediction.
+   * 3, Using SizeEstimator to estimate the driver memory usage of distributed objects
+   * is not accurate, because the size of SparkSession/SparkContext is also included, e.g.
+   *    val df = spark.range(1)
+   *    SizeEstimator.estimate(df)                   -> 3310984
+   *    SizeEstimator.estimate(df.rdd)               -> 3331352
+   *    SizeEstimator.estimate(df.sparkSession)      -> 3249464
+   *    SizeEstimator.estimate(df.rdd.sparkContext)  -> 3249744
+   * 4, For 3-rd extension, if external languages are used, it is recommended to override
+   * this method and return a proper size.
+   */
+  private[spark] def estimatedSize: Long = throw new NotImplementedError
 }
