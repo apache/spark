@@ -24,10 +24,12 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -109,24 +111,30 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   override def create(): Unit = {
-    val tableSpec = UnresolvedTableSpec(
-      properties = properties.toMap,
-      provider = provider,
-      optionExpression = OptionList(Seq.empty),
-      location = None,
-      comment = None,
-      serde = None,
-      external = false)
     runCommand(
       CreateTableAsSelect(
         UnresolvedIdentifier(tableName),
         partitioning.getOrElse(Seq.empty),
         logicalPlan,
-        tableSpec,
+        buildTableSpec(),
         options.toMap,
         false))
   }
 
+  private def buildTableSpec(): UnresolvedTableSpec = {
+    val ignorePathOption = sparkSession.sessionState.conf.getConf(
+      SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION)
+    UnresolvedTableSpec(
+      properties = properties.toMap,
+      provider = provider,
+      optionExpression = OptionList(Seq.empty),
+      location = if (ignorePathOption) None else CaseInsensitiveMap(options.toMap).get("path"),
+      comment = None,
+      serde = None,
+      external = false)
+  }
+
+  /** @inheritdoc */
   override def replace(): Unit = {
     internalReplace(orCreate = false)
   }
@@ -202,19 +210,11 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
-    val tableSpec = UnresolvedTableSpec(
-      properties = properties.toMap,
-      provider = provider,
-      optionExpression = OptionList(Seq.empty),
-      location = None,
-      comment = None,
-      serde = None,
-      external = false)
     runCommand(ReplaceTableAsSelect(
       UnresolvedIdentifier(tableName),
       partitioning.getOrElse(Seq.empty),
       logicalPlan,
-      tableSpec,
+      buildTableSpec(),
       writeOptions = options.toMap,
       orCreate = orCreate))
   }
