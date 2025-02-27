@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -493,6 +493,21 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
     val p2 = model.set(model.quantileProbabilities, quantileProbabilities).predictQuantiles(vec)
 
     assert(p1 === p2)
+  }
+
+  test("model size estimation: aft") {
+    val quantileProbabilities = Array(0.1, 0.5, 0.9)
+    val aft = new AFTSurvivalRegression()
+      .setQuantilesCol("quantiles")
+      .setQuantileProbabilities(quantileProbabilities)
+    val size1 = aft.estimateModelSize(datasetUnivariate)
+    val model = aft.fit(datasetUnivariate)
+    val size2 = model.estimatedSize
+
+    // (size1, size2)
+    // (3284,3284)
+    val rel = (size1 - size2).toDouble / size2
+    assert(math.abs(rel) < 0.05, (size1, size2))
   }
 }
 
