@@ -40,7 +40,8 @@ case class UnionLoop(
     id: Long,
     anchor: LogicalPlan,
     recursion: LogicalPlan,
-    limit: Option[Int] = None) extends UnionBase {
+    localLimit: Option[Int] = None,
+    globalLimit: Option[Int] = None) extends UnionBase {
   override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): UnionLoop =
