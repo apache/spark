@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSu
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, Literal, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 
@@ -45,14 +45,15 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       "MODE", "PERCENTILE_CONT", "PERCENTILE_DISC")
 
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
-    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "BIT_AND", "BIT_OR", "BIT_XOR") ++
+    distinctUnsupportedAggregateFunctions
 
   private val supportedFunctions = supportedAggregateFunctions ++
     Set("ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LN", "EXP",
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
       "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
-      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD")
+      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD", "BIT_COUNT", "BIT_GET")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -260,6 +261,18 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
 
   class H2SQLBuilder extends JDBCSQLBuilder {
 
+    override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
+      (le, re) match {
+        // BIT_GET in H2 returns boolean value, so cast the literal to boolean explicitly.
+        case (gse: GeneralScalarExpression, lit: Literal[_])
+          if gse.name() == "BIT_GET" && lit.dataType == ByteType =>
+          val l = inputToSQL(gse)
+          val r = inputToSQL(lit)
+          s"$l $name CAST($r AS BOOLEAN)"
+        case _ => super.visitBinaryComparison(name, inputToSQL(le), inputToSQL(re))
+      }
+    }
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -269,7 +282,15 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
       } else {
-        super.visitAggregateFunction(funcName, isDistinct, inputs)
+        funcName match {
+          case "BIT_AND" =>
+            "BIT_AND_AGG(" + inputs.mkString(",") + ")"
+          case "BIT_OR" =>
+            "BIT_OR_AGG(" + inputs.mkString(",") + ")"
+          case "BIT_XOR" =>
+            "BIT_XOR_AGG(" + inputs.mkString(",") + ")"
+          case _ => super.visitAggregateFunction(funcName, isDistinct, inputs)
+        }
       }
 
     override def visitExtract(field: String, source: String): String = {
@@ -290,6 +311,10 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
           "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
         case "SHA2" =>
           "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
+        case "BIT_COUNT" =>
+          "BITCOUNT(" + inputs.mkString(",") + ")"
+        case "BIT_GET" =>
+          "CAST(BITGET(" + inputs.mkString(",") + ") AS BOOLEAN)"
         case _ => super.visitSQLFunction(funcName, inputs)
       }
     }

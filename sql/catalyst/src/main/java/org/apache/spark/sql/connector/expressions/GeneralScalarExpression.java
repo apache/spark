@@ -428,6 +428,18 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *    <li>Since version: 4.0.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>BIT_COUNT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>BIT_COUNT(expr)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>BIT_GET</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>BIT_GET(expr, pos)</code></li>
+ *    <li>Since version: 4.1.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.
