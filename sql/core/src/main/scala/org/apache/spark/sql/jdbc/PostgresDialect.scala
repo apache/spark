@@ -303,12 +303,27 @@ private case class PostgresDialect()
 
   class PostgresSQLBuilder extends JDBCSQLBuilder {
     override def visitExtract(field: String, source: String): String = {
-      field match {
-        case "DAY_OF_YEAR" => s"EXTRACT(DOY FROM $source)"
-        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
-        case "DAY_OF_WEEK" => s"EXTRACT(DOW FROM $source)"
-        case _ => super.visitExtract(field, source)
+      // SECOND, MINUTE, HOUR, QUARTER, YEAR, DAY are identical on postgres and spark
+      // MONTH        is different, postgres returns 0-11, spark returns 1-12.
+      //              Postgres also returns 1-12 but just for interval columns, so without source
+      //              data type, we cannot know how to push down it
+      // DAY_OF_WEEK  is DOW, day of week is full compatible with postgres,
+      //              but in V2ExpressionBuilder they converted DAY_OF_WEEK to DAY_OF_WEEK_ISO,
+      //              so we need to push down ISODOW
+      //              (ISO and standard day of weeks differs in starting day,
+      //              Sunday is 0 on standard DOW extraction, while in ISO it's 7)
+      // DAY_OF_YEAR  have same semantic, but different name (On postgres, it is DOY)
+      // WEEK         is a little bit specific function, but both spark and postgres uses ISO week
+      // YEAR_OF_WEEK is ISO year actually, (first few days of calendar year are actually past year
+      //              by ISO standard of week counting, 1st january is actually 52nd week of year
+      val postgresField = field match {
+        case "MONTH" => throw new UnsupportedOperationException("Month is not currently supported")
+        case "DAY_OF_WEEK" => "ISODOW"
+        case "DAY_OF_YEAR" => "DOY"
+        case "YEAR_OF_WEEK" => "ISOYEAR"
+        case _ => field
       }
+      super.visitExtract(postgresField, source)
     }
 
     override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
