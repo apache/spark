@@ -692,7 +692,7 @@ class SparkConnectPlanner(
       val outputAttr = udf.outputObjAttr
 
       val timeMode = TimeModes(twsInfo.getTimeMode)
-      val outputMode = InternalOutputModes(twsInfo.getOutputMode)
+      val outputMode = InternalOutputModes(rel.getOutputMode)
 
       val twsNode = if (hasInitialState) {
         val statefulProcessor = unpackedUdf.function

@@ -54,10 +54,13 @@ class BasicCountStatefulProcessor
       key: String,
       inputRows: Iterator[InputRowForConnectTest],
       timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
-    val count =
-      Option(_countState.get())
-        .getOrElse(StateRowForConnectTest(0L))
-        .count + inputRows.toSeq.length
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get().count
+      } else {
+        0L
+      }
+    }
     _countState.update(StateRowForConnectTest(count))
     Iterator(OutputRowForConnectTest(key, count.toString))
   }
@@ -81,7 +84,13 @@ class TestInitialStatefulProcessor
       key: String,
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = Option(_countState.get()).getOrElse(0L) + inputRows.toSeq.length
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get()
+      } else {
+        0L
+      }
+    }
     _countState.update(count)
     Iterator((key, count.toString))
   }
@@ -90,7 +99,13 @@ class TestInitialStatefulProcessor
       key: String,
       initialState: (String, String, String),
       timerValues: TimerValues): Unit = {
-    val count = Option(_countState.get()).getOrElse(0L) + 1
+    val count = 1 + {
+      if (_countState.exists()) {
+        _countState.get()
+      } else {
+        0L
+      }
+    }
     _countState.update(count)
   }
 }
@@ -139,11 +154,17 @@ class TTLTestStatefulProcessor
       inputRows: Iterator[(String, String)],
       timerValues: TimerValues): Iterator[(String, String)] = {
     val numOfInputRows = inputRows.toSeq.length
-    val count = Option(countState.get()).getOrElse(0) + numOfInputRows
-    val ttlCount = Option(ttlCountState.get()).getOrElse(0) + numOfInputRows
+    var count = numOfInputRows
+    var ttlCount = numOfInputRows
     var ttlListStateCount = numOfInputRows
     var ttlMapStateCount = numOfInputRows
 
+    if (countState.exists()) {
+      count += countState.get()
+    }
+    if (ttlCountState.exists()) {
+      ttlCount += ttlCountState.get()
+    }
     if (ttlListState.exists()) {
       for (value <- ttlListState.get()) {
         ttlListStateCount += value
@@ -317,11 +338,12 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        prepareInputData(path + "/text-test3.csv", Seq("a", "b"), Seq(10, 15))
-        Thread.sleep(2000)
+        val curTime = System.currentTimeMillis
+        val file1 = prepareInputData(path + "/text-test3.csv", Seq("a", "b"), Seq(10, 15))
+        file1.setLastModified(curTime + 2L)
         prepareInputData(path + "/text-test4.csv", Seq("a", "c"), Seq(11, 25))
-        Thread.sleep(2000)
-        prepareInputData(path + "/text-test1.csv", Seq("a"), Seq(5))
+        val file2 = prepareInputData(path + "/text-test1.csv", Seq("a"), Seq(5))
+        file2.setLastModified(curTime + 4L)
 
         val q = buildTestDf(path, spark)
           .select(col("key").as("key"), timestamp_seconds(col("value")).as("eventTime"))

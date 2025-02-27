@@ -684,9 +684,9 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
         .setFunc(funcProto)
+        .setOutputMode(outputMode.toString)
         .setTransformWithStateInfo(
           twsInfoBuilder
-            .setOutputMode(outputMode.toString)
             // we pass time mode as string here and deterministically restored on server
             .setTimeMode(timeMode.toString)
             .build())
