@@ -27,6 +27,7 @@ import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, Py
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
@@ -93,12 +94,14 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
 
-          writeIteratorToArrowStream(root, writer, dataOut, inputIterator)
-
-          // end writes footer to the output stream and doesn't clean any resources.
-          // It could throw exception if the output stream is closed, so it should be
-          // in the try block.
-          writer.end()
+          Utils.tryWithSafeFinally {
+            writeIteratorToArrowStream(root, writer, dataOut, inputIterator)
+          } {
+            // end writes footer to the output stream and doesn't clean any resources.
+            // It could throw exception if the output stream is closed, so it should be
+            // in the try block.
+            writer.end()
+          }
         } {
           // If we close root and allocator in TaskCompletionListener, there could be a race
           // condition where the writer thread keeps writing to the VectorSchemaRoot while
@@ -141,6 +144,51 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       arrowWriter.reset()
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
+    }
+  }
+}
+
+private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
+  self: BasePythonRunner[Iterator[InternalRow], _] =>
+
+  private val arrowMaxRecordsPerBatch = SQLConf.get.arrowMaxRecordsPerBatch
+  private val maxBytesPerBatch = SQLConf.get.arrowMaxBytesPerBatch
+
+  // Marker inside the input iterator to indicate the start of the next batch.
+  private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
+
+  override protected def writeIteratorToArrowStream(
+      root: VectorSchemaRoot,
+      writer: ArrowStreamWriter,
+      dataOut: DataOutputStream,
+      inputIterator: Iterator[Iterator[InternalRow]]): Unit = {
+    val arrowWriter = ArrowWriter.create(root)
+
+    while (nextBatchStart.hasNext || inputIterator.hasNext) {
+      if (!nextBatchStart.hasNext) {
+        nextBatchStart = inputIterator.next()
+      }
+
+      val startData = dataOut.size()
+      var numRowsInBatch = 0
+
+      def underBatchSizeLimit: Boolean =
+        maxBytesPerBatch == Int.MaxValue || arrowWriter.sizeInBytes() < maxBytesPerBatch
+
+      while (nextBatchStart.hasNext &&
+          (arrowMaxRecordsPerBatch <= 0 || numRowsInBatch < arrowMaxRecordsPerBatch) &&
+          underBatchSizeLimit) {
+        arrowWriter.write(nextBatchStart.next())
+        numRowsInBatch += 1
+      }
+
+      if (numRowsInBatch > 0) {
+        arrowWriter.finish()
+        writer.writeBatch()
+        arrowWriter.reset()
+        val deltaData = dataOut.size() - startData
+        pythonMetrics("pythonDataSent") += deltaData
+      }
     }
   }
 }

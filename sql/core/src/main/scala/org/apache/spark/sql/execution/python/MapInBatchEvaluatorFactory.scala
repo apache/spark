@@ -58,11 +58,9 @@ class MapInBatchEvaluatorFactory(
       // as a DataFrame.
       val wrappedIter = contextAwareIterator.map(InternalRow(_))
 
-      // DO NOT use iter.grouped(). See BatchIterator.
-      val batchIter =
-        if (batchSize > 0) new BatchIterator(wrappedIter, batchSize) else Iterator(wrappedIter)
+      val batchIter = Iterator(wrappedIter)
 
-      val columnarBatchIter = new ArrowPythonRunner(
+      val pyRunner = new ArrowPythonRunner(
         chainedFunc,
         pythonEvalType,
         argOffsets,
@@ -71,7 +69,8 @@ class MapInBatchEvaluatorFactory(
         largeVarTypes,
         pythonRunnerConf,
         pythonMetrics,
-        jobArtifactUUID).compute(batchIter, context.partitionId(), context)
+        jobArtifactUUID) with BatchedPythonArrowInput
+      val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
 

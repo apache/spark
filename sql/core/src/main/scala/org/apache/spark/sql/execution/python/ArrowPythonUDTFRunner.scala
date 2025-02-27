@@ -42,7 +42,7 @@ class ArrowPythonUDTFRunner(
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(offsets), jobArtifactUUID)
-  with BasicPythonArrowInput
+  with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
 
   override protected def writeUDF(
