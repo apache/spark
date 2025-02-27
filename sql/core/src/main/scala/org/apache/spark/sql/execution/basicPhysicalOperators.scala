@@ -770,9 +770,12 @@ case class UnionLoopExec(
     @transient anchor: LogicalPlan,
     @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
-    limit: Option[Int] = None) extends LeafExecNode {
+    localLimit: Option[Int] = None,
+    globalLimit: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
+
+  private val numPartitions: Int = conf.defaultNumShufflePartitions
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -786,13 +789,13 @@ case class UnionLoopExec(
      plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a (local) limit node above the plan and execute
     // the newly created plan.
-    val planOrLimitedPlan = if (limit.isDefined) {
+    val planOrLimitedPlan = if (globalLimit.isDefined || localLimit.isDefined) {
       LocalLimit(Literal(currentLimit), plan)
     } else {
       plan
     }
     val df = Dataset.ofRows(session, planOrLimitedPlan)
-    val cachedDF = df.repartition()
+    val cachedDF = df.repartition(numPartitions)
     val count = cachedDF.count()
     (cachedDF, count)
   }
@@ -815,7 +818,10 @@ case class UnionLoopExec(
     // the number of rows generated in that step.
     // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
     // condition of while loop down (limit.isEmpty will be true).
-    var currentLimit = limit.getOrElse(0)
+    var globalLimitNum = globalLimit.getOrElse(0)
+    var localLimitNum = localLimit.getOrElse(0)
+    var currentLimit = Math.max(globalLimitNum, localLimitNum * numPartitions)
+
     val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
@@ -823,7 +829,7 @@ case class UnionLoopExec(
     var currentLevel = 1
 
     // Main loop for obtaining the result of the recursive query.
-    while (prevCount > 0 && (limit.isEmpty || currentLimit > 0)) {
+    while (prevCount > 0 && ((globalLimit.isEmpty && localLimit.isEmpty) || currentLimit > 0)) {
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(
@@ -859,7 +865,7 @@ case class UnionLoopExec(
       prevCount = count
 
       currentLevel += 1
-      if (limit.isDefined) {
+      if (globalLimit.isDefined || localLimit.isDefined) {
         currentLimit -= count.toInt
       }
     }
@@ -867,9 +873,10 @@ case class UnionLoopExec(
     if (unionChildren.isEmpty) {
       new EmptyRDD[InternalRow](sparkContext)
     } else if (unionChildren.length == 1) {
-      Dataset.ofRows(session, unionChildren.head).queryExecution.toRdd
+      Dataset.ofRows(session, unionChildren.head).repartition(numPartitions).queryExecution.toRdd
     } else {
-      Dataset.ofRows(session, Union(unionChildren.toSeq)).queryExecution.toRdd
+      Dataset.ofRows(session, Union(unionChildren.toSeq)).repartition(numPartitions).queryExecution
+        .toRdd
     }
   }
 
@@ -882,7 +889,8 @@ case class UnionLoopExec(
        |$formattedNodeName
        |Loop id: $loopId
        |${QueryPlan.generateFieldString("Output", output)}
-       |Limit: $limit
+       |LocalLimit: $localLimit
+       |GlobalLimit: $globalLimit
        |""".stripMargin
   }
 }
