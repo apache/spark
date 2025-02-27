@@ -5550,7 +5550,7 @@ object SQLConf {
       .internal()
       .doc("When set to true, DataFrameWriterV2 ignores the 'path' option and always write data " +
         "to the default table location.")
-      .version("3.5.5")
+      .version("3.5.6")
       .booleanConf
       .createWithDefault(false)
 
