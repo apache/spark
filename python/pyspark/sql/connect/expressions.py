@@ -1233,25 +1233,6 @@ class NamedArgumentExpression(Expression):
         return f"{self._key} => {self._value}"
 
 
-class LazyExpression(Expression):
-    def __init__(self, expr: Expression):
-        assert isinstance(expr, Expression)
-        super().__init__()
-        self._expr = expr
-
-    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = self._create_proto_expression()
-        expr.lazy_expression.child.CopyFrom(self._expr.to_plan(session))
-        return expr
-
-    @property
-    def children(self) -> Sequence["Expression"]:
-        return [self._expr]
-
-    def __repr__(self) -> str:
-        return f"lazy({self._expr})"
-
-
 class SubqueryExpression(Expression):
     def __init__(
         self,
