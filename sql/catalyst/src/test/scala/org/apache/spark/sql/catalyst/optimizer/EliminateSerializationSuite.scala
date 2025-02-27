@@ -78,4 +78,22 @@ class EliminateSerializationSuite extends PlanTest {
     val optimized = Optimize.execute(plan)
     comparePlans(optimized, plan)
   }
+
+  test("SPARK-50502 push deserialization through union when it removes serialization") {
+    val input1 = LocalRelation($"obj".obj(classOf[(Int, Int)]))
+    val input2 = LocalRelation($"obj".obj(classOf[(Int, Int)]))
+    val plan = Union(
+      input1.serialize[(Int, Int)], input2.serialize[(Int, Int)]).deserialize[(Int, Int)].analyze
+    val optimized = Optimize.execute(plan)
+    val expected = Union(input1, input2).select($"obj".as("obj")).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-50502 only push deserialization through union when it removes serialization") {
+    val input1 = LocalRelation($"_1".int, $"_2".int)
+    val input2 = LocalRelation($"_1".int, $"_2".int)
+    val plan = Union(input1, input2).deserialize[(Int, Int)].analyze
+    val optimized = Optimize.execute(plan)
+    comparePlans(optimized, plan)
+  }
 }

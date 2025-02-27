@@ -38,14 +38,24 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, Use
  * representation of data item.  For example back to back map operations.
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
+  private def compatible(d: DeserializeToObject, s: SerializeFromObject): Boolean = {
+    d.outputObjAttr.dataType == s.inputObjAttr.dataType
+  }
+
+  private def preserveOutputObjExprId(
+    outputObjAttr: Attribute,
+    inputObjAttr: Attribute,
+    child: LogicalPlan): LogicalPlan = {
+    // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
+    // We will remove it later in RemoveAliasOnlyProject rule.
+    val alias = Alias(inputObjAttr, inputObjAttr.name)(exprId = outputObjAttr.exprId)
+    Project(alias :: Nil, child)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(DESERIALIZE_TO_OBJECT, APPEND_COLUMNS, TYPED_FILTER), ruleId) {
-    case d @ DeserializeToObject(_, _, s: SerializeFromObject)
-      if d.outputObjAttr.dataType == s.inputObjAttr.dataType =>
-      // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
-      // We will remove it later in RemoveAliasOnlyProject rule.
-      val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
-      Project(objAttr :: Nil, s.child)
+      case d @ DeserializeToObject(_, _, s: SerializeFromObject) if compatible(d, s) =>
+      preserveOutputObjExprId(d.outputObjAttr, s.inputObjAttr, s.child)
 
     case a @ AppendColumns(_, _, _, _, _, s: SerializeFromObject)
       if a.deserializer.dataType == s.inputObjAttr.dataType =>
@@ -68,6 +78,22 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     case d @ DeserializeToObject(_, _, f: TypedFilter)
       if d.outputObjAttr.dataType == f.deserializer.dataType =>
       f.withObjectProducerChild(d.copy(child = f.child))
+
+    case d @ DeserializeToObject(_, _, u @ Union(children, false, false)) if children.exists {
+      case s: SerializeFromObject => compatible(d, s)
+      case _ => false
+    } =>
+      val newChildren = u.children.map {
+        case s: SerializeFromObject if compatible(d, s) => s.child
+        case other =>
+          // Change the attributes in the deserializer to match the output of new child.
+          val rewrite = AttributeMap(d.child.output.zip(other.output))
+          val deserializer = d.deserializer.transform { case a: Attribute => rewrite(a)}
+          DeserializeToObject(deserializer, d.outputObjAttr.newInstance(), other)
+      }
+
+      val newUnion = u.withNewChildren(newChildren)
+      preserveOutputObjExprId(d.outputObjAttr, newUnion.output.head, newUnion)
   }
 }
 
