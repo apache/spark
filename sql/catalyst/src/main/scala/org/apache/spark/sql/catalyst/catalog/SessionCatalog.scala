@@ -260,7 +260,8 @@ class SessionCatalog(
   }
 
   private def requireDbExists(db: String): Unit = {
-    if (!databaseExists(db)) {
+    val requireDbExistsEnabled = SQLConf.get.requireDbExistsEnabled
+    if("true".equals(requireDbExistsEnabled) && !databaseExists(db)) {
       throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, db))
     }
   }
