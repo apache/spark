@@ -156,7 +156,7 @@ case class CatalogStorageFormat(
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {
     val map = mutable.LinkedHashMap[String, JValue]()
 
-    locationUri.foreach(l => map += ("Location" -> JString(l.toString)))
+    locationUri.foreach(l => map += ("Location" -> JString(CatalogUtils.URIToString(l))))
     serde.foreach(s => map += ("Serde Library" -> JString(s)))
     inputFormat.foreach(format => map += ("InputFormat" -> JString(format)))
     outputFormat.foreach(format => map += ("OutputFormat" -> JString(format)))
