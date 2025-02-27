@@ -485,7 +485,7 @@ object ArrowSerializer {
           o => getter.invoke(o)
         }
 
-      case (TransformingEncoder(_, encoder, provider), v) =>
+      case (TransformingEncoder(_, encoder, provider, _), v) =>
         new Serializer {
           private[this] val codec = provider().asInstanceOf[Codec[Any, Any]]
           private[this] val delegate: Serializer = serializerFor(encoder, v)

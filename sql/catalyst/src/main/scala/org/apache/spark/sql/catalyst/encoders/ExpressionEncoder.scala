@@ -24,6 +24,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{OptionEncoder, TransformingEncoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -215,6 +216,13 @@ case class ExpressionEncoder[T](
     StructField(s.name, s.dataType, s.nullable)
   })
 
+  private def transformerOfOption(enc: AgnosticEncoder[_]): Boolean =
+    enc match {
+      case t: TransformingEncoder[_, _] => transformerOfOption(t.transformed)
+      case _: OptionEncoder[_] => true
+      case _ => false
+    }
+
   /**
    * Returns true if the type `T` is serialized as a struct by `objSerializer`.
    */
@@ -228,7 +236,8 @@ case class ExpressionEncoder[T](
    * returns true if `T` is serialized as struct and is not `Option` type.
    */
   def isSerializedAsStructForTopLevel: Boolean = {
-    isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
+    isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass) &&
+      !transformerOfOption(encoder)
   }
 
   // serializer expressions are used to encode an object to a row, while the object is usually an

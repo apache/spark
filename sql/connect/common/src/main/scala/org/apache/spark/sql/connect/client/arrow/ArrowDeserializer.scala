@@ -388,7 +388,7 @@ object ArrowDeserializers {
           }
         }
 
-      case (TransformingEncoder(_, encoder, provider), v) =>
+      case (TransformingEncoder(_, encoder, provider, _), v) =>
         new Deserializer[Any] {
           private[this] val codec = provider()
           private[this] val deserializer = deserializerFor(encoder, v, timeZoneId)
