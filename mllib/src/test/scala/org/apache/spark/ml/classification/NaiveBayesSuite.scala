@@ -530,7 +530,6 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     assert(preds(4)._2 ~= Vectors.dense(0.0, 1.0) relTol 1E-5)
   }
 
-  // scalastyle:off println
   test("model size estimation: dense data") {
     val rng = new Random(1)
 
