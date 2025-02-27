@@ -495,7 +495,6 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(p1 === p2)
   }
 
-  // scalastyle:off println
   test("model size estimation: aft") {
     val quantileProbabilities = Array(0.1, 0.5, 0.9)
     val aft = new AFTSurvivalRegression()
