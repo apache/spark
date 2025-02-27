@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io.Closeable
 import java.util.{Properties, TimerTask}
-import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -82,7 +82,7 @@ class BarrierTaskContext private[spark] (
       }
     }
     // Log the update of global sync every 1 minute.
-    timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
+    val timerFuture = timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[String]](
@@ -121,8 +121,8 @@ class BarrierTaskContext private[spark] (
         logProgressInfo(log"failed to perform global sync", Some(startTime))
         throw e
     } finally {
-      timerTask.cancel()
-      timer.purge()
+      timerFuture.cancel(true)
+      ThreadUtils.shutdown(timer)
     }
   }
 
@@ -300,11 +300,7 @@ object BarrierTaskContext {
   @Since("2.4.0")
   def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
 
-  private val timer = {
-    val executor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-      "Barrier task timer for barrier() calls.")
-    assert(executor.isInstanceOf[ScheduledThreadPoolExecutor])
-    executor.asInstanceOf[ScheduledThreadPoolExecutor]
-  }
+  private val timer = ThreadUtils.newSingleThreadScheduledExecutor(
+    "Barrier task timer for barrier() calls.")
 
 }
