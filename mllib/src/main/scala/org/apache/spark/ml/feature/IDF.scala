@@ -121,6 +121,9 @@ class IDFModel private[ml] (
 
   import IDFModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", null)
+
   /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

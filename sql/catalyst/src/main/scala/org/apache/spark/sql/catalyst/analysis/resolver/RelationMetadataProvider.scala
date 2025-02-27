@@ -48,6 +48,13 @@ trait RelationMetadataProvider extends LookupCatalog {
   protected val relationsWithResolvedMetadata: RelationsWithResolvedMetadata
 
   /**
+   * Resolve metadata for the given `unresolvedPlan`. This method is called once per unresolved
+   * logical plan by the [[Resolver]] (for each SQL query/ DataFrame program and for each
+   * nested [[View]] operator).
+   */
+  def resolve(unresolvedPlan: LogicalPlan): Unit
+
+  /**
    * Get the [[LogicalPlan]] with resolved metadata for the given [[UnresolvedRelation]].
    *
    * [[java.util.HashMap]] returns `null` if the key is not found, so we wrap it in an [[Option]].

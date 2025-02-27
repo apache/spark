@@ -41,6 +41,7 @@ from pyspark.sql.udf import (
     UDFRegistration as PySparkUDFRegistration,
     UserDefinedFunction as PySparkUserDefinedFunction,
 )
+from pyspark.sql.utils import has_arrow
 from pyspark.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -58,6 +59,7 @@ def _create_py_udf(
     returnType: "DataTypeOrString",
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
+    is_arrow_enabled = False
     if useArrow is None:
         is_arrow_enabled = False
         try:
@@ -69,7 +71,7 @@ def _create_py_udf(
                 == "true"
             )
         except PySparkRuntimeError as e:
-            if e.getErrorClass() == "NO_ACTIVE_OR_DEFAULT_SESSION":
+            if e.getCondition() == "NO_ACTIVE_OR_DEFAULT_SESSION":
                 pass  # Just uses the default if no session found.
             else:
                 raise e
@@ -77,6 +79,14 @@ def _create_py_udf(
         is_arrow_enabled = useArrow
 
     eval_type: int = PythonEvalType.SQL_BATCHED_UDF
+
+    if is_arrow_enabled and not has_arrow:
+        is_arrow_enabled = False
+        warnings.warn(
+            "Arrow optimization failed to enable because PyArrow is not installed. "
+            "Falling back to a non-Arrow-optimized UDF.",
+            RuntimeWarning,
+        )
 
     if is_arrow_enabled:
         try:

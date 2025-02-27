@@ -18,9 +18,12 @@
 import logging
 import unittest
 import json
+import tempfile
 from io import StringIO
 from pyspark.errors import ArithmeticException
-from pyspark.logger.logger import PySparkLogger
+from pyspark.logger.logger import PySparkLogger, SPARK_LOG_SCHEMA
+from pyspark.sql import Row, functions as sf
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -52,6 +55,22 @@ class LoggerTestsMixin:
             log_json["context"], {"action": "test_action_info", "user": "test_user_info"}
         )
         self.assertTrue("exception" not in log_json)
+
+    def test_log_info_with_exception(self):
+        # SPARK-51274: PySparkLogger should respect the expected keyword arguments
+        self.logger.info(
+            "This is an info log", exc_info=True, user="test_user_info", action="test_action_info"
+        )
+        log_json = json.loads(self.handler.stream.getvalue().strip())
+
+        self.assertEqual(log_json["msg"], "This is an info log")
+        self.assertEqual(
+            log_json["context"], {"action": "test_action_info", "user": "test_user_info"}
+        )
+        self.assertTrue("exception" in log_json)
+        self.assertTrue("class" in log_json["exception"])
+        self.assertTrue("msg" in log_json["exception"])
+        self.assertTrue("stacktrace" in log_json["exception"])
 
     def test_log_warn(self):
         self.logger.warn("This is an warn log", user="test_user_warn", action="test_action_warn")
@@ -108,7 +127,87 @@ class LoggerTestsMixin:
             self.assertTrue(
                 log_json["exception"]["class"] in ("Py4JJavaError", "_MultiThreadedRendezvous")
             )
-            self.assertTrue("Traceback" in log_json["exception"]["stacktrace"][0])
+            stacktrace = log_json["exception"]["stacktrace"][0].keys()
+            self.assertTrue("class" in stacktrace)
+            self.assertTrue("method" in stacktrace)
+            self.assertTrue("file" in stacktrace)
+            self.assertTrue("line" in stacktrace)
+
+    def test_log_exception_with_stacktrace(self):
+        try:
+            raise ValueError("Test Exception")
+        except ValueError:
+            self.logger.exception("Exception occurred", user="test_user_stacktrace")
+
+        log_json = json.loads(self.handler.stream.getvalue().strip())
+
+        self.assertEqual(log_json["msg"], "Exception occurred")
+        self.assertEqual(log_json["context"], {"user": "test_user_stacktrace"})
+        self.assertTrue("exception" in log_json)
+        self.assertTrue("class" in log_json["exception"])
+        self.assertTrue("msg" in log_json["exception"])
+        self.assertTrue("stacktrace" in log_json["exception"])
+        self.assertIsInstance(log_json["exception"]["stacktrace"], list)
+
+        # Check the structure of "stacktrace"
+        for frame in log_json["exception"]["stacktrace"]:
+            self.assertTrue("class" in frame)
+            self.assertTrue("method" in frame)
+            self.assertTrue("file" in frame)
+            self.assertTrue("line" in frame)
+
+    def test_apply_schema(self):
+        with tempfile.TemporaryDirectory(prefix="test_apply_schema") as d:
+            logfile = f"{d}/log"
+            handler = logging.FileHandler(logfile)
+            try:
+                self.logger.addHandler(handler)
+
+                self.logger.info("Test logging structure.")
+                try:
+                    1 / 0
+                except ZeroDivisionError:
+                    self.logger.exception("Exception occurred.")
+
+                assertDataFrameEqual(
+                    self.spark.read.format("json")
+                    .schema(SPARK_LOG_SCHEMA)
+                    .load(logfile)
+                    .select(
+                        sf.col("ts").isNotNull().alias("ts_is_not_null"),
+                        "level",
+                        "msg",
+                        sf.col("exception.class").alias("exception_class"),
+                        sf.col("exception.msg").alias("exception_msg"),
+                        sf.col("exception.stacktrace.class").alias("exception_stacktrace_class"),
+                        sf.col("exception.stacktrace.method").alias("exception_stacktrace_method"),
+                        sf.col("exception.stacktrace.file").alias("exception_stacktrace_file"),
+                    ),
+                    [
+                        Row(
+                            ts_is_not_null=True,
+                            level="INFO",
+                            msg="Test logging structure.",
+                            exception_class=None,
+                            exception_msg=None,
+                            exception_stacktrace_class=None,
+                            exception_stacktrace_method=None,
+                            exception_stacktrace_file=None,
+                        ),
+                        Row(
+                            ts_is_not_null=True,
+                            level="ERROR",
+                            msg="Exception occurred.",
+                            exception_class="ZeroDivisionError",
+                            exception_msg="division by zero",
+                            exception_stacktrace_class=[None],
+                            exception_stacktrace_method=["test_apply_schema"],
+                            exception_stacktrace_file=[__file__],
+                        ),
+                    ],
+                )
+            finally:
+                self.logger.removeHandler(handler)
 
 
 class LoggerTests(LoggerTestsMixin, ReusedSQLTestCase):

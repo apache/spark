@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.io.{File, FileOutputStream, InputStream, ObjectOutputStream}
 import java.util.concurrent.{Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -35,7 +36,7 @@ import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.scheduler.{JobFailed, SparkListener, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Test suite for cancelling running jobs. We run the cancellation tasks for single job action
@@ -711,6 +712,142 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     taskCompletedSem.acquire()
     assert(executionOfInterruptibleCounter.get() < numElements)
  }
+
+  Seq(true, false).foreach { interruptible =>
+
+    val (hint1, hint2) = if (interruptible) {
+      (" not", "")
+    } else {
+      ("", " not")
+    }
+
+    val testName = s"SPARK-50768:$hint1 use TaskContext.createResourceUninterruptibly " +
+      s"would$hint2 cause stream leak on task interruption"
+
+    test(testName) {
+      import org.apache.spark.JobCancellationSuite._
+      withTempDir { dir =>
+
+        // `InterruptionSensitiveInputStream` is designed to easily leak the underlying
+        // stream when task thread interruption happens during its initialization, as
+        // the reference to the underlying stream is intentionally not available to
+        // `InterruptionSensitiveInputStream` at that point.
+        class InterruptionSensitiveInputStream(fileHint: String) extends InputStream {
+          private var underlying: InputStream = _
+
+          def initialize(): InputStream = {
+            val in: InputStream = new InputStream {
+
+              open()
+
+              private def dumpFile(typeName: String): Unit = {
+                var fileOut: FileOutputStream = null
+                var objOut: ObjectOutputStream = null
+                try {
+                  val file = new File(dir, s"$typeName.$fileHint")
+                  fileOut = new FileOutputStream(file)
+                  objOut = new ObjectOutputStream(fileOut)
+                  objOut.writeBoolean(true)
+                  objOut.flush()
+                } finally {
+                  if (fileOut != null) {
+                    fileOut.close()
+                  }
+                  if (objOut != null) {
+                    objOut.close()
+                  }
+                }
+
+              }
+
+              private def open(): Unit = {
+                dumpFile("open")
+              }
+
+              override def close(): Unit = {
+                dumpFile("close")
+              }
+
+              override def read(): Int = -1
+            }
+
+            // Leave some time for the task to be interrupted during the
+            // creation of `InterruptionSensitiveInputStream`.
+            Thread.sleep(10000)
+
+            underlying = in
+            underlying
+          }
+
+          override def read(): Int = -1
+
+          override def close(): Unit = {
+            if (underlying != null) {
+              underlying.close()
+            }
+          }
+        }
+
+        def createStream(fileHint: String): Unit = {
+          if (interruptible) {
+              Utils.tryInitializeResource {
+                new InterruptionSensitiveInputStream(fileHint)
+              } {
+                _.initialize()
+              }
+          } else {
+            TaskContext.get().createResourceUninterruptibly[java.io.InputStream] {
+              Utils.tryInitializeResource {
+                new InterruptionSensitiveInputStream(fileHint)
+              } {
+                _.initialize()
+              }
+            }
+          }
+        }
+
+        sc = new SparkContext("local[2]", "test interrupt streams")
+
+        sc.addSparkListener(new SparkListener {
+          override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+            // Sleep some time to ensure task has started
+            Thread.sleep(2000)
+            taskStartedSemaphore.release()
+          }
+
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+            if (taskEnd.reason.isInstanceOf[TaskKilled]) {
+              taskCancelledSemaphore.release()
+            }
+          }
+        })
+
+        sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
+
+        val fileHint = if (interruptible) "interruptible" else "uninterruptible"
+        val future = sc.parallelize(1 to 100, 1).mapPartitions { _ =>
+          createStream(fileHint)
+          Iterator.single(1)
+        }.collectAsync()
+
+        taskStartedSemaphore.acquire()
+        future.cancel()
+        taskCancelledSemaphore.acquire()
+
+        val fileOpen = new File(dir, s"open.$fileHint")
+        val fileClose = new File(dir, s"close.$fileHint")
+        assert(fileOpen.exists())
+
+        if (interruptible) {
+          // The underlying stream leaks when the stream creation is interruptible.
+          assert(!fileClose.exists())
+        } else {
+          // The underlying stream won't leak when the stream creation is uninterruptible.
+          assert(fileClose.exists())
+        }
+      }
+    }
+  }
 
   def testCount(): Unit = {
     // Cancel before launching any tasks
