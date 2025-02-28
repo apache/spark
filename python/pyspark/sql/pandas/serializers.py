@@ -1223,6 +1223,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
+
         def flatten_iterator():
             # iterator: iter[list[(iter[pandas.DataFrame], pdf_type)]]
             for packed in iterator:
