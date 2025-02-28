@@ -19,13 +19,15 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import scala.collection.immutable.ArraySeq
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, InMemoryCatalogWithMultiPartNamespace}
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.{IN, INOUT, OUT}
@@ -40,15 +42,20 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
   before {
     spark.conf.set(s"spark.sql.catalog.cat", classOf[InMemoryCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.cat2",
+      classOf[InMemoryCatalogWithMultiPartNamespace].getName)
   }
 
   after {
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf(s"spark.sql.catalog.cat")
+    spark.sessionState.conf.unsetConf(s"spark.sql.catalog.cat2")
   }
 
-  private def catalog: InMemoryCatalog = {
-    val catalog = spark.sessionState.catalogManager.catalog("cat")
+  private def catalog: InMemoryCatalog = catalog("cat")
+
+  private def catalog(name: String): InMemoryCatalog = {
+    val catalog = spark.sessionState.catalogManager.catalog(name)
     catalog.asInstanceOf[InMemoryCatalog]
   }
 
@@ -139,6 +146,14 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkError(
         exception = intercept[AnalysisException](
           sql("CALL testcat.procedure(1, 2)")
+        ),
+        condition = "_LEGACY_ERROR_TEMP_1184",
+        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+      )
+
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("SHOW PROCEDURES IN testcat")
         ),
         condition = "_LEGACY_ERROR_TEMP_1184",
         parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
@@ -345,6 +360,99 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       val result = sql("CALL cat.ns.sum(1, 2)")
       result.write.saveAsTable("summary")
       checkAnswer(spark.table("summary"), Row(3) :: Nil)
+    }
+  }
+
+  test("SPARK-51350: Implement SHOW procedures") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
+    catalog.createProcedure(Identifier.of(Array("ns"), "abc"), UnboundLongSum)
+    catalog.createProcedure(Identifier.of(Array(""), "xyz"), UnboundComplexProcedure)
+    catalog.createProcedure(Identifier.of(Array(), "xxx"), UnboundStructProcedure)
+
+    sql("USE cat")
+    withNamespace("cat2.db_1") {
+      sql("CREATE NAMESPACE cat2.db_1")
+
+      catalog("cat2").createProcedure(Identifier.of(Array("ns_1", "db_1"), "foo"),
+        UnboundVoidProcedure)
+      catalog("cat2").createProcedure(Identifier.of(Array("ns_1", "db_1"), "bar"),
+        UnboundMultiResultProcedure)
+      catalog("cat2").createProcedure(Identifier.of(Array(""), "foo"),
+        UnboundVoidProcedure)
+      catalog("cat2").createProcedure(Identifier.of(Array(), "bar"),
+        UnboundMultiResultProcedure)
+
+      checkAnswer(
+        // uses default catalog
+        sql("SHOW PROCEDURES"),
+        Row("cat", null, null, "xxx") ::
+          Row("cat", null, "", "xyz") ::
+          Row("cat", null, "ns", "abc") ::
+          Row("cat", null, "ns", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES IN ns"),
+        Row("cat", null, "ns", "abc") ::
+          Row("cat", null, "ns", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES IN cat.ns"),
+        Row("cat", null, "ns", "abc") ::
+          Row("cat", null, "ns", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM cat.ns"),
+        Row("cat", null, "ns", "abc") ::
+          Row("cat", null, "ns", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM ``"),
+        Row("cat", null, "", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM cat.``"),
+        Row("cat", null, "", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM cat2.ns_1.db_1"),
+        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
+        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+
+      // Switch catalog.
+      sql("USE cat2")
+
+      checkAnswer(
+        sql("SHOW PROCEDURES IN cat.ns"),
+        Row("cat", null, "ns", "abc") ::
+          Row("cat", null, "ns", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES"),
+        Row("cat2", ArraySeq(""), "", "foo") ::
+        Row("cat2", ArraySeq(), null, "bar") ::
+        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
+        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM ns_1.db_1"),
+        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
+          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM cat2.ns_1.db_1"),
+        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
+          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM ``"),
+        Row("cat2", ArraySeq(""), "", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM cat2.``"),
+        Row("cat2", ArraySeq(""), "", "foo") :: Nil)
+
+      // Switch catalog back to 'cat' before clean up.
+      sql("USE cat")
     }
   }
 

@@ -15,30 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.catalog;
+package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure;
-
-/**
- * A catalog API for working with procedures.
- *
- * @since 4.0.0
- */
-@Evolving
-public interface ProcedureCatalog extends CatalogPlugin {
+class InMemoryCatalogWithMultiPartNamespace extends InMemoryCatalog {
   /**
-   * Load a procedure by {@link Identifier identifier} from the catalog.
    *
-   * @param ident a procedure identifier
-   * @return the loaded unbound procedure
+   * @return true if catalog supports multi-part namespaces
    */
-  UnboundProcedure loadProcedure(Identifier ident);
-
-  /**
-   * List all procedures in the specified namespace.
-   *
-   * If a null or empty array is passed, all procedures are returned.
-   */
-  Identifier[] listProcedures(String[] namespace);
+  override def supportsMultiPartNamespace(): Boolean = true
 }
