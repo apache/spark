@@ -69,7 +69,7 @@ class MapInBatchEvaluatorFactory(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        None)
+        None) with BatchedPythonArrowInput
       val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
