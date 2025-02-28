@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.Properties
 import java.util.UUID
 
 import scala.collection.mutable
@@ -31,7 +32,7 @@ import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
@@ -45,7 +46,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -72,8 +73,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
@@ -1438,28 +1438,25 @@ class SparkConnectPlanner(
           isStreaming = rel.getIsStreaming)
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
-        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         val reader = session.read
-        if (rel.getDataSource.hasFormat) {
-          reader.format(rel.getDataSource.getFormat)
-        }
-        localMap.foreach { case (key, value) => reader.option(key, value) }
         if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
-          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
-            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
+          if (!rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_URL) ||
+            !rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_TABLE_NAME)) {
             throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
           }
 
           val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
           val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
-          val options = new JDBCOptions(url, table, localMap)
           val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
-          val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-            JDBCPartition(part, i): Partition
-          }
-          val relation = JDBCRelation(parts, options)(session)
-          LogicalRelation(relation)
+          val properties = new Properties()
+          properties.putAll(rel.getDataSource.getOptionsMap)
+          reader.jdbc(url, table, predicates, properties).queryExecution.analyzed
         } else if (rel.getDataSource.getPredicatesCount == 0) {
+          val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
+          if (rel.getDataSource.hasFormat) {
+            reader.format(rel.getDataSource.getFormat)
+          }
+          localMap.foreach { case (key, value) => reader.option(key, value) }
           if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
             reader.schema(parseSchema(rel.getDataSource.getSchema))
           }
@@ -1697,8 +1694,6 @@ class SparkConnectPlanner(
         transformMergeAction(exp.getMergeAction)
       case proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION =>
         transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
-      case proto.Expression.ExprTypeCase.LAZY_EXPRESSION =>
-        transformLazyExpression(exp.getLazyExpression)
       case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
         transformSubqueryExpression(exp.getSubqueryExpression)
       case _ =>
@@ -3940,10 +3935,6 @@ class SparkConnectPlanner(
     } else {
       session.catalog.listCatalogs().logicalPlan
     }
-  }
-
-  private def transformLazyExpression(getLazyExpression: proto.LazyExpression): Expression = {
-    LazyExpression(transformExpression(getLazyExpression.getChild))
   }
 
   private def transformSubqueryExpression(

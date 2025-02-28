@@ -2721,6 +2721,25 @@ class DataFrameSuite extends QueryTest
       parameters = Map("name" -> ".whatever")
     )
   }
+
+  test("SPARK-50994: RDD conversion is performed with execution context") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        withTempDir(dir => {
+          val dummyDF = Seq((1, 1.0), (2, 2.0), (3, 3.0), (1, 1.0)).toDF("a", "A")
+          dummyDF.write.format("parquet").mode("overwrite").save(dir.getCanonicalPath)
+
+          val df = spark.read.parquet(dir.getCanonicalPath)
+          val encoder = ExpressionEncoder(df.schema)
+          val deduplicated = df.dropDuplicates(Array("a"))
+          val df2 = deduplicated.flatMap(row => Seq(row))(encoder).rdd
+
+          val output = spark.createDataFrame(df2, df.schema)
+          checkAnswer(output, Seq(Row(1, 1.0), Row(2, 2.0), Row(3, 3.0)))
+        })
+      }
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
