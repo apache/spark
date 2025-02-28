@@ -225,6 +225,16 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows7.length === 1)
     assert(rows7(0).getString(0) === "alex")
 
+    withClue("weekofyear") {
+      val woy = sql(s"SELECT weekofyear(date1) FROM $tbl WHERE name = 'tom'")
+        .collect().head.getInt(0)
+      val df = sql(s"SELECT name FROM $tbl WHERE weekofyear(date1) = $woy")
+      checkFilterPushed(df)
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "tom")
+    }
+
     withClue("dayofweek") {
       val dow = sql(s"SELECT dayofweek(date1) FROM $tbl WHERE name = 'alex'")
         .collect().head.getInt(0)
@@ -239,7 +249,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       val yow = sql(s"SELECT extract(YEAROFWEEK from date1) FROM $tbl WHERE name = 'tom'")
         .collect().head.getInt(0)
       val df = sql(s"SELECT name FROM $tbl WHERE extract(YEAROFWEEK from date1) = $yow")
-      checkFilterPushed(df)
+      checkFilterPushed(df, false)
       val rows = df.collect()
       assert(rows.length === 1)
       assert(rows(0).getString(0) === "tom")
