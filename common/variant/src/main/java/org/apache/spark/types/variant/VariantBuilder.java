@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.*;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -238,6 +240,18 @@ public class VariantBuilder {
     writePos += U32_SIZE;
     System.arraycopy(binary, 0, writeBuffer, writePos, binary.length);
     writePos += binary.length;
+  }
+
+  public void appendUuid(UUID uuid) {
+    checkCapacity(1 + 16);
+    writeBuffer[writePos++] = primitiveHeader(UUID);
+
+    // UUID is stored big-endian, so don't use writeLong.
+    ByteBuffer buffer = ByteBuffer.wrap(writeBuffer, writePos, 16);
+    buffer.order(ByteOrder.BIG_ENDIAN);
+    buffer.putLong(writePos, uuid.getMostSignificantBits());
+    buffer.putLong(writePos + 8, uuid.getLeastSignificantBits());
+    writePos += 16;
   }
 
   // Add a key to the variant dictionary. If the key already exists, the dictionary is not modified.
