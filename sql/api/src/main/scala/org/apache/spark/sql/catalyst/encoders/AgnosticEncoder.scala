@@ -276,8 +276,8 @@ object AgnosticEncoders {
    * another encoder. This is fallback for scenarios where objects can't be represented using
    * standard encoders, an example of this is where we use a different (opaque) serialization
    * format (i.e. java serialization, kryo serialization, or protobuf).
-   * @param nullable defaults to false indicating the codec guarantees
-   *                 decode / encode results are non-nullable
+   * @param nullable
+   *   defaults to false indicating the codec guarantees decode / encode results are non-nullable
    */
   case class TransformingEncoder[I, O](
       clsTag: ClassTag[I],
