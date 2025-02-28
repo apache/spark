@@ -671,16 +671,15 @@ class RocksDB(
 
         if (useColumnFamilies) {
           changelogReader.foreach { case (recordType, key, value) =>
-            val (keyWithoutPrefix, cfName) = decodeStateRowWithPrefix(key)
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(keyWithoutPrefix, value, cfName)
+                put(key, value, isExistingChangelogRow = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(keyWithoutPrefix, cfName)
+                remove(key, isExistingChangelogRow = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(keyWithoutPrefix, value, cfName)
+                merge(key, value, isExistingChangelogRow = true)
             }
           }
         } else {
@@ -801,8 +800,9 @@ class RocksDB(
   def put(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      isExistingChangelogRow: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !isExistingChangelogRow) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -827,8 +827,9 @@ class RocksDB(
   def merge(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      isExistingChangelogRow: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !isExistingChangelogRow) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -843,8 +844,11 @@ class RocksDB(
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte], cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+  def remove(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      isExistingChangelogRow: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !isExistingChangelogRow) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
