@@ -150,8 +150,10 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
 
 private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
-
-  private val arrowMaxRecordsPerBatch = SQLConf.get.arrowMaxRecordsPerBatch
+  private val arrowMaxRecordsPerBatch = {
+    val v = SQLConf.get.arrowMaxRecordsPerBatch
+    if (v > 0) v else Int.MaxValue
+  }
   private val maxBytesPerBatch = SQLConf.get.arrowMaxBytesPerBatch
 
   // Marker inside the input iterator to indicate the start of the next batch.
@@ -176,7 +178,7 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
         maxBytesPerBatch == Int.MaxValue || arrowWriter.sizeInBytes() < maxBytesPerBatch
 
       while (nextBatchStart.hasNext &&
-          (arrowMaxRecordsPerBatch <= 0 || numRowsInBatch < arrowMaxRecordsPerBatch) &&
+          numRowsInBatch < arrowMaxRecordsPerBatch &&
           underBatchSizeLimit) {
         arrowWriter.write(nextBatchStart.next())
         numRowsInBatch += 1
