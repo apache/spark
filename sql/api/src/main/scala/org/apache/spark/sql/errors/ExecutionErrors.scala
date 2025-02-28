@@ -143,7 +143,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_ARROWTYPE",
-      messageParameters = Map("typeName" -> typeName.toString))
+      messageParameters = Map(ExecutionErrors.TYPE_NAME -> typeName.toString))
   }
 
   def duplicatedFieldNameInArrowStructError(
@@ -156,7 +156,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def unsupportedDataTypeError(typeName: DataType): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Map("typeName" -> toSQLType(typeName)))
+      messageParameters = Map(ExecutionErrors.TYPE_NAME -> toSQLType(typeName)))
   }
 
   def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
@@ -168,8 +168,9 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "ENCODER_NOT_FOUND",
-      messageParameters = Map("typeName" -> typeName, "docroot" -> SparkBuildInfo.spark_doc_root))
+      errorClass = ExecutionErrors.ENCODER_NOT_FOUND_ERROR,
+      messageParameters =
+        Map(ExecutionErrors.TYPE_NAME -> typeName, "docroot" -> SparkBuildInfo.spark_doc_root))
   }
 
   def cannotHaveCircularReferencesInBeanClassError(
@@ -255,4 +256,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 }
 
-private[sql] object ExecutionErrors extends ExecutionErrors
+private[sql] object ExecutionErrors extends ExecutionErrors {
+  val ENCODER_NOT_FOUND_ERROR = "ENCODER_NOT_FOUND"
+  val TYPE_NAME = "typeName"
+}
