@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
-object ViewResolution {
+object ViewResolution extends SQLConfHelper {
   def resolve(
       view: View,
       resolveChild: LogicalPlan => LogicalPlan,
@@ -41,7 +43,7 @@ object ViewResolution {
           view
         )
       }
-      SQLConf.withExistingConf(View.effectiveSQLConf(view.desc.viewSQLConfigs, view.isTempView)) {
+      SQLConf.withExistingConf(ViewResolution.getViewResolutionConf(view.desc, view.isTempView)) {
         resolveChild(view.child)
       }
     }
@@ -51,5 +53,13 @@ object ViewResolution {
     checkAnalysis(newChild)
 
     view.copy(child = newChild)
+  }
+
+  def getViewResolutionConf(viewDescription: CatalogTable, isTempView: Boolean): SQLConf = {
+    var viewSQLConfigs = viewDescription.viewSQLConfigs ++ Map(
+      SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> conf.planChangeLogLevel,
+      SQLConf.EXPRESSION_TREE_CHANGE_LOG_LEVEL.key -> conf.expressionTreeChangeLogLevel
+    )
+    View.effectiveSQLConf(viewSQLConfigs, isTempView)
   }
 }
