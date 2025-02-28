@@ -1002,10 +1002,9 @@ object KubernetesIntegrationTests {
         if (excludeTags.exists(_.equalsIgnoreCase("r"))) {
           rDockerFile = ""
         }
-        val extraOptions = if (javaImageTag.isDefined) {
-          Seq("-b", s"java_image_tag=$javaImageTag")
-        } else {
-          Seq("-f", s"$dockerFile")
+        val extraOptions = javaImageTag match {
+          case Some(tag) => Seq("-b", s"java_image_tag=$tag")
+          case _ => Seq("-f", s"$dockerFile")
         }
         val cmd = Seq(dockerTool,
           "-r", imageRepo,
