@@ -196,7 +196,7 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable)(exprId, qualifier,
+      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier,
         this.hasIndeterminism)
     } else {
       UnresolvedAttribute.quoted(name)
@@ -367,7 +367,7 @@ case class AttributeReference(
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
-    exprId :: qualifier :: Nil
+    exprId :: qualifier :: Boolean.box(hasIndeterminism) :: Nil
   }
 
   /** Used to signal the column used to calculate an eventTime watermark (e.g. a#1-T{delayMs}) */
