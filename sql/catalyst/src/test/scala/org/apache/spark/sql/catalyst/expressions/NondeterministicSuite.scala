@@ -35,7 +35,7 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-51016: has Indeterministic Component") {
     def assertIndeterminancyComponent(expression: Expression): Unit =
-      assert(prepareEvaluation(expression).exprValHasIndeterministicCharacter)
+      assert(prepareEvaluation(expression).hasIndeterminism)
 
     assertIndeterminancyComponent(MonotonicallyIncreasingID())
     val alias = Alias(Multiply(MonotonicallyIncreasingID(), Literal(100L)), "al1")()
@@ -52,7 +52,7 @@ class NondeterministicSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-51016: has Deterministic Component") {
     def assertNoIndeterminancyComponent(expression: Expression): Unit =
-      assert(!prepareEvaluation(expression).exprValHasIndeterministicCharacter)
+      assert(!prepareEvaluation(expression).hasIndeterminism)
 
     assertNoIndeterminancyComponent(Literal(1000L))
     val alias = Alias(Multiply(Literal(10000L), Literal(100L)), "al1")()

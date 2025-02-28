@@ -111,9 +111,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   @transient
   override lazy val references: AttributeSet = AttributeSet(this)
 
-  override lazy val exprValHasIndeterministicCharacter: Boolean =
-    metadata.contains(Attribute.KEY_HAS_INDETERMINISTIC_COMPONENT) &&
-      metadata.getBoolean(Attribute.KEY_HAS_INDETERMINISTIC_COMPONENT)
+  override def hasIndeterminism: Boolean = false
 
   def withNullability(newNullability: Boolean): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
@@ -125,10 +123,6 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
 
-}
-
-object Attribute {
-  val KEY_HAS_INDETERMINISTIC_COMPONENT = "hasIndeterministicComponent"
 }
 
 /**
@@ -202,13 +196,8 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      val mdForAttrib = if (this.exprValHasIndeterministicCharacter) {
-        new MetadataBuilder().withMetadata(metadata).
-          putBoolean(Attribute.KEY_HAS_INDETERMINISTIC_COMPONENT, true).build()
-      } else {
-        metadata
-      }
-      AttributeReference(name, child.dataType, child.nullable, mdForAttrib)(exprId, qualifier)
+      AttributeReference(name, child.dataType, child.nullable)(exprId, qualifier,
+        this.hasIndeterminism)
     } else {
       UnresolvedAttribute.quoted(name)
     }
@@ -288,7 +277,8 @@ case class AttributeReference(
     nullable: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifier: Seq[String] = Seq.empty[String])
+    val qualifier: Seq[String] = Seq.empty[String],
+    override val hasIndeterminism: Boolean = false)
   extends Attribute with Unevaluable {
 
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
@@ -326,7 +316,8 @@ case class AttributeReference(
   }
 
   override def newInstance(): AttributeReference =
-    AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier)
+    AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier,
+      hasIndeterminism = hasIndeterminism)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -335,7 +326,8 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier)
+      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier,
+        hasIndeterminism)
     }
   }
 
@@ -343,7 +335,7 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier)
+      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier, hasIndeterminism)
     }
   }
 
@@ -354,7 +346,7 @@ case class AttributeReference(
     if (newQualifier == qualifier) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier, hasIndeterminism)
     }
   }
 
@@ -362,12 +354,12 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier)
+      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier, hasIndeterminism)
     }
   }
 
   override def withMetadata(newMetadata: Metadata): AttributeReference = {
-    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
+    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier, hasIndeterminism)
   }
 
   override def withDataType(newType: DataType): AttributeReference = {

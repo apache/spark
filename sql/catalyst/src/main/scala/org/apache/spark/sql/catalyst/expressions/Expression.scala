@@ -115,8 +115,11 @@ abstract class Expression extends TreeNode[Expression] {
    */
   lazy val deterministic: Boolean = children.forall(_.deterministic)
 
-  lazy val exprValHasIndeterministicCharacter: Boolean = !deterministic ||
-    this.references.exists(_.exprValHasIndeterministicCharacter)
+  def hasIndeterminism: Boolean = _hasIndeterminism
+
+  @transient
+  private lazy val _hasIndeterminism: Boolean = !deterministic ||
+    this.references.exists(_.hasIndeterminism)
 
   def nullable: Boolean
 

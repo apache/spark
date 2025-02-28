@@ -38,7 +38,7 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
   private def getProjection(expr: Expression): Option[Expression] =
     expr match {
       case a: AttributeReference if fieldNames.contains(a.name) && output.contains(a) =>
-        Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
+        Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier, a.hasIndeterminism))
       case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
         getProjection(child).map {
           projection => GetArrayItem(projection, arrayItemOrdinal, failOnError)

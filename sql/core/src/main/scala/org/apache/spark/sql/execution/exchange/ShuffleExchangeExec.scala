@@ -468,7 +468,7 @@ object ShuffleExchangeExec {
       }
     }
     val isIndeterministic = newPartitioning match {
-      case expr: Expression => expr.exprValHasIndeterministicCharacter
+      case expr: Expression => expr.hasIndeterminism
       case _ => false
     }
     // Now, we manually create a ShuffleDependency. Because pairs in rddWithPartitionIds
