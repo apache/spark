@@ -17,8 +17,17 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import com.google.common.collect.Lists;
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.util.StringUtils;
 import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure;
+
+import org.apache.spark.sql.errors.QueryExecutionErrors;
+import scala.jdk.javaapi.CollectionConverters;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * A catalog API for working with procedures.
@@ -34,4 +43,24 @@ public interface ProcedureCatalog extends CatalogPlugin {
    * @return the loaded unbound procedure
    */
   UnboundProcedure loadProcedure(Identifier ident);
+
+  /**
+   * List all procedures in the specified database.
+   */
+  default Identifier[] listProcedures(String[] namespace) {
+    throw QueryExecutionErrors.unsupportedShowProceduresError();
+  }
+
+  /**
+   * List all procedures in the specified database matching the specified pattern.
+   */
+  default Identifier[] listProcedures(String[] namespace, String pattern) {
+    Identifier[] procedures = listProcedures(namespace);
+    return Arrays.stream(procedures).filter(proc ->
+      StringUtils
+        .filterPattern(
+          CollectionConverters.asScala(Lists.newArrayList(proc.name())).toSeq(), pattern)
+        .nonEmpty())
+      .toArray(Identifier[]::new);
+  }
 }
