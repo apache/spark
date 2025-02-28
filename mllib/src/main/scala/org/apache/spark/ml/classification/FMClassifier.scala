@@ -31,7 +31,6 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for FMClassifier.
@@ -242,7 +241,7 @@ class FMClassifier @Since("3.0.0") (
   override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     size += java.lang.Double.BYTES // intercept
     size += Vectors.getDenseSize(numFeatures) // linear
     size += Matrices.getDenseSize(numFeatures, $(factorSize)) // factors
@@ -324,7 +323,7 @@ class FMClassificationModel private[classification] (
   }
 
   override def estimatedSize: Long = {
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     size += java.lang.Double.BYTES // intercept
     if (this.linear != null) {
       size += this.linear.getSizeInBytes

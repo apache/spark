@@ -41,7 +41,6 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.SizeEstimator
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
@@ -171,7 +170,7 @@ class LinearSVC @Since("2.2.0") (
 
   private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numFeatures) // coefficients
     size += java.lang.Double.BYTES // intercept
     size
@@ -431,7 +430,7 @@ class LinearSVCModel private[classification] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     if (this.coefficients != null) {
       size += this.coefficients.getSizeInBytes
     }

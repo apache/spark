@@ -42,7 +42,6 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for Factorization Machines
@@ -445,7 +444,7 @@ class FMRegressor @Since("3.0.0") (
   override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     size += java.lang.Double.BYTES // intercept
     size += Vectors.getDenseSize(numFeatures) // linear
     size += Matrices.getDenseSize(numFeatures, $(factorSize)) // factors
@@ -489,7 +488,7 @@ class FMRegressionModel private[regression] (
   }
 
   override def estimatedSize: Long = {
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     size += java.lang.Double.BYTES // intercept
     if (this.linear != null) {
       size += this.linear.getSizeInBytes

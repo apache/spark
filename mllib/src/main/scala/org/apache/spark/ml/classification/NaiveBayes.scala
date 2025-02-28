@@ -34,7 +34,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{SizeEstimator, VersionUtils}
+import org.apache.spark.util.VersionUtils
 
 /**
  * Params for Naive Bayes Classifiers.
@@ -348,7 +348,7 @@ class NaiveBayes @Since("1.5.0") (
     val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numClasses) // pi
     size += Matrices.getDenseSize(numClasses, numFeatures) // theta
     $(modelType) match {
@@ -568,7 +568,7 @@ class NaiveBayesModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     if (this.pi != null) {
       size += this.pi.getSizeInBytes
     }

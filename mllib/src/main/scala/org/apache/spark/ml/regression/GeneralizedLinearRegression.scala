@@ -41,7 +41,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
-import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for Generalized Linear Regression.
@@ -450,7 +449,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numFeatures) // coefficients
     size += java.lang.Double.BYTES // intercept
     size
@@ -1116,7 +1115,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = SizeEstimator.estimate((this.params, this.uid))
+    var size = this.estimateMatadataSize
     if (this.coefficients != null) {
       size += this.coefficients.getSizeInBytes
     }
