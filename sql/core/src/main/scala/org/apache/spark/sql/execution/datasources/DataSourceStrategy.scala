@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PREDICATES
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SaveMode, Strategy}
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow, QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
@@ -40,8 +40,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, I
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, ResolveDefaultColumns, V2ExpressionBuilder}
-import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
+import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
@@ -865,11 +865,4 @@ object PushableColumnAndNestedColumn extends PushableColumnBase {
 
 object PushableColumnWithoutNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = false
-}
-
-/**
- * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
- */
-object PushableExpression {
-  def unapply(e: Expression): Option[V2Expression] = new V2ExpressionBuilder(e).build()
 }

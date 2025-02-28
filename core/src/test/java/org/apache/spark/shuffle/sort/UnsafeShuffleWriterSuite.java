@@ -215,22 +215,24 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     for (int i = 0; i < NUM_PARTITIONS; i++) {
       final long partitionSize = partitionSizesInMergedFile[i];
       if (partitionSize > 0) {
-        FileInputStream fin = new FileInputStream(mergedOutputFile);
-        fin.getChannel().position(startOffset);
-        InputStream in = new LimitedInputStream(fin, partitionSize);
-        in = blockManager.serializerManager().wrapForEncryption(in);
-        if ((boolean) conf.get(package$.MODULE$.SHUFFLE_COMPRESS())) {
-          in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
-        }
-        try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
-          Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
-          while (records.hasNext()) {
-            Tuple2<Object, Object> record = records.next();
-            assertEquals(i, hashPartitioner.getPartition(record._1()));
-            recordsList.add(record);
+        try (FileInputStream fin = new FileInputStream(mergedOutputFile)) {
+          fin.getChannel().position(startOffset);
+          InputStream in = new LimitedInputStream(fin, partitionSize);
+          in = blockManager.serializerManager().wrapForEncryption(in);
+          if ((boolean) conf.get(package$.MODULE$.SHUFFLE_COMPRESS())) {
+            in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
           }
+          try (
+            DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
+            Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
+            while (records.hasNext()) {
+              Tuple2<Object, Object> record = records.next();
+              assertEquals(i, hashPartitioner.getPartition(record._1()));
+              recordsList.add(record);
+            }
+          }
+          startOffset += partitionSize;
         }
-        startOffset += partitionSize;
       }
     }
     return recordsList;

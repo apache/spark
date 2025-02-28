@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.0 to 4.1
+
+- Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
+
 ## Upgrading from Core 3.5 to 4.0
 
 - Since Spark 4.0, Spark migrated all its internal reference of servlet API from `javax` to `jakarta` 

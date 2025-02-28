@@ -55,9 +55,10 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
+    is_remote,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
-from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
+from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.types import BooleanType
 from pyspark.sql.dataframe import DataFrame
 
@@ -616,7 +617,7 @@ class CrossValidatorModelWriter(MLWriter):
             path, instance, self.sparkSession, extraMetadata=extraMetadata
         )
         bestModelPath = os.path.join(path, "bestModel")
-        cast(MLWritable, instance.bestModel).save(bestModelPath)
+        cast(MLWritable, instance.bestModel).write().session(self.sparkSession).save(bestModelPath)
         if persistSubModels:
             if instance.subModels is None:
                 raise ValueError(_save_with_persist_submodels_no_submodels_found_err)
@@ -625,7 +626,9 @@ class CrossValidatorModelWriter(MLWriter):
                 splitPath = os.path.join(subModelsPath, f"fold{splitIndex}")
                 for paramIndex in range(len(instance.getEstimatorParamMaps())):
                     modelPath = os.path.join(splitPath, f"{paramIndex}")
-                    cast(MLWritable, instance.subModels[splitIndex][paramIndex]).save(modelPath)
+                    cast(MLWritable, instance.subModels[splitIndex][paramIndex]).write().session(
+                        self.sparkSession
+                    ).save(modelPath)
 
 
 class _CrossValidatorParams(_ValidatorParams):
@@ -901,16 +904,31 @@ class CrossValidator(
                     )
                 return True
 
-            checker_udf = UserDefinedFunction(checker, BooleanType())
+            if is_remote():
+                from pyspark.sql.connect.udf import UserDefinedFunction
+            else:
+                from pyspark.sql.functions import UserDefinedFunction  # type: ignore[assignment]
+            from pyspark.util import PythonEvalType
+
+            # TODO(SPARK-48515): Use Arrow Python UDF
+            checker_udf = UserDefinedFunction(
+                checker, BooleanType(), evalType=PythonEvalType.SQL_BATCHED_UDF
+            )
             for i in range(nFolds):
                 training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
                 validation = dataset.filter(
                     checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
                 )
-                if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
-                    raise ValueError("The training data at fold %s is empty." % i)
-                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
-                    raise ValueError("The validation data at fold %s is empty." % i)
+                if is_remote():
+                    if len(training.take(1)) == 0:
+                        raise ValueError("The training data at fold %s is empty." % i)
+                    if len(validation.take(1)) == 0:
+                        raise ValueError("The validation data at fold %s is empty." % i)
+                else:
+                    if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
+                        raise ValueError("The training data at fold %s is empty." % i)
+                    if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
+                        raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
         return datasets
@@ -1279,14 +1297,16 @@ class TrainValidationSplitModelWriter(MLWriter):
             path, instance, self.sparkSession, extraMetadata=extraMetadata
         )
         bestModelPath = os.path.join(path, "bestModel")
-        cast(MLWritable, instance.bestModel).save(bestModelPath)
+        cast(MLWritable, instance.bestModel).write().session(self.sparkSession).save(bestModelPath)
         if persistSubModels:
             if instance.subModels is None:
                 raise ValueError(_save_with_persist_submodels_no_submodels_found_err)
             subModelsPath = os.path.join(path, "subModels")
             for paramIndex in range(len(instance.getEstimatorParamMaps())):
                 modelPath = os.path.join(subModelsPath, f"{paramIndex}")
-                cast(MLWritable, instance.subModels[paramIndex]).save(modelPath)
+                cast(MLWritable, instance.subModels[paramIndex]).write().session(
+                    self.sparkSession
+                ).save(modelPath)
 
 
 class _TrainValidationSplitParams(_ValidatorParams):

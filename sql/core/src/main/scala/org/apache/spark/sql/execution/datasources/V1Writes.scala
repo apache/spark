@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
@@ -65,7 +64,7 @@ trait V1WriteCommand extends DataWritingCommand {
 /**
  * A rule that plans v1 write for [[V1WriteCommand]].
  */
-object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
+object V1Writes extends Rule[LogicalPlan] {
 
   import V1WritesUtils._
 

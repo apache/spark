@@ -25,15 +25,6 @@ struct<col1:int,col2:int>
 
 
 -- !query
-SELECT col1 AS k, SUM(col2) FROM testData AS t(col1, col2) GROUP BY k
--- !query schema
-struct<k:int,sum(col2):bigint>
--- !query output
-1	3
-2	1
-
-
--- !query
 SELECT * FROM testData AS t(col1, col2, col3)
 -- !query schema
 struct<>

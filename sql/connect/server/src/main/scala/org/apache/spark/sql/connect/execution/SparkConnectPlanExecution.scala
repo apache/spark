@@ -90,14 +90,16 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,
       timeZoneId: String,
-      errorOnDuplicatedFieldNames: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
     val batches = ArrowConverters.toBatchWithSchemaIterator(
       rows,
       schema,
       maxRecordsPerBatch,
       maxBatchSize,
       timeZoneId,
-      errorOnDuplicatedFieldNames)
+      errorOnDuplicatedFieldNames,
+      largeVarTypes)
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
@@ -110,6 +112,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
+    val largeVarTypes = spark.sessionState.conf.arrowUseLargeVarTypes
     // Conservatively sets it 70% because the size is not accurate but estimated.
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
 
@@ -118,7 +121,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxRecordsPerBatch,
       maxBatchSize,
       timeZoneId,
-      errorOnDuplicatedFieldNames = false)
+      errorOnDuplicatedFieldNames = false,
+      largeVarTypes = largeVarTypes)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
@@ -239,7 +243,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         ArrowConverters.createEmptyArrowBatch(
           schema,
           timeZoneId,
-          errorOnDuplicatedFieldNames = false),
+          errorOnDuplicatedFieldNames = false,
+          largeVarTypes = largeVarTypes),
         0L,
         0L)
     }
@@ -261,8 +266,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       dataframe: DataFrame): Option[ExecutePlanResponse] = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
       case (name, row) if !executeHolder.observations.contains(name) =>
-        val values = (0 until row.length).map { i =>
-          (if (row.schema != null) Some(row.schema.fieldNames(i)) else None, row(i))
+        val values = if (row.schema == null) {
+          (0 until row.length).map { i => (None, row(i)) }
+        } else {
+          (0 until row.length).map { i => (Some(row.schema.fieldNames(i)), row(i)) }
         }
         name -> values
     }

@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 
 from pyspark.ml.linalg import Vectors
-from pyspark.sql import SparkSession
 from pyspark.ml.regression import (
     AFTSurvivalRegression,
     AFTSurvivalRegressionModel,
@@ -44,25 +43,10 @@ from pyspark.ml.regression import (
     GBTRegressor,
     GBTRegressionModel,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class RegressionTestsMixin:
-    @property
-    def df(self):
-        return (
-            self.spark.createDataFrame(
-                [
-                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
-                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
-                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
-                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
-                ],
-                ["label", "weight", "features"],
-            )
-            .coalesce(1)
-            .sortWithinPartitions("weight")
-        )
-
     def test_aft_survival(self):
         spark = self.spark
         df = spark.createDataFrame(
@@ -162,7 +146,21 @@ class RegressionTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_linear_regression(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
         lr = LinearRegression(
             regParam=0.0,
             maxIter=2,
@@ -434,7 +432,20 @@ class RegressionTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_decision_tree_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         dt = DecisionTreeRegressor(
             maxDepth=2,
@@ -490,7 +501,20 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
     def test_gbt_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         gbt = GBTRegressor(
             maxIter=3,
@@ -508,8 +532,6 @@ class RegressionTestsMixin:
         model = gbt.fit(df)
         self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 0.1, 0.1])
         self.assertEqual(model.totalNumNodes, 15)
 
@@ -554,6 +576,17 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
+
         # save & load
         with tempfile.TemporaryDirectory(prefix="gbt_regression") as d:
             gbt.write().overwrite().save(d)
@@ -566,7 +599,20 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
     def test_random_forest_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         rf = RandomForestRegressor(
             numTrees=3,
@@ -584,8 +630,6 @@ class RegressionTestsMixin:
         model = rf.fit(df)
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
         self.assertEqual(model.totalNumNodes, 11)
 
@@ -614,6 +658,17 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
+
         with tempfile.TemporaryDirectory(prefix="random_forest_regression") as d:
             rf.write().overwrite().save(d)
             rf2 = RandomForestRegressor.load(d)
@@ -625,12 +680,8 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
 
-class RegressionTests(RegressionTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class RegressionTests(RegressionTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

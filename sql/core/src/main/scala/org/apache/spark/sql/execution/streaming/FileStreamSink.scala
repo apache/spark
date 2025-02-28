@@ -134,6 +134,9 @@ class FileStreamSink(
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val basePath = new Path(path)
+  if (!basePath.isAbsolute) {
+    throw QueryExecutionErrors.notAbsolutePathError(basePath)
+  }
   private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
     sparkSession.sessionState.conf)
   private val retention = options.get("retention").map(Utils.timeStringAsMs)

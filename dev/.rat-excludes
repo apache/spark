@@ -7,6 +7,7 @@ cache
 .generated-mima-class-excludes
 .generated-mima-member-excludes
 .rat-excludes
+.mvn/jvm.config
 .*md
 .java-version
 derby.log

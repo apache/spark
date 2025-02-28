@@ -18,9 +18,11 @@
 import unittest
 
 from pyspark.sql.types import (
+    ArrayType,
     StringType,
     IntegerType,
     StructType,
+    StructField,
     BooleanType,
     DateType,
     TimestampType,
@@ -35,6 +37,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 class DataFrameCollectionTestsMixin:
@@ -288,6 +291,40 @@ class DataFrameCollectionTestsMixin:
             self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
         else:
             self.assertEqual(type(pdf["array_struct_col"][0]), list)
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_to_pandas_for_empty_df_with_nested_array_columns(self):
+        for arrow_enabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                self.check_to_pandas_for_empty_df_with_nested_array_columns()
+
+    def check_to_pandas_for_empty_df_with_nested_array_columns(self):
+        # SPARK-51112: Segfault must not occur when converting empty DataFrame with nested array
+        # columns to pandas DataFrame.
+        import pandas as pd
+
+        df = self.spark.createDataFrame(
+            data=[],
+            schema=StructType(
+                [
+                    StructField(
+                        name="b_int",
+                        dataType=IntegerType(),
+                        nullable=False,
+                    ),
+                    StructField(
+                        name="b",
+                        dataType=ArrayType(ArrayType(StringType(), True), True),
+                        nullable=True,
+                    ),
+                ]
+            ),
+        )
+        expected_pdf = pd.DataFrame(columns=["b_int", "b"])
+        assertDataFrameEqual(df.toPandas(), expected_pdf)
 
     def test_to_local_iterator(self):
         df = self.spark.range(8, numPartitions=4)

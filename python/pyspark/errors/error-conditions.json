@@ -507,6 +507,11 @@
       "Variant binary is malformed. Please check the data source is valid."
     ]
   },
+  "MASTER_URL_INVALID": {
+    "message": [
+      "Master must either be yarn or start with spark, k8s, or local."
+    ]
+  },
   "MASTER_URL_NOT_SET": {
     "message": [
       "A master URL must be set in your configuration."

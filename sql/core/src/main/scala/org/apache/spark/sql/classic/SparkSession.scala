@@ -49,11 +49,10 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
-import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
-import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -306,7 +305,7 @@ class SparkSession private(
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val encoder = ExpressionEncoder(replaced)
+    val encoder = ExpressionEncoder(replaced, lenient = true)
     val toRow = encoder.createSerializer()
     val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
@@ -446,27 +445,34 @@ class SparkSession private(
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): DataFrame = {
     val sse = new SqlScriptingExecution(script, this, args)
-    var result: Option[Seq[Row]] = None
+    sse.withLocalVariableManager {
+      var result: Option[Seq[Row]] = None
 
-    // We must execute returned df before calling sse.getNextResult again because sse.hasNext
-    // advances the script execution and executes all statements until the next result. We must
-    // collect results immediately to maintain execution order.
-    // This ensures we respect the contract of SqlScriptingExecution API.
-    var df: Option[DataFrame] = sse.getNextResult
-    while (df.isDefined) {
-      sse.withErrorHandling {
-        // Collect results from the current DataFrame.
-        result = Some(df.get.collect().toSeq)
+      // We must execute returned df before calling sse.getNextResult again because sse.hasNext
+      // advances the script execution and executes all statements until the next result. We must
+      // collect results immediately to maintain execution order.
+      // This ensures we respect the contract of SqlScriptingExecution API.
+      var df: Option[DataFrame] = sse.getNextResult
+      var resultSchema: Option[StructType] = None
+      while (df.isDefined) {
+        sse.withErrorHandling {
+          // Collect results from the current DataFrame.
+          result = Some(df.get.collect().toSeq)
+          resultSchema = Some(df.get.schema)
+        }
+        df = sse.getNextResult
       }
-      df = sse.getNextResult
-    }
 
-    if (result.isEmpty) {
-      emptyDataFrame
-    } else {
-      val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
-      Dataset.ofRows(
-        self, LocalRelation.fromExternalRows(attributes, result.get))
+      if (result.isEmpty) {
+        emptyDataFrame
+      } else {
+        // If `result` is defined, then `resultSchema` must be defined as well.
+        assert(resultSchema.isDefined)
+
+        val attributes = DataTypeUtils.toAttributes(resultSchema.get)
+        Dataset.ofRows(
+          self, LocalRelation.fromExternalRows(attributes, result.get))
+      }
     }
   }
 
@@ -583,15 +589,7 @@ class SparkSession private(
    */
   @Unstable
   def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
-    DataSource.lookupDataSource(runner, sessionState.conf) match {
-      case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
-        Dataset.ofRows(self, ExternalCommandExecutor(
-          source.getDeclaredConstructor().newInstance()
-            .asInstanceOf[ExternalCommandRunner], command, options))
-
-      case _ =>
-        throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
-    }
+    Dataset.ofRows(self, ExternalCommandExecutor(this, runner, command, options))
   }
 
   /** @inheritdoc */

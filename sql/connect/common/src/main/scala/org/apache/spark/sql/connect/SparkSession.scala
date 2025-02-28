@@ -16,11 +16,16 @@
  */
 package org.apache.spark.sql.connect
 
+import java.io.File
 import java.net.URI
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, FileSystems, Path, Paths, StandardWatchEventKinds}
+import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -36,18 +41,17 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.CONFIG
+import org.apache.spark.internal.LogKeys.{CONFIG, PATH}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -111,7 +115,8 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
+        val arrowData =
+          ArrowSerializer.serialize(data, encoder, allocator, timeZoneId, largeVarTypes)
         if (arrowData.size() <= conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
@@ -205,15 +210,21 @@ class SparkSession private[sql] (
   override def executeCommand(
       runner: String,
       command: String,
-      options: Map[String, String]): DataFrame =
-    throw ConnectClientUnsupportedErrors.executeCommand()
+      options: Map[String, String]): DataFrame = {
+    executeCommandWithDataFrameReturn(newCommand { builder =>
+      builder.getExecuteExternalCommandBuilder
+        .setRunner(runner)
+        .setCommand(command)
+        .putAllOptions(options.asJava)
+    })
+  }
 
   /** @inheritdoc */
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     val sqlCommand = proto.SqlCommand
       .newBuilder()
       .setSql(sqlText)
-      .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)
+      .addAllPosArguments(args.map(a => toLiteral(a)).toImmutableArraySeq.asJava)
       .build()
     sql(sqlCommand)
   }
@@ -228,7 +239,7 @@ class SparkSession private[sql] (
     val sqlCommand = proto.SqlCommand
       .newBuilder()
       .setSql(sqlText)
-      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)
+      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, toLiteral(v)) }.asJava)
       .build()
     sql(sqlCommand)
   }
@@ -238,10 +249,13 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame { builder =>
+  private def sql(sqlCommand: proto.SqlCommand): DataFrame = {
     // Send the SQL once to the server and then check the output.
-    val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
-    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    executeCommandWithDataFrameReturn(newCommand(_.setSqlCommand(sqlCommand)))
+  }
+
+  private def executeCommandWithDataFrameReturn(command: proto.Command): DataFrame = {
+    val plan = proto.Plan.newBuilder().setCommand(command)
     val responseIter = client.execute(plan.build())
 
     try {
@@ -249,7 +263,7 @@ class SparkSession private[sql] (
         .find(_.hasSqlCommandResult)
         .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
       // Update the builder with the values from the result.
-      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      newDataFrame(_.mergeFrom(response.getSqlCommandResult.getRelation))
     } finally {
       // consume the rest of the iterator
       responseIter.foreach(_ => ())
@@ -429,6 +443,10 @@ class SparkSession private[sql] (
     new Dataset[T](this, plan, encoder)
   }
 
+  private[sql] def newDataset[T](encoder: AgnosticEncoder[T], plan: proto.Plan): Dataset[T] = {
+    new Dataset[T](this, plan, encoder)
+  }
+
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
     val builder = proto.Command.newBuilder()
     f(builder)
@@ -459,6 +477,8 @@ class SparkSession private[sql] (
   }
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
+  private[sql] def largeVarTypes: Boolean =
+    conf.get(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toLowerCase(Locale.ROOT).toBoolean
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = executeInternal(plan)
@@ -611,6 +631,17 @@ class SparkSession private[sql] (
     }
     allocator.close()
     SparkSession.onSessionClose(this)
+    SparkSession.server.synchronized {
+      if (SparkSession.server.isDefined) {
+        // When local mode is in use, follow the regular Spark session's
+        // behavior by terminating the Spark Connect server,
+        // meaning that you can stop local mode, and restart the Spark Connect
+        // client with a different remote address.
+        new ProcessBuilder(SparkSession.maybeConnectStopScript.get.toString)
+          .start()
+        SparkSession.server = None
+      }
+    }
   }
 
   /** @inheritdoc */
@@ -653,11 +684,6 @@ class SparkSession private[sql] (
   }
 
   override private[sql] def isUsable: Boolean = client.isSessionValid
-
-  implicit class RichColumn(c: Column) {
-    def expr: proto.Expression = toExpr(c)
-    def typedExpr[T](e: Encoder[T]): proto.Expression = toTypedExpr(c, e)
-  }
 }
 
 // The minimal builder needed to create a spark session.
@@ -668,6 +694,10 @@ object SparkSession extends SparkSessionCompanion with Logging {
   private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
   private var server: Option[Process] = None
+  private val maybeConnectStartScript =
+    Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
+  private val maybeConnectStopScript =
+    Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "stop-connect-server.sh"))
   private[sql] val sparkOptions = sys.props.filter { p =>
     p._1.startsWith("spark.") && p._2.nonEmpty
   }.toMap
@@ -680,48 +710,113 @@ object SparkSession extends SparkSessionCompanion with Logging {
       override def load(c: Configuration): SparkSession = create(c)
     })
 
+  private def waitUntilFileExists(file: File): Unit = {
+    val deadline = 30.seconds.fromNow
+    val watchService = FileSystems.getDefault.newWatchService()
+    try {
+      file.toPath.getParent.register(watchService, StandardWatchEventKinds.ENTRY_CREATE)
+      while (!file.exists() && deadline.hasTimeLeft()) {
+        Option(watchService.poll(deadline.timeLeft.toSeconds + 1, TimeUnit.SECONDS)) match {
+          case Some(key) =>
+            key.pollEvents().forEach { event =>
+              val kind = event.kind()
+              val filename = event.context().asInstanceOf[Path]
+
+              if (kind == StandardWatchEventKinds.ENTRY_CREATE
+                && filename.toString == file.toPath.getFileName.toString) {
+                key.cancel()
+                return
+              }
+            }
+            key.reset()
+          case None =>
+        }
+      }
+    } finally {
+      watchService.close()
+    }
+  }
+
   /**
    * Create a new Spark Connect server to connect locally.
    */
   private[sql] def withLocalConnectServer[T](f: => T): T = {
-    synchronized {
-      val remoteString = sparkOptions
-        .get("spark.remote")
-        .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
-        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+    lazy val isAPIModeConnect =
+      Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
+        .getOrElse("classic")
+        .toLowerCase(Locale.ROOT) == "connect"
+    val remoteString = sparkOptions
+      .get("spark.remote")
+      .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
+      .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+      .orElse {
+        if (isAPIModeConnect) {
+          sparkOptions.get("spark.master").orElse(sys.env.get("MASTER"))
+        } else {
+          None
+        }
+      }
 
-      val maybeConnectScript =
-        Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
-
+    server.synchronized {
       if (server.isEmpty &&
-        remoteString.exists(_.startsWith("local")) &&
-        maybeConnectScript.exists(Files.exists(_))) {
+        (remoteString.exists(_.startsWith("local")) ||
+          (remoteString.isDefined && isAPIModeConnect)) &&
+        maybeConnectStartScript.exists(Files.exists(_))) {
+        val token = java.util.UUID.randomUUID().toString()
+        val serverId = UUID.randomUUID().toString
         server = Some {
           val args =
-            Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions
+            Seq(
+              maybeConnectStartScript.get.toString,
+              "--master",
+              remoteString.get) ++ (sparkOptions ++ Map(
+              "spark.sql.artifact.isolation.enabled" -> "true",
+              "spark.sql.artifact.isolation.alwaysApplyClassloader" -> "true"))
               .filter(p => !p._1.startsWith("spark.remote"))
+              .filter(p => !p._1.startsWith("spark.api.mode"))
               .flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
+          pb.environment().put("SPARK_IDENT_STRING", serverId)
+          pb.environment().put("HOSTNAME", "local")
+          pb.environment().put("SPARK_CONNECT_AUTHENTICATE_TOKEN", token)
           pb.start()
         }
 
-        // Let the server start. We will directly request to set the configurations
-        // and this sleep makes less noisy with retries.
-        Thread.sleep(2000L)
-        System.setProperty("spark.remote", "sc://localhost")
+        // Let the server start, and wait until the log file is created.
+        Option(System.getenv("SPARK_LOG_DIR"))
+          .orElse(Option(System.getenv("SPARK_HOME")).map(p => Paths.get(p, "logs").toString))
+          .foreach { p =>
+            val logFile = Paths
+              .get(
+                p,
+                s"spark-$serverId-" +
+                  s"org.apache.spark.sql.connect.service.SparkConnectServer-1-local.out")
+              .toFile
+            waitUntilFileExists(logFile)
+            if (logFile.exists()) {
+              logInfo(log"Spark Connect server started with the log file: ${MDC(PATH, logFile)}")
+            } else {
+              logWarning(log"Spark Connect server log not found at ${MDC(PATH, logFile)}")
+            }
+          }
+
+        System.setProperty("spark.remote", s"sc://localhost/;token=$token")
 
         // scalastyle:off runtimeaddshutdownhook
         Runtime.getRuntime.addShutdownHook(new Thread() {
-          override def run(): Unit = if (server.isDefined) {
-            new ProcessBuilder(maybeConnectScript.get.toString)
-              .start()
+          override def run(): Unit = server.synchronized {
+            if (server.isDefined) {
+              new ProcessBuilder(maybeConnectStopScript.get.toString)
+                .start()
+            }
           }
         })
         // scalastyle:on runtimeaddshutdownhook
       }
     }
+
     f
   }
 
@@ -745,8 +840,15 @@ object SparkSession extends SparkSessionCompanion with Logging {
     // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
     // by default, if it exists. The connection string can be overridden using
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
-    private val builder = SparkConnectClient.builder().loadFromEnvironment()
+    private var connectionString: Option[String] = None
+    private var interceptor: Option[ClientInterceptor] = None
     private var client: SparkConnectClient = _
+    private lazy val builder = {
+      val b = SparkConnectClient.builder().loadFromEnvironment()
+      connectionString.foreach(b.connectionString)
+      interceptor.foreach(b.interceptor)
+      b
+    }
 
     /** @inheritdoc */
     @deprecated("sparkContext does not work in Spark Connect")
@@ -762,7 +864,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
      * @since 3.5.0
      */
     def interceptor(interceptor: ClientInterceptor): this.type = {
-      builder.interceptor(interceptor)
+      this.interceptor = Some(interceptor)
       this
     }
 
@@ -810,7 +912,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
     override protected def handleBuilderConfig(key: String, value: String): Boolean = key match {
       case CONNECT_REMOTE_KEY =>
-        builder.connectionString(value)
+        connectionString = Some(value)
         true
       case APP_NAME_KEY | MASTER_KEY | CATALOG_IMPL_KEY | API_MODE_KEY =>
         logWarning(log"${MDC(CONFIG, key)} configuration is not supported in Connect mode.")

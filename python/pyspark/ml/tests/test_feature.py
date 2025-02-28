@@ -26,11 +26,13 @@ from pyspark.ml.feature import (
     DCT,
     Binarizer,
     Bucketizer,
+    QuantileDiscretizer,
     CountVectorizer,
     CountVectorizerModel,
     OneHotEncoder,
     OneHotEncoderModel,
     FeatureHasher,
+    ElementwiseProduct,
     HashingTF,
     IDF,
     IDFModel,
@@ -40,6 +42,7 @@ from pyspark.ml.feature import (
     Normalizer,
     Interaction,
     RFormula,
+    RFormulaModel,
     Tokenizer,
     SQLTransformer,
     RegexTokenizer,
@@ -60,9 +63,12 @@ from pyspark.ml.feature import (
     StopWordsRemover,
     StringIndexer,
     StringIndexerModel,
+    VectorIndexer,
+    VectorIndexerModel,
     TargetEncoder,
     TargetEncoderModel,
     VectorSizeHint,
+    VectorSlicer,
     VectorAssembler,
     PCA,
     PCAModel,
@@ -73,14 +79,39 @@ from pyspark.ml.feature import (
     MinHashLSH,
     MinHashLSHModel,
     IndexToString,
+    PolynomialExpansion,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
-from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class FeatureTestsMixin:
+    def test_polynomial_expansion(self):
+        df = self.spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
+        px = PolynomialExpansion(degree=2)
+        px.setInputCol("dense")
+        px.setOutputCol("expanded")
+        self.assertTrue(
+            np.allclose(
+                px.transform(df).head().expanded.toArray(), [0.5, 0.25, 2.0, 1.0, 4.0], atol=1e-4
+            )
+        )
+
+        def check(p: PolynomialExpansion) -> None:
+            self.assertEqual(p.getInputCol(), "dense")
+            self.assertEqual(p.getOutputCol(), "expanded")
+            self.assertEqual(p.getDegree(), 2)
+
+        check(px)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="px") as d:
+            px.write().overwrite().save(d)
+            px2 = PolynomialExpansion.load(d)
+            self.assertEqual(str(px), str(px2))
+            check(px2)
+
     def test_index_string(self):
         dataset = self.spark.createDataFrame(
             [
@@ -222,6 +253,70 @@ class FeatureTestsMixin:
         self.assertTrue(result[0][0] == "e" and result[1][0] == "f")
         sorted_value = sorted([v for _, v in result])
         self.assertEqual(sorted_value, [0.0, 1.0])
+
+    def test_vector_indexer(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                (Vectors.dense([-1.0, 0.0]),),
+                (Vectors.dense([0.0, 1.0]),),
+                (Vectors.dense([0.0, 2.0]),),
+            ],
+            ["a"],
+        )
+
+        indexer = VectorIndexer(maxCategories=2, inputCol="a")
+        indexer.setOutputCol("indexed")
+        self.assertEqual(indexer.getMaxCategories(), 2)
+        self.assertEqual(indexer.getInputCol(), "a")
+        self.assertEqual(indexer.getOutputCol(), "indexed")
+
+        model = indexer.fit(df)
+        self.assertEqual(indexer.uid, model.uid)
+        self.assertEqual(model.numFeatures, 2)
+
+        categoryMaps = model.categoryMaps
+        self.assertEqual(categoryMaps, {0: {0.0: 0, -1.0: 1}}, categoryMaps)
+
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["a", "indexed"])
+        self.assertEqual(output.count(), 3)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_indexer") as d:
+            indexer.write().overwrite().save(d)
+            indexer2 = VectorIndexer.load(d)
+            self.assertEqual(str(indexer), str(indexer2))
+            self.assertEqual(indexer2.getOutputCol(), "indexed")
+
+            model.write().overwrite().save(d)
+            model2 = VectorIndexerModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model2.getOutputCol(), "indexed")
+
+    def test_elementwise_product(self):
+        spark = self.spark
+        df = spark.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
+
+        ep = ElementwiseProduct()
+        ep.setScalingVec(Vectors.dense([1.0, 2.0, 3.0]))
+        ep.setInputCol("values")
+        ep.setOutputCol("eprod")
+
+        self.assertEqual(ep.getScalingVec(), Vectors.dense([1.0, 2.0, 3.0]))
+        self.assertEqual(ep.getInputCol(), "values")
+        self.assertEqual(ep.getOutputCol(), "eprod")
+
+        output = ep.transform(df)
+        self.assertEqual(output.columns, ["values", "eprod"])
+        self.assertEqual(output.count(), 1)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="elementwise_product") as d:
+            ep.write().overwrite().save(d)
+            ep2 = ElementwiseProduct.load(d)
+            self.assertEqual(str(ep), str(ep2))
+            self.assertEqual(ep2.getOutputCol(), "eprod")
 
     def test_pca(self):
         df = self.spark.createDataFrame(
@@ -585,13 +680,12 @@ class FeatureTestsMixin:
         self.assertEqual(synonyms.columns, ["word", "similarity"])
         self.assertEqual(synonyms.count(), 2)
 
-        # TODO(SPARK-50958): Support Word2VecModel.findSynonymsArray
-        # synonyms = model.findSynonymsArray("a", 2)
-        # self.assertEqual(len(synonyms), 2)
-        # self.assertEqual(synonyms[0][0], "b")
-        # self.assertTrue(np.allclose(synonyms[0][1], -0.024012837558984756, atol=1e-4))
-        # self.assertEqual(synonyms[1][0], "c")
-        # self.assertTrue(np.allclose(synonyms[1][1], -0.19355154037475586, atol=1e-4))
+        synonyms = model.findSynonymsArray("a", 2)
+        self.assertEqual(len(synonyms), 2)
+        self.assertEqual(synonyms[0][0], "b")
+        self.assertTrue(np.allclose(synonyms[0][1], -0.024012837558984756, atol=1e-4))
+        self.assertEqual(synonyms[1][0], "c")
+        self.assertTrue(np.allclose(synonyms[1][1], -0.19355154037475586, atol=1e-4))
 
         output = model.transform(df)
         self.assertEqual(output.columns, ["sentence", "model"])
@@ -789,8 +883,9 @@ class FeatureTestsMixin:
             remover2 = StopWordsRemover.load(d)
             self.assertEqual(str(remover), str(remover2))
 
-    def test_stop_words_remover_II(self):
-        dataset = self.spark.createDataFrame([Row(input=["a", "panda"])])
+    def test_stop_words_remover_with_given_words(self):
+        spark = self.spark
+        dataset = spark.createDataFrame([Row(input=["a", "panda"])])
         stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
         # Default
         self.assertEqual(stopWordRemover.getInputCol(), "input")
@@ -805,13 +900,6 @@ class FeatureTestsMixin:
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a"])
-        # with language selection
-        stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
-        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
-        stopWordRemover.setStopWords(stopwords)
-        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
-        transformedDF = stopWordRemover.transform(dataset)
-        self.assertEqual(transformedDF.head().output, [])
         # with locale
         stopwords = ["BELKİ"]
         dataset = self.spark.createDataFrame([Row(input=["belki"])])
@@ -819,6 +907,30 @@ class FeatureTestsMixin:
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
+
+    def test_stop_words_remover_with_turkish(self):
+        spark = self.spark
+        dataset = spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
+        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
+        stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
+        stopWordRemover.setStopWords(stopwords)
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
+
+    def test_stop_words_remover_default(self):
+        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
+
+        # check the default value of local
+        locale = stopWordRemover.getLocale()
+        self.assertIsInstance(locale, str)
+        self.assertTrue(len(locale) > 0)
+
+        # check the default value of stop words
+        stopwords = stopWordRemover.getStopWords()
+        self.assertIsInstance(stopwords, list)
+        self.assertTrue(len(stopwords) > 0)
+        self.assertTrue(all(isinstance(word, str) for word in stopwords))
 
     def test_binarizer(self):
         b0 = Binarizer()
@@ -885,6 +997,102 @@ class FeatureTestsMixin:
             binarizer.write().overwrite().save(d)
             binarizer2 = Binarizer.load(d)
             self.assertEqual(str(binarizer), str(binarizer2))
+
+    def test_quantile_discretizer_single_column(self):
+        spark = self.spark
+        values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
+        df = spark.createDataFrame(values, ["values"])
+
+        qds = QuantileDiscretizer(inputCol="values", outputCol="buckets")
+        qds.setNumBuckets(2)
+        qds.setRelativeError(0.01)
+        qds.setHandleInvalid("keep")
+
+        self.assertEqual(qds.getInputCol(), "values")
+        self.assertEqual(qds.getOutputCol(), "buckets")
+        self.assertEqual(qds.getNumBuckets(), 2)
+        self.assertEqual(qds.getRelativeError(), 0.01)
+        self.assertEqual(qds.getHandleInvalid(), "keep")
+
+        bucketizer = qds.fit(df)
+        self.assertIsInstance(bucketizer, Bucketizer)
+        # Bucketizer doesn't inherit uid from QuantileDiscretizer
+        self.assertNotEqual(qds.uid, bucketizer.uid)
+        self.assertTrue(qds.uid.startswith("QuantileDiscretizer"))
+        self.assertTrue(bucketizer.uid.startswith("Bucketizer"))
+
+        # check model coefficients
+        self.assertEqual(bucketizer.getSplits(), [float("-inf"), 0.4, float("inf")])
+
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["values", "buckets"])
+        self.assertEqual(output.count(), 6)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="quantile_discretizer_single_column") as d:
+            qds.write().overwrite().save(d)
+            qds2 = QuantileDiscretizer.load(d)
+            self.assertEqual(str(qds), str(qds2))
+
+            bucketizer.write().overwrite().save(d)
+            bucketizer2 = Bucketizer.load(d)
+            self.assertEqual(str(bucketizer), str(bucketizer2))
+
+    def test_quantile_discretizer_multiple_columns(self):
+        spark = self.spark
+        inputs = [
+            (0.1, 0.0),
+            (0.4, 1.0),
+            (1.2, 1.3),
+            (1.5, 1.5),
+            (float("nan"), float("nan")),
+            (float("nan"), float("nan")),
+        ]
+        df = spark.createDataFrame(inputs, ["input1", "input2"])
+
+        qds = QuantileDiscretizer(
+            relativeError=0.01,
+            handleInvalid="keep",
+            numBuckets=2,
+            inputCols=["input1", "input2"],
+            outputCols=["output1", "output2"],
+        )
+
+        self.assertEqual(qds.getInputCols(), ["input1", "input2"])
+        self.assertEqual(qds.getOutputCols(), ["output1", "output2"])
+        self.assertEqual(qds.getNumBuckets(), 2)
+        self.assertEqual(qds.getRelativeError(), 0.01)
+        self.assertEqual(qds.getHandleInvalid(), "keep")
+
+        bucketizer = qds.fit(df)
+        self.assertIsInstance(bucketizer, Bucketizer)
+        # Bucketizer doesn't inherit uid from QuantileDiscretizer
+        self.assertNotEqual(qds.uid, bucketizer.uid)
+        self.assertTrue(qds.uid.startswith("QuantileDiscretizer"))
+        self.assertTrue(bucketizer.uid.startswith("Bucketizer"))
+
+        # check model coefficients
+        self.assertEqual(
+            bucketizer.getSplitsArray(),
+            [
+                [float("-inf"), 0.4, float("inf")],
+                [float("-inf"), 1.0, float("inf")],
+            ],
+        )
+
+        output = bucketizer.transform(df)
+        self.assertEqual(output.columns, ["input1", "input2", "output1", "output2"])
+        self.assertEqual(output.count(), 6)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="quantile_discretizer_multiple_columns") as d:
+            qds.write().overwrite().save(d)
+            qds2 = QuantileDiscretizer.load(d)
+            self.assertEqual(str(qds), str(qds2))
+
+            bucketizer.write().overwrite().save(d)
+            bucketizer2 = Bucketizer.load(d)
+            self.assertEqual(str(bucketizer), str(bucketizer2))
 
     def test_bucketizer(self):
         df = self.spark.createDataFrame(
@@ -1168,9 +1376,8 @@ class FeatureTestsMixin:
             self.assertEqual(feature, expected)
 
         # Test an empty vocabulary
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(Exception, "vocabSize.*invalid.*0"):
-                CountVectorizerModel.from_vocabulary([], inputCol="words")
+        with self.assertRaisesRegex(Exception, "Vocabulary list cannot be empty"):
+            CountVectorizerModel.from_vocabulary([], inputCol="words")
 
         # Test model with default settings can transform
         model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
@@ -1204,11 +1411,24 @@ class FeatureTestsMixin:
         )
         rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
         self.assertEqual(rf.getStringIndexerOrderType(), "alphabetDesc")
-        transformedDF = rf.fit(df).transform(df)
+        model = rf.fit(df)
+        self.assertEqual(rf.uid, model.uid)
+        transformedDF = model.transform(df)
         observed = transformedDF.select("features").collect()
         expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
         for i in range(0, len(expected)):
             self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="rformula") as d:
+            rf.write().overwrite().save(d)
+            rf2 = RFormula.load(d)
+            self.assertEqual(str(rf), str(rf2))
+
+            model.write().overwrite().save(d)
+            model2 = RFormulaModel.load(d)
+            self.assertEqual(str(model), str(model2))
+            self.assertEqual(model.getFormula(), model2.getFormula())
 
     def test_string_indexer_handle_invalid(self):
         df = self.spark.createDataFrame([(0, "a"), (1, "d"), (2, None)], ["id", "label"])
@@ -1237,7 +1457,11 @@ class FeatureTestsMixin:
             ["a", "b", "c"], inputCol="label", outputCol="indexed", handleInvalid="keep"
         )
         self.assertEqual(model.labels, ["a", "b", "c"])
-        self.assertEqual(model.labelsArray, [("a", "b", "c")])
+        self.assertEqual(model.labelsArray, [["a", "b", "c"]])
+
+        self.assertEqual(model.getInputCol(), "label")
+        self.assertEqual(model.getOutputCol(), "indexed")
+        self.assertEqual(model.getHandleInvalid(), "keep")
 
         df1 = self.spark.createDataFrame(
             [(0, "a"), (1, "c"), (2, None), (3, "b"), (4, "b")], ["id", "label"]
@@ -1278,6 +1502,20 @@ class FeatureTestsMixin:
             .collect()
         )
         self.assertEqual(len(transformed_list), 5)
+
+    def test_string_indexer_from_arrays_of_labels(self):
+        model = StringIndexerModel.from_arrays_of_labels(
+            [["a", "b", "c"], ["x", "y", "z"]],
+            inputCols=["label1", "label2"],
+            outputCols=["indexed1", "indexed2"],
+            handleInvalid="keep",
+        )
+
+        self.assertEqual(model.labelsArray, [["a", "b", "c"], ["x", "y", "z"]])
+
+        self.assertEqual(model.getInputCols(), ["label1", "label2"])
+        self.assertEqual(model.getOutputCols(), ["indexed1", "indexed2"])
+        self.assertEqual(model.getHandleInvalid(), "keep")
 
     def test_target_encoder_binary(self):
         df = self.spark.createDataFrame(
@@ -1328,13 +1566,48 @@ class FeatureTestsMixin:
             ["id", "vector"],
         )
 
-        sizeHint = VectorSizeHint(inputCol="vector", handleInvalid="skip")
-        sizeHint.setSize(3)
-        self.assertEqual(sizeHint.getSize(), 3)
+        sh = VectorSizeHint(inputCol="vector", handleInvalid="skip")
+        sh.setSize(3)
+        self.assertEqual(sh.getSize(), 3)
 
-        output = sizeHint.transform(df).head().vector
+        output = sh.transform(df).head().vector
         expected = DenseVector([0.0, 10.0, 0.5])
         self.assertEqual(output, expected)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_size_hint") as d:
+            sh.write().overwrite().save(d)
+            sh2 = VectorSizeHint.load(d)
+            self.assertEqual(str(sh), str(sh2))
+
+    def test_vector_slicer(self):
+        spark = self.spark
+
+        df = spark.createDataFrame(
+            [
+                (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
+                (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
+                (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),),
+            ],
+            ["features"],
+        )
+
+        vs = VectorSlicer(outputCol="sliced", indices=[1, 4])
+        vs.setInputCol("features")
+        self.assertEqual(vs.getIndices(), [1, 4])
+        self.assertEqual(vs.getInputCol(), "features")
+        self.assertEqual(vs.getOutputCol(), "sliced")
+
+        output = vs.transform(df)
+        self.assertEqual(output.columns, ["features", "sliced"])
+        self.assertEqual(output.count(), 3)
+        self.assertEqual(output.head().sliced, Vectors.dense([2.3, 1.0]))
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="vector_slicer") as d:
+            vs.write().overwrite().save(d)
+            vs2 = VectorSlicer.load(d)
+            self.assertEqual(str(vs), str(vs2))
 
     def test_feature_hasher(self):
         data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
@@ -1501,7 +1774,7 @@ class FeatureTestsMixin:
             self.assertEqual(str(model), str(model2))
 
 
-class FeatureTests(FeatureTestsMixin, SparkSessionTestCase):
+class FeatureTests(FeatureTestsMixin, ReusedSQLTestCase):
     pass
 
 

@@ -401,10 +401,7 @@ object SparkBuild extends PomBuild {
   enable(PySparkAssembly.settings)(assembly)
 
   /* Enable unidoc only for the root spark project */
-  enable(SparkUnidoc.settings)(spark)
-
-  /* Enable unidoc only for the root spark connect client project */
-  // enable(SparkConnectClientUnidoc.settings)(connectClient)
+  enable(Unidoc.settings)(spark)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
@@ -1211,6 +1208,7 @@ object YARN {
     "Generate config.properties which contains a setting whether Hadoop is provided or not")
   val propFileName = "config.properties"
   val hadoopProvidedProp = "spark.yarn.isHadoopProvided"
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
   lazy val settings = Seq(
     Compile / unmanagedResources :=
@@ -1226,7 +1224,14 @@ object YARN {
         (Compile / genConfigProperties).value
         c
       }
-    }).value
+    }).value,
+
+    buildTestDeps := {
+      (LocalProject("assembly") / Compile / Keys.`package`).value
+    },
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
+
+    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated
   )
 }
 
@@ -1333,7 +1338,7 @@ object SparkR {
   )
 }
 
-trait SharedUnidocSettings {
+object Unidoc {
 
   import BuildCommons._
   import sbtunidoc.BaseUnidocPlugin
@@ -1366,14 +1371,18 @@ trait SharedUnidocSettings {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/artifact")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/scripting")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/ml")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.sql.errors")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/errors")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/errors")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))
       .map(_.filterNot(_.getCanonicalPath.contains("SSLOptions")))
@@ -1389,7 +1398,7 @@ trait SharedUnidocSettings {
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
 
-  lazy val baseSettings = BaseUnidocPlugin.projectSettings ++
+  lazy val settings = BaseUnidocPlugin.projectSettings ++
                       ScalaUnidocPlugin.projectSettings ++
                       JavaUnidocPlugin.projectSettings ++
                       Seq (
@@ -1446,27 +1455,7 @@ trait SharedUnidocSettings {
       } else {
         Seq()
       }
-    )
-  )
-}
-
-object SparkUnidoc extends SharedUnidocSettings {
-
-  import BuildCommons._
-  import sbtunidoc.BaseUnidocPlugin
-  import sbtunidoc.JavaUnidocPlugin
-  import sbtunidoc.ScalaUnidocPlugin
-  import sbtunidoc.BaseUnidocPlugin.autoImport._
-  import sbtunidoc.GenJavadocPlugin.autoImport._
-  import sbtunidoc.JavaUnidocPlugin.autoImport._
-  import sbtunidoc.ScalaUnidocPlugin.autoImport._
-
-  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
-    super.ignoreUndocumentedPackages(packages)
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
-  }
-
-  lazy val settings = baseSettings ++ Seq(
+    ),
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
@@ -1475,28 +1464,6 @@ object SparkUnidoc extends SharedUnidocSettings {
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
         connectShims, protobuf, profiler),
-  )
-}
-
-object SparkConnectClientUnidoc extends SharedUnidocSettings {
-
-  import BuildCommons._
-  import sbtunidoc.BaseUnidocPlugin
-  import sbtunidoc.JavaUnidocPlugin
-  import sbtunidoc.ScalaUnidocPlugin
-  import sbtunidoc.BaseUnidocPlugin.autoImport._
-  import sbtunidoc.GenJavadocPlugin.autoImport._
-  import sbtunidoc.JavaUnidocPlugin.autoImport._
-  import sbtunidoc.ScalaUnidocPlugin.autoImport._
-
-  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
-    super.ignoreUndocumentedPackages(packages)
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/application")))
-  }
-
-  lazy val settings = baseSettings ++ Seq(
-    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
-    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon, sqlApi),
   )
 }
 
@@ -1573,7 +1540,7 @@ object CopyDependencies {
             Files.createDirectories(destDir)
 
             val sourceAssemblyJar = Paths.get(
-              BuildCommons.sparkHome.getAbsolutePath, "connector", "connect", "client",
+              BuildCommons.sparkHome.getAbsolutePath, "sql", "connect", "client",
               "jvm", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jvm-assembly-$sparkVer.jar")
             val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jvm-assembly-$sparkVer.jar")
             Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
@@ -1642,6 +1609,7 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.enabled=false",
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
+    (Test / javaOptions) += "-Dspark.hadoop.hadoop.caller.context.enabled=true",
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
@@ -1674,7 +1642,8 @@ object TestSettings {
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
         "-Djdk.reflect.useDirectMethodHandle=false",
-        "-Dio.netty.tryReflectionSetAccessible=true").mkString(" ")
+        "-Dio.netty.tryReflectionSetAccessible=true",
+        "--enable-native-access=ALL-UNNAMED").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

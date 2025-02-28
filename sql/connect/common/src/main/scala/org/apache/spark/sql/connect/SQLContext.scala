@@ -305,29 +305,13 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     super.jdbc(url, table, theParts)
   }
 }
+
 object SQLContext extends sql.SQLContextCompanion {
 
   override private[sql] type SQLContextImpl = SQLContext
-  override private[sql] type SparkContextImpl = SparkContext
 
-  /**
-   * Get the singleton SQLContext if it exists or create a new one.
-   *
-   * This function can be used to create a singleton SQLContext object that can be shared across
-   * the JVM.
-   *
-   * If there is an active SQLContext for current thread, it will be returned instead of the
-   * global one.
-   *
-   * @param sparkContext
-   *   The SparkContext. This parameter is not used in Spark Connect.
-   *
-   * @since 4.0.0
-   */
+  /** @inheritdoc */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     SparkSession.builder().getOrCreate().sqlContext
   }
-
-  /** @inheritdoc */
-  override def setActive(sqlContext: SQLContext): Unit = super.setActive(sqlContext)
 }

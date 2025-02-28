@@ -17,8 +17,15 @@
 
 package org.apache.spark.sql.analysis.resolver
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  AnalyzerBridgeState,
+  ExplicitlyUnsupportedResolverFeature,
+  Resolver,
+  ResolverGuard
+}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolverGuardSuite extends QueryTest with SharedSparkSession {
@@ -134,8 +141,6 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     checkResolverGuard("SELECT 1 AS alias", shouldPass = true)
   }
 
-  // Queries that shouldn't pass the OperatorResolverGuard
-
   test("Select from table") {
     withTable("test_table") {
       sql("CREATE TABLE test_table (col1 INT, col2 INT)")
@@ -150,6 +155,43 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
   test("Multi-layer subquery") {
     checkResolverGuard("SELECT * FROM (SELECT * FROM (SELECT * FROM VALUES(1)))", shouldPass = true)
   }
+
+  test("Union all") {
+    checkResolverGuard(
+      "SELECT * FROM VALUES(1) UNION ALL SELECT * FROM VALUES(2)",
+      shouldPass = true
+    )
+  }
+
+  test("CTE") {
+    checkResolverGuard(
+      """
+      WITH cte1 AS (
+        SELECT * FROM VALUES (1)
+      ),
+      cte2 AS (
+        SELECT * FROM VALUES (2)
+      )
+      SELECT * FROM cte1
+      UNION ALL
+      SELECT * FROM cte2
+      """,
+      shouldPass = true
+    )
+  }
+
+  test("Subquery column aliases") {
+    checkResolverGuard(
+      "SELECT t.a, t.b FROM VALUES (1, 2) t (a, b)",
+      shouldPass = true
+    )
+  }
+
+  test("Function") {
+    checkResolverGuard("SELECT assert_true(true)", shouldPass = true)
+  }
+
+  // Queries that shouldn't pass the OperatorResolverGuard
 
   test("Scalar subquery") {
     checkResolverGuard("SELECT (SELECT * FROM VALUES(1))", shouldPass = false)
@@ -169,10 +211,6 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Function") {
-    checkResolverGuard("SELECT current_date()", shouldPass = false)
-  }
-
   test("Function without the braces") {
     checkResolverGuard("SELECT current_date", shouldPass = false)
   }
@@ -189,11 +227,91 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private def checkResolverGuard(query: String, shouldPass: Boolean): Unit = {
-    val resolverGuard = new ResolverGuard(spark.sessionState.catalogManager)
-    assert(
-      resolverGuard.apply(sql(query).queryExecution.logical) == shouldPass
+  test("Union distinct") {
+    checkResolverGuard(
+      "SELECT * FROM VALUES (1) UNION DISTINCT SELECT * FROM VALUES (2)",
+      shouldPass = true
     )
+  }
+
+  test("UDFs") {
+    sql("CREATE FUNCTION supermario(x INT) RETURNS INT RETURN x + 3")
+    checkResolverGuard("SELECT supermario(2)", shouldPass = false)
+  }
+
+  test("PLAN_ID_TAG") {
+    val plan = spark.sessionState.sqlParser.parsePlan("SELECT col1 FROM VALUES (1)")
+
+    val planId: Long = 0
+    plan.asInstanceOf[Project].projectList.head.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+
+    checkResolverGuard(plan, shouldPass = false)
+  }
+
+  test("Catch ExplicitlyUnsupportedResolverFeature exceptions") {
+
+    class ThrowsExplicitlyUnsupportedFeatureResolver
+        extends Resolver(spark.sessionState.catalogManager) {
+      override def lookupMetadataAndResolve(
+          plan: LogicalPlan,
+          analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan =
+        throw new ExplicitlyUnsupportedResolverFeature("ResolverGuardSuite dummy exception")
+    }
+
+    val dummyPlan = Project(Seq.empty, new OneRowRelation)
+
+    checkError(
+      exception = intercept[SparkException](
+        checkResolverGuard(
+          plan = dummyPlan,
+          shouldPass = true,
+          mockResolver = Some(new ThrowsExplicitlyUnsupportedFeatureResolver)
+        )
+      ),
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "Resolver failed to resolve a feature supported in resolver guard."
+      )
+    )
+  }
+
+  private def checkResolverGuard(query: String, shouldPass: Boolean): Unit = {
+    checkResolverGuard(spark.sql(query).queryExecution.logical, shouldPass)
+  }
+
+  private def checkResolverGuard(
+      plan: LogicalPlan,
+      shouldPass: Boolean,
+      mockResolver: Option[Resolver] = None): Unit = {
+    val resolverGuard = new ResolverGuard(spark.sessionState.catalogManager)
+    assert(resolverGuard.apply(plan) == shouldPass)
+
+    if (shouldPass) {
+      checkSuccessfulResolution(plan, mockResolver)
+    }
+  }
+
+  private def checkSuccessfulResolution(
+      plan: LogicalPlan,
+      mockResolver: Option[Resolver] = None) = {
+    val resolver = mockResolver match {
+      case None =>
+        new Resolver(
+          catalogManager = spark.sessionState.catalogManager,
+          extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+        )
+      case Some(mock) => mock
+    }
+
+    try {
+      resolver.lookupMetadataAndResolve(plan)
+    } catch {
+      case throwable: Throwable =>
+        throw SparkException.internalError(
+          msg = s"Resolver failed to resolve a feature supported in resolver guard.",
+          cause = throwable
+        )
+    }
   }
 
   private def withSessionVariable(body: => Unit): Unit = {

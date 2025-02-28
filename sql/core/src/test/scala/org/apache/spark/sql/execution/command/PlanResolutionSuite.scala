@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpe
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -141,6 +141,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
+    when(t.storage).thenReturn(CatalogStorageFormat.empty)
+    when(t.properties).thenReturn(Map.empty)
+    when(t.comment).thenReturn(None)
+    when(t.collation).thenReturn(None)
     V1Table(t)
   }
 
@@ -1389,7 +1393,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   None))) =>
               assert(column.name == Seq("i"))
-            case _ => fail("expect AlterTableAlterColumn")
+            case _ => fail("expect AlterColumns")
           }
 
           parsed2 match {
@@ -1403,7 +1407,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   None))) =>
               assert(column.name == Seq("i"))
-            case _ => fail("expect AlterTableAlterColumn")
+            case _ => fail("expect AlterColumns")
           }
 
           val parsed3 = parseAndResolve(sql3)
@@ -1427,7 +1431,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     Some("'value'")))) =>
               assert(column1.name == Seq("i"))
               assert(column2.name == Seq("s"))
-            case _ => fail("expect AlterTableAlterColumn")
+            case _ => fail("expect AlterColumns")
           }
         }
     }
@@ -1439,6 +1443,25 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       "i", newColumnWithCleanedType)
     val parsed = parseAndResolve(sql)
     comparePlans(parsed, expected)
+  }
+
+  test("SPARK-51010: AlterColumnSpec should correctly report resolved status") {
+    val unresolvedSpec = AlterColumnSpec(
+      ResolvedFieldName(Seq("test"), StructField("i", IntegerType)),
+      newDataType = None,
+      newNullability = None,
+      newComment = None,
+      newPosition = Some(UnresolvedFieldPosition(TableChange.ColumnPosition.first)),
+      newDefaultExpression = None)
+    assert(!unresolvedSpec.resolved)
+
+    val partiallyResolvedSpec = unresolvedSpec.copy(
+      column = ResolvedFieldName(Seq("test"), StructField("i", IntegerType)))
+    assert(!partiallyResolvedSpec.resolved)
+
+    val resolvedSpec = partiallyResolvedSpec.copy(
+      newPosition = Some(ResolvedFieldPosition(TableChange.ColumnPosition.first)))
+    assert(resolvedSpec.resolved)
   }
 
   test("alter table: alter column action is not specified") {
