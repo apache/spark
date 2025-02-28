@@ -272,13 +272,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows2(0).getString(0) === "amy")
     assert(rows2(1).getString(0) === "alex")
 
-    val df3 = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0")
+    val df3 = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0 AND month(date1) = 5")
     checkFilterPushed(df3)
     val rows3 = df3.collect()
-    assert(rows3.length === 3)
+    assert(rows3.length === 2)
     assert(rows3(0).getString(0) === "amy")
     assert(rows3(1).getString(0) === "alex")
-    assert(rows3(2).getString(0) === "tom")
 
     val df4 = sql(s"SELECT name FROM $tbl WHERE hour(time1) = 0 AND minute(time1) = 0")
     checkFilterPushed(df4)
@@ -338,21 +337,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows9(0).getString(0) === "alex")
 
     // Postgres does not support
-    withClue("unsupported") {
-      val df1 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'week') = date'2022-05-16'")
-      checkFilterPushed(df1, false)
-      val rows1 = df1.collect()
-      assert(rows1.length === 2)
-      assert(rows1(0).getString(0) === "amy")
-      assert(rows1(1).getString(0) === "alex")
-
-      val df2 = sql(s"SELECT name FROM $tbl WHERE month(date1) = 5")
-      checkFilterPushed(df2, false)
-      val rows2 = df2.collect()
-      assert(rows2.length === 2)
-      assert(rows2(0).getString(0) === "amy")
-      assert(rows2(1).getString(0) === "alex")
-    }
+    val df10 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'week') = date'2022-05-16'")
+    checkFilterPushed(df10, false)
+    val rows10 = df10.collect()
+    assert(rows10.length === 2)
+    assert(rows10(0).getString(0) === "amy")
+    assert(rows10(1).getString(0) === "alex")
   }
 
   test("Test reading 2d array from table created via CTAS command - positive test") {
