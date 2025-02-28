@@ -18,8 +18,9 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.TimerTask
-import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArrayList, ScheduledFuture, TimeUnit}
+import java.util.{ArrayList, TimerTask}
+import java.util.Collections
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
@@ -139,7 +140,7 @@ private[spark] class TaskSchedulerImpl(
   @volatile private var hasLaunchedTask = false
   private val starvationTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     "task-starvation-timer")
-  private val starvationFutures = new CopyOnWriteArrayList[ScheduledFuture[_]]
+  private val starvationFutures = Collections.synchronizedList(new ArrayList[ScheduledFuture[_]])
 
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
@@ -171,7 +172,7 @@ private[spark] class TaskSchedulerImpl(
   protected val executorIdToHost = new HashMap[String, String]
 
   private val abortTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-abort-timer")
-  private val abortFutures = new CopyOnWriteArrayList[ScheduledFuture[_]]
+  private val abortFutures = Collections.synchronizedList(new ArrayList[ScheduledFuture[_]])
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 

@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io.Closeable
 import java.util.{Properties, TimerTask}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -122,7 +122,7 @@ class BarrierTaskContext private[spark] (
         throw e
     } finally {
       timerFuture.cancel(true)
-      ThreadUtils.shutdown(timer)
+      timer.purge()
     }
   }
 
@@ -300,7 +300,11 @@ object BarrierTaskContext {
   @Since("2.4.0")
   def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
 
-  private val timer = ThreadUtils.newSingleThreadScheduledExecutor(
-    "Barrier task timer for barrier() calls.")
+  private val timer = {
+    val executor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "Barrier task timer for barrier() calls.")
+    assert(executor.isInstanceOf[ScheduledThreadPoolExecutor])
+    executor.asInstanceOf[ScheduledThreadPoolExecutor]
+  }
 
 }
