@@ -759,6 +759,11 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"to_csv(value)\""),
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
     )
+
+    checkAnswer(
+      df.select(from_csv(lit("1,2,3"), valueSchema, Map.empty[String, String])),
+      Seq(Row(Row(1L, "2", new VariantVal(Array[Byte](12, 3), Array[Byte](1, 0, 0)))))
+    )
   }
 
   test("SPARK-47497: the input of to_csv must be StructType") {
