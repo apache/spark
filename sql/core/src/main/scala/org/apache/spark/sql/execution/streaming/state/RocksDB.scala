@@ -134,6 +134,9 @@ class RocksDB(
   rocksDbOptions.setStatistics(new Statistics())
   private val nativeStats = rocksDbOptions.statistics()
 
+  // Stores a StateStoreProvider reference for event callback such as snapshot upload reports
+  private var providerListener: Option[RocksDBEventListener] = None
+
   private val workingDir = createTempDir("workingDir")
   private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
     hadoopConf, conf.compressionCodec, loggingId = loggingId)
@@ -196,6 +199,11 @@ class RocksDB(
 
   @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
+
+  /** Attaches a RocksDBStateStoreProvider reference to the RocksDB instance for event callback. */
+  def setListener(listener: RocksDBEventListener): Unit = {
+    providerListener = Some(listener)
+  }
 
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
     colFamilyNameToInfoMap.get(cfName)
@@ -1467,6 +1475,11 @@ class RocksDB(
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
       lastUploadedSnapshotVersion.set(snapshot.version)
+      // Report to coordinator that the snapshot has been uploaded when
+      // changelog checkpointing is enabled, since that is when stores can lag behind.
+      if(enableChangelogCheckpointing) {
+        providerListener.foreach(_.reportSnapshotUploaded(snapshot.version))
+      }
     } finally {
       snapshot.close()
     }

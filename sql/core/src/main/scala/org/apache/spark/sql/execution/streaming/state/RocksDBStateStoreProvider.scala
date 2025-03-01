@@ -38,9 +38,14 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
+/** Trait representing the different events reported from RocksDB instance */
+trait RocksDBEventListener {
+  def reportSnapshotUploaded(version: Long): Unit
+}
+
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
-  with SupportsFineGrainedReplay {
+  with SupportsFineGrainedReplay with RocksDBEventListener {
   import RocksDBStateStoreProvider._
 
   class RocksDBStateStore(lastVersion: Long) extends StateStore {
@@ -392,6 +397,10 @@ private[sql] class RocksDBStateStoreProvider
 
     rocksDB // lazy initialization
 
+    // Give the RocksDB instance a reference to this provider so it can call back to report
+    // specific events like snapshot uploads
+    rocksDB.setListener(this)
+
     val dataEncoderCacheKey = StateRowEncoderCacheKey(
       queryRunId = getRunId(hadoopConf),
       operatorId = stateStoreId.operatorId,
@@ -643,6 +652,23 @@ private[sql] class RocksDBStateStoreProvider
     if (!isInternal && colFamilyName.charAt(0) == '$') {
       throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
     }
+  }
+
+  /** Callback function from RocksDB to report events to the coordinator.
+   *  Additional information such as state store ID and query run ID are populated here
+   *  to report back to the coordinator.
+   *
+   * @param version The snapshot version that was just uploaded from RocksDB
+   */
+  def reportSnapshotUploaded(version: Long): Unit = {
+    // Collect the state store ID and query run ID to report back to the coordinator
+    StateStore.reportSnapshotUploaded(
+      StateStoreProviderId(
+        stateStoreId,
+        UUID.fromString(getRunId(hadoopConf))
+      ),
+      version
+    )
   }
 }
 
