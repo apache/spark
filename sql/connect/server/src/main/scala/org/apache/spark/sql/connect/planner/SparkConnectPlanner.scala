@@ -54,7 +54,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -81,7 +81,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.storage.CacheId
@@ -684,7 +684,71 @@ class SparkConnectPlanner(
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
 
-    if (rel.hasIsMapGroupsWithState) {
+    if (rel.hasTransformWithStateInfo) {
+      val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
+
+      val twsInfo = rel.getTransformWithStateInfo
+      val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
+      val outputAttr = udf.outputObjAttr
+
+      val timeMode = TimeModes(twsInfo.getTimeMode)
+      val outputMode = InternalOutputModes(rel.getOutputMode)
+
+      val twsNode = if (hasInitialState) {
+        val statefulProcessor = unpackedUdf.function
+          .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
+        val initDs = UntypedKeyValueGroupedDataset(
+          rel.getInitialInput,
+          rel.getInitialGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+        new TransformWithState(
+          keyDeserializer,
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          statefulProcessor,
+          timeMode,
+          outputMode,
+          udf.inEnc.asInstanceOf[ExpressionEncoder[Any]],
+          outputAttr,
+          ds.analyzed,
+          hasInitialState,
+          initDs.groupingAttributes,
+          initDs.dataAttributes,
+          initDs.valueDeserializer,
+          initDs.analyzed)
+      } else {
+        val statefulProcessor =
+          unpackedUdf.function.asInstanceOf[StatefulProcessor[Any, Any, Any]]
+        new TransformWithState(
+          keyDeserializer,
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          statefulProcessor,
+          timeMode,
+          outputMode,
+          udf.inEnc.asInstanceOf[ExpressionEncoder[Any]],
+          outputAttr,
+          ds.analyzed,
+          hasInitialState,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          keyDeserializer,
+          LocalRelation(ds.vEncoder.schema))
+      }
+      val serializedPlan = SerializeFromObject(udf.outputNamedExpression, twsNode)
+
+      if (twsInfo.hasEventTimeColumnName) {
+        val eventTimeWrappedPlan = UpdateEventTimeWatermarkColumn(
+          UnresolvedAttribute(twsInfo.getEventTimeColumnName),
+          None,
+          serializedPlan)
+        eventTimeWrappedPlan
+      } else {
+        serializedPlan
+      }
+    } else if (rel.hasIsMapGroupsWithState) {
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
       val initialDs = if (hasInitialState) {
         UntypedKeyValueGroupedDataset(
