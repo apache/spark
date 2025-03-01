@@ -50,6 +50,7 @@ message JobData {
   repeated string job_tags = 21;
   JobExecutionStatus status = 8;
   int32 num_tasks = 9;
+  int32 total_tasks = 22;
   int32 num_active_tasks = 10;
   int32 num_completed_tasks = 11;
   int32 num_skipped_tasks = 12;
