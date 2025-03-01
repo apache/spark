@@ -22,43 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
-import org.apache.spark.sql.catalyst.analysis.{
-  withPosition,
-  AnalysisErrorAt,
-  FunctionResolution,
-  MultiInstanceRelation,
-  RelationResolution,
-  ResolvedInlineTable,
-  UnresolvedInlineTable,
-  UnresolvedRelation,
-  UnresolvedSubqueryColumnAliases
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  AttributeSet,
-  Expression,
-  NamedExpression
-}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  AnalysisHelper,
-  CTERelationDef,
-  CTERelationRef,
-  Distinct,
-  Filter,
-  GlobalLimit,
-  LeafNode,
-  LocalLimit,
-  LocalRelation,
-  LogicalPlan,
-  OneRowRelation,
-  Project,
-  SubqueryAlias,
-  Union,
-  UnresolvedWith,
-  View,
-  WithCTE
-}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisErrorAt, FunctionResolution, MultiInstanceRelation, RelationResolution, ResolvedInlineTable, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, CTERelationDef, CTERelationRef, Distinct, Filter, GlobalLimit, LeafNode, LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, SkipDedupRelRuleMarker, SubqueryAlias, Union, UnresolvedWith, View, WithCTE}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -205,6 +171,9 @@ class Resolver(
             handleLeafOperator(localRelation)
           case unresolvedOneRowRelation: OneRowRelation =>
             handleLeafOperator(unresolvedOneRowRelation)
+          case unresolvedSkipDedup: SkipDedupRelRuleMarker =>
+            resolve(unresolvedSkipDedup.child)
+
           case _ =>
             tryDelegateResolutionToExtension(unresolvedPlan).getOrElse {
               handleUnmatchedOperator(unresolvedPlan)

@@ -39,6 +39,7 @@ import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -244,6 +245,7 @@ private[ml] object MLUtils {
   def parseRelationProto(relation: proto.Relation, sessionHolder: SessionHolder): DataFrame = {
     val planner = new SparkConnectPlanner(sessionHolder)
     val plan = planner.transformRelation(relation)
+    implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(sessionHolder.session, plan)
   }
 

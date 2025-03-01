@@ -29,6 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
 import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.SparkSession.{builder => newSparkSessionBuilder}
@@ -58,6 +59,8 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 @Stable
 class SQLContext private[sql] (override val sparkSession: SparkSession)
     extends sql.SQLContext(sparkSession) { self =>
+
+  implicit val withRelations: Set[RelationWrapper] = Set.empty
 
   sparkSession.sparkContext.assertNotStopped()
 

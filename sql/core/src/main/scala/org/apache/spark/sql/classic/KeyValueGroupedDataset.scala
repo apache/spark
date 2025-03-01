@@ -20,7 +20,7 @@ package org.apache.spark.sql.classic
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{RelationWrapper, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -52,6 +52,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
   import queryExecution.sparkSession.toRichColumn
+
+  private implicit def getRelations: Set[RelationWrapper] = queryExecution.getRelations
 
   /** @inheritdoc */
   def keyAs[L : Encoder]: KeyValueGroupedDataset[L, V] =
@@ -339,7 +341,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
         MapGroups.sortOrder(thisSortExprs.map(_.expr)),
         MapGroups.sortOrder(otherSortExprs.map(_.expr)),
         this.logicalPlan,
-        otherImpl.logicalPlan))
+       otherImpl.logicalPlan))(
+      implicitly[Encoder[R]], this.queryExecution.getCombinedRelations(other.queryExecution))
   }
 
   override def toString: String = {
