@@ -283,6 +283,11 @@ public class VariantShreddingWriter {
           return v.getBinary();
         }
         break;
+      case UUID:
+        if (targetType instanceof VariantSchema.UuidType) {
+          return v.getUuid();
+        }
+        break;
     }
     // The stored type does not match the requested shredding type. Return null, and the caller
     // will store the result in untyped_value.
