@@ -342,7 +342,7 @@ case class PrettyPythonUDF(
     children: Seq[Expression])
   extends UnevaluableAggregateFunc with NonSQLExpression {
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
+  override def toString: String = s"$name:UDF(${children.mkString(", ")})"
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
