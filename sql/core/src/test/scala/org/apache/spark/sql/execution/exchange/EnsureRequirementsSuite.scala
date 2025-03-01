@@ -1188,6 +1188,41 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-51256: Increase parallelism if joining with small bucket table") {
+    val plan1 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprA :: Nil, 1))
+    val plan2 = DummySparkPlan(
+      outputPartitioning = UnknownPartitioning(8))
+
+    val smjExec = SortMergeJoinExec(
+      exprA :: Nil, exprB :: Nil, Inner, None, plan1, plan2)
+    Seq(4, 10).foreach { bucketRatio =>
+      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> bucketRatio.toString) {
+        if (bucketRatio == 4) {
+          EnsureRequirements.apply(smjExec) match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+            SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+              assert(leftKeys === Seq(exprA))
+              assert(rightKeys === Seq(exprB))
+              assert(right.numPartitions === 5)
+            case other => fail(other.toString)
+          }
+        } else {
+          EnsureRequirements.apply(smjExec) match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+            SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
+            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+              assert(leftKeys === Seq(exprA))
+              assert(rightKeys === Seq(exprB))
+              assert(right.numPartitions === 1)
+            case other => fail(other.toString)
+          }
+        }
+      }
+    }
+  }
+
   def bucket(numBuckets: Int, expr: Expression): TransformExpression = {
     TransformExpression(BucketFunction, Seq(expr), Some(numBuckets))
   }
