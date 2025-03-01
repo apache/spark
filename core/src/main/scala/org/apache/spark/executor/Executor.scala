@@ -307,7 +307,7 @@ private[spark] class Executor(
     "executor-heartbeater",
     HEARTBEAT_INTERVAL_MS)
 
-  // must be initialized before running startDriverHeartbeat()
+  // must be initialized before running heartbeater.start()
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
