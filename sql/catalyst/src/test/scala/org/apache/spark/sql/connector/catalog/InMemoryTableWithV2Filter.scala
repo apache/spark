@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import com.google.common.base.Objects
 import org.scalatest.Assertions.assert
 
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, Transform}
@@ -65,6 +66,8 @@ class InMemoryTableWithV2Filter(
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeV2Filtering {
 
+    private var allFilters: Set[Predicate] = Set.empty
+
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
@@ -72,6 +75,7 @@ class InMemoryTableWithV2Filter(
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
+      allFilters = allFilters ++ filters.toSet
       if (partitioning.length == 1 && partitioning.head.references().length == 1) {
         val ref = partitioning.head.references().head
         filters.foreach {
@@ -90,6 +94,16 @@ class InMemoryTableWithV2Filter(
         }
       }
     }
+
+    override def equals(other: Any): Boolean = other match {
+      case imbs: InMemoryV2FilterBatchScan => this.readSchema == imbs.readSchema &&
+           this.tableSchema == imbs.tableSchema && this.allFilters == imbs.allFilters
+
+      case _ => false
+    }
+
+    override def hashCode: Int = Objects.hashCode(this.readSchema, this.tableSchema,
+      this.allFilters)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
