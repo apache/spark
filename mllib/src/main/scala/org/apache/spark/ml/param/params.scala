@@ -33,6 +33,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A param with self-contained documentation and optionally default value. Primitive-typed param
@@ -646,6 +647,10 @@ case class ParamPair[T] @Since("1.2.0") (
  * parameter values attached to the instance.
  */
 trait Params extends Identifiable with Serializable {
+
+  private[ml] def estimateMatadataSize: Long = {
+    SizeEstimator.estimate((this.paramMap, this.defaultParamMap, this.uid))
+  }
 
   /**
    * Returns all params sorted by their names. The default implementation uses Java reflection to

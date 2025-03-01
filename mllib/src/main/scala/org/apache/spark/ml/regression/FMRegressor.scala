@@ -225,7 +225,7 @@ private[ml] object FactorizationMachines {
     }
     val factors = new DenseMatrix(numFeatures, factorSize,
       coefficients.toArray.slice(0, numFeatures * factorSize), true)
-    (intercept, linear, factors)
+    (intercept, linear.compressed, factors.compressed)
   }
 
   def combineCoefficients(
@@ -440,6 +440,16 @@ class FMRegressor @Since("3.0.0") (
 
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMRegressor = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += java.lang.Double.BYTES // intercept
+    size += Vectors.getDenseSize(numFeatures) // linear
+    size += Matrices.getDenseSize(numFeatures, $(factorSize)) // factors
+    size
+  }
 }
 
 @Since("3.0.0")
@@ -475,6 +485,18 @@ class FMRegressionModel private[regression] (
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMRegressionModel = {
     copyValues(new FMRegressionModel(uid, intercept, linear, factors), extra)
+  }
+
+  override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    size += java.lang.Double.BYTES // intercept
+    if (this.linear != null) {
+      size += this.linear.getSizeInBytes
+    }
+    if (this.factors != null) {
+      size += this.factors.getSizeInBytes
+    }
+    size
   }
 
   @Since("3.0.0")
