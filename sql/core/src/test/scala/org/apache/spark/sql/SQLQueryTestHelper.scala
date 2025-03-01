@@ -66,6 +66,9 @@ trait SQLQueryTestHelper extends Logging {
         s""""location": "$notIncludedMsg/{warehouse_dir}/""")
       .replaceAll(s""""created_by":".*?"""", s""""created_by $notIncludedMsg":"None"""")
       .replaceAll(s""""created_time":".*?"""", s""""created_time $notIncludedMsg":"None"""")
+      .replaceAll(s"transient_lastDdlTime=\\d+", s"transient_lastDdlTime=$notIncludedMsg")
+      .replaceAll(s""""transient_lastDdlTime":"\\d+"""",
+        s""""transient_lastDdlTime $notIncludedMsg":"None"""")
       .replaceAll(s""""last_access":".*?"""", s""""last_access $notIncludedMsg":"None"""")
       .replaceAll(s""""owner":".*?"""", s""""owner $notIncludedMsg":"None"""")
       .replaceAll(s""""partition_statistics":"\\d+"""",
