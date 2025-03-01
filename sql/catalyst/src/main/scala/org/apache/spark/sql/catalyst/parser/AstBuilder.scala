@@ -6307,6 +6307,15 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
+  override def visitShowProcedures(ctx: ShowProceduresContext): LogicalPlan = withOrigin(ctx) {
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    ShowProcedures(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
   /**
    * Check plan for any parameters.
    * If it finds any throws UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT.

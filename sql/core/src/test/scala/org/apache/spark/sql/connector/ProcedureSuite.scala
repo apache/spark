@@ -40,15 +40,23 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
   before {
     spark.conf.set(s"spark.sql.catalog.cat", classOf[InMemoryCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.cat2", classOf[InMemoryCatalog].getName)
+
+    // needed for switching back and forth between catalogs
+    sql("create database cat.default")
+    sql("create database cat.default2")
   }
 
   after {
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf(s"spark.sql.catalog.cat")
+    spark.sessionState.conf.unsetConf(s"spark.sql.catalog.cat2")
   }
 
-  private def catalog: InMemoryCatalog = {
-    val catalog = spark.sessionState.catalogManager.catalog("cat")
+  private def catalog: InMemoryCatalog = catalog("cat")
+
+  private def catalog(name: String): InMemoryCatalog = {
+    val catalog = spark.sessionState.catalogManager.catalog(name)
     catalog.asInstanceOf[InMemoryCatalog]
   }
 
@@ -139,6 +147,14 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkError(
         exception = intercept[AnalysisException](
           sql("CALL testcat.procedure(1, 2)")
+        ),
+        condition = "_LEGACY_ERROR_TEMP_1184",
+        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+      )
+
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("SHOW PROCEDURES IN testcat")
         ),
         condition = "_LEGACY_ERROR_TEMP_1184",
         parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
@@ -345,6 +361,157 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       val result = sql("CALL cat.ns.sum(1, 2)")
       result.write.saveAsTable("summary")
       checkAnswer(spark.table("summary"), Row(3) :: Nil)
+    }
+  }
+
+  test("SPARK-51350: Impelement SHOW procedures") {
+    catalog.createProcedure(Identifier.of(Array("default"), "foo"), UnboundSum)
+    catalog.createProcedure(Identifier.of(Array("default"), "abc"), UnboundLongSum)
+    catalog.createProcedure(Identifier.of(Array("default"), "xyz"), UnboundComplexProcedure)
+    catalog.createProcedure(Identifier.of(Array("default"), "xxx"), UnboundStructProcedure)
+
+    sql("USE cat")
+
+    withDatabase("cat2.default") {
+      sql("CREATE DATABASE cat2.default")
+
+      catalog("cat2").createProcedure(Identifier.of(Array("default"), "foo"),
+        UnboundVoidProcedure)
+      catalog("cat2").createProcedure(Identifier.of(Array("default"), "bar"),
+        UnboundMultiResultProcedure)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES"),
+        Row("default", "abc") ::
+          Row("default", "foo") ::
+          Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES IN default"),
+        Row("default", "abc") ::
+          Row("default", "foo") ::
+          Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM default"),
+        Row("default", "abc") ::
+          Row("default", "foo") ::
+          Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES IN main.default"),
+        Row("default", "abc") ::
+          Row("default", "foo") ::
+          Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM main.default"),
+        Row("default", "abc") ::
+          Row("default", "foo") ::
+          Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES FROM default LIKE 'f*' """),
+        Row("default", "foo"))
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES FROM main.default LIKE "f*" """),
+        Row("default", "foo"))
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES 'foo' """),
+        Row("default", "foo"))
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES LIKE "foo" """),
+        Row("default", "foo"))
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES 'aaa' """),
+        Seq.empty)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES LIKE 'aaa' """),
+        Seq.empty)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES 'f*' """),
+        Row("default", "foo"))
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES LIKE "f*" """),
+        Row("default", "foo"))
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES 'x*' """),
+        Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES LIKE 'x*' """),
+        Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES 'z*' """),
+        Seq.empty)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES LIKE 'z*' """),
+        Seq.empty)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES 'f*|x*' """),
+        Row("default", "foo") ::
+          Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES "*x|*b*" """),
+        Row("default", "abc") ::
+          Row("default", "xxx") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM cat2.default"),
+        Row("default", "foo") ::
+        Row("default", "bar") :: Nil)
+
+      // Switch catalog.
+      sql("USE cat2")
+
+      checkAnswer(
+        sql("SHOW PROCEDURES IN cat.default"),
+        Row("default", "abc") ::
+          Row("default", "foo") ::
+          Row("default", "xxx") ::
+          Row("default", "xyz") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES"),
+        Row("default", "bar") ::
+          Row("default", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM default"),
+        Row("default", "bar") ::
+          Row("default", "foo") :: Nil)
+
+      checkAnswer(
+        sql("SHOW PROCEDURES FROM ct2.default"),
+        Row("default", "bar") ::
+          Row("default", "foo") :: Nil)
+
+      checkAnswer(
+        sql("""SHOW PROCEDURES 'f*|x*' """),
+        Row("default", "foo"))
+
+      // Switch catalog back to 'cat' before clean up.
+      sql("USE cat")
     }
   }
 
