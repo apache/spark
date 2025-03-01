@@ -1898,25 +1898,51 @@ private[spark] class DAGScheduler(
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
     // only updated in certain cases.
-    event.reason match {
+    val (readLockTaken, isIndeterministicZombie) = event.reason match {
       case Success =>
-        task match {
-          case rt: ResultTask[_, _] =>
-            val resultStage = stage.asInstanceOf[ResultStage]
-            resultStage.activeJob match {
-              case Some(job) =>
-                // Only update the accumulator once for each result task.
-                if (!job.finished(rt.outputId)) {
-                  updateAccumulators(event)
-                }
-              case None => // Ignore update if task's job has finished.
-            }
-          case _ =>
-            updateAccumulators(event)
+        stage.acquireStageReadLock()
+        val isZombieIndeterminate =
+          (task.stageAttemptId < stage.latestInfo.attemptNumber()
+            && stage.isIndeterminate) ||
+            stage.treatAllPartitionsMissing(task.stageAttemptId)
+        if (!isZombieIndeterminate) {
+          task match {
+            case rt: ResultTask[_, _] =>
+              val resultStage = stage.asInstanceOf[ResultStage]
+              resultStage.activeJob match {
+                case Some(job) =>
+                  // Only update the accumulator once for each result task.
+                  if (!job.finished(rt.outputId)) {
+                    updateAccumulators(event)
+                  }
+                case _ => // Ignore update if task's job has finished.
+              }
+            case _ => updateAccumulators(event)
+          }
         }
-      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
-      case _ =>
+        (true, isZombieIndeterminate)
+
+      case _: ExceptionFailure | _: TaskKilled =>
+        updateAccumulators(event)
+        (false, false)
+
+      case _ => (false, false)
     }
+
+    try {
+      handleTaskCompletionInOptionalReadLock(event, task, stageId, stage, isIndeterministicZombie)
+    } finally {
+      if (readLockTaken) {
+        stage.releaseStageReadLock()
+      }
+    }
+  }
+
+  private def handleTaskCompletionInOptionalReadLock(
+      event: CompletionEvent,
+      task: Task[_], stageId: Int,
+      stage: Stage,
+      isIndeterministicZombie: Boolean): Unit = {
     if (trackingCacheVisibility) {
       // Update rdd blocks' visibility status.
       blockManagerMaster.updateRDDBlockVisibility(
@@ -1936,7 +1962,7 @@ private[spark] class DAGScheduler(
         }
 
         task match {
-          case rt: ResultTask[_, _] =>
+          case rt: ResultTask[_, _] if !isIndeterministicZombie =>
             // Cast to ResultStage here because it's part of the ResultTask
             // TODO Refactor this out to a function that accepts a ResultStage
             val resultStage = stage.asInstanceOf[ResultStage]
@@ -1984,7 +2010,7 @@ private[spark] class DAGScheduler(
                 logInfo(log"Ignoring result from ${MDC(RESULT, rt)} because its job has finished")
             }
 
-          case smt: ShuffleMapTask =>
+          case smt: ShuffleMapTask  if !isIndeterministicZombie =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
             // Ignore task completion for old attempt of indeterminate stage
             val ignoreIndeterminate = stage.isIndeterminate &&
@@ -2017,6 +2043,8 @@ private[spark] class DAGScheduler(
                 processShuffleMapStageCompletion(shuffleStage)
               }
             }
+
+          case _ => // ignore
         }
 
       case FetchFailed(bmAddress, shuffleId, _, mapIndex, reduceId, failureMessage) =>
@@ -2121,92 +2149,111 @@ private[spark] class DAGScheduler(
             failedStages += failedStage
             failedStages += mapStage
             if (noResubmitEnqueued) {
-              // If the map stage is INDETERMINATE, which means the map tasks may return
-              // different result when re-try, we need to re-try all the tasks of the failed
-              // stage and its succeeding stages, because the input data will be changed after the
-              // map tasks are re-tried.
-              // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
-              // guaranteed to be determinate, so the input data of the reducers will not change
-              // even if the map tasks are re-tried.
-              if (mapStage.isIndeterminate) {
-                // It's a little tricky to find all the succeeding stages of `mapStage`, because
-                // each stage only know its parents not children. Here we traverse the stages from
-                // the leaf nodes (the result stages of active jobs), and rollback all the stages
-                // in the stage chains that connect to the `mapStage`. To speed up the stage
-                // traversing, we collect the stages to rollback first. If a stage needs to
-                // rollback, all its succeeding stages need to rollback to.
-                val stagesToRollback = HashSet[Stage](mapStage)
+              val writeLockedStages = mutable.Buffer.empty[Stage]
+              try {
+                // If the map stage is INDETERMINATE, which means the map tasks may return
+                // different result when re-try, we need to re-try all the tasks of the failed
+                // stage and its succeeding stages, because the input data will be changed after the
+                // map tasks are re-tried.
+                // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
+                // guaranteed to be determinate, so the input data of the reducers will not change
+                // even if the map tasks are re-tried.
+                if (mapStage.isIndeterminate) {
+                  // It's a little tricky to find all the succeeding stages of `mapStage`, because
+                  // each stage only know its parents not children. Here we traverse the stages from
+                  // the leaf nodes (the result stages of active jobs), and rollback all the stages
+                  // in the stage chains that connect to the `mapStage`. To speed up the stage
+                  // traversing, we collect the stages to rollback first. If a stage needs to
+                  // rollback, all its succeeding stages need to rollback to.
+                  val stagesToRollback = HashSet[Stage](mapStage)
 
-                def collectStagesToRollback(stageChain: List[Stage]): Unit = {
-                  if (stagesToRollback.contains(stageChain.head)) {
-                    stageChain.drop(1).foreach(s => stagesToRollback += s)
-                  } else {
-                    stageChain.head.parents.foreach { s =>
-                      collectStagesToRollback(s :: stageChain)
-                    }
-                  }
-                }
-
-                def generateErrorMessage(stage: Stage): String = {
-                  "A shuffle map stage with indeterminate output was failed and retried. " +
-                    s"However, Spark cannot rollback the $stage to re-process the input data, " +
-                    "and has to fail this job. Please eliminate the indeterminacy by " +
-                    "checkpointing the RDD before repartition and try again."
-                }
-
-                activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
-
-                // The stages will be rolled back after checking
-                val rollingBackStages = HashSet[Stage](mapStage)
-                stagesToRollback.foreach {
-                  case mapStage: ShuffleMapStage =>
-                    val numMissingPartitions = mapStage.findMissingPartitions().length
-                    if (numMissingPartitions < mapStage.numTasks) {
-                      if (sc.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
-                        val reason = "A shuffle map stage with indeterminate output was failed " +
-                          "and retried. However, Spark can only do this while using the new " +
-                          "shuffle block fetching protocol. Please check the config " +
-                          "'spark.shuffle.useOldFetchProtocol', see more detail in " +
-                          "SPARK-27665 and SPARK-25341."
-                        abortStage(mapStage, reason, None)
-                      } else {
-                        rollingBackStages += mapStage
+                  def collectStagesToRollback(stageChain: List[Stage]): Unit = {
+                    if (stagesToRollback.contains(stageChain.head)) {
+                      stageChain.drop(1).foreach(s => stagesToRollback += s)
+                    } else {
+                      stageChain.head.parents.foreach { s =>
+                        collectStagesToRollback(s :: stageChain)
                       }
                     }
+                  }
 
-                  case resultStage: ResultStage if resultStage.activeJob.isDefined =>
-                    val numMissingPartitions = resultStage.findMissingPartitions().length
-                    if (numMissingPartitions < resultStage.numTasks) {
-                      // TODO: support to rollback result tasks.
-                      abortStage(resultStage, generateErrorMessage(resultStage), None)
-                    }
+                  def generateErrorMessage(stage: Stage): String = {
+                    "A shuffle map stage with indeterminate output was failed and retried. " +
+                      s"However, Spark cannot rollback the $stage to re-process the input data, " +
+                      "and has to fail this job. Please eliminate the indeterminacy by " +
+                      "checkpointing the RDD before repartition and try again."
+                  }
 
-                  case _ =>
+                  activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
+
+                  // The stages will be rolled back after checking
+                  val rollingBackStages = HashSet[Stage](mapStage)
+                  stagesToRollback.foreach {
+                    case mapStage: ShuffleMapStage =>
+                      if (mapStage.acquireStageWriteLock()) {
+                        writeLockedStages += mapStage
+                      }
+                      val numMissingPartitions = mapStage.findMissingPartitions().length
+                      if (numMissingPartitions < mapStage.numTasks) {
+                        if (sc.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+                          val reason = "A shuffle map stage with indeterminate output was failed " +
+                            "and retried. However, Spark can only do this while using the new " +
+                            "shuffle block fetching protocol. Please check the config " +
+                            "'spark.shuffle.useOldFetchProtocol', see more detail in " +
+                            "SPARK-27665 and SPARK-25341."
+                          abortStage(mapStage, reason, None)
+                        } else {
+                          rollingBackStages += mapStage
+                          mapStage.markAttemptIdForAllPartitionsMissing(
+                            mapStage.latestInfo.attemptNumber())
+                        }
+                      } else {
+                        mapStage.markAttemptIdForAllPartitionsMissing(
+                          mapStage.latestInfo.attemptNumber())
+                      }
+
+                    case resultStage: ResultStage if resultStage.activeJob.isDefined =>
+                      if (resultStage.acquireStageWriteLock()) {
+                        writeLockedStages += resultStage
+                      }
+                      val numMissingPartitions = resultStage.findMissingPartitions().length
+                      if (numMissingPartitions < resultStage.numTasks) {
+                        // TODO: support to rollback result tasks.
+                        abortStage(resultStage, generateErrorMessage(resultStage), None)
+                      } else {
+                        resultStage.markAttemptIdForAllPartitionsMissing(
+                          resultStage.latestInfo.attemptNumber())
+                      }
+
+                    case _ =>
+                  }
+                  logInfo(log"The shuffle map stage ${MDC(SHUFFLE_ID, mapStage)} with indeterminate output was failed, " +
+                    log"we will roll back and rerun below stages which include itself and all its " +
+                    log"indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
                 }
-                logInfo(log"The shuffle map stage ${MDC(SHUFFLE_ID, mapStage)} with indeterminate output was failed, " +
-                  log"we will roll back and rerun below stages which include itself and all its " +
-                  log"indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
-              }
 
-              // We expect one executor failure to trigger many FetchFailures in rapid succession,
-              // but all of those task failures can typically be handled by a single resubmission of
-              // the failed stage.  We avoid flooding the scheduler's event queue with resubmit
-              // messages by checking whether a resubmit is already in the event queue for the
-              // failed stage.  If there is already a resubmit enqueued for a different failed
-              // stage, that event would also be sufficient to handle the current failed stage, but
-              // producing a resubmit for each failed stage makes debugging and logging a little
-              // simpler while not producing an overwhelming number of scheduler events.
-              logInfo(
-                log"Resubmitting ${MDC(STAGE, mapStage)} " +
-                log"(${MDC(STAGE_NAME, mapStage.name)}) and ${MDC(FAILED_STAGE, failedStage)} " +
-                log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to fetch failure")
-              messageScheduler.schedule(
-                new Runnable {
-                  override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-                },
-                DAGScheduler.RESUBMIT_TIMEOUT,
-                TimeUnit.MILLISECONDS
-              )
+                // We expect one executor failure to trigger many FetchFailures in rapid succession,
+                // but all of those task failures can typically be handled by a single resubmission of
+                // the failed stage.  We avoid flooding the scheduler's event queue with resubmit
+                // messages by checking whether a resubmit is already in the event queue for the
+                // failed stage.  If there is already a resubmit enqueued for a different failed
+                // stage, that event would also be sufficient to handle the current failed stage, but
+                // producing a resubmit for each failed stage makes debugging and logging a little
+                // simpler while not producing an overwhelming number of scheduler events.
+                logInfo(
+                  log"Resubmitting ${MDC(STAGE, mapStage)} " +
+                    log"(${MDC(STAGE_NAME, mapStage.name)}) and ${MDC(FAILED_STAGE, failedStage)} " +
+                    log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to fetch failure")
+                messageScheduler.schedule(
+                  new Runnable {
+                    override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+                  },
+                  DAGScheduler.RESUBMIT_TIMEOUT,
+                  TimeUnit.MILLISECONDS
+                )
+              } finally {
+                writeLockedStages.foreach(_.releaseStageWriteLock())
+              }
             }
           }
 
@@ -2263,8 +2310,8 @@ private[spark] class DAGScheduler(
             log"and there is a more recent attempt for that stage (attempt " +
             log"${MDC(NUM_ATTEMPT, failedStage.latestInfo.attemptNumber())}) running")
         } else {
-              logInfo(log"Marking ${MDC(STAGE_ID, failedStage.id)} (${MDC(STAGE_NAME, failedStage.name)}) " +
-                log"as failed due to a barrier task failed.")
+          logInfo(log"Marking ${MDC(STAGE_ID, failedStage.id)} (${MDC(STAGE_NAME, failedStage.name)}) " +
+            log"as failed due to a barrier task failed.")
           val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
             failure.toErrorString
           try {
