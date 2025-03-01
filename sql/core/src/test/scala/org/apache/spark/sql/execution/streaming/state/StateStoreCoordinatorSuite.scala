@@ -157,7 +157,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("snapshot uploads in RocksDB are not reported if changelog checkpointing is disabled") {
+  test(
+    "SPARK-51358: Snapshot uploads in RocksDB are not reported if changelog " +
+    "checkpointing is disabled"
+  ) {
     withCoordinatorAndSQLConf(
       sc,
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
@@ -198,7 +201,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("snapshot uploads in RocksDB are properly reported to the coordinator") {
+  test("SPARK-51358: Snapshot uploads in RocksDB are properly reported to the coordinator") {
     withCoordinatorAndSQLConf(
       sc,
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
@@ -242,8 +245,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test(
-    "snapshot uploads in RocksDBSkipMaintenanceOnCertainPartitionsProvider are properly " +
-    "reported to the coordinator"
+    "SPARK-51358: Snapshot uploads in RocksDBSkipMaintenanceOnCertainPartitionsProvider " +
+    "are properly reported to the coordinator"
   ) {
     withCoordinatorAndSQLConf(
       sc,
@@ -299,17 +302,17 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
 
   test(
-    "snapshot uploads for join queries with RocksDBStateStoreProvider are properly " +
-      "reported to the coordinator"
+    "SPARK-51358: Snapshot uploads for join queries with RocksDBStateStoreProvider " +
+    "are properly reported to the coordinator"
   ) {
     withCoordinatorAndSQLConf(
       sc,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "50",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
@@ -354,18 +357,18 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test(
-    "snapshot uploads for join queries with RocksDBSkipMaintenanceOnCertainPartitionsProvider " +
-    "are properly reported to the coordinator"
+    "SPARK-51358: Snapshot uploads for join queries with " +
+    "RocksDBSkipMaintenanceOnCertainPartitionsProvider are properly reported to the coordinator"
   ) {
     withCoordinatorAndSQLConf(
       sc,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "50",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
