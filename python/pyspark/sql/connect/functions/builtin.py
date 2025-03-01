@@ -569,6 +569,18 @@ def bin(col: "ColumnOrName") -> Column:
 bin.__doc__ = pysparkfuncs.bin.__doc__
 
 
+def try_bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("try_bround", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_bround", col, scale)  # type: ignore[arg-type]
+
+
+try_bround.__doc__ = pysparkfuncs.try_bround.__doc__
+
+
 def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     if scale is None:
         return _invoke_function_over_columns("bround", col)
@@ -610,6 +622,13 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
+
+
+def try_conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
+    return _invoke_function("try_conv", _to_col(col), lit(fromBase), lit(toBase))
+
+
+try_conv.__doc__ = pysparkfuncs.conv.__doc__
 
 
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
@@ -815,6 +834,18 @@ def rint(col: "ColumnOrName") -> Column:
 
 
 rint.__doc__ = pysparkfuncs.rint.__doc__
+
+
+def try_round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("try_round", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("try_round", col, scale)  # type: ignore[arg-type]
+
+
+try_round.__doc__ = pysparkfuncs.try_round.__doc__
 
 
 def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
