@@ -26,8 +26,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors;
 import scala.jdk.javaapi.CollectionConverters;
 
 import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * A catalog API for working with procedures.
