@@ -159,6 +159,18 @@ ExplainCommand CTE [cte1], FormattedMode
 
 -- !query
 EXPLAIN FORMATTED
+  WITH RECURSIVE r(level) AS (
+    VALUES 0
+    UNION ALL
+    SELECT level + 1 FROM r WHERE level < 9
+  )
+SELECT * FROM r
+-- !query analysis
+ExplainCommand CTE [r], FormattedMode
+
+
+-- !query
+EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1
 -- !query analysis
