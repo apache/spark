@@ -72,8 +72,4 @@ class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog with Pro
   def clearProcedures(): Unit = {
     procedures.clear()
   }
-
-  override def listProcedures(namespace: Array[String]): Array[Identifier] = {
-    procedures.keySet().toArray(new Array[Identifier](0))
-  }
 }
