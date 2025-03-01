@@ -26,8 +26,9 @@ import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
-import org.apache.spark.sql.functions.count
-import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.functions.{count, expr}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
@@ -102,7 +103,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   test("multiple references have same underlying coordinator") {
     withCoordinatorRef(sc) { coordRef1 =>
-      val coordRef2 = StateStoreCoordinatorRef.forDriver(sc.env)
+      val coordRef2 = StateStoreCoordinatorRef.forDriver(sc.env, new SQLConf)
 
       val id = StateStoreProviderId(StateStoreId("x", 0, 0), UUID.randomUUID)
 
@@ -125,7 +126,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       import spark.implicits._
       coordRef = spark.streams.stateStoreCoordinator
       implicit val sqlContext = spark.sqlContext
-      spark.conf.set(SHUFFLE_PARTITIONS.key, "1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
 
       // Start a query and run a batch to load state stores
       val inputData = MemoryStream[Int]
@@ -155,16 +156,293 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       StateStore.stop()
     }
   }
+
+  test("snapshot uploads in RocksDB are not reported if changelog checkpointing is disabled") {
+    withCoordinatorAndSQLConf(
+      sc,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false"
+    ) {
+      case (coordRef, spark) =>
+        import spark.implicits._
+        implicit val sqlContext = spark.sqlContext
+
+        // Start a query and run some data to force snapshot uploads
+        val inputData = MemoryStream[Int]
+        val aggregated = inputData.toDF().dropDuplicates()
+        val checkpointLocation = Utils.createTempDir().getAbsoluteFile
+        val query = aggregated.writeStream
+          .format("memory")
+          .outputMode("update")
+          .queryName("query")
+          .option("checkpointLocation", checkpointLocation.toString)
+          .start()
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+        val stateCheckpointDir =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+
+        // Verify stores do not report snapshot upload events to the coordinator.
+        // As a result, all stores will return nothing as the latest version
+        (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
+          val providerId =
+            StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
+          assert(coordRef.getLatestSnapshotVersion(providerId).isEmpty)
+        }
+        query.stop()
+    }
+  }
+
+  test("snapshot uploads in RocksDB are properly reported to the coordinator") {
+    withCoordinatorAndSQLConf(
+      sc,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+    ) {
+      case (coordRef, spark) =>
+        import spark.implicits._
+        implicit val sqlContext = spark.sqlContext
+
+        // Start a query and run some data to force snapshot uploads
+        val inputData = MemoryStream[Int]
+        val aggregated = inputData.toDF().dropDuplicates()
+        val checkpointLocation = Utils.createTempDir().getAbsoluteFile
+        val query = aggregated.writeStream
+          .format("memory")
+          .outputMode("update")
+          .queryName("query")
+          .option("checkpointLocation", checkpointLocation.toString)
+          .start()
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+        val stateCheckpointDir =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+
+        // Verify all stores have uploaded a snapshot and it's logged by the coordinator
+        (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
+          val providerId =
+            StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
+          assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+        }
+        // Verify that we should not have any state stores lagging behind
+        assert(coordRef.getLaggingStores().isEmpty)
+        query.stop()
+    }
+  }
+
+  test(
+    "snapshot uploads in RocksDBSkipMaintenanceOnCertainPartitionsProvider are properly " +
+    "reported to the coordinator"
+  ) {
+    withCoordinatorAndSQLConf(
+      sc,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+    ) {
+      case (coordRef, spark) =>
+        import spark.implicits._
+        implicit val sqlContext = spark.sqlContext
+
+        // Start a query and run some data to force snapshot uploads
+        val inputData = MemoryStream[Int]
+        val aggregated = inputData.toDF().dropDuplicates()
+        val checkpointLocation = Utils.createTempDir().getAbsoluteFile
+        val query = aggregated.writeStream
+          .format("memory")
+          .outputMode("update")
+          .queryName("query")
+          .option("checkpointLocation", checkpointLocation.toString)
+          .start()
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+        val stateCheckpointDir =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+
+        (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
+          val providerId =
+            StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
+          if(partitionId <= 1) {
+            // Verify state stores in partition 0 and 1 are lagging and did not upload anything
+            assert(coordRef.getLatestSnapshotVersion(providerId).isEmpty)
+          } else {
+            // Verify other stores have uploaded a snapshot and it's logged by the coordinator
+            assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+          }
+        }
+        // We should have two state stores (id 0 and 1) that are lagging behind at this point
+        val laggingStores = coordRef.getLaggingStores()
+        assert(laggingStores.size == 2)
+        assert(laggingStores.forall(_.storeId.partitionId <= 1))
+        query.stop()
+    }
+  }
+
+  private val allJoinStateStoreNames: Seq[String] =
+    SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+
+  test(
+    "snapshot uploads for join queries with RocksDBStateStoreProvider are properly " +
+      "reported to the coordinator"
+  ) {
+    withCoordinatorAndSQLConf(
+      sc,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+    ) {
+      case (coordRef, spark) =>
+        import spark.implicits._
+        implicit val sqlContext = spark.sqlContext
+
+        // Start a join query and run some data to force snapshot uploads
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+        val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+        val df2 = input2.toDF().select($"value" as "rightKey", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, expr("leftKey = rightKey"))
+        val checkpointLocation = Utils.createTempDir().getAbsoluteFile
+        val query = joined.writeStream
+          .format("memory")
+          .queryName("query")
+          .option("checkpointLocation", checkpointLocation.toString)
+          .start()
+        (0 until 5).foreach { _ =>
+          input1.addData(1, 5)
+          query.processAllAvailable()
+          input2.addData(1, 5, 10)
+          query.processAllAvailable()
+        }
+        val stateCheckpointDir =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+
+        // Verify all state stores for join queries are reporting snapshot uploads
+        (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
+          allJoinStateStoreNames.foreach { storeName =>
+            val providerId =
+              StateStoreProviderId(
+                StateStoreId(stateCheckpointDir, 0, partitionId, storeName),
+                query.runId
+              )
+            assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+          }
+        }
+        // Verify that we should not have any state stores lagging behind
+        assert(coordRef.getLaggingStores().isEmpty)
+        query.stop()
+    }
+  }
+
+  test(
+    "snapshot uploads for join queries with RocksDBSkipMaintenanceOnCertainPartitionsProvider " +
+    "are properly reported to the coordinator"
+  ) {
+    withCoordinatorAndSQLConf(
+      sc,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+    ) {
+      case (coordRef, spark) =>
+        import spark.implicits._
+        implicit val sqlContext = spark.sqlContext
+
+        // Start a join query and run some data to force snapshot uploads
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+        val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+        val df2 = input2.toDF().select($"value" as "rightKey", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, expr("leftKey = rightKey"))
+        val checkpointLocation = Utils.createTempDir().getAbsoluteFile
+        val query = joined.writeStream
+          .format("memory")
+          .queryName("query")
+          .option("checkpointLocation", checkpointLocation.toString)
+          .start()
+        (0 until 5).foreach { _ =>
+          input1.addData(1, 5)
+          query.processAllAvailable()
+          input2.addData(1, 5, 10)
+          query.processAllAvailable()
+        }
+        val stateCheckpointDir =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+
+        // Verify all state stores for join queries are reporting snapshot uploads
+        (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
+          allJoinStateStoreNames.foreach { storeName =>
+            val providerId =
+              StateStoreProviderId(
+                StateStoreId(stateCheckpointDir, 0, partitionId, storeName),
+                query.runId
+              )
+            if (partitionId <= 1) {
+              // Verify state stores in partition 0 and 1 are lagging and did not upload anything
+              assert(coordRef.getLatestSnapshotVersion(providerId).isEmpty)
+            } else {
+              // Verify other stores have uploaded a snapshot and it's logged by the coordinator
+              assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+            }
+          }
+        }
+        // Verify that only stores from partition id 0 and 1 are lagging behind.
+        // Each partition has 4 stores for join queries, so there are 2 * 4 = 8 lagging stores.
+        val laggingStores = coordRef.getLaggingStores()
+        assert(laggingStores.size == 2 * 4)
+        assert(laggingStores.forall(_.storeId.partitionId <= 1))
+    }
+  }
 }
 
 object StateStoreCoordinatorSuite {
   def withCoordinatorRef(sc: SparkContext)(body: StateStoreCoordinatorRef => Unit): Unit = {
     var coordinatorRef: StateStoreCoordinatorRef = null
     try {
-      coordinatorRef = StateStoreCoordinatorRef.forDriver(sc.env)
+      coordinatorRef = StateStoreCoordinatorRef.forDriver(sc.env, new SQLConf)
       body(coordinatorRef)
     } finally {
       if (coordinatorRef != null) coordinatorRef.stop()
+    }
+  }
+
+  def withCoordinatorAndSQLConf(sc: SparkContext, pairs: (String, String)*)(
+      body: (StateStoreCoordinatorRef, SparkSession) => Unit): Unit = {
+    var coordinatorRef: StateStoreCoordinatorRef = null
+    try {
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      SparkSession.setActiveSession(spark)
+      coordinatorRef = spark.streams.stateStoreCoordinator
+      // Set up SQLConf entries
+      pairs.foreach { case (key, value) => spark.conf.set(key, value) }
+      body(coordinatorRef, spark)
+    } finally {
+      SparkSession.getActiveSession.foreach(_.streams.active.foreach(_.stop()))
+      if (coordinatorRef != null) coordinatorRef.stop()
+      StateStore.stop()
     }
   }
 }

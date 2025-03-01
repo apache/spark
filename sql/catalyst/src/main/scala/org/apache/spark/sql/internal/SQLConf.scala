@@ -2249,6 +2249,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.minSnapshotVersionDeltaToLog")
+      .internal()
+      .doc(
+        "Minimum number of versions between the most recent uploaded snapshot version of a " +
+        "single state store instance and the most recent version across all state store " +
+        "instances to log a warning message."
+      )
+      .version("4.0.0")
+      .intConf
+      .checkValue(k => k >= 0, "Must be greater than or equal to 0")
+      .createWithDefault(30)
+
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()
