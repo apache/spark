@@ -182,6 +182,8 @@ trait FileFormat {
    */
   def supportDataType(dataType: DataType): Boolean = true
 
+  def supportDataTypeReadOnly(dataType: DataType): Boolean = supportDataType(dataType)
+
   /**
    * Returns whether this format supports the given filed name in read/write path.
    * By default all field name is supported.

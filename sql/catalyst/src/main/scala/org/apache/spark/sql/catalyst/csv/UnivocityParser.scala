@@ -34,7 +34,8 @@ import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
  * Constructs a parser for a given schema that translates CSV data to an [[InternalRow]].
@@ -135,6 +136,8 @@ class UnivocityParser(
           options.dateFormatOption.isEmpty
       }
 
+  private[csv] var headerColumnNames: Option[Array[String]] = None
+
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
     if (tokenizer.getContext == null) return null
@@ -161,9 +164,12 @@ class UnivocityParser(
   // Each input token is placed in each output row's position by mapping these. In this case,
   //
   //   output row - ["A", 2]
-  private val valueConverters: Array[ValueConverter] = {
-    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
-  }
+  private val valueConverters: Array[ValueConverter] =
+    if (options.singleVariantColumn.isDefined) {
+      null
+    } else {
+      requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
+    }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -274,6 +280,13 @@ class UnivocityParser(
           UTF8String.fromString(datum), dt.startField, dt.endField)
       }
 
+    case _: VariantType => (d: String) => {
+      val builder = new VariantBuilder(false)
+      UnivocityParser.appendCsvColumnToVariant(builder, d, options.nullValue)
+      val v = builder.result()
+      new VariantVal(v.getValue, v.getMetadata)
+    }
+
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
@@ -331,6 +344,35 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
+  protected final def convertSingleVariantRow(
+      tokens: Array[String],
+      currentInput: UTF8String): GenericInternalRow = {
+    val row = new GenericInternalRow(1)
+    try {
+      val keys = headerColumnNames.orNull
+      val numFields = if (keys != null) tokens.length.min(keys.length) else tokens.length
+      val builder = new VariantBuilder(false)
+      val start = builder.getWritePos
+      val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
+      for (i <- 0 until numFields) {
+        val key = if (keys != null) keys(i) else "_c" + i
+        val id = builder.addKey(key)
+        fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+        UnivocityParser.appendCsvColumnToVariant(builder, tokens(i), options.nullValue)
+      }
+      builder.finishWritingObject(start, fields)
+      val v = builder.result()
+      row(0) = new VariantVal(v.getValue, v.getMetadata)
+      if (keys != null && keys.length != tokens.length) {
+        throw QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)
+      }
+      row
+    } catch {
+      case NonFatal(e) =>
+        throw BadRecordException(() => currentInput, () => Array(row), cause = e)
+    }
+  }
+
   private def convert(tokens: Array[String]): Option[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
@@ -340,6 +382,10 @@ class UnivocityParser(
     }
 
     val currentInput = getCurrentInput
+
+    if (options.singleVariantColumn.isDefined) {
+      return Some(convertSingleVariantRow(tokens, currentInput))
+    }
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
@@ -420,7 +466,10 @@ private[sql] object UnivocityParser {
       parser.options.columnNameOfCorruptRecord)
 
     val handleHeader: () => Unit =
-      () => headerChecker.checkHeaderColumnNames(tokenizer)
+      () => {
+        headerChecker.checkHeaderColumnNames(tokenizer)
+        parser.headerColumnNames = headerChecker.headerColumnNames
+      }
 
     convertStream(inputStream, tokenizer, handleHeader, parser.options.charset) { tokens =>
       safeParser.parse(tokens)
@@ -461,6 +510,7 @@ private[sql] object UnivocityParser {
       headerChecker: CSVHeaderChecker,
       schema: StructType): Iterator[InternalRow] = {
     headerChecker.checkHeaderColumnNames(lines, parser.tokenizer)
+    parser.headerColumnNames = headerChecker.headerColumnNames
 
     val options = parser.options
 
@@ -472,5 +522,22 @@ private[sql] object UnivocityParser {
       schema,
       parser.options.columnNameOfCorruptRecord)
     filteredLines.flatMap(safeParser.parse)
+  }
+
+  def appendCsvColumnToVariant(builder: VariantBuilder, s: String, nullValue: String): Unit = {
+    if (s == null || s == nullValue) {
+      builder.appendNull()
+      return
+    }
+    scala.util.Try(s.toLong) match {
+      case scala.util.Success(l) if l.toString == s =>
+        builder.appendLong(l)
+        return
+      case _ =>
+    }
+    if (builder.tryParseDecimal(s)) {
+      return
+    }
+    builder.appendString(s)
   }
 }
