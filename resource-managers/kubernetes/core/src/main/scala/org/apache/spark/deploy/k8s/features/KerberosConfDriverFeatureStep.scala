@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import java.io.File
 import java.nio.charset.StandardCharsets
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
@@ -209,14 +210,17 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    val additionalProps = mutable.Map[String, String]()
     // If a submission-local keytab is provided, update the Spark config so that it knows the
     // path of the keytab in the driver container.
     if (needKeytabUpload) {
       val ktName = new File(keytab.get).getName()
-      Map(KEYTAB.key -> s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
-    } else {
-      Map.empty
+      additionalProps += (KEYTAB.key -> s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
     }
+    if (hasKerberosConf) {
+      additionalProps += (KRB_CONFIG_MAP_NAME -> krb5CMap.getOrElse(newConfigMapName))
+    }
+    additionalProps.toMap
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
