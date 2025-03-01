@@ -52,6 +52,8 @@ class CSVHeaderChecker(
   // the column name don't conform to the schema, an exception is thrown.
   private val enforceSchema = options.enforceSchema
 
+  // When `options.needHeaderForSingleVariantColumn` is true, it will be set to the header column
+  // names and no check will happen (because any name is valid).
   private[csv] var headerColumnNames: Option[Array[String]] = None
 
   /**
@@ -62,7 +64,7 @@ class CSVHeaderChecker(
    */
   private def checkHeaderColumnNames(columnNames: Array[String]): Unit = {
     if (columnNames != null) {
-      if (options.singleVariantColumn.isDefined) {
+      if (options.needHeaderForSingleVariantColumn) {
         headerColumnNames = Some(columnNames)
         return
       }

@@ -344,6 +344,11 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
+  /**
+   * The entire line of CSV data is collected into a single variant object. When `headerColumnNames`
+   * is defined, the field names will be extracted from it. Otherwise, the field names will have a
+   * a format of "_c$i" to match the position of the values in the CSV data.
+   */
   protected final def convertSingleVariantRow(
       tokens: Array[String],
       currentInput: UTF8String): GenericInternalRow = {
@@ -363,6 +368,8 @@ class UnivocityParser(
       builder.finishWritingObject(start, fields)
       val v = builder.result()
       row(0) = new VariantVal(v.getValue, v.getMetadata)
+      // If the header line has different number of tokens than the content line, the CSV data is
+      // malformed. We may still have partially parsed data in `row`.
       if (keys != null && keys.length != tokens.length) {
         throw QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)
       }
@@ -524,6 +531,11 @@ private[sql] object UnivocityParser {
     filteredLines.flatMap(safeParser.parse)
   }
 
+  /**
+   * Convert a CSV value `s` into a variant value and append the result to `builder`.
+   * The result can only be one of a variant integer/decimal/string. Anything that cannot be
+   * precisely represented by a variant integer/decimal will be represented by a variant string.
+   */
   def appendCsvColumnToVariant(builder: VariantBuilder, s: String, nullValue: String): Unit = {
     if (s == null || s == nullValue) {
       builder.appendNull()

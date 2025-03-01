@@ -69,6 +69,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    // This is a defensive check to ensure the schema doesn't have variant. It shouldn't be
+    // triggered if other part of the code is correct because `supportDataType` doesn't allow
+    // variant (in case the user is not using `supportDataType/supportReadDataType` correctly).
     dataSchema.foreach { field =>
       if (!supportDataType(field.dataType, allowVariant = false)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("CSV", field)
@@ -160,10 +163,14 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
+  /**
+   * Allow reading variant from CSV, but don't allow writing variant into CSV. This is because the
+   * written data (the string representation of variant) may not be read back as the same variant.
+   */
   override def supportDataType(dataType: DataType): Boolean =
     supportDataType(dataType, allowVariant = false)
 
-  override def supportDataTypeReadOnly(dataType: DataType): Boolean =
+  override def supportReadDataType(dataType: DataType): Boolean =
     supportDataType(dataType, allowVariant = true)
 
   private def supportDataType(dataType: DataType, allowVariant: Boolean): Boolean = dataType match {

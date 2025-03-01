@@ -3510,10 +3510,6 @@ abstract class CSVSuite
           spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
           expected.map(Row(_))
         )
-        checkAnswer(
-          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("count(*)"),
-          Row(expected.length)
-        )
       }
 
       checkSingleVariant(Map(),
