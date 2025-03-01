@@ -84,6 +84,17 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case _ => super.dialectFunctionName(funcName)
     }
 
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
+      funcName match {
+        case "RPAD" =>
+          val Array(str, len, pad) = inputs
+          s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
+        case "LPAD" =>
+          val Array(str, len, pad) = inputs
+          s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+
     override def build(expr: Expression): String = {
       // MsSqlServer does not support boolean comparison using standard comparison operators
       // We shouldn't propagate these queries to MsSqlServer

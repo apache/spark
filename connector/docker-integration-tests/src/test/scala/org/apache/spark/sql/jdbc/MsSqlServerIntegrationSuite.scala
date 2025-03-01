@@ -493,4 +493,44 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       condition = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> "sql_variant", "jdbcType" -> "-156"))
   }
+
+  test("SPARK-51321: RPAD expression is pushed down on strings table when used in WHERE clause") {
+    // Using column 'b' from the strings table (value "quick")
+    val query = "SELECT * FROM strings WHERE RPAD(b, 10, 'x') = 'quickxxxxx'"
+
+    val df = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+
+    val results = df.collect()
+    // Expect exactly one row where b equals "quick"
+    assert(results.length == 1)
+    val row = results.head
+    // b is the second column (index 1) in the "strings" table as defined:
+    // (a CHAR(10), b VARCHAR(10), c NCHAR(10), d NVARCHAR(10), e BINARY(4),
+    //  f VARBINARY(4), g TEXT, h NTEXT, i IMAGE)
+    assert(row.getString(1).trim == "quick")
+  }
+
+  test("SPARK-51321: LPAD expression is pushed down on strings table when used in WHERE clause") {
+    // Using column 'b' from the strings table (value "quick")
+    val query = "SELECT * FROM strings WHERE LPAD(b, 10, 'x') = 'xxxxxquick'"
+
+    val df = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+
+    val results = df.collect()
+    // Expect exactly one row where b equals "quick"
+    assert(results.length == 1)
+    val row = results.head
+    // b is the second column (index 1) in the "strings" table as defined:
+    // (a CHAR(10), b VARCHAR(10), c NCHAR(10), d NVARCHAR(10), e BINARY(4),
+    //  f VARBINARY(4), g TEXT, h NTEXT, i IMAGE)
+    assert(row.getString(1).trim == "quick")
+  }
 }
