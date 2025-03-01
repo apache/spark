@@ -192,8 +192,7 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          timerFuture =
-            Some(timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS))
+          timerFuture = Some(timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS))
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester
