@@ -898,6 +898,100 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
+  test("SPARK-49386: test SortMergeJoin (with spill by size threshold)") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString,
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1") {
+
+      assertSpilled(sparkContext, "inner join") {
+        checkAnswer(
+          sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
+          Row(2, "2", 2, 1) :: Row(2, "2", 2, 2) :: Nil
+        )
+      }
+
+      // LEFT SEMI JOIN without bound condition does not spill
+      assertNotSpilled(sparkContext, "left semi join") {
+        checkAnswer(
+          sql("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a WHERE key = 2"),
+          Row(2, "2") :: Nil
+        )
+      }
+
+      // LEFT ANTI JOIN without bound condition does not spill
+      assertNotSpilled(sparkContext, "left anti join") {
+        checkAnswer(
+          sql("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a WHERE key = 2"),
+          Nil
+        )
+      }
+
+      val expected = new ListBuffer[Row]()
+      expected.appendAll(Seq(
+        Row(1, "1", 1, 1), Row(1, "1", 1, 2),
+        Row(2, "2", 2, 1), Row(2, "2", 2, 2),
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2))
+      )
+      for (i <- 4 to 100) {
+        expected.append(Row(i, i.toString, null, null))
+      }
+
+      assertSpilled(sparkContext, "left outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData big
+              |LEFT OUTER JOIN
+              |  testData2 small
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected.toSeq
+        )
+      }
+
+      assertSpilled(sparkContext, "right outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |RIGHT OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected.toSeq
+        )
+      }
+
+      // FULL OUTER JOIN still does not use [[ExternalAppendOnlyUnsafeRowArray]]
+      // so should not cause any spill
+      assertNotSpilled(sparkContext, "full outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |FULL OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected.toSeq
+        )
+      }
+    }
+  }
+
   test("outer broadcast hash join should not throw NPE") {
     withTempView("v1", "v2") {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
