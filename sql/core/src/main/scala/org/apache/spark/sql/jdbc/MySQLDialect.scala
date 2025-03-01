@@ -54,7 +54,14 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     override def visitExtract(field: String, source: String): String = {
       field match {
         case "DAY_OF_YEAR" => s"DAYOFYEAR($source)"
-        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
+        case "YEAR_OF_WEEK" => s"YEARWEEK($source, 3) / 100"
+        // The second argument of WEEK is mode, which controls the first day of the week, the range
+        // of return value, config of week 1 (with a Sunday in this year, with 4 or more days this
+        // year, with a Monday in this year).
+        // The mode 3 means the first day of the week is Monday, the range of return value is 1-53
+        // and week 1 is the first week with 4 or more days this year. In the other word, mode 3
+        // has the same semantics as ISO week.
+        case "WEEK" => s"WEEK($source, 3)"
         // WEEKDAY uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
         // so we use the formula (WEEKDAY + 1) to follow the ISO standard.
         case "DAY_OF_WEEK" => s"(WEEKDAY($source) + 1)"
