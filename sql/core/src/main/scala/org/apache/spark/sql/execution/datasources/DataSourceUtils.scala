@@ -94,7 +94,7 @@ object DataSourceUtils extends PredicateHelper {
   def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
     schema.foreach { field =>
       val supported = if (readOnly) {
-        format.supportDataTypeReadOnly(field.dataType)
+        format.supportReadDataType(field.dataType)
       } else {
         format.supportDataType(field.dataType)
       }
