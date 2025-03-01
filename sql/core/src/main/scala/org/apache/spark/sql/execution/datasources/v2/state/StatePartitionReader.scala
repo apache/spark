@@ -47,7 +47,7 @@ class StatePartitionReaderFactory(
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
-    if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
+    if (stateStoreInputPartition.sourceOptions.readChangeLog) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
         stateStoreColFamilySchemaOpt, stateSchemaProviderOpt)
@@ -210,7 +210,7 @@ class StatePartitionReader(
 }
 
 /**
- * An implementation of [[StatePartitionReaderBase]] for the readChangeFeed mode of State Data
+ * An implementation of [[StatePartitionReaderBase]] for the readChangeLog mode of State Data
  * Source. It reads the change of state over batches of a particular partition.
  */
 class StateStoreChangeDataPartitionReader(
@@ -241,8 +241,8 @@ class StateStoreChangeDataPartitionReader(
 
     provider.asInstanceOf[SupportsFineGrainedReplay]
       .getStateStoreChangeDataReader(
-        partition.sourceOptions.readChangeFeedOptions.get.changeStartBatchId + 1,
-        partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1,
+        partition.sourceOptions.readChangeLogOptions.get.changeStartBatchId + 1,
+        partition.sourceOptions.readChangeLogOptions.get.changeEndBatchId + 1,
         colFamilyNameOpt)
   }
 
