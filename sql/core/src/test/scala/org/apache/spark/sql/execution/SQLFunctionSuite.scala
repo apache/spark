@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -56,6 +56,21 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
         checkAnswer(sql("SELECT foo(1)"), Row(5))
         checkAnswer(sql("SELECT foo(a) FROM t"), Seq(Row(null), Row(5)))
       }
+    }
+  }
+
+  test("SPARK-51289 throw a proper error message for not fully implemented SQLTableFunction") {
+    withUserDefinedFunction("foo" -> false) {
+      sql("CREATE FUNCTION foo(x INT) RETURNS TABLE (a INT) RETURN SELECT x")
+      val e = intercept[AnalysisException] {
+        sql("SELECT * FROM foo(1)").collect()
+      }
+      checkError(
+        exception = e,
+        condition = "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS",
+        parameters = Map(
+          "action" -> "call",
+          "functionName" -> "`spark_catalog`.`default`.`foo`"))
     }
   }
 }
