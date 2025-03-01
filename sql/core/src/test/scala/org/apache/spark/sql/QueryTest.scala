@@ -326,7 +326,13 @@ object QueryTest extends Assertions {
     // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
     // equality test.
     val converted: Seq[Row] = answer.map(prepareRow)
-    if (!isSorted) converted.sortBy(_.toString()) else converted
+    // SPARK-51349: "null" and null had the same precedence in sorting
+    if (!isSorted) converted.sortBy( r =>
+      Row(r.toSeq.map {
+        case null => "000_aaa_null"
+        case v => v
+      }).toString
+    ) else converted
   }
 
   // We need to call prepareRow recursively to handle schemas with struct types.
@@ -478,5 +484,10 @@ class QueryTestSuite extends QueryTest with test.SharedSparkSession {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
+  }
+
+  test("SPARK-51349: null string and true null are distinguished") {
+    checkAnswer(sql("select case when id == 0 then 'null' else null end s from range(2)"),
+      Seq(Row(null), Row("null")))
   }
 }
