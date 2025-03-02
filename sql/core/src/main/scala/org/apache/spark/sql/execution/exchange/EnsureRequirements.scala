@@ -149,11 +149,17 @@ case class EnsureRequirements(
         // first. For instance, if we have:
         //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
         // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
-        // new shuffle for A.
-        val candidateSpecsWithoutShuffle = candidateSpecs.filter { case (k, _) =>
-          !children(k).isInstanceOf[ShuffleExchangeLike]
+        // new shuffle for A, unless the number of partitions of B is much smaller than the number
+        // of partitions of A.
+        val (candidateSpecsWithShuffle, candidateSpecsWithoutShuffle) = candidateSpecs.partition {
+          case (k, _) => children(k).isInstanceOf[ShuffleExchangeLike]
         }
-        val finalCandidateSpecs = if (candidateSpecsWithoutShuffle.nonEmpty) {
+        val maxShufflePartNumOpt = candidateSpecsWithShuffle.values.map(_.numPartitions).maxOption
+        val finalCandidateSpecs = if (candidateSpecsWithoutShuffle.nonEmpty &&
+          maxShufflePartNumOpt.forall { n =>
+            n / candidateSpecsWithoutShuffle.values.map(_.numPartitions).max <=
+              conf.coalesceBucketsInJoinMaxBucketRatio
+          }) {
           candidateSpecsWithoutShuffle
         } else {
           candidateSpecs
