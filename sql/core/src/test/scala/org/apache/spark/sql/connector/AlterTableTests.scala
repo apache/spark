@@ -37,6 +37,14 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
   protected val catalogAndNamespace: String
 
+  protected def catalog: String = {
+    if (catalogAndNamespace.nonEmpty) {
+      catalogAndNamespace.split('.').headOption.getOrElse("spark_catalog")
+    } else {
+      "spark_catalog"
+    }
+  }
+
   protected val v2Format: String
 
   private def fullTableName(tableName: String): String = {
@@ -328,7 +336,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
   }
 
   test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD/ALTER COLUMN") {
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format,$catalog") {
       val t = fullTableName("table_name")
       withTable("t") {
         sql(s"create table $t (a string) using $v2Format")
