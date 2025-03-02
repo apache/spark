@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal.types
 
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, CharType, DataType, StringType, VarcharType}
 
 /**
  * AbstractStringType is an abstract class for StringType with collation support.
@@ -29,6 +29,8 @@ abstract class AbstractStringType(supportsTrimCollation: Boolean = false)
   override private[sql] def simpleString: String = "string"
 
   override private[sql] def acceptsType(other: DataType): Boolean = other match {
+    case CharType(_) | VarcharType(_) =>
+      false
     case st: StringType =>
       canUseTrimCollation(st) && acceptsStringType(st)
     case _ =>
