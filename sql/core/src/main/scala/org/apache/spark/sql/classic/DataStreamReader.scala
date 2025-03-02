@@ -78,7 +78,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       isStreaming = true,
       path.toSeq
     )
-    Dataset.ofRows(sparkSession, unresolved)
+    Dataset.ofRows(sparkSession, unresolved)(Set.empty)
   }
 
   /** @inheritdoc */
@@ -99,7 +99,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       UnresolvedRelation(
         identifier,
         new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
-        isStreaming = true))
+        isStreaming = true))(Set.empty)
   }
 
   override protected def assertNoSpecifiedSchema(operation: String): Unit = {
