@@ -309,11 +309,14 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   private def assertPlanCache(
       sessionHolder: SessionHolder,
-      optionExpectedCachedRelations: Option[Set[proto.Relation]]) = {
+      optionExpectedCachedRelations: Option[Set[proto.Relation]],
+      expectAnalyzed: Boolean) = {
     optionExpectedCachedRelations match {
       case Some(expectedCachedRelations) =>
         val cachedRelations = sessionHolder.getPlanCache.get.asMap().keySet().asScala
         assert(cachedRelations.size == expectedCachedRelations.size)
+        val cachedLogicalPlans = sessionHolder.getPlanCache.get.asMap().values().asScala
+        cachedLogicalPlans.foreach(plan => assert(plan.analyzed == expectAnalyzed))
         expectedCachedRelations.foreach(relation => assert(cachedRelations.contains(relation)))
       case None => assert(sessionHolder.getPlanCache.isEmpty)
     }
@@ -345,29 +348,29 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
         .build()
 
-      // If cachePlan is false, the cache is still empty.
-      planner.transformRelation(random1, cachePlan = false)
-      assertPlanCache(sessionHolder, Some(Set()))
+      // Transform the relation without analysis, the cache is still empty.
+      val random1Plan = planner.transformRelation(random1)
+      assertPlanCache(sessionHolder, Some(Set()), false)
 
-      // Put a random entry in cache.
-      planner.transformRelation(random1, cachePlan = true)
-      assertPlanCache(sessionHolder, Some(Set(random1)))
+      // Put a random entry in cache after analysis.
+      sessionHolder.createDataFrame(random1, planner)
+      assertPlanCache(sessionHolder, Some(Set(random1)), true)
 
       // Put another random entry in cache.
-      planner.transformRelation(random2, cachePlan = true)
-      assertPlanCache(sessionHolder, Some(Set(random1, random2)))
+      sessionHolder.createDataFrame(random2, planner)
+      assertPlanCache(sessionHolder, Some(Set(random1, random2)), true)
 
       // Analyze query1. We only cache the root relation, and the random1 is evicted.
-      planner.transformRelation(query1, cachePlan = true)
-      assertPlanCache(sessionHolder, Some(Set(random2, query1)))
+      sessionHolder.createDataFrame(query1, planner)
+      assertPlanCache(sessionHolder, Some(Set(random2, query1)), true)
 
       // Put another random entry in cache.
-      planner.transformRelation(random3, cachePlan = true)
-      assertPlanCache(sessionHolder, Some(Set(query1, random3)))
+      sessionHolder.createDataFrame(random3, planner)
+      assertPlanCache(sessionHolder, Some(Set(query1, random3)), true)
 
       // Analyze query2. As query1 is accessed during the process, it should be in the cache.
-      planner.transformRelation(query2, cachePlan = true)
-      assertPlanCache(sessionHolder, Some(Set(query1, query2)))
+      sessionHolder.createDataFrame(query2, planner)
+      assertPlanCache(sessionHolder, Some(Set(query1, query2)), true)
     } finally {
       // Set back to default value.
       SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, 5)
@@ -383,13 +386,9 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
       val query = buildRelation("select 1")
 
-      // If cachePlan is false, the cache is still None.
-      planner.transformRelation(query, cachePlan = false)
-      assertPlanCache(sessionHolder, None)
-
-      // Even if we specify "cachePlan = true", the cache is still None.
-      planner.transformRelation(query, cachePlan = true)
-      assertPlanCache(sessionHolder, None)
+      // The cache must be empty.
+      sessionHolder.createDataFrame(query, planner)
+      assertPlanCache(sessionHolder, None, true)
     } finally {
       // Set back to default value.
       SparkEnv.get.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE, 5)
@@ -404,14 +403,11 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
     val query = buildRelation("select 1")
 
-    // If cachePlan is false, the cache is still empty.
-    // Although the cache is created as cache size is greater than zero, it won't be used.
-    planner.transformRelation(query, cachePlan = false)
-    assertPlanCache(sessionHolder, Some(Set()))
+    // The cache must be empty.
+    sessionHolder.createDataFrame(query, planner)
+    assertPlanCache(sessionHolder, Some(Set()), true)
 
-    // Even if we specify "cachePlan = true", the cache is still empty.
-    planner.transformRelation(query, cachePlan = true)
-    assertPlanCache(sessionHolder, Some(Set()))
+    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED.key, true)
   }
 
   test("Test duplicate operation IDs") {

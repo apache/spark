@@ -192,6 +192,11 @@ abstract class LogicalPlan
   def refresh(): Unit = children.foreach(_.refresh())
 
   /**
+   * Returns true if the plan is outdated and requires a refresh or reanalysis.
+   */
+  def isOutdated: Boolean = children.exists(_.isOutdated)
+
+  /**
    * Returns true iff `other`'s output is semantically the same, i.e.:
    *  - it contains the same number of `Attribute`s;
    *  - references are the same;
