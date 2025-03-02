@@ -69,8 +69,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.{NextIterator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
