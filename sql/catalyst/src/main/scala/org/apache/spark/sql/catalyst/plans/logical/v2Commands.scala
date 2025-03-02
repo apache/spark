@@ -1664,3 +1664,22 @@ case class Call(
   override protected def withNewChildInternal(newChild: LogicalPlan): Call =
     copy(procedure = newChild)
 }
+
+/**
+ * The logical plan of the SHOW PROCEDURES command.
+ */
+case class ShowProcedures(
+  namespace: LogicalPlan,
+  pattern: Option[String],
+  override val output: Seq[Attribute] = ShowProcedures.getOutputAttrs) extends UnaryCommand {
+  override def child: LogicalPlan = namespace
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowProcedures =
+    copy(namespace = newChild)
+}
+
+object ShowProcedures {
+  def getOutputAttrs: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("name", StringType, nullable = false)())
+}
