@@ -54,10 +54,31 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     override def visitExtract(field: String, source: String): String = {
       field match {
         case "DAY_OF_YEAR" => s"DAYOFYEAR($source)"
-        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
+        // The second argument of WEEK is mode, which controls the first day of the week, the range
+        // of return value, config of week 1 (with a Sunday in this year, with 4 or more days this
+        // year, with a Monday in this year).
+        // The mode 3 means the first day of the week is Monday, the range of return value is 1-53
+        // and week 1 is the first week with 4 or more days this year. In the other word, mode 3
+        // has the same semantics as ISO week.
+        case "WEEK" => s"WEEK($source, 3)"
+        // MySQL doesn't support extract the ISO year. We use the case statements shown below to
+        // get it.
+        // CASE
+        //   WHEN WEEK(date, 3) = 1 AND MONTH(date) = 12 THEN YEAR(date) + 1
+        //   WHEN WEEK(date, 3) >= 52 AND MONTH(date) = 1 THEN YEAR(date) - 1
+        //   ELSE YEAR(date)
+        // END
+        case "YEAR_OF_WEEK" =>
+          val arr = Array(s"WEEK($source, 3) = 1 AND MONTH($source) = 12", s"YEAR($source) + 1",
+            s"WEEK($source, 3) >= 52 AND MONTH($source) = 1", s"YEAR($source) - 1",
+            s"YEAR($source)")
+          val caseWhen = visitCaseWhen(arr)
+          s"($caseWhen)"
         // WEEKDAY uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
         // so we use the formula (WEEKDAY + 1) to follow the ISO standard.
         case "DAY_OF_WEEK" => s"(WEEKDAY($source) + 1)"
+        // SECOND, MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on MySQL and Spark for
+        // both datetime and interval types.
         case _ => super.visitExtract(field, source)
       }
     }
