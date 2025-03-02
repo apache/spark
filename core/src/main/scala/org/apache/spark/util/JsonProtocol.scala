@@ -612,7 +612,7 @@ private[spark] object JsonProtocol extends JsonUtils {
       g.writeNumberField("Total Records Read", taskMetrics.shuffleReadMetrics.recordsRead)
       g.writeNumberField("Remote Requests Duration",
         taskMetrics.shuffleReadMetrics.remoteReqsDuration)
-      g.writeFieldName("Push Based Shuffle")
+      g.writeFieldName("Shuffle Push Read Metrics")
       writeShufflePushReadMetrics()
       g.writeEndObject()
     }
@@ -1341,8 +1341,8 @@ private[spark] object JsonProtocol extends JsonUtils {
         readMetrics.incCorruptMergedBlockChunks(jsonOption(
           shufflePushReadJson.get("Corrupt Merged Block Chunks"))
             .map(_.extractLong).getOrElse(0L))
-        readMetrics.incMergedFetchFallbackCount(jsonOption(
-          shufflePushReadJson.get("Merged Fallback Count")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incMergedFetchFallbackCount(jsonOption(shufflePushReadJson
+          .get("Merged Fetch Fallback Count")).map(_.extractLong).getOrElse(0L))
         readMetrics.incRemoteMergedBlocksFetched(jsonOption(shufflePushReadJson
           .get("Merged Remote Blocks Fetched")).map(_.extractLong).getOrElse(0L))
         readMetrics.incLocalMergedBlocksFetched(jsonOption(shufflePushReadJson
