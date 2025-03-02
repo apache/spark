@@ -65,7 +65,7 @@ case class ScalaUDF(
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SCALA_UDF)
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
+  override def toString: String = s"$fullName(${children.mkString(", ")})"
 
   override def name: String = udfName.getOrElse("UDF")
 
