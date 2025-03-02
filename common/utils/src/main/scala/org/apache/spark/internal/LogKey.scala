@@ -82,6 +82,7 @@ private[spark] object LogKeys {
   case object ARGS extends LogKey
   case object ARTIFACTS extends LogKey
   case object ARTIFACT_ID extends LogKey
+  case object ATTRIBUTE_ID extends LogKey
   case object ATTRIBUTE_MAP extends LogKey
   case object AUTH_ENABLED extends LogKey
   case object AVG_BATCH_PROC_TIME extends LogKey
