@@ -19,10 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import org.scalatest.matchers.should.Matchers._
 
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{And, BinaryComparison, Expression, In, Literal, Or}
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
@@ -35,6 +38,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with SharedSparkSession {
+  type listPartitionLambda = Seq[Expression] => Unit
+  type filterPartitionLambda = (Seq[CatalogTablePartition], Seq[Expression]) => Unit
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -115,7 +120,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
         spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
             .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
-          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
           assertPrunedPartitions("SELECT COUNT(*) FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
           assertPrunedPartitions("SELECT input_file_name() FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
         }
@@ -130,7 +135,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
         spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
           .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
-          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
           assertPrunedPartitions("SELECT * FROM tmp WHERE (p = 0 AND id > 0) OR (p = 1 AND id = 2)",
             2,
             "((tmp.p = 0) || (tmp.p = 1))")
@@ -160,6 +165,226 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
             "(tmp.p = 0)")
         }
       }
+    }
+  }
+
+  test("no duplicates in union filter and no redundant filter evaluation") {
+    withTable("test") {
+      var listPartionCBInvoked: Boolean = false
+      var filterPartitionsCBInvoked: Boolean = false
+      executeTestLogic(
+        logicalRelation => {
+          val q1 = Project(Seq($"id".as("id1"), $"p".as("p1")),
+            Filter($"p" === 1, logicalRelation)).analyze
+          val q2 = Project(Seq($"id".as("id2"), $"p".as("p2")),
+            Filter($"p" === 1, logicalRelation)).analyze
+          val query = q1.join(q2, JoinType("cross"))
+          Optimize.execute(query)
+        },
+        Option((exprs: Seq[Expression]) => {
+          listPartionCBInvoked = true
+          assert(exprs.lengthCompare(1) == 0)
+          exprs.head match {
+            case BinaryComparison(_, _) =>
+            case _ => fail("distinct filter expression not found")
+          }
+        }),
+        Option((_: Seq[CatalogTablePartition], exprs: Seq[Expression]) => {
+          filterPartitionsCBInvoked = true
+          assert(exprs.isEmpty)
+        })
+      )
+      assert(listPartionCBInvoked)
+      assert(filterPartitionsCBInvoked)
+    }
+  }
+
+  test("union should contain all distinct filters") {
+    withTable("test") {
+      var listPartionCBInvoked: Boolean = false
+      var filterPartitionsCBInvoked: Boolean = false
+      executeTestLogic(
+        logicalRelation => {
+          val q1 = Project(Seq($"id".as("id1"), $"p".as("p1")),
+            Filter($"p" === 2, logicalRelation)).analyze
+          val q2 = Project(Seq($"id".as("id2"), $"p".as("p2")),
+            Filter($"p" > 1 && $"p" < 7, logicalRelation)).analyze
+          val query = q1.join(q2, JoinType("cross"))
+          Optimize.execute(query)
+        },
+        Option((exprs: Seq[Expression]) => {
+          listPartionCBInvoked = true
+          assert(exprs.lengthCompare(1) == 0)
+          exprs.head match {
+            case Or(_: BinaryComparison, And(_: BinaryComparison, _: BinaryComparison)) =>
+            case Or(And(_: BinaryComparison, _: BinaryComparison), _: BinaryComparison) =>
+            case _ => fail("distinct filter expression not found")
+          }
+        }),
+        Option((_: Seq[CatalogTablePartition], exprs: Seq[Expression]) => {
+          filterPartitionsCBInvoked = true
+          assert(exprs.lengthCompare(1) == 0)
+          exprs.head match {
+            case _: BinaryComparison =>
+            case And(_: BinaryComparison, _: BinaryComparison) =>
+            case _ => fail("Binary Comparison expression not found")
+          }
+        })
+      )
+      assert(listPartionCBInvoked)
+      assert(filterPartitionsCBInvoked)
+    }
+  }
+
+  test("No pruning filter in even a single table should result in no pruning at all") {
+    withTable("test") {
+      var listPartionCBInvoked: Boolean = false
+      var filterPartitionsCBInvoked: Boolean = false
+      executeTestLogic(
+        logicalRelation => {
+          val q1 = Project(Seq($"id".as("id1"), $"p".as("p1")),
+            Filter($"p" === 2, logicalRelation)).analyze
+          val q2 = Project(Seq($"id".as("id2"), $"p".as("p2")),
+            Filter(In($"p", Seq(Literal(1), Literal(4))), logicalRelation)).analyze
+          val q3 = Project(Seq($"id".as("id2"), $"p".as("p2")), logicalRelation).analyze
+          val query = q1.join(q2, JoinType("cross")).join(q3, JoinType("cross"))
+          Optimize.execute(query)
+        },
+        Option((exprs: Seq[Expression]) => {
+          listPartionCBInvoked = true
+          assert(exprs.isEmpty)
+        }),
+        Option((_: Seq[CatalogTablePartition], exprs: Seq[Expression]) => {
+          filterPartitionsCBInvoked = true
+          exprs.headOption match {
+            case None =>
+            case Some(_: BinaryComparison) =>
+            case Some(_: In) =>
+            case _ => fail("Binary Comparison expression not found")
+          }
+        })
+      )
+      assert(listPartionCBInvoked)
+      assert(filterPartitionsCBInvoked)
+    }
+  }
+
+  test("order of the repeating tables should not impact the unioned filter") {
+    withTable("test") {
+      var listPartionCBInvoked: Boolean = false
+      var filterPartitionsCBInvoked: Boolean = false
+      val listCbLmbda: Option[listPartitionLambda] = Option((exprs: Seq[Expression]) => {
+        listPartionCBInvoked = true
+        assert(exprs.isEmpty)
+      })
+      val filterCbLmbda: Option[filterPartitionLambda] =
+        Option((_: Seq[CatalogTablePartition], exprs: Seq[Expression]) => {
+          filterPartitionsCBInvoked = true
+          exprs.headOption match {
+            case None =>
+            case Some(_: BinaryComparison) =>
+            case Some(_: In) =>
+            case _ => fail("Binary Comparison expression not found")
+          }
+        })
+      executeTestLogic(
+        logicalRelation => {
+          val q1 = Project(Seq($"id".as("id1"), $"p".as("p1")),
+            Filter($"p" === 2, logicalRelation)).analyze
+          val q2 = Project(Seq($"id".as("id2"), $"p".as("p2")),
+            Filter(In($"p", Seq(Literal(1), Literal(4))), logicalRelation)).analyze
+          val q3 = Project(Seq($"id".as("id2"), $"p".as("p2")), logicalRelation).analyze
+          val query = q1.join(q2, JoinType("cross")).join(q3, JoinType("cross"))
+          Optimize.execute(query)
+        },
+        listCbLmbda,
+        filterCbLmbda
+      )
+      assert(listPartionCBInvoked)
+      assert(filterPartitionsCBInvoked)
+
+      listPartionCBInvoked = false
+      filterPartitionsCBInvoked = false
+      executeTestLogic(
+        logicalRelation => {
+          val q1 = Project(Seq($"id".as("id1"), $"p".as("p1")),
+            Filter($"p" === 2, logicalRelation)).analyze
+          val q2 = Project(Seq($"id".as("id2"), $"p".as("p2")),
+            Filter(In($"p", Seq(Literal(1), Literal(4))), logicalRelation)).analyze
+          val q3 = Project(Seq($"id".as("id2"), $"p".as("p2")), logicalRelation).analyze
+          val query = q2.join(q3, JoinType("cross")).join(q1, JoinType("cross"))
+          Optimize.execute(query)
+        },
+        listCbLmbda,
+        filterCbLmbda
+      )
+      assert(listPartionCBInvoked)
+      assert(filterPartitionsCBInvoked)
+
+      listPartionCBInvoked = false
+      filterPartitionsCBInvoked = false
+      executeTestLogic(
+        logicalRelation => {
+          val q1 = Project(Seq($"id".as("id1"), $"p".as("p1")),
+            Filter($"p" === 2, logicalRelation)).analyze
+          val q2 = Project(Seq($"id".as("id2"), $"p".as("p2")),
+            Filter(In($"p", Seq(Literal(1), Literal(4))), logicalRelation)).analyze
+          val q3 = Project(Seq($"id".as("id2"), $"p".as("p2")), logicalRelation).analyze
+          val query = q3.join(q1, JoinType("cross")).join(q2, JoinType("cross"))
+          Optimize.execute(query)
+        },
+        listCbLmbda,
+        filterCbLmbda
+      )
+      assert(listPartionCBInvoked)
+      assert(filterPartitionsCBInvoked)
+    }
+  }
+
+  private def executeTestLogic(
+      body: LogicalRelation => Unit,
+      listPartitionCb: Option[listPartitionLambda],
+      filterPartitionCb: Option[filterPartitionLambda]): Unit = {
+    spark.range(10).selectExpr("id", "id % 3 as p").write.mode(SaveMode.Overwrite).
+      partitionBy("p").saveAsTable("test")
+    val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
+    val catalogFileIndex = new CallbackCatalogFileIndex(spark, tableMeta, 0, listPartitionCb,
+      filterPartitionCb)
+    val dataSchema = StructType(tableMeta.schema.filterNot { f =>
+      tableMeta.partitionColumnNames.contains(f.name)
+    })
+    val relation = HadoopFsRelation(
+      location = catalogFileIndex,
+      partitionSchema = tableMeta.partitionSchema,
+      dataSchema = dataSchema,
+      bucketSpec = None,
+      fileFormat = new ParquetFileFormat(),
+      options = Map.empty)(sparkSession = spark)
+
+    val logicalRelation = LogicalRelation(relation, tableMeta)
+    // execute test body
+    body(logicalRelation)
+  }
+
+  class CallbackCatalogFileIndex(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      sizeInBytes: Long,
+      val onListPartitionsInvoc: Option[listPartitionLambda] = None,
+      val onFilterPartitionsInvoc: Option[filterPartitionLambda] = None)
+    extends CatalogFileIndex(sparkSession, table, sizeInBytes) {
+
+    override def listPartitions(filters: Seq[Expression]): (Seq[CatalogTablePartition], Long) = {
+      onListPartitionsInvoc.foreach(_.apply(filters))
+      super.listPartitions(filters)
+    }
+
+    override def filterPartitions(
+        inputPartitions: Seq[CatalogTablePartition],
+        baseTimeNs: Long,
+        filters: Seq[Expression]): InMemoryFileIndex = {
+      onFilterPartitionsInvoc.foreach(_.apply(inputPartitions, filters))
+      super.filterPartitions(inputPartitions, baseTimeNs, filters)
     }
   }
 
