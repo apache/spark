@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -132,25 +134,31 @@ class RelationResolution(override val catalogManager: CatalogManager)
             .orElse {
               val writePrivilegesString =
                 Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
-              val table =
-                CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec, writePrivilegesString)
-              val loaded = createRelation(
-                catalog,
-                ident,
-                table,
-                u.clearWritePrivileges.options,
-                u.isStreaming
-              )
-              loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-              u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-                .map { planId =>
-                  loaded.map { loadedRelation =>
-                    val loadedConnectRelation = loadedRelation.clone()
-                    loadedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
-                    loadedConnectRelation
-                  }
-                }
-                .getOrElse(loaded)
+              try {
+                val table = CatalogV2Util.getTable(
+                  catalog,
+                  ident,
+                  finalTimeTravelSpec,
+                  writePrivilegesString
+                )
+                val loaded = createRelation(
+                  catalog,
+                  ident,
+                  table,
+                  u.clearWritePrivileges.options,
+                  u.isStreaming
+                )
+                AnalysisContext.get.relationCache.update(key, loaded)
+                u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                  val loadedConnectRelation = loaded.clone()
+                  loadedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                  loadedConnectRelation
+                }.orElse(Some(loaded))
+              } catch {
+                case NonFatal(e) =>
+                  u.setTagValue(UnresolvedRelation.RESOLUTION_ERROR, e)
+                  None
+              }
             }
         case _ => None
       }
@@ -160,60 +168,58 @@ class RelationResolution(override val catalogManager: CatalogManager)
   private def createRelation(
       catalog: CatalogPlugin,
       ident: Identifier,
-      table: Option[Table],
+      table: Table,
       options: CaseInsensitiveStringMap,
-      isStreaming: Boolean): Option[LogicalPlan] = {
-    table.map {
-      // To utilize this code path to execute V1 commands, e.g. INSERT,
-      // either it must be session catalog, or tracksPartitionsInCatalog
-      // must be false so it does not require use catalog to manage partitions.
-      // Obviously we cannot execute V1Table by V1 code path if the table
-      // is not from session catalog and the table still requires its catalog
-      // to manage partitions.
-      case v1Table: V1Table
-          if CatalogV2Util.isSessionCatalog(catalog)
-          || !v1Table.catalogTable.tracksPartitionsInCatalog =>
-        if (isStreaming) {
-          if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-            throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-              ident.quoted
-            )
-          }
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
+      isStreaming: Boolean): LogicalPlan = table match {
+    // To utilize this code path to execute V1 commands, e.g. INSERT,
+    // either it must be session catalog, or tracksPartitionsInCatalog
+    // must be false so it does not require use catalog to manage partitions.
+    // Obviously we cannot execute V1Table by V1 code path if the table
+    // is not from session catalog and the table still requires its catalog
+    // to manage partitions.
+    case v1Table: V1Table
+        if CatalogV2Util.isSessionCatalog(catalog)
+        || !v1Table.catalogTable.tracksPartitionsInCatalog =>
+      if (isStreaming) {
+        if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
+          throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+            ident.quoted
           )
-        } else {
-          v1SessionCatalog.getRelation(v1Table.v1Table, options)
         }
+        SubqueryAlias(
+          catalog.name +: ident.asMultipartIdentifier,
+          UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
+        )
+      } else {
+        v1SessionCatalog.getRelation(v1Table.v1Table, options)
+      }
 
-      case table =>
-        if (isStreaming) {
-          val v1Fallback = table match {
-            case withFallback: V2TableWithV1Fallback =>
-              Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
-            case _ => None
-          }
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            StreamingRelationV2(
-              None,
-              table.name,
-              table,
-              options,
-              table.columns.toAttributes,
-              Some(catalog),
-              Some(ident),
-              v1Fallback
-            )
-          )
-        } else {
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            DataSourceV2Relation.create(table, Some(catalog), Some(ident), options)
-          )
+    case _ =>
+      if (isStreaming) {
+        val v1Fallback = table match {
+          case withFallback: V2TableWithV1Fallback =>
+            Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
+          case _ => None
         }
-    }
+        SubqueryAlias(
+          catalog.name +: ident.asMultipartIdentifier,
+          StreamingRelationV2(
+            None,
+            table.name,
+            table,
+            options,
+            table.columns.toAttributes,
+            Some(catalog),
+            Some(ident),
+            v1Fallback
+          )
+        )
+      } else {
+        SubqueryAlias(
+          catalog.name +: ident.asMultipartIdentifier,
+          DataSourceV2Relation.create(table, Some(catalog), Some(ident), options)
+        )
+      }
   }
 
   private def resolveTempView(
