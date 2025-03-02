@@ -75,10 +75,8 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>${connect.guava.version}</version>
-      <scope>compile</scope>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -133,6 +131,16 @@
       <version>${mima.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-inprocess</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -148,7 +156,6 @@
           <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
-              <include>com.google.guava:*</include>
               <include>com.google.android:*</include>
               <include>com.google.api.grpc:*</include>
               <include>com.google.code.findbugs:*</include>
@@ -169,13 +176,6 @@
           </artifactSet>
           <relocations>
             <relocation>
-              <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-              <includes>
-                <include>com.google.common.**</include>
-              </includes>
-            </relocation>
-            <relocation>
               <pattern>io.grpc</pattern>
               <shadedPattern>${spark.shade.packageName}.io.grpc</shadedPattern>
               <includes>
@@ -185,10 +185,6 @@
             <relocation>
               <pattern>com.google</pattern>
               <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
-              <excludes>
-                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
-                <exclude>com.google.common.**</exclude>
-              </excludes>
             </relocation>
             <relocation>
               <pattern>io.netty</pattern>
