@@ -32,7 +32,8 @@ import org.apache.spark.util.JsonProtocol
 /**
  * A SparkListenerBus that can be used to replay events from serialized event data.
  */
-private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
+private[spark] class ReplayListenerBus(
+    jsonProtocol: JsonProtocol) extends SparkListenerBus with Logging {
 
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
@@ -86,7 +87,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
           currentLine = entry._1
           lineNumber = entry._2 + 1
 
-          postToAll(JsonProtocol.sparkEventFromJson(currentLine))
+          postToAll(jsonProtocol.sparkEventFromJson(currentLine))
         } catch {
           case e: ClassNotFoundException =>
             // Ignore unknown events, parse through the event log file.
