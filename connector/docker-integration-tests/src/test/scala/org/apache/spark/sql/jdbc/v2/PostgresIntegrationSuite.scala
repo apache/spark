@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.util.Locale
 
 import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
@@ -373,5 +374,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
       parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\"")
     )
+  }
+
+  test("SPARK-51321: Postgres pushdown for RPAD expression on string column") {
+    val df = sql(s"SELECT * FROM $catalogName.employee WHERE rpad(name, 10, 'x') = 'xxxxxxxxxx'")
+    val pushedQuery = df.queryExecution.executedPlan.toString().toLowerCase(Locale.ROOT)
+
+    assert(pushedQuery.contains("rpad("),
+      s"Expected RPAD expression to be pushed down, but got: $pushedQuery")
+    assert(!pushedQuery.contains("filterexec"),
+      s"Expected the filter to be pushed down, but found a Spark-side filter in: $pushedQuery")
+
+    df.collect()
   }
 }
