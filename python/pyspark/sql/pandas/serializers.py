@@ -185,7 +185,7 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     """
 
     def load_stream(self, stream):
-        return super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        return ArrowStreamSerializer.load_stream(self, stream)
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
