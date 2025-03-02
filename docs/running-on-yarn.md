@@ -515,6 +515,14 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.executor.bindAddress.mode</code></td>
+  <td><code><code>HOSTNAME</code></code></td>
+  <td>
+  Configures executor behaviour of which network to listen sockets to. Possible choices are: <code>HOSTNAME</code> means to bind to hostname, <code>ALL_IPS</code> means to bind to 0.0.0.0
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
   <td>(none)</td>
   <td>
