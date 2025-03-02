@@ -813,14 +813,28 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         VERSION_FIELD_NUMBER: builtins.int
+        JAVA_VERSION_FIELD_NUMBER: builtins.int
+        SCALA_VERSION_FIELD_NUMBER: builtins.int
         version: builtins.str
+        java_version: builtins.str
+        scala_version: builtins.str
         def __init__(
             self,
             *,
             version: builtins.str = ...,
+            java_version: builtins.str = ...,
+            scala_version: builtins.str = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["version", b"version"]
+            self,
+            field_name: typing_extensions.Literal[
+                "java_version",
+                b"java_version",
+                "scala_version",
+                b"scala_version",
+                "version",
+                b"version",
+            ],
         ) -> None: ...
 
     class DDLParse(google.protobuf.message.Message):
