@@ -60,11 +60,12 @@ compoundBody
     ;
 
 compoundStatement
-    : statement
+    : declareConditionStatement
+    | statement
     | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
-    | declareConditionStatement
     | declareHandlerStatement
+    | signalStatement
     | ifElseStatement
     | caseStatement
     | whileStatement
@@ -102,6 +103,12 @@ conditionValues
 
 declareHandlerStatement
     : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementWithOptionalVarKeyword)
+    ;
+
+signalStatement
+    : SIGNAL conditionName=multipartIdentifier
+      (SET (MESSAGE_TEXT EQ (msgStr=stringLit|msgVar=multipartIdentifier) | MESSAGE_ARGUMENTS EQ argVar=multipartIdentifier))? #signalStatementWithCondition
+    | SIGNAL SQLSTATE VALUE? sqlState=stringLit (SET MESSAGE_TEXT EQ (msgStr=stringLit|msgVar=multipartIdentifier))? #signalStatementWithSqlState
     ;
 
 whileStatement
@@ -1744,6 +1751,8 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MESSAGE_ARGUMENTS
+    | MESSAGE_TEXT
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -1824,6 +1833,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIGNAL
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2115,6 +2125,8 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MESSAGE_ARGUMENTS
+    | MESSAGE_TEXT
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -2206,6 +2218,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIGNAL
     | SINGLE
     | SKEWED
     | SMALLINT
