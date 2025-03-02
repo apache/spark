@@ -862,31 +862,50 @@ class BlockManagerMasterEndpoint(
   private def getLocationsAndStatus(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
-    val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
-    val status = locations.headOption.flatMap { bmId =>
-      if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
-        blockStatusByShuffleService.get(bmId).flatMap(m => m.get(blockId))
-      } else {
-        blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
-      }
-    }
+    val allLocations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
+    val hostLocalLocations = allLocations.filter(bmId => bmId.host == requesterHost)
 
-    if (locations.nonEmpty && status.isDefined) {
-      val localDirs = locations.find { loc =>
-        // When the external shuffle service running on the same host is found among the block
-        // locations then the block must be persisted on the disk. In this case the executorId
-        // can be used to access this block even when the original executor is already stopped.
-        loc.host == requesterHost &&
-          (loc.port == externalShuffleServicePort ||
-            blockManagerInfo
-              .get(loc)
-              .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
-              .getOrElse(false))
-      }.flatMap { bmId => Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)) }
-      Some(BlockLocationsAndStatus(locations, status.get, localDirs))
-    } else {
-      None
-    }
+    val blockStatusWithBlockManagerId: Option[(BlockStatus, BlockManagerId)] =
+      (if (externalShuffleServiceRddFetchEnabled) {
+         // if fetching RDD is enabled from the external shuffle service then first try to find
+         // the block in the external shuffle service of the same host
+         val location = hostLocalLocations.find(_.port == externalShuffleServicePort)
+         location
+           .flatMap(blockStatusByShuffleService.get(_).flatMap(_.get(blockId)))
+           .zip(location)
+       } else {
+         None
+       })
+        .orElse {
+          // if the block is not found via the external shuffle service trying to find it in the
+          // executors running on the same host and persisted on the disk
+          // using flatMap on iterators makes the transformation lazy
+          hostLocalLocations.iterator
+            .flatMap { bmId =>
+              blockManagerInfo.get(bmId).flatMap { blockInfo =>
+                blockInfo.getStatus(blockId).map((_, bmId))
+              }
+            }
+            .find(_._1.storageLevel.useDisk)
+        }
+        .orElse {
+          // if the block cannot be found in the same host search it in all the executors
+          val location = allLocations.headOption
+          location.flatMap(blockManagerInfo.get(_)).flatMap(_.getStatus(blockId)).zip(location)
+        }
+    logDebug(s"Identified block: $blockStatusWithBlockManagerId")
+    blockStatusWithBlockManagerId
+      .map { case (blockStatus: BlockStatus, bmId: BlockManagerId) =>
+        if (bmId.host == requesterHost && blockStatus.storageLevel.useDisk) {
+          BlockLocationsAndStatus(
+            allLocations,
+            blockStatus,
+            Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)))
+        } else {
+          BlockLocationsAndStatus(allLocations, blockStatus, None)
+        }
+      }
+      .orElse(None)
   }
 
   private def getLocationsMultipleBlockIds(
