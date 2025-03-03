@@ -130,7 +130,7 @@ install_mvn() {
     local MIRROR_URL_QUERY="?action=download"
 
     if [ $(command -v curl) ]; then
-      if ! curl -L --output /dev/null --retry 3 --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}.asc${MIRROR_URL_QUERY}" ; then
+      if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
         # Fall back to archive.apache.org for older Maven
         echo "Falling back to archive.apache.org to download Maven"
         APACHE_MIRROR="https://archive.apache.org/dist"
