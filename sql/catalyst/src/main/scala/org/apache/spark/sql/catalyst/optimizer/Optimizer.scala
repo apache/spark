@@ -855,7 +855,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case l @ Limit(IntegerLiteral(limit), ul: UnionLoop) =>
       l.copy(child = ul.copy(globalLimit = Some(limit)))
 
-    case l @ LocalLimit(IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>c
+    case l @ LocalLimit(IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
       l.copy(child = p.copy(child = ul.copy(localLimit = Some(limit))))
     case l @ LocalLimit(IntegerLiteral(limit), ul: UnionLoop) =>
       l.copy(child = ul.copy(localLimit = Some(limit)))
