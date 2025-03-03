@@ -250,17 +250,17 @@ case class DescribeRelationJsonCommand(
   private def describeClusteringInfoJson(
       table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.clusterBySpec.foreach { clusterBySpec =>
-      val clusteringColumnsJson = jsonType(StructType(clusterBySpec.columnNames.map { fieldNames =>
+      val clusteringColumnsJson = JArray(clusterBySpec.columnNames.map { fieldNames =>
         val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
         assert(nestedFieldOpt.isDefined,
           "The clustering column " +
             s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
             s"was not found in the table schema ${table.schema.catalogString}."
         )
-        val (_, field) = nestedFieldOpt.get
-        field
-      })).asInstanceOf[JObject].find(_.isInstanceOf[JArray]).get
-      addKeyValueToMap("clustering_information", clusteringColumnsJson, jsonMap)
+        JString(fieldNames.fieldNames.map(quoteIfNeeded).mkString("."))
+      }.toList)
+
+      addKeyValueToMap("clustering_columns", clusteringColumnsJson, jsonMap)
     }
   }
 

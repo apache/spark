@@ -248,7 +248,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |) USING parquet
            |OPTIONS ('compression' = 'snappy', 'max_records' = '1000')
            |PARTITIONED BY (department, hire_date)
-           |CLUSTERED BY (employee_id) SORTED BY (employee_name ASC) INTO 4 BUCKETS
+           |CLUSTER BY (employee_id) SORTED BY (employee_name ASC) INTO 4 BUCKETS
            |COMMENT 'Employee data table for testing partitions and buckets'
            |TBLPROPERTIES ('version' = '1.0')
            |""".stripMargin
@@ -289,7 +289,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           "max_records" -> "1000"
         )),
         partition_provider = Some("Catalog"),
-        partition_columns = Some(List("department", "hire_date"))
+        partition_columns = Some(List("department", "hire_date")),
+        clustering_columns = Some(List("employee_id"))
       )
 
       assert(parsedOutput.location.isDefined)
@@ -354,7 +355,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         statistics = Some(Map(
           "size_in_bytes" -> 0,
           "num_rows" -> 0
-        ))
+        )),
+        clustering_columns = None // no cluster spec
       )
 
       assert(parsedOutput.location.isDefined)
@@ -413,10 +415,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         } else {
           None
         },
-        clustering_information = Some(List(
-          TableColumn("id", Type("int"), true),
-          TableColumn("name", Type("string"), true)
-        ))
+        clustering_columns = Some(List("id", "name"))
       )
 
       assert(parsedOutput.location.isDefined)
@@ -818,7 +817,7 @@ case class DescribeTableJson(
     partition_provider: Option[String] = None,
     partition_columns: Option[List[String]] = Some(Nil),
     partition_values: Option[Map[String, String]] = None,
-    clustering_information: Option[List[TableColumn]] = Some(Nil),
+    clustering_columns: Option[List[String]] = None,
     statistics: Option[Map[String, Any]] = None,
     view_text: Option[String] = None,
     view_original_text: Option[String] = None,
