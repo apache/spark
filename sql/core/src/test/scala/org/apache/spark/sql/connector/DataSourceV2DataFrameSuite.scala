@@ -265,7 +265,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("columns with default values") {
+  test("add columns with default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (id INT, dep STRING) USING foo")
@@ -286,6 +286,11 @@ class DataSourceV2DataFrameSuite
       val df4 = Seq((6, "hr", null), (7, "hr", "explicit-text")).toDF("id", "dep", "txt")
       df4.writeTo(tableName).append()
 
+      sql(s"ALTER TABLE $tableName ALTER COLUMN txt DROP DEFAULT")
+
+      val df5 = Seq((8, "hr"), (9, "hr")).toDF("id", "dep")
+      df5.writeTo(tableName).append()
+
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
         Seq(
@@ -295,7 +300,43 @@ class DataSourceV2DataFrameSuite
           Row(4, "hr", "new-text"),
           Row(5, "hr", "new-text"),
           Row(6, "hr", null),
-          Row(7, "hr", "explicit-text")))
+          Row(7, "hr", "explicit-text"),
+          Row(8, "hr", null),
+          Row(9, "hr", null)))
+    }
+  }
+
+  test("create/replace table with default values") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id INT, dep STRING DEFAULT 'hr') USING foo")
+
+      val df1 = Seq(1, 2).toDF("id")
+      df1.writeTo(tableName).append()
+
+      sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT 'it'")
+
+      val df2 = Seq(3, 4).toDF("id")
+      df2.writeTo(tableName).append()
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(
+          Row(1, "hr"),
+          Row(2, "hr"),
+          Row(3, "it"),
+          Row(4, "it")))
+
+      sql(s"REPLACE TABLE $tableName (id INT, dep STRING DEFAULT 'unknown') USING foo")
+
+      val df3 = Seq(1, 2).toDF("id")
+      df3.writeTo(tableName).append()
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(
+          Row(1, "unknown"),
+          Row(2, "unknown")))
     }
   }
 }
