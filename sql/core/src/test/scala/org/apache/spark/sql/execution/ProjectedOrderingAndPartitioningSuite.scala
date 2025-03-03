@@ -216,24 +216,24 @@ class ProjectedOrderingAndPartitioningSuite
 
   test("SPARK-51016: ShuffleRDD using indeterministic join keys should be INDETERMINATE") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val outerDf = spark.createDataset(
+      val leftDfBase = spark.createDataset(
         Seq((1L, "aa"), (null, "aa"), (2L, "bb"), (null, "bb"), (3L, "cc"), (null, "cc")))(
         Encoders.tupleEncoder(Encoders.LONG, Encoders.STRING)).toDF("pkLeftt", "strleft")
 
-      val innerDf = spark.createDataset(
+      val rightDf = spark.createDataset(
         Seq((1L, "11"), (2L, "22"), (3L, "33")))(
         Encoders.tupleEncoder(Encoders.LONG, Encoders.STRING)).toDF("pkRight", "strright")
 
-      val leftOuter = outerDf.select(
+      val leftDf = leftDfBase.select(
         col("strleft"), when(isnull(col("pkLeftt")), floor(rand() * Literal(10000000L)).
           cast(LongType)).
           otherwise(col("pkLeftt")).as("pkLeft"))
 
-      val outerjoin = leftOuter.hint("shuffle_hash").
-        join(innerDf, col("pkLeft") === col("pkRight"), "left_outer")
+      val join = leftDf.hint("shuffle_hash").
+        join(rightDf, col("pkLeft") === col("pkRight"), "inner")
 
-      outerjoin.collect()
-      val finalPlan = outerjoin.queryExecution.executedPlan
+      join.collect()
+      val finalPlan = join.queryExecution.executedPlan
       val shuffleHJExec = finalPlan.children(0).asInstanceOf[ShuffledHashJoinExec]
       assert(shuffleHJExec.left.asInstanceOf[InputAdapter].execute().outputDeterministicLevel ==
         DeterministicLevel.INDETERMINATE)

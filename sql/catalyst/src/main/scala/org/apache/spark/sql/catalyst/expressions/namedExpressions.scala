@@ -112,7 +112,6 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   override lazy val references: AttributeSet = AttributeSet(this)
 
   override def hasIndeterminism: Boolean = false
-
   def withNullability(newNullability: Boolean): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
   def withName(newName: String): Attribute

@@ -28,21 +28,21 @@ class ShuffleMapStageTest extends SharedSparkSession {
 
   test("SPARK-51016: ShuffleMapStage using indeterministic join keys should be INDETERMINATE") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val outerDf = spark.createDataset(
+      val leftDfBase = spark.createDataset(
         Seq((1L, "aa")))(
         Encoders.tuple(Encoders.scalaLong, Encoders.STRING)).toDF("pkLeftt", "strleft")
 
-      val innerDf = spark.createDataset(
+      val rightDf = spark.createDataset(
         Seq((1L, "11"), (2L, "22")))(
         Encoders.tuple(Encoders.scalaLong, Encoders.STRING)).toDF("pkRight", "strright")
 
-      val leftOuter = outerDf.select(
+      val leftDf = leftDfBase.select(
         col("strleft"), when(isnull(col("pkLeftt")), floor(rand() * Literal(10000000L)).
           cast(LongType)).
           otherwise(col("pkLeftt")).as("pkLeft"))
 
-      val outerjoin = leftOuter.hint("shuffle_hash").
-        join(innerDf, col("pkLeft") === col("pkRight"), "left_outer")
+      val join = leftDf.hint("shuffle_hash").
+        join(rightDf, col("pkLeft") === col("pkRight"), "inner")
       val shuffleStages: Array[ShuffleMapStage] = Array.ofDim(2)
       spark.sparkContext.addSparkListener(new SparkListener() {
         var i = 0
@@ -54,7 +54,7 @@ class ShuffleMapStageTest extends SharedSparkSession {
           }
         }
       });
-      outerjoin.collect()
+      join.collect()
       assert(shuffleStages.filter(_.isIndeterminate).size == 1)
     }
   }
