@@ -1846,6 +1846,33 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
+  test("for statement - mixed case variable names") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE sum INT = 0;
+        |  FOR LoopCursor AS (SELECT * FROM VALUES (1), (2), (3) AS tbl(RowValue)) DO
+        |    SET sum = sum + LoopCursor.RowValue;
+        |  END FOR;
+        |  SELECT sum;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare sum
+      Seq.empty[Row], // declare RowValue
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
+      Seq.empty[Row], // declare RowValue
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
+      Seq.empty[Row], // declare RowValue
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
+      Seq(Row(6)) // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   test("for statement - enters body once") {
     withTable("t") {
       val sqlScript =
@@ -2400,8 +2427,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // ignored until loops are fixed to support empty bodies
-  ignore("for statement - nested - empty result set") {
+  test("for statement - nested - empty result set") {
     withTable("t") {
       val sqlScript =
         """
@@ -2417,20 +2443,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin
 
       val expected = Seq(
-        Seq.empty[Row], // declare cnt
-        Seq.empty[Row], // create table
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // set cnt
-        Seq(Row(0)), // select intCol
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row], // set cnt
-        Seq(Row(0)), // select intCol
-        Seq(Row(1)), // select intCol
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row] // drop local var
+        Seq.empty[Row] // create table
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -3007,8 +3020,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // ignored until loops are fixed to support empty bodies
-  ignore("for statement - no variable - nested - empty result set") {
+  test("for statement - no variable - nested - empty result set") {
     withTable("t") {
       val sqlScript =
         """
@@ -3024,18 +3036,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin
 
       val expected = Seq(
-        Seq.empty[Row], // declare cnt
-        Seq.empty[Row], // create table
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // set cnt
-        Seq(Row(0)), // select intCol
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // drop local var
-        Seq.empty[Row], // set cnt
-        Seq(Row(0)), // select intCol
-        Seq(Row(1)), // select intCol
-        Seq.empty[Row], // insert
-        Seq.empty[Row] // drop local var
+        Seq.empty[Row] // create table
       )
       verifySqlScriptResult(sqlScript, expected)
     }

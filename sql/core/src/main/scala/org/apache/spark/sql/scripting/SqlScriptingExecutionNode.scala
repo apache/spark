@@ -208,7 +208,7 @@ class TriggerToExceptionHandlerMap(
 }
 
 object TriggerToExceptionHandlerMap {
-  def createEmptyMap: TriggerToExceptionHandlerMap = new TriggerToExceptionHandlerMap(
+  def createEmptyMap(): TriggerToExceptionHandlerMap = new TriggerToExceptionHandlerMap(
     Map.empty[String, ExceptionHandlerExec],
     Map.empty[String, ExceptionHandlerExec],
     None,
@@ -631,9 +631,9 @@ class SimpleCaseStatementExec(
   }
 
   private var state = CaseState.Condition
-  var bodyExec: Option[CompoundBodyExec] = None
+  private var bodyExec: Option[CompoundBodyExec] = None
 
-  var conditionBodyTupleIterator: Iterator[(SingleStatementExec, CompoundBodyExec)] = _
+  private var conditionBodyTupleIterator: Iterator[(SingleStatementExec, CompoundBodyExec)] = _
   private var caseVariableLiteral: Literal = _
 
   private var isCacheValid = false
@@ -934,11 +934,16 @@ class ForStatementExec(
    */
   private var interrupted: Boolean = false
 
+  /**
+   * Whether this iteration of the FOR loop is the first one.
+   */
+  private var firstIteration: Boolean = true
+
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
 
       override def hasNext: Boolean = !interrupted && (state match {
-          case ForState.VariableAssignment => cachedQueryResult().hasNext
+          case ForState.VariableAssignment => cachedQueryResult().hasNext || firstIteration
           case ForState.Body => bodyWithVariables.getTreeIterator.hasNext
         })
 
@@ -946,6 +951,17 @@ class ForStatementExec(
       override def next(): CompoundStatementExec = state match {
 
         case ForState.VariableAssignment =>
+          // If result set is empty and we are on the first iteration, we return NO-OP statement
+          // to prevent compound statements from not having anything to return. For example,
+          // if a FOR statement is nested in REPEAT, REPEAT will assume that FOR has at least
+          // one statement to return. In the case the result set is empty, FOR doesn't have
+          // anything to return naturally, so we return NO-OP instead.
+          if (!cachedQueryResult().hasNext && firstIteration) {
+            firstIteration = false
+            return new NoOpStatementExec
+          }
+          firstIteration = false
+
           val row = cachedQueryResult().next()
 
           val variableInitStatements = row.schema.names.toSeq
@@ -955,6 +971,14 @@ class ForStatementExec(
               createSetVarExec(colName, expr)
             ) }
 
+          val varScopeLabel = variableName.map(varName =>
+            if (session.sessionState.conf.caseSensitiveAnalysis) {
+              varName
+            } else {
+              varName.toLowerCase(Locale.ROOT)
+            }
+          ).orElse(Some(UUID.randomUUID().toString.toLowerCase(Locale.ROOT)))
+
           bodyWithVariables = new CompoundBodyExec(
             // NoOpStatementExec appended to end of body to prevent
             // dropping variables before last statement is executed.
@@ -963,10 +987,10 @@ class ForStatementExec(
             statements = variableInitStatements ++ statements :+ new NoOpStatementExec,
             // We generate label name if FOR variable is not specified, similar to how
             // compound bodies have generated label names if label is not specified.
-            label = variableName.orElse(Some(UUID.randomUUID().toString.toLowerCase(Locale.ROOT))),
+            label = varScopeLabel,
             isScope = true,
             context = context,
-            triggerToExceptionHandlerMap = TriggerToExceptionHandlerMap.createEmptyMap
+            triggerToExceptionHandlerMap = TriggerToExceptionHandlerMap.createEmptyMap()
           )
 
           state = ForState.Body
@@ -1070,6 +1094,7 @@ class ForStatementExec(
     isResultCacheValid = false
     interrupted = false
     bodyWithVariables = null
+    firstIteration = true
   }
 }
 

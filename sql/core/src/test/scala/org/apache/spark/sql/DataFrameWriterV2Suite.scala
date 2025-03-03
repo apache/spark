@@ -839,4 +839,30 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`writeTo`"))
   }
+
+  test("SPARK-51281: DataFrameWriterV2 should respect the path option") {
+    def checkResults(df: DataFrame): Unit = {
+      checkAnswer(df, spark.range(10).toDF())
+    }
+
+    Seq(true, false).foreach { ignorePath =>
+      withSQLConf(SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION.key -> ignorePath.toString) {
+        withTable("t1", "t2") {
+          spark.range(10).writeTo("t1").using("json").create()
+          checkResults(spark.table("t1"))
+
+          withTempPath { p =>
+            val path = p.getCanonicalPath
+            spark.range(10).writeTo("t2").using("json").option("path", path).create()
+            checkResults(spark.table("t2"))
+            if (ignorePath) {
+              assert(!p.exists())
+            } else {
+              checkResults(spark.read.json(path))
+            }
+          }
+        }
+      }
+    }
+  }
 }

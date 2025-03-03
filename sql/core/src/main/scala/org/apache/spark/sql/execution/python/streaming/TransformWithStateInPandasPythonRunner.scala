@@ -63,7 +63,7 @@ class TransformWithStateInPandasPythonRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
-  override protected def writeNextInputToArrowStream(
+  override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
@@ -122,7 +122,7 @@ class TransformWithStateInPandasPythonInitialStateRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
-  override protected def writeNextInputToArrowStream(
+  override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
