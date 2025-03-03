@@ -673,13 +673,13 @@ class RocksDB(
           changelogReader.foreach { case (recordType, key, value) =>
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(key, value, isExistingChangelogRow = true)
+                put(key, value, includesPrefix = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(key, isExistingChangelogRow = true)
+                remove(key, includesPrefix = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(key, value, isExistingChangelogRow = true)
+                merge(key, value, includesPrefix = true)
             }
           }
         } else {
@@ -801,8 +801,8 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      isExistingChangelogRow: Boolean = false): Unit = {
-    val keyWithPrefix = if (useColumnFamilies && !isExistingChangelogRow) {
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -828,8 +828,8 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      isExistingChangelogRow: Boolean = false): Unit = {
-    val keyWithPrefix = if (useColumnFamilies && !isExistingChangelogRow) {
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -847,8 +847,8 @@ class RocksDB(
   def remove(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      isExistingChangelogRow: Boolean = false): Unit = {
-    val keyWithPrefix = if (useColumnFamilies && !isExistingChangelogRow) {
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
