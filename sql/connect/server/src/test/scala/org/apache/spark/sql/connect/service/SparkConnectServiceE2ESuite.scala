@@ -22,6 +22,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
 
@@ -43,6 +44,21 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
       }
       assert(query.hasNext)
+    }
+  }
+
+  test("AnalyzePlanRequest for spark version returns java and scala versions") {
+    withClient { client =>
+      val request = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setSparkVersion(
+          proto.AnalyzePlanRequest.SparkVersion.newBuilder().build()
+        )
+
+      val response = client.analyze(request)
+      val sparkVersionResponse = response.getSparkVersion
+      assert(sparkVersionResponse.getJavaVersion == System.getProperty("java.version"))
+      assert(sparkVersionResponse.getScalaVersion == scala.util.Properties.versionNumberString)
     }
   }
 
