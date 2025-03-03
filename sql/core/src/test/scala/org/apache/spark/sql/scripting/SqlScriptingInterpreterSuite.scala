@@ -1860,11 +1860,14 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq.empty[Row], // declare sum
       Seq.empty[Row], // declare RowValue
-      Seq.empty[Row], // set
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
       Seq.empty[Row], // declare RowValue
-      Seq.empty[Row], // set
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
       Seq.empty[Row], // declare RowValue
-      Seq.empty[Row], // set
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
       Seq(Row(6)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
