@@ -1393,7 +1393,7 @@ private[hive] object HiveClientImpl extends Logging {
     // Here we use DBCP to replace BoneCP instead of HikariCP as HikariCP was introduced in
     // Hive 2.2.0 (see HIVE-13931) while the minium Hive we support is 2.0.0.
     if ("bonecp".equalsIgnoreCase(cpType)) {
-      logWarning(log"Detected HiveConf datanucleus.connectionPoolingType is 'BoneCP' and " +
+      logInfo(log"Detected HiveConf datanucleus.connectionPoolingType is 'BoneCP' and " +
         log"will be reset to 'DBCP' to avoid memory leak")
       hiveConf.set("datanucleus.connectionPoolingType", "DBCP", SOURCE_SPARK)
     }
