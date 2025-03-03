@@ -848,42 +848,36 @@ class AstBuilder extends DataTypeAstBuilder
       //   2. Write commands do not hold the table logical plan as a child, and we need to add
       //      additional resolution code to resolve identifiers inside the write commands.
       case table: InsertIntoTableContext =>
-        val InsertTableParams(
-          relationCtx,
-          options,
-          userSpecifiedCols,
-          partitionSpec,
-          ifPartitionNotExists,
-          byName) = visitInsertIntoTable(table)
-        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
+        val insertParams = visitInsertIntoTable(table)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
-            table = createUnresolvedRelation(relationCtx, ident, options,
-              Seq(TableWritePrivilege.INSERT)),
-            partitionSpec = partitionSpec,
-            userSpecifiedCols = userSpecifiedCols,
+            table = createUnresolvedRelation(
+              ctx = insertParams.relationCtx,
+              ident = ident,
+              optionsClause = insertParams.options,
+              writePrivileges = Seq(TableWritePrivilege.INSERT)),
+            partitionSpec = insertParams.partitionSpec,
+            userSpecifiedCols = insertParams.userSpecifiedCols,
             query = otherPlans.head,
             overwrite = false,
-            ifPartitionNotExists = ifPartitionNotExists,
-            byName = byName)
+            ifPartitionNotExists = insertParams.ifPartitionNotExists,
+            byName = insertParams.byName)
         })
       case table: InsertOverwriteTableContext =>
-        val InsertTableParams(
-          relationCtx,
-          options,
-          userSpecifiedCols,
-          partitionSpec,
-          ifPartitionNotExists,
-          byName) = visitInsertOverwriteTable(table)
-        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
+        val insertParams = visitInsertOverwriteTable(table)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
-            table = createUnresolvedRelation(relationCtx, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
-            partitionSpec = partitionSpec,
-            userSpecifiedCols = userSpecifiedCols,
+            table = createUnresolvedRelation(
+              ctx = insertParams.relationCtx,
+              ident = ident,
+              optionsClause = insertParams.options,
+              writePrivileges = Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+            partitionSpec = insertParams.partitionSpec,
+            userSpecifiedCols = insertParams.userSpecifiedCols,
             query = otherPlans.head,
             overwrite = true,
-            ifPartitionNotExists = ifPartitionNotExists,
-            byName = byName)
+            ifPartitionNotExists = insertParams.ifPartitionNotExists,
+            byName = insertParams.byName)
         })
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
