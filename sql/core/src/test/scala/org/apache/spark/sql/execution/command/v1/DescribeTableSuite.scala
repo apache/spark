@@ -248,7 +248,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |) USING parquet
            |OPTIONS ('compression' = 'snappy', 'max_records' = '1000')
            |PARTITIONED BY (department, hire_date)
-           |CLUSTER BY (employee_id) SORTED BY (employee_name ASC) INTO 4 BUCKETS
+           |CLUSTERED BY (employee_id) SORTED BY (employee_name ASC) INTO 4 BUCKETS
            |COMMENT 'Employee data table for testing partitions and buckets'
            |TBLPROPERTIES ('version' = '1.0')
            |""".stripMargin
@@ -290,7 +290,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         )),
         partition_provider = Some("Catalog"),
         partition_columns = Some(List("department", "hire_date")),
-        clustering_columns = Some(List("employee_id"))
+        clustering_columns = None // no cluster spec for "CLUSTERED BY"
       )
 
       assert(parsedOutput.location.isDefined)
@@ -355,8 +355,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         statistics = Some(Map(
           "size_in_bytes" -> 0,
           "num_rows" -> 0
-        )),
-        clustering_columns = None // no cluster spec
+        ))
       )
 
       assert(parsedOutput.location.isDefined)
