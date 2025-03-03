@@ -198,7 +198,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.javaImageTag</code></td>
     <td>
-      A specific OpenJDK base image tag to use, when set uses it instead of 8-jre-slim.
+      A specific eclipse-temurin OpenJDK base image tag to use, when set uses it instead of 17-jammy.
     </td>
     <td><code>8-jre-slim</code></td>
   </tr>
