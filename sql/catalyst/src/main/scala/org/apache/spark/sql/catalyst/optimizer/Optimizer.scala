@@ -1043,9 +1043,24 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p
       }
-    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
-    //  `UnionLoopRef` nodes.
-    case p @ Project(_, _: UnionLoop) => p
+
+    case p @ Project(_, ul: UnionLoop) =>
+      val recursionChild = ul.recursion
+      val anchorChild = ul.anchor
+      // There is only a single occurrence of UnionLoopRef in the subtree, so taking the head of the
+      // collection will give us the required attribute set.
+      val recursionRefs = recursionChild.collect {
+        case ulr: UnionLoopRef =>
+          ulr.references
+      }.head
+      val renamedRefs = recursionChild.outputSet -- recursionChild.inputSet
+      val required = anchorChild.references ++ p.references ++ recursionRefs ++ renamedRefs
+      if (!ul.inputSet.subsetOf(required)) {
+        val newChildren = ul.children.map(c => prunedChild(c, required))
+        p.copy(child = ul.withNewChildren(newChildren))
+      } else {
+        p
+      }
 
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
