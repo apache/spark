@@ -329,8 +329,8 @@ object QueryTest extends Assertions {
     // SPARK-51349: "null" and null had the same precedence in sorting
     if (!isSorted) converted.sortBy( r =>
       Row(r.toSeq.map {
-        case null => "000_aaa_null"
-        case v => v
+        case null => (0, null)
+        case v => (1, v)
       }).toString
     ) else converted
   }
