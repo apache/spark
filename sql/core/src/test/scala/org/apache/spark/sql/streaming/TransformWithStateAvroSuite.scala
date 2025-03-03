@@ -274,7 +274,7 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
         val inputData = MemoryStream[String]
         val result1 = inputData.toDS()
           .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
+          .transformWithState(new RunningCountStatefulProcessorOneLong(),
             TimeMode.None(),
             OutputMode.Update())
 

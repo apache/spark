@@ -306,10 +306,43 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   }
 }
 
+case class OneLong(
+  value: Long
+)
+
 case class NestedLongs(
     value: Long,
     value2: TwoLongs
 )
+
+class RunningCountStatefulProcessorOneLong
+  extends StatefulProcessor[String, String, (String, String)] with Logging {
+  @transient protected var _countState: ValueState[OneLong] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[OneLong]("countState",
+      Encoders.product[OneLong], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = Option(_countState.get()).getOrElse(OneLong(0L)).value + 1
+
+    logError(s"### key: $key, count: $count")
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(OneLong(count))
+      Iterator((key, count.toString))
+    }
+  }
+}
+
 
 class RunningCountStatefulProcessorTwoLongs
   extends StatefulProcessor[String, String, (String, String)] with Logging {
@@ -356,6 +389,7 @@ class RunningCountStatefulProcessorNestedLongs
     val count = Option(_countState.get()).getOrElse(
       NestedLongs(0L, TwoLongs(0L, 0L))).value + 1
 
+    logError(s"### key: $key, count: ${_countState.get()}")
     if (count == 3) {
       _countState.clear()
       Iterator.empty
