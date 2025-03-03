@@ -971,6 +971,14 @@ class ForStatementExec(
               createSetVarExec(colName, expr)
             ) }
 
+          val varScopeLabel = variableName.map(varName =>
+            if (session.sessionState.conf.caseSensitiveAnalysis) {
+              varName
+            } else {
+              varName.toLowerCase(Locale.ROOT)
+            }
+          ).orElse(Some(UUID.randomUUID().toString.toLowerCase(Locale.ROOT)))
+
           bodyWithVariables = new CompoundBodyExec(
             // NoOpStatementExec appended to end of body to prevent
             // dropping variables before last statement is executed.
@@ -979,7 +987,7 @@ class ForStatementExec(
             statements = variableInitStatements ++ statements :+ new NoOpStatementExec,
             // We generate label name if FOR variable is not specified, similar to how
             // compound bodies have generated label names if label is not specified.
-            label = variableName.orElse(Some(UUID.randomUUID().toString.toLowerCase(Locale.ROOT))),
+            label = varScopeLabel,
             isScope = true,
             context = context,
             triggerToExceptionHandlerMap = TriggerToExceptionHandlerMap.createEmptyMap()
