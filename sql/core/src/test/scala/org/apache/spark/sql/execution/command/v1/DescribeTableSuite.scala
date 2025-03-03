@@ -405,7 +405,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         sort_columns = Some(Nil),
         comment = Some("test cluster spec"),
         table_properties = Some(Map(
-          "t" -> "test"
+          "t" -> "test",
+          "clusteringColumns" -> "[[\"id\"],[\"name\"]]"
         )),
         serde_library = if (getProvider() == "hive") {
           Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
