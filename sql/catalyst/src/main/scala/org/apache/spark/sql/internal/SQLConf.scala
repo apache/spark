@@ -3421,7 +3421,7 @@ object SQLConf {
         errorMsg = "The value of " +
           "spark.sql.execution.arrow.maxBytesPerBatch should be greater " +
           "than zero and less than INT_MAX.")
-      .createWithDefaultString("256MB")
+      .createWithDefaultString("16MB")
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
