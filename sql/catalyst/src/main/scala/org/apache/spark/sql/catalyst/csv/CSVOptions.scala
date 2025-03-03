@@ -306,6 +306,9 @@ class CSVOptions(
   private val isColumnPruningOptionEnabled: Boolean =
     getBool(COLUMN_PRUNING, !multiLine && columnPruning)
 
+  // This option takes in a column name and specifies that the entire CSV record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("csv").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
   def needHeaderForSingleVariantColumn: Boolean =

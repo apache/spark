@@ -3583,6 +3583,25 @@ abstract class CSVSuite
       )
     }
   }
+
+  test("write variant with csv is disallowed") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("create table test_table(v variant) using csv")
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        withTempPath { path =>
+          spark.sql("select cast(1 as variant) v").write.csv(path.getCanonicalPath)
+        }
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
