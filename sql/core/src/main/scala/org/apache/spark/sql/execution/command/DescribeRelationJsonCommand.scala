@@ -250,22 +250,16 @@ case class DescribeRelationJsonCommand(
   private def describeClusteringInfoJson(
       table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.clusterBySpec.foreach { clusterBySpec =>
-      val clusteringColumnsJson: JValue = JArray(
-        clusterBySpec.columnNames.map { fieldNames =>
-          val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
-          assert(nestedFieldOpt.isDefined,
-            "The clustering column " +
-              s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-              s"was not found in the table schema ${table.schema.catalogString}."
-          )
-          val (path, field) = nestedFieldOpt.get
-          JObject(
-            "name" -> JString((path :+ field.name).map(quoteIfNeeded).mkString(".")),
-            "type" -> jsonType(field.dataType),
-            "comment" -> field.getComment().map(JString).getOrElse(JNull)
-          )
-        }.toList
-      )
+      val clusteringColumnsJson = jsonType(StructType(clusterBySpec.columnNames.map { fieldNames =>
+        val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+        assert(nestedFieldOpt.isDefined,
+          "The clustering column " +
+            s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
+            s"was not found in the table schema ${table.schema.catalogString}."
+        )
+        val (_, field) = nestedFieldOpt.get
+        field
+      })).asInstanceOf[JObject].find(_.isInstanceOf[JArray]).get
       addKeyValueToMap("clustering_information", clusteringColumnsJson, jsonMap)
     }
   }
