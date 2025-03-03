@@ -1387,12 +1387,14 @@ private[hive] object HiveClientImpl extends Logging {
       hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
     }
     val cpType = hiveConf.get("datanucleus.connectionPoolingType")
-    // Bonecp might cause memory leak, it could affect some hive client versions we support
+    // BoneCP might cause memory leak, it could affect some hive client versions we support
     // See more details in HIVE-15551
-    // Also, Bonecp is removed in Hive 4.0.0, see HIVE-23258
-    // Here we use DBCP to replace bonecp instead of HikariCP as HikariCP was introduced in
+    // Also, BoneCP is removed in Hive 4.0.0, see HIVE-23258
+    // Here we use DBCP to replace BoneCP instead of HikariCP as HikariCP was introduced in
     // Hive 2.2.0 (see HIVE-13931) while the minium Hive we support is 2.0.0.
     if ("bonecp".equalsIgnoreCase(cpType)) {
+      logWarning(log"Detected HiveConf datanucleus.connectionPoolingType is 'BoneCP' and " +
+        log"will be reset to 'DBCP' to avoid memory leak")
       hiveConf.set("datanucleus.connectionPoolingType", "DBCP", SOURCE_SPARK)
     }
     hiveConf
