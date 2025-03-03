@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.CountStar;
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc;
 import org.apache.spark.sql.connector.expressions.aggregate.Sum;
 import org.apache.spark.sql.connector.expressions.aggregate.UserDefinedAggregateFunc;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -120,7 +121,7 @@ public class V2ExpressionSQLBuilder {
           "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
           "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD" ->
           visitSQLFunction(name, expressionsToStringArray(e.children()));
-        case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
+        case "CASE_WHEN" -> visitCaseWhen(e);
         case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
@@ -253,6 +254,18 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitUnaryArithmetic(String name, String v) { return name + v; }
 
+  protected String visitCaseWhen(GeneralScalarExpression e) {
+    if (e instanceof Predicate) {
+      return visitCaseWhen(e.children());
+    } else {
+      return visitCaseWhen(expressionsToStringArray(e.children()));
+    }
+  }
+
+  protected String visitCaseWhen(Expression[] children) {
+    return visitCaseWhen(expressionsToStringArray(children));
+  }
+
   protected String visitCaseWhen(String[] children) {
     StringBuilder sb = new StringBuilder("CASE");
     for (int i = 0; i < children.length; i += 2) {
@@ -360,7 +373,7 @@ public class V2ExpressionSQLBuilder {
     return joiner.toString();
   }
 
-  protected String[] expressionsToStringArray(Expression[] expressions) {
+  private String[] expressionsToStringArray(Expression[] expressions) {
     String[] result = new String[expressions.length];
     for (int i = 0; i < expressions.length; i++) {
       result[i] = build(expressions[i]);
