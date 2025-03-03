@@ -1003,7 +1003,7 @@ object KubernetesIntegrationTests {
           rDockerFile = ""
         }
         val extraOptions = if (javaImageTag.isDefined) {
-          Seq("-b", s"java_image_tag=$javaImageTag")
+          Seq("-b", s"java_image_tag=${javaImageTag.get}")
         } else {
           Seq("-f", s"$dockerFile")
         }
