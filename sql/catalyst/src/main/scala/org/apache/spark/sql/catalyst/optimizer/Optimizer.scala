@@ -1049,7 +1049,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         val newAnchorChildProj = prunedChild(ul.anchor, p.references)
         val neededIndicesListRef = {
           ul.recursion.collect {
-            case pref@Project(_, ulr: UnionLoopRef) if ulr.loopId == ul.id =>
+            case pref @ Project(_, ulr: UnionLoopRef) if ulr.loopId == ul.id =>
               collection.mutable.Set.from {
                 ulr.output.zipWithIndex.filter { case (_, i) =>
                   pref.references.contains(ulr.output(i))
