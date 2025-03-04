@@ -401,10 +401,6 @@ private[sql] class RocksDBStateStoreProvider
 
     rocksDB // lazy initialization
 
-    // Give the RocksDB instance a reference to this provider so it can call back to report
-    // specific events like snapshot uploads
-    rocksDB.setListener(this)
-
     val dataEncoderCacheKey = StateRowEncoderCacheKey(
       queryRunId = getRunId(hadoopConf),
       operatorId = stateStoreId.operatorId,
