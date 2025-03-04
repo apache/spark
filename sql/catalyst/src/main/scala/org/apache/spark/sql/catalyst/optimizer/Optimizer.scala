@@ -1058,7 +1058,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
           }
         }
         if (neededIndicesListRef.nonEmpty) {
-          Console.println("Bagasana")
           val indicesForRef = neededIndicesListRef.head
           val newOutputProj = newAnchorChildProj.outputSet
           val indicesForProj = collection.mutable.Set.from {
