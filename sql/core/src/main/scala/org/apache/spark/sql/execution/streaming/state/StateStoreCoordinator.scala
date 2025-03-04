@@ -144,7 +144,6 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
       storeProviderId: StateStoreProviderId,
       version: Long,
       timestamp: Long): Unit = {
-    logWarning(s"ZEYU: snapshotUploaded rpc endoint ref")
     rpcEndpointRef.askSync[Boolean](SnapshotUploaded(storeProviderId, version, timestamp))
   }
 
