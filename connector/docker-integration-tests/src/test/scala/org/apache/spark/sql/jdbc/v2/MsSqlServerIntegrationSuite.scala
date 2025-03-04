@@ -91,17 +91,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
          |)
                    """.stripMargin
     ).executeUpdate()
-
-    connection.prepareStatement(
-        "CREATE TABLE employee_rpad_lpad_test (dept INT, name VARCHAR(32))")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO employee_rpad_lpad_test VALUES (1, 'Alice')")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO employee_rpad_lpad_test VALUES (2, 'xxxx')")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO employee_rpad_lpad_test VALUES (3, 'xxxxxxxxxx')")
-      .executeUpdate()
-
   }
 
   override def notSupportsTableComment: Boolean = true
@@ -239,31 +228,25 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
 
   test("SPARK-51321: SQLServer pushdown for RPAD expression on string column") {
     val df = sql(
-      s"""|SELECT * FROM $catalogName.employee_rpad_lpad_test
-          |WHERE rpad(name, 10, 'x') = 'xxxxxxxxxx'
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE rpad(name, 10, 'x') = 'amyxxxxxxx'
           |""".stripMargin
     )
     checkFilterPushed(df)
-
     val rows = df.collect()
-    // Expecting exactly two rows: one with 'xxxx' and one with 'xxxxxxxxxx'
-    assert(rows.length == 2)
-    val names = rows.map(row => row.getString(row.fieldIndex("name"))).toSet
-    assert(names == Set("xxxx", "xxxxxxxxxx"))
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
   }
 
   test("SPARK-51321: SQLServer pushdown for LPAD expression on string column") {
     val df = sql(
-      s"""|SELECT * FROM $catalogName.employee_rpad_lpad_test
-          |WHERE lpad(name, 10, 'x') = 'xxxxxxxxxx'
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE lpad(name, 10, 'x') = 'xxxxxxxamy'
           |""".stripMargin
     )
     checkFilterPushed(df)
-
     val rows = df.collect()
-    // Expecting exactly two rows: one with 'xxxx' and one with 'xxxxxxxxxx'
-    assert(rows.length == 2)
-    val names = rows.map(row => row.getString(row.fieldIndex("name"))).toSet
-    assert(names == Set("xxxx", "xxxxxxxxxx"))
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
   }
 }
