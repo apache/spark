@@ -51,7 +51,9 @@ import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockMan
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
-class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
+class DAGSchedulerEventProcessLoopTester(
+    dagScheduler: DAGScheduler,
+    dagSchedulerInterceptorOpt: Option[DagSchedulerInterceptor] = None)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
 
   dagScheduler.setEventProcessLoop(this)
@@ -64,12 +66,14 @@ class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
     if (isProcessing) {
       // `DAGSchedulerEventProcessLoop` is guaranteed to process events sequentially. So we should
       // buffer events for sequent processing later instead of processing them recursively.
+      dagSchedulerInterceptorOpt.foreach(_.beforeAddingDagEventToQueue(event))
       eventQueue += event
     } else {
       try {
         isProcessing = true
         // Forward event to `onReceive` directly to avoid processing event asynchronously.
         onReceive(event)
+        dagSchedulerInterceptorOpt.foreach(_.afterDirectProcessingOfDagEvent(event))
       } catch {
         case NonFatal(e) => onError(e)
       } finally {
@@ -78,15 +82,6 @@ class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
       if (eventQueue.nonEmpty) {
         post(eventQueue.remove(0))
       }
-    }
-  }
-
-  def postInCurrentThread(event: DAGSchedulerEvent): Unit = {
-    try {
-      // Forward event to `onReceive` directly to avoid processing event asynchronously.
-      onReceive(event)
-    } catch {
-      case NonFatal(e) => onError(e)
     }
   }
 
@@ -185,8 +180,8 @@ class DummyScheduledFuture(
 class DAGSchedulerSuiteDummyException extends Exception
 
 trait DagSchedulerInterceptor {
-  def interceptHandleTaskCompletion(event: CompletionEvent): Unit = {}
-  def interceptResubmitFailedStages(): Unit = {}
+  def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {}
+  def afterDirectProcessingOfDagEvent(event: DAGSchedulerEvent): Unit = {}
 }
 
 class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with TimeLimits {
@@ -382,8 +377,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       env: SparkEnv,
       clock: Clock = new SystemClock(),
       shuffleMergeFinalize: Boolean = true,
-      shuffleMergeRegister: Boolean = true,
-      dagSchedulerInterceptorOpt: Option[DagSchedulerInterceptor] = None
+      shuffleMergeRegister: Boolean = true
   ) extends DAGScheduler(
       sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock) {
     /**
@@ -415,17 +409,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
 
     override private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
-      dagSchedulerInterceptorOpt.foreach(_.interceptHandleTaskCompletion(event))
       super.handleTaskCompletion(event)
       runningTaskInfos.get(event.task.stageId).foreach{ partitions =>
         partitions -= event.task.partitionId
         if (partitions.isEmpty) runningTaskInfos.remove(event.task.stageId)
       }
-    }
-
-    override private[scheduler] def resubmitFailedStages(): Unit = {
-      dagSchedulerInterceptorOpt.foreach(_.interceptResubmitFailedStages())
-      super.resubmitFailedStages()
     }
   }
 
@@ -464,11 +452,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env,
-      dagSchedulerInterceptorOpt = Option(dagSchedulerInterceptor)
+      sc.env
     ))
 
-    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler,
+      Option(dagSchedulerInterceptor))
   }
 
   override def afterEach(): Unit = {
@@ -504,13 +492,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Ensure the initialization of various components
     sc
     dagEventProcessLoopTester.post(event)
-  }
-
-  private def runEventInCurrentThread(event: DAGSchedulerEvent): Unit = {
-    // Ensure the initialization of various components
-    sc
-    dagEventProcessLoopTester.asInstanceOf[DAGSchedulerEventProcessLoopTester].
-      postInCurrentThread(event)
   }
 
   /**
@@ -3222,15 +3203,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     if (scheduler != null) {
       this.afterEach()
     }
-
+    val resubmitFailedStageTriggered = Array.fill[Boolean](1)(false)
     val monitor = new Object()
-    val resubmitFailedStageReached = Array.fill[Boolean](1)(false)
     this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
-      override def interceptHandleTaskCompletion(event: CompletionEvent): Unit = {
-        event.reason match {
-          case Success if event.task.isInstanceOf[ResultTask[_, _]] =>
-            assert(resubmitFailedStageReached(0))
+      override def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
+        event match {
+          case ResubmitFailedStages =>
+              runEvent(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
             monitor.synchronized {
+              resubmitFailedStageTriggered(0) = true
               monitor.notify()
             }
 
@@ -3238,11 +3219,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         }
       }
 
-      override def interceptResubmitFailedStages(): Unit = {
-        monitor.synchronized {
-          resubmitFailedStageReached(0) = true
-          monitor.notify()
-          monitor.wait()
+      override def afterDirectProcessingOfDagEvent(event: DAGSchedulerEvent): Unit = {
+        event match {
+          case CompletionEvent(_, reason, _, _, _, _) =>
+            reason match {
+              case FetchFailed(_, _, _, _, _, _) =>
+                monitor.synchronized {
+                  if (!resubmitFailedStageTriggered(0)) {
+                    monitor.wait()
+                  }
+                }
+
+              case _ =>
+            }
+
+          case _ =>
         }
       }
     }
@@ -3257,23 +3248,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(activeJob.isDefined)
     // The result stage is still waiting for its 2 tasks to complete
     assert(resultStage.findMissingPartitions() == Seq.tabulate(numPartitions)(i => i))
-    new Thread(() => {
-      runEventInCurrentThread(
-        makeCompletionEvent(
-          taskSets(2).tasks(0),
-          FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
-          null))
-    }).start()
 
-    monitor.synchronized {
-      if (!resubmitFailedStageReached(0)) {
-        monitor.wait()
-      }
-    }
-    assert(resubmitFailedStageReached(0))
-    new Thread(() => {
-      runEventInCurrentThread(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
-    }).start()
+    runEvent(
+      makeCompletionEvent(
+        taskSets(2).tasks(0),
+        FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+        null))
 
     val shuffleStage1 = this.scheduler.shuffleIdToMapStage(shuffleId1)
     val shuffleStage2 = this.scheduler.shuffleIdToMapStage(shuffleId2)
@@ -3295,7 +3275,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       Thread.sleep(500)
       keepGoing = resultStage.latestInfo.attemptNumber() != 1
     }
-
     assert(resultStage.latestInfo.numTasks == 2)
   }
 
