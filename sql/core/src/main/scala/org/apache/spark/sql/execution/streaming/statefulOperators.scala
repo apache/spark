@@ -216,7 +216,9 @@ trait StateStoreWriter
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
-  ) ++ stateStoreCustomMetrics ++ pythonMetrics ++ stateStoreInstanceMetrics
+  ) ++ stateStoreCustomMetrics ++ pythonMetrics
+
+  override lazy val instanceMetrics = stateStoreInstanceMetrics
 
   val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
 
@@ -332,7 +334,7 @@ trait StateStoreWriter
         case (name, metricConfig) =>
           // Keep instance metrics that are updated or aren't marked to be ignored,
           // as their initial value could still be important.
-          !metricConfig.ignoreIfUnchanged || !longMetric(name).isZero
+          !metricConfig.ignoreIfUnchanged || !longInstanceMetric(name).isZero
       }
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
@@ -347,8 +349,8 @@ trait StateStoreWriter
           metrics
             .map {
               case (_, metric) =>
-                metric.name -> (if (longMetric(metric.name).isZero) metricConf.initValue
-                                else longMetric(metric.name).value)
+                metric.name -> (if (longInstanceMetric(metric.name).isZero) metricConf.initValue
+                                else longInstanceMetric(metric.name).value)
             }
             .toSeq
             .sortBy(_._2)(metricConf.ordering)
@@ -439,7 +441,8 @@ trait StateStoreWriter
       case (metric, value) =>
         val metricConfig = instanceMetricConfiguration(metric.name)
         // Update the metric's value based on the defined combine method
-        longMetric(metric.name).set(metricConfig.combine(longMetric(metric.name), value))
+        longInstanceMetric(metric.name)
+          .set(metricConfig.combine(longInstanceMetric(metric.name), value))
     }
   }
 
