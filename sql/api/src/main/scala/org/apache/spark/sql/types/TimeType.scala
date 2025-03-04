@@ -33,7 +33,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
 @Unstable
 case class TimeType(precision: Int) extends DatetimeType {
 
-  if (precision < TimeType.MIN_PRECISION || precision > TimeType.MICROS_PRECISION) {
+  if (precision < TimeType.MIN_PRECISION || precision > TimeType.MAX_PRECISION) {
     throw DataTypeErrors.unsupportedTimePrecisionError(precision)
   }
 
