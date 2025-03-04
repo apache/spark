@@ -225,6 +225,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
+        // Add and commit data multiple times to force new snapshot versions
         inputData.addData(1, 2, 3)
         query.processAllAvailable()
         inputData.addData(1, 2, 3)
@@ -272,6 +273,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
+        // Add and commit data multiple times to force new snapshot versions
         inputData.addData(1, 2, 3)
         query.processAllAvailable()
         inputData.addData(1, 2, 3)
@@ -282,7 +284,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
           val providerId =
             StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
-          if(partitionId <= 1) {
+          if (partitionId <= 1) {
             // Verify state stores in partition 0 and 1 are lagging and did not upload anything
             assert(coordRef.getLatestSnapshotVersion(providerId).isEmpty)
           } else {
@@ -330,6 +332,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
+        // Add and commit data multiple times to force new snapshot versions
         (0 until 5).foreach { _ =>
           input1.addData(1, 5)
           query.processAllAvailable()
@@ -386,6 +389,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
+        // Add and commit data multiple times to force new snapshot versions
         (0 until 5).foreach { _ =>
           input1.addData(1, 5)
           query.processAllAvailable()

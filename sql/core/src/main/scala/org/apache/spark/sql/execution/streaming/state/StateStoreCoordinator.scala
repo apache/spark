@@ -59,9 +59,19 @@ private case class DeactivateInstances(runId: UUID)
 private case class SnapshotUploaded(storeId: StateStoreProviderId, version: Long, timestamp: Long)
   extends StateStoreCoordinatorMessage
 
+/**
+ * Message used for testing.
+ * This message is used to retrieve the latest snapshot version reported for upload from a
+ * specific state store instance.
+ */
 private case class GetLatestSnapshotVersion(storeId: StateStoreProviderId)
   extends StateStoreCoordinatorMessage
 
+/**
+ * Message used for testing.
+ * This message is used to retrieve the all active state store instance falling behind in
+ * snapshot uploads, whether it is through version or time criteria.
+ */
 private case class GetLaggingStores()
   extends StateStoreCoordinatorMessage
 
@@ -134,16 +144,23 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
       storeProviderId: StateStoreProviderId,
       version: Long,
       timestamp: Long): Unit = {
+    logWarning(s"ZEYU: snapshotUploaded rpc endoint ref")
     rpcEndpointRef.askSync[Boolean](SnapshotUploaded(storeProviderId, version, timestamp))
   }
 
-  /** Get the latest snapshot version uploaded for a state store */
+  /**
+   * Endpoint used for testing.
+   * Get the latest snapshot version uploaded for a state store.
+   */
   private[sql] def getLatestSnapshotVersion(
       stateStoreProviderId: StateStoreProviderId): Option[Long] = {
     rpcEndpointRef.askSync[Option[Long]](GetLatestSnapshotVersion(stateStoreProviderId))
   }
 
-  /** Get the state store instances that are falling behind in snapshot uploads */
+  /**
+   * Endpoint used for testing.
+   * Get the state store instances that are falling behind in snapshot uploads.
+   */
   private[sql] def getLaggingStores(): Seq[StateStoreProviderId] = {
     rpcEndpointRef.askSync[Seq[StateStoreProviderId]](GetLaggingStores)
   }
@@ -161,13 +178,14 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
 private class StateStoreCoordinator(
     override val rpcEnv: RpcEnv,
     val sqlConf: SQLConf)
-    extends ThreadSafeRpcEndpoint
+  extends ThreadSafeRpcEndpoint
   with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
 
   // Stores the latest snapshot version of a specific state store provider instance
   private val stateStoreSnapshotVersions =
     new mutable.HashMap[StateStoreProviderId, SnapshotUploadEvent]
+  private var lastSnapshotUploadEvent: Option[SnapshotUploadEvent] = None
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId, providerIdsToCheck) =>
@@ -210,16 +228,19 @@ private class StateStoreCoordinator(
       // Report all stores that are behind in snapshot uploads
       val (laggingStores, latestSnapshot) = findLaggingStores()
       if (laggingStores.nonEmpty) {
-        logWarning(s"Number of state stores falling behind: ${laggingStores.size}")
+        logWarning(s"StateStoreCoordinator Snapshot Lag - " +
+          s"Number of state stores falling behind: ${laggingStores.size}" +
+          s"(Last upload: ${lastSnapshotUploadEvent.getOrElse(SnapshotUploadEvent(-1, 0))})")
         laggingStores.foreach { storeProviderId =>
           val snapshotEvent =
             stateStoreSnapshotVersions.getOrElse(storeProviderId, SnapshotUploadEvent(-1, 0))
           logWarning(
-            s"State store falling behind $storeProviderId " +
+            s"StateStoreCoordinator Snapshot Lag - State store falling behind $storeProviderId " +
             s"(current: $snapshotEvent, latest: $latestSnapshot)"
           )
         }
       }
+      lastSnapshotUploadEvent = Some(latestSnapshot)
       context.reply(true)
 
     case GetLatestSnapshotVersion(providerId) =>
@@ -258,7 +279,7 @@ private class StateStoreCoordinator(
       val minTimeDeltaForLogging = 10 * sqlConf.getConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL)
 
       versionDelta >= minVersionDeltaForLogging ||
-      (version >= 0 && timeDelta > minTimeDeltaForLogging)
+        (version >= 0 && timeDelta > minTimeDeltaForLogging)
     }
 
     override def compare(that: SnapshotUploadEvent): Int = {
@@ -271,12 +292,14 @@ private class StateStoreCoordinator(
   }
 
   private def findLaggingStores(): (Seq[StateStoreProviderId], SnapshotUploadEvent) = {
+    if (instances.isEmpty) {
+      return (Seq.empty, SnapshotUploadEvent(-1, 0))
+    }
     // Find the most updated instance to use as reference point
     val latestSnapshot = instances
       .map(
         instance => stateStoreSnapshotVersions.getOrElse(instance._1, SnapshotUploadEvent(-1, 0))
-      )
-      .max
+      ).max
     // Look for instances that are lagging behind in snapshot uploads
     val laggingStores = instances.keys.filter { storeProviderId =>
       stateStoreSnapshotVersions

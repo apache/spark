@@ -38,7 +38,11 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
-/** Trait representing the different events reported from RocksDB instance */
+/**
+ * Trait representing the different events reported from RocksDB instance.
+ * Gives the RocksDB instance a reference to this provider so it can call back to report
+ * specific events like snapshot uploads.
+ */
 trait RocksDBEventListener {
   def reportSnapshotUploaded(version: Long): Unit
 }
@@ -534,7 +538,7 @@ private[sql] class RocksDBStateStoreProvider
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, Some(this))
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
