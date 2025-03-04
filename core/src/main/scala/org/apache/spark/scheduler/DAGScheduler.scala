@@ -2149,15 +2149,15 @@ private[spark] class DAGScheduler(
                 // rollback, all its succeeding stages need to rollback to.
                 val stagesToRollback = HashSet[Stage](mapStage)
 
-                  def collectStagesToRollback(stageChain: List[Stage]): Unit = {
-                    if (stagesToRollback.contains(stageChain.head)) {
-                      stageChain.drop(1).foreach(s => stagesToRollback += s)
-                    } else {
-                      stageChain.head.parents.foreach { s =>
-                        collectStagesToRollback(s :: stageChain)
-                      }
+                def collectStagesToRollback(stageChain: List[Stage]): Unit = {
+                  if (stagesToRollback.contains(stageChain.head)) {
+                    stageChain.drop(1).foreach(s => stagesToRollback += s)
+                  } else {
+                    stageChain.head.parents.foreach { s =>
+                      collectStagesToRollback(s :: stageChain)
                     }
                   }
+                }
 
                 def generateErrorMessage(stage: Stage): String = {
                   "A shuffle map stage with indeterminate output was failed and retried. " +
