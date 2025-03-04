@@ -168,6 +168,7 @@ You can access them by doing
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|TimestampType|
 |**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
 |**DateType**|java.time.LocalDate or java.sql.Date|DateType|
+|**TimeType**|java.time.LocalTime|TimeType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
@@ -201,6 +202,7 @@ please use factory methods provided in
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|DataTypes.TimestampType|
 |**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
 |**DateType**|java.time.LocalDate or java.sql.Date|DataTypes.DateType|
+|**TimeType**|java.time.LocalTime|DataTypes.TimeType|
 |**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
