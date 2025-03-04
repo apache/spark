@@ -6195,6 +6195,12 @@
     ],
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_TIME_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
+    ],
+    "sqlState" : "0A001"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
