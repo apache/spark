@@ -249,7 +249,7 @@ object AgnosticEncoders {
   case class InstantEncoder(override val lenientSerialization: Boolean)
       extends LeafEncoder[Instant](TimestampType)
   case object LocalDateTimeEncoder extends LeafEncoder[LocalDateTime](TimestampNTZType)
-  case object LocalTimeEncoder extends LeafEncoder[LocalTime](TimeType(6))
+  case object LocalTimeEncoder extends LeafEncoder[LocalTime](TimeType())
 
   case class SparkDecimalEncoder(dt: DecimalType) extends LeafEncoder[Decimal](dt)
   case class ScalaDecimalEncoder(dt: DecimalType) extends LeafEncoder[BigDecimal](dt)

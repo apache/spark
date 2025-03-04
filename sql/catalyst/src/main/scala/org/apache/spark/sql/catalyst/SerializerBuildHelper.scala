@@ -102,7 +102,7 @@ object SerializerBuildHelper {
   def createSerializerForLocalTime(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
-      TimeType(6),
+      TimeType(),
       "localTimeToMicros",
       inputObject :: Nil,
       returnNullable = false)

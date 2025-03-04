@@ -441,7 +441,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       86399000000L,
       86399999999L).foreach { us =>
       val localTime = DateTimeUtils.microsToLocalTime(us)
-      assert(CatalystTypeConverters.createToScalaConverter(TimeType(6))(us) === localTime)
+      assert(CatalystTypeConverters.createToScalaConverter(TimeType())(us) === localTime)
     }
   }
 }
