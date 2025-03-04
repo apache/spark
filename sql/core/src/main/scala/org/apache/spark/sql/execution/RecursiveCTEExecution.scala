@@ -18,13 +18,12 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable
-
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LogicalPlan, Project, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalLimit, LogicalPlan, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -94,6 +93,20 @@ case class UnionLoopExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numRecursiveLoops" -> SQLMetrics.createMetric(sparkContext, "number of recursive loops"))
 
+  private val simpleRecursion = {
+    recursion match {
+      case Project(_, Filter(_, Project(_, UnionLoopRef(_, _, _)))) =>
+        true
+      case Filter(_, Project(_, UnionLoopRef(_, _, _))) =>
+        true
+      case Project(_, Filter(_, UnionLoopRef(_, _, _))) =>
+        true
+      case Project(_, UnionLoopRef(_, _, _)) =>
+        true
+      case _ =>
+        false
+  }
+  }
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
@@ -108,9 +121,15 @@ case class UnionLoopExec(
       plan
     }
     val df = Dataset.ofRows(session, planOrLimitedPlan)
-    val cachedDF = df.repartition(numPartitions)
-    val count = cachedDF.count()
-    (cachedDF, count)
+    val newDF = {
+      if (!simpleRecursion) {
+        df.repartition(numPartitions)
+      } else {
+        df
+      }
+    }
+    val count = newDF.count()
+    (newDF, count)
   }
 
   /**
