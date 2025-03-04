@@ -261,9 +261,9 @@ message AnalyzePlanResponse {
 
   message SparkVersion {
     string version = 1;
-    // The java version the Spark Connect Service is built with.
+    // Java runtime version of the Spark Connect Service
     string java_version = 2;
-    // The scala version the Spark Connect Service is built with.
+    // Scala runtime version of the Spark Connect Service
     string scala_version = 3;
   }
 

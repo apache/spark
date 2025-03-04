@@ -817,7 +817,9 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         SCALA_VERSION_FIELD_NUMBER: builtins.int
         version: builtins.str
         java_version: builtins.str
+        """Java runtime version of the Spark Connect Service"""
         scala_version: builtins.str
+        """Scala runtime version of the Spark Connect Service"""
         def __init__(
             self,
             *,
