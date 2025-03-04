@@ -1196,6 +1196,95 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithColumnFamilies(
+    "RocksDB: test includesPrefix parameter during changelog replay",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+
+    // Only test when column families are enabled, as the includesPrefix parameter
+    // is only relevant in that case
+    if (colFamiliesEnabled) {
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+
+      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+        // Create a test column family
+        val testCfName = "test_cf"
+        db.createColFamilyIfAbsent(testCfName, isInternal = false)
+
+        // Write initial data
+        db.load(0)
+        db.put("key1", "value1", StateStore.DEFAULT_COL_FAMILY_NAME)
+        db.put("key2", "value2", testCfName)
+        db.commit()
+
+        // Get the encoded keys with column family prefixes
+        val keyWithPrefix1 = getKeyWithPrefix(db, "key1", StateStore.DEFAULT_COL_FAMILY_NAME)
+        val keyWithPrefix2 = getKeyWithPrefix(db, "key2", testCfName)
+
+        // Pretend we're replaying changelog with already-prefixed keys
+        // Throughout this test, we will load version 0 and the latest version
+        // in order to ensure that the changelog files are read from and
+        // replayed
+        db.load(0)
+        db.load(1)
+
+        // Use the includesPrefix=true parameter with keys that already have prefixes
+        db.put(keyWithPrefix1, "updated1", includesPrefix = true)
+        db.put(keyWithPrefix2, "updated2", includesPrefix = true)
+        db.commit()
+
+        // Verify the updates were applied correctly
+        db.load(0)
+        db.load(2)
+        assert(toStr(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME)) === "updated1")
+        assert(toStr(db.get("key2", testCfName)) === "updated2")
+
+        // Test remove with includesPrefix
+        db.remove(keyWithPrefix1, includesPrefix = true)
+        db.remove(keyWithPrefix2, includesPrefix = true)
+        db.commit()
+
+        // Verify removals worked
+        db.load(0)
+        db.load(3)
+        assert(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME) === null)
+        assert(db.get("key2", testCfName) === null)
+
+        // Add back some data for testing merge operation
+        db.put("merge_key", "base", StateStore.DEFAULT_COL_FAMILY_NAME)
+        db.commit()
+
+        // Get encoded key for merge test
+        val mergeKeyWithPrefix = getKeyWithPrefix(
+          db, "merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)
+
+        // Test merge with includesPrefix
+        db.load(0)
+        db.load(4)
+        db.merge(mergeKeyWithPrefix, "appended", includesPrefix = true)
+        db.commit()
+
+        // Verify merge operation worked
+        db.load(0)
+        db.load(5)
+        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "base,appended")
+      }
+    }
+  }
+
+  // Helper method to get a key with column family prefix
+  private def getKeyWithPrefix(db: RocksDB, key: String, cfName: String): Array[Byte] = {
+    // This uses reflection to call the private encodeStateRowWithPrefix method
+    val encodeMethod = classOf[RocksDB].getDeclaredMethod(
+      "encodeStateRowWithPrefix",
+      classOf[Array[Byte]],
+      classOf[String]
+    )
+    encodeMethod.setAccessible(true)
+    encodeMethod.invoke(db, key.getBytes, cfName).asInstanceOf[Array[Byte]]
+  }
+
   testWithStateStoreCheckpointIdsAndColumnFamilies(s"RocksDB: get, put, iterator, commit, load",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) {
     case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
