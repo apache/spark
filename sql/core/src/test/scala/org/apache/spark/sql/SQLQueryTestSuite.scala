@@ -599,6 +599,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     session.sql("DROP TABLE IF EXISTS tenk1")
   }
 
+  protected override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     createTestTables(spark)
