@@ -1223,6 +1223,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         val keyWithPrefix2 = getKeyWithPrefix(db, "key2", testCfName)
 
         // Pretend we're replaying changelog with already-prefixed keys
+        // Throughout this test, we will load version 0 and the latest version
+        // in order to ensure that the changelog files are read from and
+        // replayed
+        db.load(0)
         db.load(1)
 
         // Use the includesPrefix=true parameter with keys that already have prefixes
@@ -1231,6 +1235,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         // Verify the updates were applied correctly
+        db.load(0)
         db.load(2)
         assert(toStr(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME)) === "updated1")
         assert(toStr(db.get("key2", testCfName)) === "updated2")
@@ -1241,6 +1246,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         // Verify removals worked
+        db.load(0)
         db.load(3)
         assert(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME) === null)
         assert(db.get("key2", testCfName) === null)
@@ -1254,11 +1260,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db, "merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)
 
         // Test merge with includesPrefix
+        db.load(0)
         db.load(4)
         db.merge(mergeKeyWithPrefix, "appended", includesPrefix = true)
         db.commit()
 
         // Verify merge operation worked
+        db.load(0)
         db.load(5)
         assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "base,appended")
       }
