@@ -452,8 +452,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env
-    ))
+      sc.env))
 
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler,
       Option(dagSchedulerInterceptor))
