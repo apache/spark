@@ -21,6 +21,7 @@ import java.io.{BufferedWriter, File, FileWriter}
 import java.nio.file.Paths
 import java.sql.Timestamp
 
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -188,7 +189,11 @@ class TTLTestStatefulProcessor
   }
 }
 
-class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession with Logging {
+class TransformWithStateConnectSuite
+    extends QueryTest
+    with RemoteSparkSession
+    with Logging
+    with BeforeAndAfterEach {
   val testData: Seq[(String, String)] = Seq(("a", "1"), ("b", "1"), ("a", "2"))
   val twsAdditionalSQLConf = Seq(
     "spark.sql.streaming.stateStore.providerClass" ->
@@ -197,12 +202,23 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
     "spark.sql.session.timeZone" -> "UTC",
     "spark.sql.streaming.noDataMicroBatches.enabled" -> "false")
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sql("DROP TABLE IF EXISTS my_sink")
+  }
+
+  override protected def afterEach(): Unit = {
+    try {
+      spark.sql("DROP TABLE IF EXISTS my_sink")
+    } finally {
+      super.afterEach()
+    }
+  }
+
   test("transformWithState - streaming with state variable, case class type") {
     withSQLConf(twsAdditionalSQLConf: _*) {
       val session: SparkSession = spark
       import session.implicits._
-
-      spark.sql("DROP TABLE IF EXISTS my_sink")
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
@@ -242,7 +258,6 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
           }
         } finally {
           q.stop()
-          spark.sql("DROP TABLE IF EXISTS my_sink")
         }
       }
     }
@@ -252,8 +267,6 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
     withSQLConf(twsAdditionalSQLConf: _*) {
       val session: SparkSession = spark
       import session.implicits._
-
-      spark.sql("DROP TABLE IF EXISTS my_sink")
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
@@ -299,7 +312,6 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
           }
         } finally {
           q.stop()
-          spark.sql("DROP TABLE IF EXISTS my_sink")
         }
       }
     }
@@ -444,8 +456,6 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
       val session: SparkSession = spark
       import session.implicits._
 
-      spark.sql("DROP TABLE IF EXISTS my_sink")
-
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         testData
@@ -458,26 +468,22 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
         val testSchema =
           StructType(Array(StructField("key", StringType), StructField("value", StringType)))
 
-        try {
-          spark.read
-            .schema(testSchema)
-            .parquet(path)
-            .as[InputRowForConnectTest]
-            .groupByKey(x => x.key)
-            .transformWithState[OutputRowForConnectTest](
-              new BasicCountStatefulProcessor(),
-              TimeMode.None(),
-              OutputMode.Update())
-            .write
-            .saveAsTable("my_sink")
+        spark.read
+          .schema(testSchema)
+          .parquet(path)
+          .as[InputRowForConnectTest]
+          .groupByKey(x => x.key)
+          .transformWithState[OutputRowForConnectTest](
+            new BasicCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+          .write
+          .saveAsTable("my_sink")
 
-          checkDatasetUnorderly(
-            spark.table("my_sink").toDF().as[(String, String)],
-            ("a", "2"),
-            ("b", "1"))
-        } finally {
-          spark.sql("DROP TABLE IF EXISTS my_sink")
-        }
+        checkDatasetUnorderly(
+          spark.table("my_sink").toDF().as[(String, String)],
+          ("a", "2"),
+          ("b", "1"))
       }
     }
   }
