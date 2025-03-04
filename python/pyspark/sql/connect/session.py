@@ -458,7 +458,9 @@ class SparkSession:
         _num_cols: Optional[int] = None
 
         if isinstance(schema, str):
-            schema = self.client._analyze(method="ddl_parse", ddl_string=schema).parsed
+            schema = self.client._analyze(  # type: ignore[assignment]
+                method="ddl_parse", ddl_string=schema
+            ).parsed
 
         if isinstance(schema, (AtomicType, StructType)):
             _schema = schema
