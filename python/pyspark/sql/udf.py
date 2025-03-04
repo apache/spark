@@ -17,8 +17,6 @@
 """
 User-defined function related classes and functions
 """
-from inspect import getfullargspec
-
 import functools
 import inspect
 import sys
@@ -34,7 +32,7 @@ from pyspark.sql.types import (
     StructType,
     _parse_datatype_string,
 )
-from pyspark.sql.utils import get_active_spark_context, has_arrow
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
@@ -131,31 +129,22 @@ def _create_py_udf(
     else:
         is_arrow_enabled = useArrow
 
-    if is_arrow_enabled and not has_arrow:
-        is_arrow_enabled = False
-        warnings.warn(
-            "Arrow optimization failed to enable because PyArrow is not installed. "
-            "Falling back to a non-Arrow-optimized UDF.",
-            RuntimeWarning,
-        )
+    if is_arrow_enabled:
+        try:
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+        except ImportError:
+            is_arrow_enabled = False
+            warnings.warn(
+                "Arrow optimization failed to enable because PyArrow/pandas is not installed. "
+                "Falling back to a non-Arrow-optimized UDF.",
+                RuntimeWarning,
+            )
 
     eval_type: int = PythonEvalType.SQL_BATCHED_UDF
 
     if is_arrow_enabled:
-        try:
-            is_func_with_args = len(getfullargspec(f).args) > 0
-        except TypeError:
-            is_func_with_args = False
-        if is_func_with_args:
-            require_minimum_pandas_version()
-            require_minimum_pyarrow_version()
-            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
-        else:
-            warnings.warn(
-                "Arrow optimization for Python UDFs cannot be enabled for functions"
-                " without arguments.",
-                UserWarning,
-            )
+        eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
 
     return _create_udf(f, returnType, eval_type)
 

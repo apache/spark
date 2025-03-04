@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, I
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -865,11 +865,4 @@ object PushableColumnAndNestedColumn extends PushableColumnBase {
 
 object PushableColumnWithoutNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = false
-}
-
-/**
- * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
- */
-object PushableExpression {
-  def unapply(e: Expression): Option[V2Expression] = new V2ExpressionBuilder(e).build()
 }

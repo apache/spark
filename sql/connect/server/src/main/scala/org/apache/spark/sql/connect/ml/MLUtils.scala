@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.lang.reflect.InvocationTargetException
 import java.util.{Optional, ServiceLoader}
 import java.util.stream.Collectors
 
@@ -450,7 +451,16 @@ private[ml] object MLUtils {
 
   // Since we're using reflection way to get the attribute, in order not to
   // leave a security hole, we define an allowed attribute list that can be accessed.
-  // The attributes could be retrieved from the corresponding python class
+  // The attributes could be retrieved from the Connect clients.
+  // Before each invocation, both the object type and method name need to be checked here.
+  // Class inheritance is also considered.
+  // For example, if the object is a subclass of 'ProbabilisticClassificationModel',
+  // methods defined in the superclass ('ClassificationModel', 'PredictionModel' and
+  // 'Identifiable') are also allowed.
+  // So if a 3-rd party model extends 'ProbabilisticClassificationModel', then
+  // 'model.predictRaw' defined in 'ClassificationModel' is allowed to invoke.
+  // If the object is not the expected type or the method is not allowed,
+  // we throw an exception 'MLAttributeNotAllowedException'.
   private lazy val ALLOWED_ATTRIBUTES = Seq(
     (classOf[Identifiable], Set("toString")),
 
@@ -512,7 +522,6 @@ private[ml] object MLUtils {
         "predictLeaf",
         "trees",
         "treeWeights",
-        "javaTreeWeights",
         "getNumTrees",
         "totalNumNodes",
         "toDebugString")),
@@ -680,7 +689,12 @@ private[ml] object MLUtils {
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName)
+    try {
+      invokeMethod(obj, methodName)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def invokeMethodAllowed(
@@ -689,7 +703,12 @@ private[ml] object MLUtils {
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName, args, parameterTypes)
+    try {
+      invokeMethod(obj, methodName, args, parameterTypes)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {

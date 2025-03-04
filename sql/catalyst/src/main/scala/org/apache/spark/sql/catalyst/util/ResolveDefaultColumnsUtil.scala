@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -340,12 +341,39 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         "", field.name, defaultSQL)
     }
-    if (!expr.resolved) {
-      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
-        "", field.name, defaultSQL, null)
+
+    val resolvedExpr = expr match {
+      case _: ExprLiteral => expr
+      case c: Cast if c.resolved => expr
+      case _ =>
+        fallbackResolveExistenceDefaultValue(field)
     }
 
-    coerceDefaultValue(expr, field.dataType, "", field.name, defaultSQL)
+    coerceDefaultValue(resolvedExpr, field.dataType, "", field.name, defaultSQL)
+  }
+
+  // In most cases, column existsDefault should already be persisted as resolved
+  // and constant-folded literal sql, but because they are fetched from external catalog,
+  // it is possible that this assumption does not hold, so we fallback to full analysis
+  // if we encounter an unresolved existsDefault
+  private def fallbackResolveExistenceDefaultValue(
+      field: StructField): Expression = {
+    field.getExistenceDefaultValue().map { defaultSQL: String =>
+
+      logWarning(log"Encountered unresolved exists default value: " +
+        log"'${MDC(COLUMN_DEFAULT_VALUE, defaultSQL)}' " +
+        log"for column ${MDC(COLUMN_NAME, field.name)} " +
+        log"with ${MDC(COLUMN_DATA_TYPE_SOURCE, field.dataType)}, " +
+        log"falling back to full analysis.")
+
+      val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val literal = expr match {
+        case _: ExprLiteral | _: Cast => expr
+        case _ => throw SparkException.internalError(s"parse existence default as literal err," +
+          s" field name: ${field.name}, value: $defaultSQL")
+      }
+      literal
+    }.orNull
   }
 
   /**

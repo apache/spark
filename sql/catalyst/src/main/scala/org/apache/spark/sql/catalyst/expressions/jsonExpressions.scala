@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils, JsonToStructsEvaluator, JsonTupleEvaluator, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
@@ -42,6 +42,10 @@ import org.apache.spark.unsafe.types.UTF8String
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
+      > SELECT _FUNC_('[{"a":"b"},{"a":"c"}]', '$[0].a');
+       b
+      > SELECT _FUNC_('[{"a":"b"},{"a":"c"}]', '$[*].a');
+       ["b","c"]
   """,
   group = "json_funcs",
   since = "1.5.0")
@@ -257,6 +261,7 @@ case class JsonToStructs(
     variantAllowDuplicateKeys: Boolean = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS))
   extends UnaryExpression
   with TimeZoneAwareExpression
+  with CodegenFallback
   with ExpectsInputTypes
   with QueryErrorsBase {
 
@@ -304,30 +309,13 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   @transient
-  private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+  private lazy val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
 
   override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val eval = child.genCode(ctx)
-    val resultType = CodeGenerator.boxedType(dataType)
-    val resultTerm = ctx.freshName("result")
-    ev.copy(code =
-      code"""
-         |${eval.code}
-         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate(${eval.value});
-         |boolean ${ev.isNull} = $resultTerm == null;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $resultTerm;
-         |}
-         |""".stripMargin)
-  }
 
   override def inputTypes: Seq[AbstractDataType] =
     StringTypeWithCollation(supportsTrimCollation = true) :: Nil

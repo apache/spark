@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
 
@@ -99,15 +98,13 @@ class CollationSQLRegexpSuite
   test("Like simplification should work with collated strings (for default collation)") {
     val tableNameBinary = "T_BINARY"
     withTable(tableNameBinary) {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
-        sql(s"CREATE TABLE IF NOT EXISTS $tableNameBinary(c STRING) using PARQUET")
-        sql(s"INSERT INTO $tableNameBinary(c) VALUES('ABC')")
-        checkAnswer(sql(s"select c like 'ab%' FROM $tableNameBinary"), Row(false))
-        checkAnswer(sql(s"select c like '%bc' FROM $tableNameBinary"), Row(false))
-        checkAnswer(sql(s"select c like 'a%c' FROM $tableNameBinary"), Row(false))
-        checkAnswer(sql(s"select c like '%b%' FROM $tableNameBinary"), Row(false))
-        checkAnswer(sql(s"select c like 'abc' FROM $tableNameBinary"), Row(false))
-      }
+      sql(s"CREATE TABLE IF NOT EXISTS $tableNameBinary(c STRING) using PARQUET")
+      sql(s"INSERT INTO $tableNameBinary(c) VALUES('ABC')")
+      checkAnswer(sql(s"select c like 'ab%' FROM $tableNameBinary"), Row(false))
+      checkAnswer(sql(s"select c like '%bc' FROM $tableNameBinary"), Row(false))
+      checkAnswer(sql(s"select c like 'a%c' FROM $tableNameBinary"), Row(false))
+      checkAnswer(sql(s"select c like '%b%' FROM $tableNameBinary"), Row(false))
+      checkAnswer(sql(s"select c like 'abc' FROM $tableNameBinary"), Row(false))
     }
     val tableNameLcase = "T_LCASE"
     withTable(tableNameLcase) {

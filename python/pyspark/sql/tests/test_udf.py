@@ -1166,6 +1166,26 @@ class BaseUDFTestsMixin(object):
             with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
 
+    def test_num_arguments(self):
+        @udf("long")
+        def f():
+            return 10
+
+        @udf("long")
+        def f2(arg):
+            return arg
+
+        [v1, v2] = self.spark.range(1).select(f(), f2(col("id"))).first()
+        self.assertEqual(v1, 10)
+        self.assertEqual(v2, 0)
+
+        [v1, v2] = self.spark.range(1).select(f2(col("id")), f()).first()
+        self.assertEqual(v1, 0)
+        self.assertEqual(v2, 10)
+
+        [v] = self.spark.range(1).select(f()).first()
+        self.assertEqual(v, 10)
+
     def test_raise_stop_iteration(self):
         @udf("int")
         def test_udf(a):

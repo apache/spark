@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.Properties
 import java.util.UUID
 
 import scala.collection.mutable
@@ -31,7 +32,7 @@ import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
@@ -45,7 +46,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -53,7 +54,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -72,8 +73,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
@@ -81,7 +81,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.storage.CacheId
@@ -659,6 +659,10 @@ class SparkConnectPlanner(
           case PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF =>
             group.flatMapGroupsInArrow(Column(pythonUdf)).logicalPlan
 
+          case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF |
+              PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
+            transformTransformWithStateInPandas(pythonUdf, group, rel)
+
           case _ =>
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
@@ -680,7 +684,71 @@ class SparkConnectPlanner(
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
 
-    if (rel.hasIsMapGroupsWithState) {
+    if (rel.hasTransformWithStateInfo) {
+      val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
+
+      val twsInfo = rel.getTransformWithStateInfo
+      val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
+      val outputAttr = udf.outputObjAttr
+
+      val timeMode = TimeModes(twsInfo.getTimeMode)
+      val outputMode = InternalOutputModes(rel.getOutputMode)
+
+      val twsNode = if (hasInitialState) {
+        val statefulProcessor = unpackedUdf.function
+          .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
+        val initDs = UntypedKeyValueGroupedDataset(
+          rel.getInitialInput,
+          rel.getInitialGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+        new TransformWithState(
+          keyDeserializer,
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          statefulProcessor,
+          timeMode,
+          outputMode,
+          udf.inEnc.asInstanceOf[ExpressionEncoder[Any]],
+          outputAttr,
+          ds.analyzed,
+          hasInitialState,
+          initDs.groupingAttributes,
+          initDs.dataAttributes,
+          initDs.valueDeserializer,
+          initDs.analyzed)
+      } else {
+        val statefulProcessor =
+          unpackedUdf.function.asInstanceOf[StatefulProcessor[Any, Any, Any]]
+        new TransformWithState(
+          keyDeserializer,
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          statefulProcessor,
+          timeMode,
+          outputMode,
+          udf.inEnc.asInstanceOf[ExpressionEncoder[Any]],
+          outputAttr,
+          ds.analyzed,
+          hasInitialState,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          keyDeserializer,
+          LocalRelation(ds.vEncoder.schema))
+      }
+      val serializedPlan = SerializeFromObject(udf.outputNamedExpression, twsNode)
+
+      if (twsInfo.hasEventTimeColumnName) {
+        val eventTimeWrappedPlan = UpdateEventTimeWatermarkColumn(
+          UnresolvedAttribute(twsInfo.getEventTimeColumnName),
+          None,
+          serializedPlan)
+        eventTimeWrappedPlan
+      } else {
+        serializedPlan
+      }
+    } else if (rel.hasIsMapGroupsWithState) {
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
       val initialDs = if (hasInitialState) {
         UntypedKeyValueGroupedDataset(
@@ -1034,6 +1102,57 @@ class SparkConnectPlanner(
       .logicalPlan
   }
 
+  private def transformTransformWithStateInPandas(
+      pythonUdf: PythonUDF,
+      groupedDs: RelationalGroupedDataset,
+      rel: proto.GroupMap): LogicalPlan = {
+    val twsInfo = rel.getTransformWithStateInfo
+    val outputSchema: StructType = {
+      transformDataType(twsInfo.getOutputSchema) match {
+        case s: StructType => s
+        case dt =>
+          throw InvalidPlanInput(
+            "Invalid user-defined output schema type for TransformWithStateInPandas. " +
+              s"Expect a struct type, but got ${dt.typeName}.")
+      }
+    }
+
+    if (rel.hasInitialInput) {
+      val initialGroupingCols = rel.getInitialGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
+
+      val initialStateDs = Dataset
+        .ofRows(session, transformRelation(rel.getInitialInput))
+        .groupBy(initialGroupingCols: _*)
+
+      // Explicitly creating UDF on resolved column to avoid ambiguity of analysis on initial state
+      // columns and the input columns
+      val resolvedPythonUDF = createUserDefinedPythonFunction(rel.getFunc)
+        .builder(groupedDs.df.logicalPlan.output)
+        .asInstanceOf[PythonUDF]
+
+      groupedDs
+        .transformWithStateInPandas(
+          Column(resolvedPythonUDF),
+          outputSchema,
+          rel.getOutputMode,
+          twsInfo.getTimeMode,
+          initialStateDs,
+          twsInfo.getEventTimeColumnName)
+        .logicalPlan
+    } else {
+      groupedDs
+        .transformWithStateInPandas(
+          Column(pythonUdf),
+          outputSchema,
+          rel.getOutputMode,
+          twsInfo.getTimeMode,
+          null,
+          twsInfo.getEventTimeColumnName)
+        .logicalPlan
+    }
+  }
+
   private def transformCommonInlineUserDefinedTableFunction(
       fun: proto.CommonInlineUserDefinedTableFunction): LogicalPlan = {
     fun.getFunctionCase match {
@@ -1383,28 +1502,25 @@ class SparkConnectPlanner(
           isStreaming = rel.getIsStreaming)
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
-        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         val reader = session.read
-        if (rel.getDataSource.hasFormat) {
-          reader.format(rel.getDataSource.getFormat)
-        }
-        localMap.foreach { case (key, value) => reader.option(key, value) }
         if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
-          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
-            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
+          if (!rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_URL) ||
+            !rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_TABLE_NAME)) {
             throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
           }
 
           val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
           val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
-          val options = new JDBCOptions(url, table, localMap)
           val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
-          val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-            JDBCPartition(part, i): Partition
-          }
-          val relation = JDBCRelation(parts, options)(session)
-          LogicalRelation(relation)
+          val properties = new Properties()
+          properties.putAll(rel.getDataSource.getOptionsMap)
+          reader.jdbc(url, table, predicates, properties).queryExecution.analyzed
         } else if (rel.getDataSource.getPredicatesCount == 0) {
+          val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
+          if (rel.getDataSource.hasFormat) {
+            reader.format(rel.getDataSource.getFormat)
+          }
+          localMap.foreach { case (key, value) => reader.option(key, value) }
           if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
             reader.schema(parseSchema(rel.getDataSource.getSchema))
           }
@@ -1642,8 +1758,6 @@ class SparkConnectPlanner(
         transformMergeAction(exp.getMergeAction)
       case proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION =>
         transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
-      case proto.Expression.ExprTypeCase.LAZY_EXPRESSION =>
-        transformLazyExpression(exp.getLazyExpression)
       case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
         transformSubqueryExpression(exp.getSubqueryExpression)
       case _ =>
@@ -2472,6 +2586,15 @@ class SparkConnectPlanner(
       case _ =>
         throw InvalidPlanInput(s"Unsupported merge action type ${action.getActionType}.")
     }
+  }
+
+  /**
+   * Exposed for testing. Processes a command without a response observer.
+   *
+   * Called only from SparkConnectPlannerTestUtils.
+   */
+  private[planner] def processWithoutResponseObserverForTesting(command: proto.Command): Unit = {
+    process(command, new MockObserver())
   }
 
   def process(
@@ -3876,10 +3999,6 @@ class SparkConnectPlanner(
     } else {
       session.catalog.listCatalogs().logicalPlan
     }
-  }
-
-  private def transformLazyExpression(getLazyExpression: proto.LazyExpression): Expression = {
-    LazyExpression(transformExpression(getLazyExpression.getChild))
   }
 
   private def transformSubqueryExpression(

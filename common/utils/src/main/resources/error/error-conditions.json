@@ -775,6 +775,11 @@
           "<attribute> in <className> is not allowed to be accessed."
         ]
       },
+      "CACHE_INVALID" : {
+        "message" : [
+          "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
+        ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"
@@ -2315,16 +2320,6 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
-      "DEFAULT_COLLATION" : {
-        "message" : [
-          "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
-        ]
-      },
-      "DEFAULT_COLLATION_NOT_SUPPORTED" : {
-        "message" : [
-          "Setting default session collation other than UTF8_BINARY is currently not supported."
-        ]
-      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -3498,6 +3493,11 @@
         "message" : [
           "Scalar subquery must return only one column, but got <number>."
         ]
+      },
+      "STREAMING_QUERY" : {
+        "message" : [
+          "Streaming query is not allowed in subquery expressions."
+        ]
       }
     },
     "sqlState" : "42823"
@@ -3591,6 +3591,16 @@
       "ONLY_AT_BEGINNING" : {
         "message" : [
           "Variable <varName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_LOCAL_VARIABLE" : {
+        "message" : [
+          "The variable <varName> must be declared without a qualifier, as qualifiers are not allowed for local variable declarations."
+        ]
+      },
+      "REPLACE_LOCAL_VARIABLE" : {
+        "message" : [
+          "The variable <varName> does not support DECLARE OR REPLACE, as local variables cannot be replaced."
         ]
       }
     },
@@ -3735,6 +3745,12 @@
   "LABEL_ALREADY_EXISTS" : {
     "message" : [
       "The label <label> already exists. Choose another name or rename the existing label."
+    ],
+    "sqlState" : "42K0L"
+  },
+  "LABEL_NAME_FORBIDDEN" : {
+    "message" : [
+      "The label name <label> is forbidden."
     ],
     "sqlState" : "42K0L"
   },
@@ -5812,6 +5828,11 @@
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
         ]
       },
+      "SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE" : {
+        "message" : [
+          "DROP TEMPORARY VARIABLE is not supported within SQL scripts. To bypass this, use `EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE ...'` ."
+        ]
+      },
       "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
         "message" : [
           "Positional parameters are not supported with SQL Scripting."
@@ -6640,7 +6661,7 @@
   },
   "_LEGACY_ERROR_TEMP_1047" : {
     "message" : [
-      "<hintName> Hint parameter should include columns, but <invalidParams> found."
+      "<hintName> Hint parameters should include an optional integral partitionNum and/or columns, but <invalidParams> can not be recognized as either partitionNum or columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1048" : {

@@ -418,7 +418,7 @@ CreateViewCommand `myview`, [(c1,None)], WITH "v"("a") AS (SELECT 1) SELECT "a" 
       :           +- OneRowRelation
       +- Project [a#x]
          +- SubqueryAlias v
-            +- CTERelationRef xxxx, true, [a#x], false, false
+            +- CTERelationRef xxxx, true, [a#x], false, false, 1
 
 
 -- !query
@@ -438,7 +438,7 @@ Project [a1#x AS a2#x]
                   :           +- OneRowRelation
                   +- Project [a#x]
                      +- SubqueryAlias v
-                        +- CTERelationRef xxxx, true, [a#x], false, false
+                        +- CTERelationRef xxxx, true, [a#x], false, false, 1
 
 
 -- !query

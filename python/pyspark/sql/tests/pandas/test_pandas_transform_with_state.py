@@ -67,6 +67,8 @@ class TransformWithStateInPandasTestsMixin:
         )
         cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
         cfg.set("spark.sql.session.timeZone", "UTC")
+        # TODO SPARK-49046 this config is to stop query from FEB sink gracefully
+        cfg.set("spark.sql.streaming.noDataMicroBatches.enabled", "false")
         return cfg
 
     def _prepare_input_data(self, input_path, col1, col2):
@@ -270,14 +272,10 @@ class TransformWithStateInPandasTestsMixin:
     # test list state with ttl has the same behavior as list state when state doesn't expire.
     def test_transform_with_state_in_pandas_list_state_large_ttl(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.sort("id").collect()) == {
-                    Row(id="0", countAsString="2"),
-                    Row(id="1", countAsString="2"),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
 
         self._test_transform_with_state_in_pandas_basic(
             ListStateLargeTTLProcessor(), check_results, True, "processingTime"
@@ -295,14 +293,10 @@ class TransformWithStateInPandasTestsMixin:
     # test map state with ttl has the same behavior as map state when state doesn't expire.
     def test_transform_with_state_in_pandas_map_state_large_ttl(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.sort("id").collect()) == {
-                    Row(id="0", countAsString="2"),
-                    Row(id="1", countAsString="2"),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
 
         self._test_transform_with_state_in_pandas_basic(
             MapStateLargeTTLProcessor(), check_results, True, "processingTime"
@@ -317,14 +311,11 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", countAsString="2"),
                     Row(id="1", countAsString="2"),
                 }
-            elif batch_id == 1:
+            else:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="3"),
                     Row(id="1", countAsString="2"),
                 }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
 
         self._test_transform_with_state_in_pandas_basic(
             SimpleTTLStatefulProcessor(), check_results, False, "processingTime"
@@ -362,7 +353,7 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-map-state-count-1", count=2),
                     ],
                 )
-            elif batch_id == 2:
+            else:
                 # ttl-count-0 expire and restart from count 0.
                 # The TTL for value state ttl_count_state gets reset in batch 1 because of the
                 # update operation and ttl-count-1 keeps the state.
@@ -383,9 +374,7 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-map-state-count-1", count=3),
                     ],
                 )
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+
             if batch_id == 0 or batch_id == 1:
                 time.sleep(4)
 
@@ -469,23 +458,23 @@ class TransformWithStateInPandasTestsMixin:
         self.assertTrue(q.exception() is None)
 
     def test_transform_with_state_in_pandas_proc_timer(self):
-        # helper function to check expired timestamp is smaller than current processing time
-        def check_timestamp(batch_df):
-            expired_df = (
-                batch_df.filter(batch_df["countAsString"] == "-1")
-                .select("id", "timeValues")
-                .withColumnRenamed("timeValues", "expiredTimestamp")
-            )
-            count_df = (
-                batch_df.filter(batch_df["countAsString"] != "-1")
-                .select("id", "timeValues")
-                .withColumnRenamed("timeValues", "countStateTimestamp")
-            )
-            joined_df = expired_df.join(count_df, on="id")
-            for row in joined_df.collect():
-                assert row["expiredTimestamp"] < row["countStateTimestamp"]
-
         def check_results(batch_df, batch_id):
+            # helper function to check expired timestamp is smaller than current processing time
+            def check_timestamp(batch_df):
+                expired_df = (
+                    batch_df.filter(batch_df["countAsString"] == "-1")
+                    .select("id", "timeValues")
+                    .withColumnRenamed("timeValues", "expiredTimestamp")
+                )
+                count_df = (
+                    batch_df.filter(batch_df["countAsString"] != "-1")
+                    .select("id", "timeValues")
+                    .withColumnRenamed("timeValues", "countStateTimestamp")
+                )
+                joined_df = expired_df.join(count_df, on="id")
+                for row in joined_df.collect():
+                    assert row["expiredTimestamp"] < row["countStateTimestamp"]
+
             if batch_id == 0:
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
                     Row(id="0", countAsString="1"),
@@ -499,28 +488,14 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", countAsString="-1"),
                     Row(id="1", countAsString="3"),
                 }
-                self.first_expired_timestamp = batch_df.filter(
-                    batch_df["countAsString"] == -1
-                ).first()["timeValues"]
                 check_timestamp(batch_df)
 
-            elif batch_id == 2:
+            else:
                 assert set(batch_df.sort("id").select("id", "countAsString").collect()) == {
                     Row(id="0", countAsString="3"),
                     Row(id="0", countAsString="-1"),
                     Row(id="1", countAsString="5"),
                 }
-                # The expired timestamp in current batch is larger than expiry timestamp in batch 1
-                # because this is a new timer registered in batch1 and
-                # different from the one registered in batch 0
-                current_batch_expired_timestamp = batch_df.filter(
-                    batch_df["countAsString"] == -1
-                ).first()["timeValues"]
-                assert current_batch_expired_timestamp > self.first_expired_timestamp
-
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
 
         self._test_transform_with_state_in_pandas_proc_timer(
             ProcTimeStatefulProcessor(), check_results
@@ -603,7 +578,7 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="4"),
                     Row(id="a-expired", timestamp="10000"),
                 }
-            elif batch_id == 2:
+            else:
                 # watermark for late event = 10
                 # watermark for eviction = 10 (unchanged as 4 < 10)
                 # timer is registered with expiration time = 10, hence expired at the same batch
@@ -611,9 +586,6 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="15"),
                     Row(id="a-expired", timestamp="10000"),
                 }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
 
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
@@ -640,12 +612,7 @@ class TransformWithStateInPandasTestsMixin:
         df = self._build_test_df(input_path)
         self.assertTrue(df.isStreaming)
 
-        output_schema = StructType(
-            [
-                StructField("id", StringType(), True),
-                StructField("value", StringType(), True),
-            ]
-        )
+        output_schema = "id string, value string"
 
         if initial_state is None:
             data = [("0", 789), ("3", 987)]
@@ -741,14 +708,10 @@ class TransformWithStateInPandasTestsMixin:
 
     def test_transform_with_state_non_contiguous_grouping_cols(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                assert set(batch_df.collect()) == {
-                    Row(id1="0", id2="1", value=str(123 + 46)),
-                    Row(id1="1", id2="2", value=str(146 + 346)),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+            assert set(batch_df.collect()) == {
+                Row(id1="0", id2="1", value=str(123 + 46)),
+                Row(id1="1", id2="2", value=str(146 + 346)),
+            }
 
         self._test_transform_with_state_non_contiguous_grouping_cols(
             SimpleStatefulProcessorWithInitialState(), check_results
@@ -756,15 +719,11 @@ class TransformWithStateInPandasTestsMixin:
 
     def test_transform_with_state_non_contiguous_grouping_cols_with_init_state(self):
         def check_results(batch_df, batch_id):
-            if batch_id == 0:
-                # initial state for key (0, 1) is processed
-                assert set(batch_df.collect()) == {
-                    Row(id1="0", id2="1", value=str(789 + 123 + 46)),
-                    Row(id1="1", id2="2", value=str(146 + 346)),
-                }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
+            # initial state for key (0, 1) is processed
+            assert set(batch_df.collect()) == {
+                Row(id1="0", id2="1", value=str(789 + 123 + 46)),
+                Row(id1="1", id2="2", value=str(146 + 346)),
+            }
 
         # grouping key of initial state is also not starting from the beginning of attributes
         data = [(789, "0", "1"), (987, "3", "2")]
@@ -875,16 +834,13 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),
                 }
-            elif batch_id == 1:
+            else:
                 # handleInitialState is only processed in the first batch,
                 # no more timer is registered so no more expired timers
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46 + 67)),
                     Row(id="3", value=str(987 + 12)),
                 }
-            else:
-                for q in self.spark.streams.active:
-                    q.stop()
 
         self._test_transform_with_state_init_state_in_pandas(
             StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
@@ -944,6 +900,18 @@ class TransformWithStateInPandasTestsMixin:
         "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
     )
     def test_transform_with_map_state_metadata(self):
+        self._test_transform_with_map_state_metadata(None)
+
+    def test_transform_with_map_state_metadata_with_init_state(self):
+        # run the same test suite again but with no-op initial state
+        # TWS with initial state is using a different python runner
+        init_data = [("0", 789), ("3", 987)]
+        initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
+            "id"
+        )
+        self._test_transform_with_map_state_metadata(initial_state)
+
+    def _test_transform_with_map_state_metadata(self, initial_state):
         checkpoint_path = tempfile.mktemp()
 
         def check_results(batch_df, batch_id):
@@ -954,7 +922,9 @@ class TransformWithStateInPandasTestsMixin:
                 }
             else:
                 # check for state metadata source
-                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 assert set(
                     metadata_df.select(
                         "operatorId",
@@ -995,7 +965,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 # check for state data source
                 map_state_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "mapState")
                     .load()
@@ -1011,7 +981,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 # check for map state with flatten option
                 map_state_df_non_flatten = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "mapState")
                     .option("flattenCollectionTypes", False)
@@ -1039,31 +1009,13 @@ class TransformWithStateInPandasTestsMixin:
                 assert len(set(ttl_df)) == 1
 
                 list_state_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "listState")
                     .load()
                 )
                 assert list_state_df.isEmpty()
 
-                for q in self.spark.streams.active:
-                    q.stop()
-
-        self._test_transform_with_state_in_pandas_basic(
-            MapStateLargeTTLProcessor(),
-            check_results,
-            True,
-            "processingTime",
-            checkpoint_path=checkpoint_path,
-            initial_state=None,
-        )
-
-        # run the same test suite again but with no-op initial state
-        # TWS with initial state is using a different python runner
-        init_data = [("0", 789), ("3", 987)]
-        initial_state = self.spark.createDataFrame(init_data, "id string, temperature int").groupBy(
-            "id"
-        )
         self._test_transform_with_state_in_pandas_basic(
             MapStateLargeTTLProcessor(),
             check_results,
@@ -1085,7 +1037,9 @@ class TransformWithStateInPandasTestsMixin:
                 }
             else:
                 # check for state metadata source
-                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 operator_properties_json_obj = json.loads(
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
@@ -1100,7 +1054,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 # check for state data source and flatten option
                 list_state_1_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "listState1")
                     .option("flattenCollectionTypes", True)
@@ -1123,7 +1077,7 @@ class TransformWithStateInPandasTestsMixin:
                 ]
 
                 list_state_2_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "listState2")
                     .option("flattenCollectionTypes", False)
@@ -1139,9 +1093,6 @@ class TransformWithStateInPandasTestsMixin:
                     Row(groupingKey="0", valueSortedList=[20, 20, 120, 120, 222]),
                     Row(groupingKey="1", valueSortedList=[20, 20, 120, 120, 222]),
                 ]
-
-                for q in self.spark.streams.active:
-                    q.stop()
 
         self._test_transform_with_state_in_pandas_basic(
             ListStateProcessor(),
@@ -1170,7 +1121,9 @@ class TransformWithStateInPandasTestsMixin:
                 }
 
                 # check for state metadata source
-                metadata_df = self.spark.read.format("state-metadata").load(checkpoint_path)
+                metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
+                    checkpoint_path
+                )
                 operator_properties_json_obj = json.loads(
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
@@ -1186,7 +1139,7 @@ class TransformWithStateInPandasTestsMixin:
 
                 # check for state data source and readChangeFeed
                 value_state_df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "numViolations")
                     .option("readChangeFeed", True)
@@ -1210,7 +1163,7 @@ class TransformWithStateInPandasTestsMixin:
                 for partition_id in partition_id_list:
                     # check for state data source and snapshotStartBatchId options
                     state_snapshot_df = (
-                        self.spark.read.format("statestore")
+                        batch_df.sparkSession.read.format("statestore")
                         .option("path", checkpoint_path)
                         .option("stateVarName", "numViolations")
                         .option("snapshotPartitionId", partition_id)
@@ -1229,9 +1182,6 @@ class TransformWithStateInPandasTestsMixin:
                         .sort("groupingKey")
                         .collect()
                     )
-
-                for q in self.spark.streams.active:
-                    q.stop()
 
         with self.sql_conf(
             {"spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled": "true"}
@@ -1264,7 +1214,7 @@ class TransformWithStateInPandasTestsMixin:
                 }
                 # verify values in initial state is appended into list state for all keys
                 df = (
-                    self.spark.read.format("statestore")
+                    batch_df.sparkSession.read.format("statestore")
                     .option("path", new_checkpoint_path)
                     .option("stateVarName", "list_state")
                     .load()
@@ -1309,9 +1259,7 @@ class TransformWithStateInPandasTestsMixin:
             self.test_transform_with_state_in_pandas_proc_timer()
             self.test_transform_with_state_restart_with_multiple_rows_init_state()
 
-    def _run_evolution_test(
-        self, processor, checkpoint_dir, check_results, df, check_exception=None
-    ):
+    def _run_evolution_test(self, processor, checkpoint_dir, check_results, df):
         output_schema = StructType(
             [
                 StructField("id", StringType(), True),
@@ -1323,35 +1271,25 @@ class TransformWithStateInPandasTestsMixin:
         for q in self.spark.streams.active:
             q.stop()
 
-        try:
-            q = (
-                df.groupBy("id")
-                .transformWithStateInPandas(
-                    statefulProcessor=processor,
-                    outputStructType=output_schema,
-                    outputMode="Update",
-                    timeMode="None",
-                )
-                .writeStream.queryName("evolution_test")
-                .option("checkpointLocation", checkpoint_dir)
-                .foreachBatch(check_results)
-                .outputMode("update")
-                .start()
+        q = (
+            df.groupBy("id")
+            .transformWithStateInPandas(
+                statefulProcessor=processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
             )
+            .writeStream.queryName("evolution_test")
+            .option("checkpointLocation", checkpoint_dir)
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
 
-            self.assertEqual(q.name, "evolution_test")
-            self.assertTrue(q.isActive)
-            q.processAllAvailable()
-            q.awaitTermination(10)
-
-            if q.exception() is None:
-                assert check_exception is None
-
-        except Exception as e:
-            # If we are expecting an exception, verify it's the right one
-            if check_exception is None:
-                raise  # Re-raise if we weren't expecting an exception
-            self.assertTrue(check_exception(e))
+        self.assertEqual(q.name, "evolution_test")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
 
     def test_schema_evolution_scenarios(self):
         """Test various schema evolution scenarios"""
@@ -1431,7 +1369,6 @@ class TransformWithStateInPandasTestsMixin:
                     assert results[0].value["active"]
 
                 self._run_evolution_test(AddFieldsProcessor(), checkpoint_dir, check_add_fields, df)
-
                 self._prepare_test_resource2(input_path)
 
                 def check_upcast(batch_df, batch_id):
@@ -1440,7 +1377,6 @@ class TransformWithStateInPandasTestsMixin:
 
                 # Long
                 self._run_evolution_test(UpcastProcessor(), checkpoint_dir, check_upcast, df)
-
                 self._prepare_test_resource3(input_path)
 
                 def check_basic_state(batch_df, batch_id):
@@ -1448,27 +1384,26 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["id"] == 0  # First ID from test data
                     assert result.value["name"] == "name-0"
 
-                def check_exception(error):
+                # Int
+                try:
+                    self._run_evolution_test(
+                        BasicProcessor(),
+                        checkpoint_dir,
+                        check_basic_state,
+                        df,
+                    )
+                except Exception as e:
+                    # we are expecting an exception, verify it's the right one
                     from pyspark.errors.exceptions.captured import StreamingQueryException
 
-                    if not isinstance(error, StreamingQueryException):
+                    if not isinstance(e, StreamingQueryException):
                         return False
-
-                    error_msg = str(error)
-                    return (
+                    error_msg = str(e)
+                    assert (
                         "[STREAM_FAILED]" in error_msg
                         and "[STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION]" in error_msg
                         and "Schema evolution is not possible" in error_msg
                     )
-
-                # Int
-                self._run_evolution_test(
-                    BasicProcessor(),
-                    checkpoint_dir,
-                    check_basic_state,
-                    df,
-                    check_exception=check_exception,
-                )
 
     def test_not_nullable_fails(self):
         with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
@@ -1483,25 +1418,24 @@ class TransformWithStateInPandasTestsMixin:
                     assert result.value["id"] == 0  # First ID from test data
                     assert result.value["name"] == "name-0"
 
-                def check_exception(error):
+                try:
+                    self._run_evolution_test(
+                        BasicProcessorNotNullable(),
+                        checkpoint_dir,
+                        check_basic_state,
+                        df,
+                    )
+                except Exception as e:
+                    # we are expecting an exception, verify it's the right one
                     from pyspark.errors.exceptions.captured import StreamingQueryException
 
-                    if not isinstance(error, StreamingQueryException):
+                    if not isinstance(e, StreamingQueryException):
                         return False
-
-                    error_msg = str(error)
-                    return (
+                    error_msg = str(e)
+                    assert (
                         "[TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
                         and "column family state must be nullable" in error_msg
                     )
-
-                self._run_evolution_test(
-                    BasicProcessorNotNullable(),
-                    checkpoint_dir,
-                    check_basic_state,
-                    df,
-                    check_exception=check_exception,
-                )
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
