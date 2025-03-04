@@ -260,7 +260,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
 
   class H2SQLBuilder extends JDBCSQLBuilder {
 
-    override def visitAggregateFunction(
+    override def aggregateFunctionToSQL(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
@@ -269,7 +269,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
       } else {
-        super.visitAggregateFunction(funcName, isDistinct, inputs)
+        super.aggregateFunctionToSQL(funcName, isDistinct, inputs)
       }
 
     override def visitExtract(field: String, source: String): String = {
@@ -282,23 +282,15 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       s"EXTRACT($newField FROM $source)"
     }
 
-    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
-      if (isSupportedFunction(funcName)) {
-        funcName match {
-          case "MD5" =>
-            "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
-          case "SHA1" =>
-            "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
-          case "SHA2" =>
-            "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
-          case _ => super.visitSQLFunction(funcName, inputs)
-        }
-      } else {
-        throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3177",
-          messageParameters = Map(
-            "class" -> this.getClass.getSimpleName,
-            "funcName" -> funcName))
+    override def functionToSQL(funcName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "MD5" =>
+          "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
+        case "SHA1" =>
+          "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
+        case "SHA2" =>
+          "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
+        case _ => super.functionToSQL(funcName, inputs)
       }
     }
   }

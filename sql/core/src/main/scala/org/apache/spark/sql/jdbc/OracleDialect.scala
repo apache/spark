@@ -50,7 +50,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     supportedFunctions.contains(funcName)
 
   class OracleSQLBuilder extends JDBCSQLBuilder {
-    override def visitAggregateFunction(
+    override def aggregateFunctionToSQL(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
@@ -59,7 +59,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
       } else {
-        super.visitAggregateFunction(funcName, isDistinct, inputs)
+        super.aggregateFunctionToSQL(funcName, isDistinct, inputs)
       }
 
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {

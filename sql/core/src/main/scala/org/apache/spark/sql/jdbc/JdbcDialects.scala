@@ -413,7 +413,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
+        functionToSQL(funcName, inputs)
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
@@ -425,16 +425,29 @@ abstract class JdbcDialect extends Serializable with Logging {
       }
     }
 
+    protected def functionToSQL(funcName: String, inputs: Array[String]): String = {
+      s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
+    }
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
       if (isSupportedFunction(funcName)) {
-        super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
+        aggregateFunctionToSQL(funcName, isDistinct, inputs)
       } else {
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3177",
           messageParameters = Map(
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
+      }
+    }
+
+    protected def aggregateFunctionToSQL(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+      if (isDistinct) {
+        s"""${dialectFunctionName(funcName)}(DISTINCT ${inputs.mkString(", ")})"""
+      } else {
+        s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
       }
     }
 
