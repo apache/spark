@@ -162,6 +162,8 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
                 # Wrap the root struct
                 if len(batch.columns) == 0:
+                    # When batch has no column, it should still create
+                    # an empty batch with the number of rows set.
                     struct = pa.array([{}] * batch.num_rows)
                 else:
                     struct = pa.StructArray.from_arrays(
@@ -180,8 +182,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
 
 class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     """
-    Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
-    for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
+    Same as :class:`ArrowStreamUDFSerializer` but it does not flatten when loading batches.
     """
 
     def load_stream(self, stream):
