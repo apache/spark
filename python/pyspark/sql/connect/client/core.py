@@ -20,12 +20,13 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-import atexit
-
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import inspect
+import functools
+import atexit
 import logging
 import threading
 import os
@@ -51,6 +52,7 @@ from typing import (
     Type,
     Sequence,
 )
+from typing import Callable
 
 import pandas as pd
 import pyarrow as pa
@@ -688,6 +690,19 @@ class SparkConnectClient(object):
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml)
 
+    @staticmethod
+    def _check_if_closed(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapped(self: SparkConnectClient, *args: Any, **kwargs: Any) -> Any:
+            if self.is_closed:
+                raise SparkConnectException(
+                    errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
+                ) from None
+            return func(self, *args, **kwargs)
+
+        wrapped.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+        return wrapped
+
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
         Register a progress handler to be called when a progress message is received.
@@ -1237,6 +1252,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         return req
 
+    @_check_if_closed
     def _analyze(self, method: str, **kwargs: Any) -> AnalyzeResult:
         """
         Call the analyze RPC of Spark Connect.
@@ -1329,6 +1345,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    @_check_if_closed
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """
         Execute the passed request `req` and drop all results.
@@ -1360,6 +1377,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    @_check_if_closed
     def _execute_and_fetch_as_iterator(
         self,
         req: pb2.ExecutePlanRequest,
@@ -1621,6 +1639,7 @@ class SparkConnectClient(object):
         configs = dict(self.config(op).pairs)
         return tuple(configs.get(key) for key, _ in pairs)
 
+    @_check_if_closed
     def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
         """
         Call the config RPC of Spark Connect.
@@ -1677,6 +1696,7 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         return req
 
+    @_check_if_closed
     def interrupt_all(self) -> Optional[List[str]]:
         req = self._interrupt_request("all")
         try:
@@ -1689,6 +1709,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    @_check_if_closed
     def interrupt_tag(self, tag: str) -> Optional[List[str]]:
         req = self._interrupt_request("tag", tag)
         try:
@@ -1701,6 +1722,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    @_check_if_closed
     def interrupt_operation(self, op_id: str) -> Optional[List[str]]:
         req = self._interrupt_request("operation", op_id)
         try:
@@ -1713,6 +1735,7 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    @_check_if_closed
     def release_session(self) -> None:
         req = pb2.ReleaseSessionRequest()
         req.session_id = self._session_id
@@ -1796,15 +1819,11 @@ class SparkConnectClient(object):
             self.thread_local.inside_error_handling = True
             if isinstance(error, grpc.RpcError):
                 self._handle_rpc_error(error)
-            elif isinstance(error, ValueError):
-                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                    raise SparkConnectException(
-                        errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
-                    ) from None
             raise error
         finally:
             self.thread_local.inside_error_handling = False
 
+    @_check_if_closed
     def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
         if "errorId" not in info.metadata:
             return None
