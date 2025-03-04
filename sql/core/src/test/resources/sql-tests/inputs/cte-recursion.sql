@@ -440,3 +440,10 @@ WITH RECURSIVE fibonacci AS (
   SELECT b, a + b FROM fibonacci WHERE a < 10
 )
 SELECT a FROM fibonacci ORDER BY a;
+
+-- Recursive CTE that can be pruned
+WITH RECURSIVE t1(a,b,c) AS (
+    SELECT 1,1,1
+    UNION ALL
+    SELECT a+1,a+1,a+1 FROM t1)
+SELECT a FROM t1 LIMIT 5

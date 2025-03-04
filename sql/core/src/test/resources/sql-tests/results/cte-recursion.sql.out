@@ -994,3 +994,19 @@ struct<a:int>
 5
 8
 13
+
+
+-- !query
+WITH RECURSIVE t1(a,b,c) AS (
+    SELECT 1,1,1
+    UNION ALL
+    SELECT a+1,a+1,a+1 FROM t1)
+SELECT a FROM t1 LIMIT 5
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5

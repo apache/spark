@@ -874,7 +874,8 @@ struct<plan:string>
 (1) UnionLoop
 Loop id: xxxx
 Output [1]: [col1#x]
-Limit: None
+LocalLimit: None
+GlobalLimit: None
 
 (2) LocalRelation
 Arguments: [col1#x]
