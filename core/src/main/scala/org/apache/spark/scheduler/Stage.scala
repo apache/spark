@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
-
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
@@ -68,9 +66,6 @@ private[scheduler] abstract class Stage(
   @volatile
   private var attemptIdAllPartitionsMissing: Int = -1
 
-  private val stageReattemptLock = new ReentrantReadWriteLock()
-  private val stageReadLock = stageReattemptLock.readLock()
-  private val stageWriteLock = stageReattemptLock.writeLock()
   val numPartitions = rdd.partitions.length
 
   /** Set of jobs that this stage belongs to. */
@@ -108,21 +103,14 @@ private[scheduler] abstract class Stage(
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
-    val writeLockTaken = this.acquireStageWriteLock()
-    try {
-      val metrics = new TaskMetrics
-      metrics.register(rdd.sparkContext)
-      _latestInfo = StageInfo.fromStage(
-        this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
-        resourceProfileId = resourceProfileId)
-      nextAttemptId += 1
-      // clear the entry in the allPartitionsAsMissing set
-      attemptIdAllPartitionsMissing = -1
-    } finally {
-      if (writeLockTaken) {
-        this.releaseStageWriteLock()
-      }
-    }
+    val metrics = new TaskMetrics
+    metrics.register(rdd.sparkContext)
+    _latestInfo = StageInfo.fromStage(
+      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
+      resourceProfileId = resourceProfileId)
+    nextAttemptId += 1
+    // clear the entry in the allPartitionsAsMissing set
+    attemptIdAllPartitionsMissing = -1
   }
 
   /** Forward the nextAttemptId if skipped and get visited for the first time. */
@@ -154,37 +142,4 @@ private[scheduler] abstract class Stage(
 
   def markAttemptIdForAllPartitionsMissing(attemptId: Int): Unit =
     this.attemptIdAllPartitionsMissing = attemptId
-
-  def acquireStageReadLock(): Unit = {
-    this.stageReadLock.lockInterruptibly()
-    val prevSet = Stage.threadHoldingReadLock.get()
-    Stage.threadHoldingReadLock.set(prevSet + this.id)
-  }
-
-  def releaseStageReadLock(): Unit = {
-    val prevSet = Stage.threadHoldingReadLock.get()
-    Stage.threadHoldingReadLock.set(prevSet - this.id)
-    this.stageReadLock.unlock()
-  }
-
-  def acquireStageWriteLock(): Boolean = {
-    if (Stage.threadHoldingReadLock.get().contains(this.id)) {
-      false
-    } else {
-      stageWriteLock.lockInterruptibly()
-      true
-    }
-  }
-
-  def releaseStageWriteLock(): Unit = {
-    stageWriteLock.unlock()
-  }
-}
-
-object Stage {
-  private val threadHoldingReadLock = new ThreadLocal[Set[Int]] {
-    override protected def initialValue(): Set[Int] = {
-      Set.empty[Int]
-    }
-  }
 }
