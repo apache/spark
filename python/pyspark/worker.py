@@ -1405,13 +1405,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 else:
                     list_args = list(args)
                     names = [f"_{n}" for n in range(len(list_args))]
-                    t = pa.Table.from_arrays(
-                        [pa.StructArray.from_arrays(list_args, names=names)], names=["_0"]
-                    )
+                    t = pa.Table.from_arrays(list_args, names=names)
                     schema = from_arrow_schema(t.schema, prefers_large_var_types)
                     rows = ArrowTableToRowsConversion.convert(t, schema=schema)
                     for row in rows:
-                        row = row["_0"]
                         row = tuple(row)  # type: ignore[assignment]
                         for batch in convert_to_arrow(func(*row)):
                             yield verify_result(batch), arrow_return_type
