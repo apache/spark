@@ -1204,6 +1204,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.taskMetrics.trackUpdatedBlockStatuses</code></td>
+  <td>false</td>
+  <td>
+    Enable tracking of updatedBlockStatuses in the TaskMetrics. Off by default since tracking the
+    block statuses can use a lot of memory and its not used anywhere within spark.
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.sort.io.plugin.class</code></td>
   <td>org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO</td>
   <td>
