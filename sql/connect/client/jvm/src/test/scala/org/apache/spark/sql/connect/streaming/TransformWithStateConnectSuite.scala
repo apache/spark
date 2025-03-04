@@ -458,22 +458,26 @@ class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession w
         val testSchema =
           StructType(Array(StructField("key", StringType), StructField("value", StringType)))
 
-        spark.read
-          .schema(testSchema)
-          .parquet(path)
-          .as[InputRowForConnectTest]
-          .groupByKey(x => x.key)
-          .transformWithState[OutputRowForConnectTest](
-            new BasicCountStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-          .write
-          .saveAsTable("my_sink")
+        try {
+          spark.read
+            .schema(testSchema)
+            .parquet(path)
+            .as[InputRowForConnectTest]
+            .groupByKey(x => x.key)
+            .transformWithState[OutputRowForConnectTest](
+              new BasicCountStatefulProcessor(),
+              TimeMode.None(),
+              OutputMode.Update())
+            .write
+            .saveAsTable("my_sink")
 
-        checkDatasetUnorderly(
-          spark.table("my_sink").toDF().as[(String, String)],
-          ("a", "2"),
-          ("b", "1"))
+          checkDatasetUnorderly(
+            spark.table("my_sink").toDF().as[(String, String)],
+            ("a", "2"),
+            ("b", "1"))
+        } finally {
+          spark.sql("DROP TABLE IF EXISTS my_sink")
+        }
       }
     }
   }
