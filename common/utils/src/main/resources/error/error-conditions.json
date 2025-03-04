@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OUT_OF_MEMORY" : {
+    "message" : [
+      "No enough memory for aggregation"
+    ],
+    "sqlState" : "53200"
+  },
   "ALL_PARAMETERS_MUST_BE_NAMED" : {
     "message" : [
       "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
@@ -1736,6 +1742,12 @@
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
     ],
     "sqlState" : "42822"
+  },
+  "GROW_POINTER_ARRAY_OUT_OF_MEMORY" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ],
+    "sqlState" : "53200"
   },
   "HINT_UNSUPPORTED_FOR_JDBC_DIALECT" : {
     "message" : [
@@ -4638,6 +4650,12 @@
       "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
     ],
     "sqlState" : "42601"
+  },
+  "SPILL_OUT_OF_MEMORY" : {
+    "message" : [
+      "Error while calling spill() on <consumerToSpill> : <message>"
+    ],
+    "sqlState" : "53200"
   },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
@@ -9319,21 +9337,6 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3300" : {
-    "message" : [
-      "error while calling spill() on <consumerToSpill> : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3301" : {
-    "message" : [
-      "Not enough memory to grow pointer array"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3302" : {
-    "message" : [
-      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
