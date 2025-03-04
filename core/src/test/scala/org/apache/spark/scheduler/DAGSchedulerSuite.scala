@@ -3208,6 +3208,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
         event match {
           case ResubmitFailedStages =>
+               // Before the ResubmitFailedStages is added to the queue, add the successful
+               // partition task completion.
               runEvent(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
             monitor.synchronized {
               resubmitFailedStageTriggered(0) = true
@@ -3223,6 +3225,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           case CompletionEvent(_, reason, _, _, _, _) =>
             reason match {
               case FetchFailed(_, _, _, _, _, _) =>
+                // Do not allow this thread to exit, till the ResubmitFailedStages
+                // in callback is received. This is to ensure that this thread
+                // does not exit and process the ResubmitFailedStage event, before
+                // the queue gets successful partition task completion
                 monitor.synchronized {
                   if (!resubmitFailedStageTriggered(0)) {
                     monitor.wait()
@@ -3248,6 +3254,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // The result stage is still waiting for its 2 tasks to complete
     assert(resultStage.findMissingPartitions() == Seq.tabulate(numPartitions)(i => i))
 
+    // The below event is going to initiate the retry of previous indeterminate stages, and also
+    // the retry of all result tasks. But before the "ResubmitFailedStages" event is added to the
+    // queue of Scheduler, a successful completion of the result partition task is added to the
+    // event queue.  Due to scenario, the bug surfaces where instead of retry of all partitions
+    // of result tasks (2 tasks in total), only some (1 task) get retried
     runEvent(
       makeCompletionEvent(
         taskSets(2).tasks(0),
@@ -3267,7 +3278,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       Thread.sleep(500)
       keepGoing = shuffleStage2.latestInfo.attemptNumber() != 1
     }
-
     completeShuffleMapStageSuccessfully(1, 1, numPartitions)
     keepGoing = true
     while (keepGoing) {
