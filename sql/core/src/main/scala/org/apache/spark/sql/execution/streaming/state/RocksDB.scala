@@ -200,11 +200,6 @@ class RocksDB(
   @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
-  /** Attaches a RocksDBStateStoreProvider reference to the RocksDB instance for event callback. */
-  def setListener(listener: RocksDBEventListener): Unit = {
-    providerListener = Some(listener)
-  }
-
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
     colFamilyNameToInfoMap.get(cfName)
   }
