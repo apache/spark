@@ -46,7 +46,8 @@ Spark SQL and DataFrames support the following data types:
 * Datetime type
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
-  - `TimeType`: Represents values comprising values of fields hour, minute and second, without a time-zone.
+  - `TimeType(precision)`: Represents values comprising values of fields hour, minute and second with the number of decimal digits `precision` following the decimal point in the seconds field, without a time-zone.
+  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999` for max precision `6`.
   - `TimestampType`: Timestamp with local time zone(TIMESTAMP_LTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second, with the session local time-zone. The timestamp value represents an
   absolute point in time.
