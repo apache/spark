@@ -161,6 +161,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.RemoveRepetitionFromGroupExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReplaceArrayContainsWithInSet" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceExceptWithAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceExceptWithFilter" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceDistinctWithAggregate" ::
