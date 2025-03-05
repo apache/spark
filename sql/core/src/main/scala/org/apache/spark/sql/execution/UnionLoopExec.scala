@@ -88,8 +88,6 @@ case class UnionLoopExec(
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
-  private val numPartitions: Int = conf.defaultNumShufflePartitions
-
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"))
@@ -124,7 +122,7 @@ case class UnionLoopExec(
     val df = Dataset.ofRows(session, planOrLimitedPlan)
     val newDF = {
       if (!simpleRecursion) {
-        df.repartition(numPartitions)
+        df.repartition()
       } else {
         df
       }
@@ -151,9 +149,16 @@ case class UnionLoopExec(
     // the number of rows generated in that step.
     // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
     // condition of while loop down (limit.isEmpty will be true).
-    var globalLimitNum = globalLimit.getOrElse(-1)
-    var localLimitNum = localLimit.getOrElse(-1)
-    var currentLimit = Math.max(globalLimitNum, localLimitNum * numPartitions)
+    var currentLimit = {
+      if (globalLimit.isDefined) {
+        globalLimit.get
+      } else if (localLimit.isDefined) {
+        localLimit.get
+      }
+      else {
+        -1
+      }
+    }
 
     val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
 
@@ -163,6 +168,7 @@ case class UnionLoopExec(
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && ((globalLimit.isEmpty && localLimit.isEmpty) || currentLimit > 0)) {
+      Console.println(prevDF)
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(
@@ -205,11 +211,22 @@ case class UnionLoopExec(
 
     if (unionChildren.isEmpty) {
       new EmptyRDD[InternalRow](sparkContext)
-    } else if (unionChildren.length == 1) {
-      Dataset.ofRows(session, unionChildren.head).repartition(numPartitions).queryExecution.toRdd
     } else {
-      Dataset.ofRows(session, Union(unionChildren.toSeq)).repartition(numPartitions).queryExecution
-        .toRdd
+      val df = {
+        if (unionChildren.length == 1) {
+          Dataset.ofRows(session, unionChildren.head)
+        } else {
+          Dataset.ofRows(session, Union(unionChildren.toSeq))
+        }
+      }
+      val dfMaybeCoalesced = {
+        if (globalLimit.isEmpty && localLimit.isDefined) {
+          df.coalesce(1)
+        } else {
+          df
+        }
+      }
+      dfMaybeCoalesced.queryExecution.toRdd
     }
   }
 
