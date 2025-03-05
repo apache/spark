@@ -862,7 +862,7 @@ HAVING   max(t1b) <= (SELECT   max(t2b)
                       GROUP BY t2c)
 -- !query analysis
 Project [t1a#x]
-+- Filter (max(t1b#x)#x <= scalar-subquery#x [t1c#x])
++- Filter (max(t1b)#x <= scalar-subquery#x [t1c#x])
    :  +- Aggregate [t2c#x], [max(t2b#x) AS max(t2b)#x]
    :     +- Filter (t2c#x = outer(t1c#x))
    :        +- SubqueryAlias t2
@@ -871,7 +871,7 @@ Project [t1a#x]
    :                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    :                    +- SubqueryAlias t2
    :                       +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
-   +- Aggregate [t1a#x, t1c#x], [t1a#x, max(t1b#x) AS max(t1b#x)#x, t1c#x]
+   +- Aggregate [t1a#x, t1c#x], [t1a#x, max(t1b#x) AS max(t1b)#x, t1c#x]
       +- SubqueryAlias t1
          +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
             +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as decimal(4,0)) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
@@ -1204,8 +1204,8 @@ Project [t1a#x, t1b#x]
    :  +- GlobalLimit 1
    :     +- LocalLimit 1
    :        +- Project [max(t2c)#x]
-   :           +- Sort [min(t2c#x)#x ASC NULLS FIRST], true
-   :              +- Aggregate [max(t2c#x) AS max(t2c)#x, min(t2c#x) AS min(t2c#x)#x]
+   :           +- Sort [min(t2c)#x ASC NULLS FIRST], true
+   :              +- Aggregate [max(t2c#x) AS max(t2c)#x, min(t2c#x) AS min(t2c)#x]
    :                 +- Filter (cast(outer(t1b#x) as bigint) < outer(t1d#xL))
    :                    +- SubqueryAlias t2
    :                       +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
