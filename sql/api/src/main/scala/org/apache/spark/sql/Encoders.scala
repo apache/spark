@@ -148,8 +148,8 @@ object Encoders {
   def INSTANT: Encoder[java.time.Instant] = STRICT_INSTANT_ENCODER
 
   /**
-   * Creates an encoder that serializes instances of the `java.time.LocalTime` class
-   * to the internal representation of nullable Catalyst's TimeType.
+   * Creates an encoder that serializes instances of the `java.time.LocalTime` class to the
+   * internal representation of nullable Catalyst's TimeType.
    *
    * @since 4.1.0
    */

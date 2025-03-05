@@ -185,17 +185,17 @@ trait SparkDateTimeUtils {
     instantToMicros(instant)
   }
 
-
   /**
-   * Converts the local time to the number of microseconds within the day,
-   * from 0 to (24 * 60 * 60 * 1000000) - 1.
+   * Converts the local time to the number of microseconds within the day, from 0 to (24 * 60 * 60
+   * * 1000000) - 1.
    */
   def localTimeToMicros(localTime: LocalTime): Long = localTime.getLong(MICRO_OF_DAY)
 
   /**
    * Converts the number of microseconds within the day to the local time.
    */
-  def microsToLocalTime(micros: Long): LocalTime = LocalTime.ofNanoOfDay(micros * NANOS_PER_MICROS)
+  def microsToLocalTime(micros: Long): LocalTime =
+    LocalTime.ofNanoOfDay(micros * NANOS_PER_MICROS)
 
   /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01 in
