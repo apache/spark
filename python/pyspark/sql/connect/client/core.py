@@ -670,7 +670,7 @@ class SparkConnectClient(object):
 
         self._channel = self._builder.toChannel()
         self._closed = False
-        self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        self._internal_stub = grpc_lib.SparkConnectServiceStub(self._channel)
         self._artifact_manager = ArtifactManager(
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
@@ -687,6 +687,19 @@ class SparkConnectClient(object):
 
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml)
+
+    @property
+    def _stub(self) -> grpc_lib.SparkConnectServiceStub:
+        if self.is_closed:
+            raise SparkConnectException(
+                errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
+            ) from None
+        return self._internal_stub
+
+    # For testing only.
+    @_stub.setter
+    def _stub(self, value: grpc_lib.SparkConnectServiceStub) -> None:
+        self._internal_stub = value
 
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
@@ -1796,11 +1809,6 @@ class SparkConnectClient(object):
             self.thread_local.inside_error_handling = True
             if isinstance(error, grpc.RpcError):
                 self._handle_rpc_error(error)
-            elif isinstance(error, ValueError):
-                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                    raise SparkConnectException(
-                        errorClass="NO_ACTIVE_SESSION", messageParameters=dict()
-                    ) from None
             raise error
         finally:
             self.thread_local.inside_error_handling = False
