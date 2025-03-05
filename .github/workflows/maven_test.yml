@@ -184,7 +184,7 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         run: |
-          ulimit -n 655360
+          # ulimit -n 655360
           ulimit -a
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
