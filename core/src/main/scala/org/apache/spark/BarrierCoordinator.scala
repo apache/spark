@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.util.Collections
-import java.util.TimerTask
+import java.util.{ArrayList, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 import java.util.function.Consumer
 
