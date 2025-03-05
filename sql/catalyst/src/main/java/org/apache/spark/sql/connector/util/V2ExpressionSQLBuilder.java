@@ -42,7 +42,6 @@ import org.apache.spark.sql.connector.expressions.aggregate.CountStar;
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc;
 import org.apache.spark.sql.connector.expressions.aggregate.Sum;
 import org.apache.spark.sql.connector.expressions.aggregate.UserDefinedAggregateFunc;
-import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -98,8 +97,7 @@ public class V2ExpressionSQLBuilder {
         case "STARTS_WITH" -> visitStartsWith(build(e.children()[0]), build(e.children()[1]));
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
-        case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, e.children()[0], e.children()[1]);
+        case "=", "<>", "<=>", "<", "<=", ">", ">=" -> visitBinaryComparison(e);
         case "+", "*", "/", "%", "&", "|", "^" ->
           visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-" -> {
@@ -220,6 +218,10 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
+  protected String visitBinaryComparison(GeneralScalarExpression e) {
+    return visitBinaryComparison(e.name(), e.children()[0], e.children()[1]);
+  }
+
   protected String visitBinaryComparison(String name, Expression le, Expression re) {
     return visitBinaryComparison(name, inputToSQL(le), inputToSQL(re));
   }
@@ -255,11 +257,7 @@ public class V2ExpressionSQLBuilder {
   protected String visitUnaryArithmetic(String name, String v) { return name + v; }
 
   protected String visitCaseWhen(GeneralScalarExpression e) {
-    if (e instanceof Predicate) {
-      return visitCaseWhen(e.children());
-    } else {
-      return visitCaseWhen(expressionsToStringArray(e.children()));
-    }
+    return visitCaseWhen(e.children());
   }
 
   protected String visitCaseWhen(Expression[] children) {
