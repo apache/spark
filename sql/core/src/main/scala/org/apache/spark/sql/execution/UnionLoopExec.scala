@@ -79,12 +79,12 @@ import org.apache.spark.sql.internal.SQLConf
  *              inside the recursive term of recursive CTE.
  */
 case class UnionLoopExec(
-                          loopId: Long,
-                          @transient anchor: LogicalPlan,
-                          @transient recursion: LogicalPlan,
-                          override val output: Seq[Attribute],
-                          localLimit: Option[Int] = None,
-                          globalLimit: Option[Int] = None) extends LeafExecNode {
+    loopId: Long,
+    @transient anchor: LogicalPlan,
+    @transient recursion: LogicalPlan,
+    override val output: Seq[Attribute],
+    localLimit: Option[Int] = None,
+    globalLimit: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
@@ -144,15 +144,15 @@ case class UnionLoopExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val numOutputRows = longMetric("numOutputRows")
-    val numRecursiveLoops = longMetric("numRecursiveLoops")
+    val numIterations = longMetric("numIterations")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
     // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
     // condition of while loop down (limit.isEmpty will be true).
-    var globalLimitNum = globalLimit.getOrElse(0)
-    var localLimitNum = localLimit.getOrElse(0)
+    var globalLimitNum = globalLimit.getOrElse(-1)
+    var localLimitNum = localLimit.getOrElse(-1)
     var currentLimit = Math.max(globalLimitNum, localLimitNum * numPartitions)
 
     val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
@@ -178,7 +178,7 @@ case class UnionLoopExec(
 
       // Update metrics
       numOutputRows += prevCount
-      numRecursiveLoops += 1
+      numIterations += 1
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
       // the current plan is created by substituting UnionLoopRef node with the project node of

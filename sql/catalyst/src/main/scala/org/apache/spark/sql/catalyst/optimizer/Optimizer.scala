@@ -1058,7 +1058,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
           }
         }
         if (neededIndicesListRef.nonEmpty) {
-          val indicesForRef = neededIndicesListRef.head
+          val indicesForRef = neededIndicesListRef.head.map(_._2)
           val newOutputProj = newAnchorChildProj.outputSet
           val indicesForProj = collection.mutable.Set.from {
             ul.anchor.output.zipWithIndex.filter { case (_, i) =>
