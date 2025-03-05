@@ -203,20 +203,26 @@ trait StateStoreWriter
 
   def operatorStateMetadataVersion: Int = 1
 
-  override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
-      "number of rows which are dropped by watermark"),
-    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
-    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
-    "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
-    "numRemovedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of removed state rows"),
-    "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
-    "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
-    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
-    "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
-      "number of state store instances")
-  ) ++ stateStoreCustomMetrics ++ pythonMetrics
+  override lazy val metrics = {
+    // Lazy initialize instance metrics
+    instanceMetrics
+    statefulOperatorCustomMetrics ++ Map(
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numRowsDroppedByWatermark" -> SQLMetrics
+        .createMetric(sparkContext, "number of rows which are dropped by watermark"),
+      "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+      "numUpdatedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of updated state rows"),
+      "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
+      "numRemovedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of removed state rows"),
+      "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
+      "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
+      "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
+      "numStateStoreInstances" -> SQLMetrics
+        .createMetric(sparkContext, "number of state store instances")
+    ) ++ stateStoreCustomMetrics ++ pythonMetrics
+  }
 
   override lazy val instanceMetrics = stateStoreInstanceMetrics
 
