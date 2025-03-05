@@ -15,7 +15,7 @@
     "message" : [
       "No enough memory for aggregation"
     ],
-    "sqlState" : "53200"
+    "sqlState" : "82001"
   },
   "ALL_PARAMETERS_MUST_BE_NAMED" : {
     "message" : [
@@ -4396,7 +4396,7 @@
     "message" : [
       "Not enough memory to grow pointer array"
     ],
-    "sqlState" : "53200"
+    "sqlState" : "82002"
   },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
@@ -4655,7 +4655,7 @@
     "message" : [
       "Error while calling spill() on <consumerToSpill> : <message>"
     ],
-    "sqlState" : "53200"
+    "sqlState" : "82003"
   },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
