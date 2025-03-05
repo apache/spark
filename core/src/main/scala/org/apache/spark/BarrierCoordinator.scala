@@ -126,29 +126,13 @@ private[spark] class BarrierCoordinator(
     */
     private def initTimerTask(state: ContextBarrierState): Unit = {
       timerTask = new TimerTask {
-        override def run(): Unit =
-          try {
-            state.synchronized {
-              if (!Thread.currentThread().isInterrupted()) {
-                // Timeout current barrier() call, fail all the sync requests.
-                requesters.foreach(
-                  _.sendFailure(new SparkException("The coordinator didn't get all " +
-                    s"barrier sync requests for barrier epoch +" +
-                    s" $barrierEpoch from $barrierId within " +
-                    s"$timeoutInSecs second(s).")))
-              }
-            }
-          } catch {
-            case _: InterruptedException =>
-              // Handle interruption gracefully
-              Thread.currentThread().interrupt()
-            case e: Exception =>
-              new SparkException(s"Error during running of barrier tasks for $barrierId", e)
-          } finally {
-            // Ensure cleanup happens even if interrupted or exception occurs
-            cleanupBarrierStage(barrierId)
-            state.clear()
-          }
+        override def run(): Unit = state.synchronized {
+          // Timeout current barrier() call, fail all the sync requests.
+          requesters.foreach(_.sendFailure(new SparkException("The coordinator didn't get all " +
+            s"barrier sync requests for barrier epoch $barrierEpoch from $barrierId within " +
+            s"$timeoutInSecs second(s).")))
+          cleanupBarrierStage(barrierId)
+        }
       }
     }
 
