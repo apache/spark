@@ -1743,12 +1743,6 @@
     ],
     "sqlState" : "42822"
   },
-  "GROW_POINTER_ARRAY_OUT_OF_MEMORY" : {
-    "message" : [
-      "Not enough memory to grow pointer array"
-    ],
-    "sqlState" : "53200"
-  },
   "HINT_UNSUPPORTED_FOR_JDBC_DIALECT" : {
     "message" : [
       "The option `hint` is not supported for <jdbcDialect> in JDBC data source. Supported dialects are `MySQLDialect`, `OracleDialect` and `DatabricksDialect`."
@@ -4397,6 +4391,12 @@
       "Rule <rule> in batch <batch> generated an invalid plan: <reason>"
     ],
     "sqlState" : "XXKD0"
+  },
+  "POINTER_ARRAY_OUT_OF_MEMORY" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ],
+    "sqlState" : "53200"
   },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
