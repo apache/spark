@@ -121,7 +121,9 @@ private[spark] class BarrierCoordinator(
     // A timer task that ensures we may timeout for a barrier() call.
     private var timerTask: TimerTask = null
 
-    // Init a TimerTask for a barrier() call.
+    /* Init a TimerTask for a barrier() call and also add logic to handle Thread Interruption 
+    * which is invoked when the timerTask.cancel(true) is invokved.
+    */
     private def initTimerTask(state: ContextBarrierState): Unit = {
       timerTask = new TimerTask {
         override def run(): Unit =
@@ -134,7 +136,6 @@ private[spark] class BarrierCoordinator(
                     s"barrier sync requests for barrier epoch +" +
                     s" $barrierEpoch from $barrierId within " +
                     s"$timeoutInSecs second(s).")))
-                cleanupBarrierStage(barrierId)
               }
             }
           } catch {
