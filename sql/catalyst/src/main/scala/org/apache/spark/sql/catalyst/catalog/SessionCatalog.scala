@@ -1677,7 +1677,7 @@ class SessionCatalog(
   }
 
   /**
-   * Constructs a table SQL function plan.
+   * Constructs a SQL table function plan.
    *
    * Example SQL table function:
    *

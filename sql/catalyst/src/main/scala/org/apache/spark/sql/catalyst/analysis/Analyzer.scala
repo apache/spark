@@ -2450,8 +2450,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * function inputs into the given project list.
      */
     private def rewriteSQLFunctions[E <: Expression](
-      expression: E,
-      projectList: ArrayBuffer[NamedExpression]): E = {
+        expression: E,
+        projectList: ArrayBuffer[NamedExpression]): E = {
       val newExpr = expression match {
         case f: SQLFunctionExpression if !hasSQLFunctionExpression(f.inputs) &&
           // Make sure LateralColumnAliasReference in parameters is resolved and eliminated first.
@@ -2494,13 +2494,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * Extract aggregate expressions from the given expression and replace
      * them with attribute references.
      * Example:
-     * Before: foo(c1) + foo(max(c2)) + max(foo(c2))
-     * After: foo(c1) + foo(max_c2) + max_foo_c2
-     * Extracted expressions: [c1, max(c2) AS max_c2, max(foo(c2)) AS max_foo_c2]
+     *   Before: foo(c1) + foo(max(c2)) + max(foo(c2))
+     *   After: foo(c1) + foo(max_c2) + max_foo_c2
+     *   Extracted expressions: [c1, max(c2) AS max_c2, max(foo(c2)) AS max_foo_c2]
      */
     private def extractAndRewrite[T <: Expression](
-      expression: T,
-      extractedExprs: ArrayBuffer[NamedExpression]): T = {
+        expression: T,
+        extractedExprs: ArrayBuffer[NamedExpression]): T = {
       val newExpr = expression match {
         case e if !shouldExtract(e) =>
           val exprToAdd: NamedExpression = e match {
@@ -2523,8 +2523,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * from the aliasMap.
      */
     private def replaceSQLFunctionWithAttr[T <: Expression](
-      expr: T,
-      aliasMap: mutable.HashMap[Expression, Alias]): T = {
+        expr: T,
+        aliasMap: mutable.HashMap[Expression, Alias]): T = {
       expr.transform {
         case f: SQLFunctionExpression if aliasMap.contains(f.canonicalized) =>
           aliasMap(f.canonicalized).toAttribute
@@ -2535,7 +2535,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // Return if a sub-tree does not contain SQLFunctionExpression.
       case p: LogicalPlan if !p.containsPattern(SQL_FUNCTION_EXPRESSION) => p
 
-      case f@Filter(cond, a: Aggregate)
+      case f @ Filter(cond, a: Aggregate)
         if !f.resolved || AggregateExpression.containsAggregate(cond) ||
           ResolveGroupingAnalytics.hasGroupingFunction(cond) ||
           cond.containsPattern(TEMP_RESOLVED_COLUMN) =>
@@ -2546,7 +2546,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // which breaks the pattern matching in those rules.
         f.copy(child = a.copy(child = rewrite(a.child)))
 
-      case h@UnresolvedHaving(_, a: Aggregate) =>
+      case h @ UnresolvedHaving(_, a: Aggregate) =>
         // Similarly UnresolvedHaving should be resolved by ResolveAggregateFunctions first
         // before rewriting aggregate.
         h.copy(child = a.copy(child = rewrite(a.child)))
