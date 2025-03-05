@@ -23,7 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 import java.util.function.Consumer
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
-import scala.language.existentials
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
@@ -178,11 +178,11 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          val timerFuture = Some(timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS))
+          val timerFuture = timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS)
+          timerFutures.add(timerFuture)
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester
-        timerFutures.add(timerFuture)
         messages(request.partitionId) = request.message
         logInfo(log"Barrier sync epoch ${MDC(BARRIER_EPOCH, barrierEpoch)}" +
           log" from ${MDC(BARRIER_ID, barrierId)} received update from Task" +
