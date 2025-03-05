@@ -25,10 +25,12 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
@@ -269,8 +271,19 @@ public final class Variant {
       .appendOffset("+HH:MM", "+00:00")
       .toFormatter(Locale.US);
 
+  private static final DateTimeFormatter TIME_FORMATTER = new DateTimeFormatterBuilder()
+      .appendPattern("HH:mm:ss")
+      .optionalStart()
+      .appendFraction(ChronoField.MICRO_OF_SECOND, 0, 6, true)
+      .optionalEnd()
+      .toFormatter(Locale.US);
+
   private static Instant microsToInstant(long timestamp) {
     return Instant.EPOCH.plus(timestamp, ChronoUnit.MICROS);
+  }
+
+  private static Instant nanosToInstant(long timestamp) {
+    return Instant.EPOCH.plus(timestamp, ChronoUnit.NANOS);
   }
 
   static void toJsonImpl(byte[] value, byte[] metadata, int pos, StringBuilder sb, ZoneId zoneId) {
@@ -324,6 +337,18 @@ public final class Variant {
         break;
       case DATE:
         appendQuoted(sb, LocalDate.ofEpochDay((int) VariantUtil.getLong(value, pos)).toString());
+        break;
+      case TIME:
+        appendQuoted(sb, TIME_FORMATTER.format(
+            LocalTime.ofNanoOfDay(VariantUtil.getLong(value, pos) * 1_000)));
+        break;
+      case TIMESTAMP_NANOS:
+        appendQuoted(sb, TIMESTAMP_FORMATTER.format(
+            nanosToInstant(VariantUtil.getLong(value, pos)).atZone(zoneId)));
+        break;
+      case TIMESTAMP_NANOS_NTZ:
+        appendQuoted(sb, TIMESTAMP_NTZ_FORMATTER.format(
+            nanosToInstant(VariantUtil.getLong(value, pos)).atZone(ZoneOffset.UTC)));
         break;
       case TIMESTAMP:
         appendQuoted(sb, TIMESTAMP_FORMATTER.format(

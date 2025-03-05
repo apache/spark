@@ -226,6 +226,27 @@ public class VariantBuilder {
     writePos += 8;
   }
 
+  public void appendTime(long microsSinceMidnight) {
+    checkCapacity(1 + 8);
+    writeBuffer[writePos++] = primitiveHeader(TIME);
+    writeLong(writeBuffer, writePos, microsSinceMidnight, 8);
+    writePos += 8;
+  }
+
+  public void appendTimestampNanos(long nanosSinceEpoch) {
+    checkCapacity(1 + 8);
+    writeBuffer[writePos++] = primitiveHeader(VariantUtil.TIMESTAMP_NANOS);
+    writeLong(writeBuffer, writePos, nanosSinceEpoch, 8);
+    writePos += 8;
+  }
+
+  public void appendTimestampNanosNtz(long nanosSinceEpoch) {
+    checkCapacity(1 + 8);
+    writeBuffer[writePos++] = primitiveHeader(VariantUtil.TIMESTAMP_NANOS_NTZ);
+    writeLong(writeBuffer, writePos, nanosSinceEpoch, 8);
+    writePos += 8;
+  }
+
   public void appendFloat(float f) {
     checkCapacity(1 + 4);
     writeBuffer[writePos++] = primitiveHeader(FLOAT);

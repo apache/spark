@@ -108,6 +108,12 @@ public class ShreddingUtils {
           builder.appendDecimal(row.getDecimal(typedIdx, dt.precision, dt.scale));
         } else if (scalar instanceof VariantSchema.DateType) {
           builder.appendDate(row.getInt(typedIdx));
+        } else if (scalar instanceof VariantSchema.TimeType) {
+          builder.appendTime(row.getLong(typedIdx));
+        } else if (scalar instanceof VariantSchema.TimestampNanosType) {
+          builder.appendTimestampNanos(row.getLong(typedIdx));
+        } else if (scalar instanceof VariantSchema.TimestampNanosNTZType) {
+          builder.appendTimestampNanosNtz(row.getLong(typedIdx));
         } else if (scalar instanceof VariantSchema.TimestampType) {
           builder.appendTimestamp(row.getLong(typedIdx));
         } else {

@@ -273,6 +273,21 @@ public class VariantShreddingWriter {
           return v.getLong();
         }
         break;
+      case TIMESTAMP_NANOS:
+        if (targetType instanceof VariantSchema.TimestampNanosType) {
+          return v.getLong();
+        }
+        break;
+      case TIMESTAMP_NANOS_NTZ:
+        if (targetType instanceof VariantSchema.TimestampNanosNTZType) {
+          return v.getLong();
+        }
+        break;
+      case TIME:
+        if (targetType instanceof VariantSchema.TimeType) {
+          return v.getLong();
+        }
+        break;
       case FLOAT:
         if (targetType instanceof VariantSchema.FloatType) {
           return v.getFloat();
