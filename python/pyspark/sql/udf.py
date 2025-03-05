@@ -34,7 +34,6 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
 
 if TYPE_CHECKING:
