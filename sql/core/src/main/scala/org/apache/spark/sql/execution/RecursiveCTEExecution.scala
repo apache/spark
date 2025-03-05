@@ -92,7 +92,7 @@ case class UnionLoopExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numRecursiveLoops" -> SQLMetrics.createMetric(sparkContext, "number of recursive loops"))
+    "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"))
 
   private val simpleRecursion = {
     recursion match {
