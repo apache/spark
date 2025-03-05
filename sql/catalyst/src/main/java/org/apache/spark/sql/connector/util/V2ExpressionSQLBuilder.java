@@ -273,11 +273,11 @@ public class V2ExpressionSQLBuilder {
     return sb.toString();
   }
 
-  protected String visitSQLFunction(String funcName, String[] inputs) {
+  public String visitSQLFunction(String funcName, String[] inputs) {
     return joinArrayToString(inputs, ", ", funcName + "(", ")");
   }
 
-  protected String visitAggregateFunction(
+  public String visitAggregateFunction(
       String funcName, boolean isDistinct, String[] inputs) {
     if (isDistinct) {
       return joinArrayToString(inputs, ", ", funcName + "(DISTINCT ", ")");
