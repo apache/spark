@@ -838,7 +838,9 @@ object StateStore extends Logging {
    * Thread Pool that runs maintenance on partitions that are scheduled by
    * MaintenanceTask periodically
    */
-  class MaintenanceThreadPool(numThreads: Int) {
+  class MaintenanceThreadPool(
+      numThreads: Int,
+      shutdownTimeout: Long) {
     private val threadPool = ThreadUtils.newDaemonFixedThreadPool(
       numThreads, "state-store-maintenance-thread")
 
@@ -851,14 +853,15 @@ object StateStore extends Logging {
       threadPool.shutdown() // Disable new tasks from being submitted
 
       // Wait a while for existing tasks to terminate
-      if (!threadPool.awaitTermination(5 * 60, TimeUnit.SECONDS)) {
+      val waitTimeout = 5 * shutdownTimeout
+      if (!threadPool.awaitTermination(waitTimeout, TimeUnit.SECONDS)) {
         logWarning(
-          s"MaintenanceThreadPool is not able to be terminated within 300 seconds," +
-            " forcefully shutting down now.")
+          s"MaintenanceThreadPool failed to terminate within waitTimeout=$waitTimeout " +
+            "seconds, forcefully shutting down now.")
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
-        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+        if (!threadPool.awaitTermination(shutdownTimeout, TimeUnit.SECONDS)) {
           logError("MaintenanceThreadPool did not terminate")
         }
       }
@@ -1010,13 +1013,15 @@ object StateStore extends Logging {
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
     val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
+    val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
           task = { doMaintenance() }
         )
-        maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads)
+        maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
+          maintenanceShutdownTimeout)
         logInfo("State Store maintenance task started")
       }
     }

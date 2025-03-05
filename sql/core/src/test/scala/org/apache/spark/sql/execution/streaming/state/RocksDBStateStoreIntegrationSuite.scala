@@ -299,6 +299,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
@@ -345,6 +346,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
@@ -410,6 +412,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBStateStoreProvider].getName,
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
@@ -464,6 +467,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
