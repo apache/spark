@@ -53,9 +53,9 @@ private[spark] class BarrierCoordinator(
 
   // TODO SPARK-25030 Create a Timer() in the mainClass submitted to SparkSubmit makes it unable to
   // fetch result, we shall fix the issue.
-  private lazy val timer = ThreadUtils.newSingleThreadScheduledExecutor(
+  private lazy val timer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     "BarrierCoordinator barrier epoch increment timer")
-  private var timerFuture: Option[ScheduledFuture[_]] = None
+  private val timerFutures = Collections.synchronizedList(new ArrayList[ScheduledFuture[_]])
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
@@ -82,7 +82,7 @@ private[spark] class BarrierCoordinator(
       states.clear()
       listenerBus.removeListener(listener)
     } finally {
-      timerFuture.foreach(_.cancel(true))
+      timerFutures.asScala.foreach(_.cancel(true))
       ThreadUtils.shutdown(timer)
       super.onStop()
     }
@@ -141,7 +141,7 @@ private[spark] class BarrierCoordinator(
     * This became a no-op when java.util.Timer was replaced with ScheduledThreadPoolExecutor
     */
     private def cancelTimerTask(): Unit = {
-      timerFuture.foreach(_.cancel(true))
+      timerFutures.asScala.foreach(_.cancel(true))
     }
 
     // Process the global sync request. The barrier() call succeed if collected enough requests
@@ -176,10 +176,11 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          timerFuture = Some(timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS))
+          val timerFuture = Some(timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS))
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester
+        timerFutures.add(timerFuture)
         messages(request.partitionId) = request.message
         logInfo(log"Barrier sync epoch ${MDC(BARRIER_EPOCH, barrierEpoch)}" +
           log" from ${MDC(BARRIER_ID, barrierId)} received update from Task" +
