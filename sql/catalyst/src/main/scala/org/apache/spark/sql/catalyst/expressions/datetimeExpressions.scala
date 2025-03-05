@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -2104,11 +2105,13 @@ case class ParseToDate(
     ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
-  override lazy val replacement: Expression = format.map { f =>
-    Cast(GetTimestamp(left, f, TimestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
-      timeZoneId, EvalMode.fromBoolean(ansiEnabled))
-  }.getOrElse(Cast(left, DateType, timeZoneId,
-    EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
+  override lazy val replacement: Expression = withOrigin(origin) {
+    format.map { f =>
+      Cast(GetTimestamp(left, f, TimestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
+        timeZoneId, EvalMode.fromBoolean(ansiEnabled))
+    }.getOrElse(Cast(left, DateType, timeZoneId,
+      EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
+  }
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format))
@@ -2183,9 +2186,11 @@ case class ParseToTimestamp(
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
-  override lazy val replacement: Expression = format.map { f =>
-    GetTimestamp(left, f, dataType, "try_to_timestamp", timeZoneId, failOnError = failOnError)
-  }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
+  override lazy val replacement: Expression = withOrigin(origin) {
+    format.map { f =>
+      GetTimestamp(left, f, dataType, "try_to_timestamp", timeZoneId, failOnError = failOnError)
+    }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
+  }
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format), SQLConf.get.timestampType)
