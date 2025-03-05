@@ -121,7 +121,7 @@ private[spark] class BarrierCoordinator(
     // A timer task that ensures we may timeout for a barrier() call.
     private var timerTask: TimerTask = null
 
-    /* Init a TimerTask for a barrier() call and also add logic to handle Thread Interruption 
+    /* Init a TimerTask for a barrier() call and also add logic to handle Thread Interruption
     * which is invoked when the timerTask.cancel(true) is invokved.
     */
     private def initTimerTask(state: ContextBarrierState): Unit = {
