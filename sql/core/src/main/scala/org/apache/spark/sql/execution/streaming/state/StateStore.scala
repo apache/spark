@@ -856,8 +856,9 @@ object StateStore extends Logging {
       val waitTimeout = 5 * shutdownTimeout
       if (!threadPool.awaitTermination(waitTimeout, TimeUnit.SECONDS)) {
         logWarning(
-          s"MaintenanceThreadPool failed to terminate within waitTimeout=$waitTimeout " +
-            "seconds, forcefully shutting down now.")
+          log"MaintenanceThreadPool failed to terminate within " +
+          log"waitTimeout=${MDC(LogKeys.TIMEOUT, waitTimeout)} seconds, " +
+          log"forcefully shutting down now.")
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
