@@ -37,14 +37,6 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
   protected val catalogAndNamespace: String
 
-  protected def catalog: String = {
-    if (catalogAndNamespace.nonEmpty) {
-      catalogAndNamespace.split('.').headOption.getOrElse("spark_catalog")
-    } else {
-      "spark_catalog"
-    }
-  }
-
   protected val v2Format: String
 
   private def fullTableName(tableName: String): String = {
