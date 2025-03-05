@@ -454,7 +454,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       case Some(cache) if canCachePlan(rel) =>
         Option(cache.getIfPresent(rel)) match {
           case Some(plan) =>
-            if (plan.isOutdated) {
+            if (isPlanOutdated(plan)) {
               // The plan is outdated, therefore remove it from the cache.
               cache.invalidate(rel)
             } else {
@@ -500,6 +500,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       }
     }
     df
+  }
+
+  // Return true if the plan is outdated and should be removed from the cache.
+  private def isPlanOutdated(plan: LogicalPlan): Boolean = {
+    // Currently, nothing is checked.
+    false
   }
 
   // Return true if the plan cache is enabled for the session and the relation.
