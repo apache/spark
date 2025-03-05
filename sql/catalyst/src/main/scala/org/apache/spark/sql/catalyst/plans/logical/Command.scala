@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.AnalysisContext
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, RelationWrapper}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, TreePattern}
  * eagerly executed.
  */
 trait Command extends LogicalPlan {
+  implicit val withRelations: Set[RelationWrapper] = Set.empty
   override def output: Seq[Attribute] = Seq.empty
   override def producedAttributes: AttributeSet = outputSet
   // Commands are eagerly executed. They will be converted to LocalRelation after the DataFrame
