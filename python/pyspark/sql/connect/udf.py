@@ -39,6 +39,7 @@ from pyspark.sql.udf import (
     UDFRegistration as PySparkUDFRegistration,
     UserDefinedFunction as PySparkUserDefinedFunction,
 )
+from pyspark.sql.pandas.utils import require_minimum_pyarrow_version, require_minimum_pandas_version
 from pyspark.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -56,6 +57,7 @@ def _create_py_udf(
     returnType: "DataTypeOrString",
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
+    is_arrow_enabled = False
     if useArrow is None:
         is_arrow_enabled = False
         try:
@@ -78,6 +80,16 @@ def _create_py_udf(
 
     if is_arrow_enabled:
         eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
+        try:
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+        except ImportError:
+            is_arrow_enabled = False
+            warnings.warn(
+                "Arrow optimization failed to enable because PyArrow is not installed. "
+                "Falling back to a non-Arrow-optimized UDF.",
+                RuntimeWarning,
+            )
 
     return _create_udf(f, returnType, eval_type)
 
