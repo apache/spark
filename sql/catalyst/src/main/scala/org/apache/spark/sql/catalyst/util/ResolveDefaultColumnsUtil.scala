@@ -40,6 +40,7 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -120,7 +121,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
       schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
       val keywords: Array[String] = SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
         .toLowerCase().split(",").map(_.trim)
-      val allowedTableProviders: Array[String] = keywords.map(_.stripSuffix("*"))
+      val allowedTableProviders: Array[String] = if (Utils.isTesting) {
+        "in-memory" +: keywords.map(_.stripSuffix("*"))
+      } else {
+        keywords.map(_.stripSuffix("*"))
+      }
       val addColumnExistingTableBannedProviders: Array[String] =
         keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
       val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()

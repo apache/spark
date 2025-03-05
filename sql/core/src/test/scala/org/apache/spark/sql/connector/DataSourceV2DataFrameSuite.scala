@@ -38,7 +38,6 @@ class DataSourceV2DataFrameSuite
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key, "testcat")
   }
 
   after {
