@@ -168,7 +168,6 @@ case class UnionLoopExec(
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && ((globalLimit.isEmpty && localLimit.isEmpty) || currentLimit > 0)) {
-      Console.println(prevDF)
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(
