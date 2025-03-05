@@ -204,7 +204,7 @@ trait StateStoreWriter
   def operatorStateMetadataVersion: Int = 1
 
   override lazy val metrics = {
-    // Lazy initialize instance metrics
+    // Lazy initialize instance metrics, but do not include these with regular metrics
     instanceMetrics
     statefulOperatorCustomMetrics ++ Map(
       "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -224,7 +224,12 @@ trait StateStoreWriter
     ) ++ stateStoreCustomMetrics ++ pythonMetrics
   }
 
-  override lazy val instanceMetrics = stateStoreInstanceMetrics
+  lazy val instanceMetrics = stateStoreInstanceMetrics
+
+  override def resetMetrics(): Unit = {
+    super.resetMetrics()
+    instanceMetrics.valuesIterator.foreach(_.reset())
+  }
 
   val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
 
@@ -340,7 +345,7 @@ trait StateStoreWriter
         case (name, metricConfig) =>
           // Keep instance metrics that are updated or aren't marked to be ignored,
           // as their initial value could still be important.
-          !metricConfig.ignoreIfUnchanged || !longInstanceMetric(name).isZero
+          !metricConfig.ignoreIfUnchanged || !instanceMetrics(name).isZero
       }
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
@@ -355,8 +360,8 @@ trait StateStoreWriter
           metrics
             .map {
               case (_, metric) =>
-                metric.name -> (if (longInstanceMetric(metric.name).isZero) metricConf.initValue
-                                else longInstanceMetric(metric.name).value)
+                metric.name -> (if (instanceMetrics(metric.name).isZero) metricConf.initValue
+                                else instanceMetrics(metric.name).value)
             }
             .toSeq
             .sortBy(_._2)(metricConf.ordering)
@@ -442,13 +447,12 @@ trait StateStoreWriter
   }
 
   protected def setStoreInstanceMetrics(
-      instanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
-    instanceMetrics.foreach {
+      newInstanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
+    newInstanceMetrics.foreach {
       case (metric, value) =>
         val metricConfig = instanceMetricConfiguration(metric.name)
         // Update the metric's value based on the defined combine method
-        longInstanceMetric(metric.name)
-          .set(metricConfig.combine(longInstanceMetric(metric.name), value))
+        instanceMetrics(metric.name).set(metricConfig.combine(instanceMetrics(metric.name), value))
     }
   }
 

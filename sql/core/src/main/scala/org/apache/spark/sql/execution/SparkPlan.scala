@@ -141,16 +141,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def metrics: Map[String, SQLMetric] = Map.empty
 
   /**
-   * @return All instance metrics of this SparkPlan.
-   */
-  def instanceMetrics: Map[String, SQLMetric] = Map.empty
-
-  /**
    * Resets all the metrics.
    */
   def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
-    instanceMetrics.valuesIterator.foreach(_.reset())
     children.foreach(_.resetMetrics())
   }
 
@@ -158,11 +152,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @return [[SQLMetric]] for the `name`.
    */
   def longMetric(name: String): SQLMetric = metrics(name)
-
-  /**
-   * @return The instance-specific [[SQLMetric]] for the given `name`.
-   */
-  def longInstanceMetric(name: String): SQLMetric = instanceMetrics(name)
 
   // TODO: Move to `DistributedPlan`
   /**
