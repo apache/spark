@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
+import java.time.temporal.ChronoField.MICRO_OF_DAY
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
 import java.util.regex.Pattern
@@ -182,6 +183,19 @@ trait SparkDateTimeUtils {
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant)
+  }
+
+  /**
+   * Converts the local time to the number of microseconds within the day, from 0 to (24 * 60 * 60
+   * * 1000000) - 1.
+   */
+  def localTimeToMicros(localTime: LocalTime): Long = localTime.getLong(MICRO_OF_DAY)
+
+  /**
+   * Converts the number of microseconds within the day to the local time.
+   */
+  def microsToLocalTime(micros: Long): LocalTime = {
+    LocalTime.ofNanoOfDay(Math.multiplyExact(micros, NANOS_PER_MICROS))
   }
 
   /**

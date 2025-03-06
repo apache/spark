@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
+import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -1104,5 +1104,26 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         Map("functionName" -> "`TIMESTAMPDIFF`",
           "parameter" -> "`unit`",
           "invalidValue" -> "'SECS'"))
+  }
+
+  test("localTimeToMicros and microsToLocalTime") {
+    assert(microsToLocalTime(0) === LocalTime.of(0, 0))
+    assert(localTimeToMicros(LocalTime.of(0, 0)) === 0)
+
+    assert(localTimeToMicros(microsToLocalTime(123456789)) === 123456789)
+
+    assert(localTimeToMicros(LocalTime.parse("23:59:59.999999")) === (24L * 60 * 60 * 1000000 - 1))
+    assert(microsToLocalTime(24L * 60 * 60 * 1000000 - 1) === LocalTime.of(23, 59, 59, 999999000))
+
+    Seq(-1, 24L * 60 * 60 * 1000000).foreach { invalidMicros =>
+      val msg = intercept[DateTimeException] {
+        microsToLocalTime(invalidMicros)
+      }.getMessage
+      assert(msg.contains("Invalid value"))
+    }
+    val msg = intercept[ArithmeticException] {
+      microsToLocalTime(Long.MaxValue)
+    }.getMessage
+    assert(msg == "long overflow")
   }
 }
