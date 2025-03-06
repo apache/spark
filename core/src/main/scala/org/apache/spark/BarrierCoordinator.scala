@@ -142,11 +142,14 @@ private[spark] class BarrierCoordinator(
     }
 
     /* Cancel the tasks scheduled to run inside the ScheduledExecutor Threadpool
-    * The original implementation was clearing java.util.Timer and java.util.TimerTasks
-    * This became a no-op when java.util.Timer was replaced with ScheduledThreadPoolExecutor
+     * The original implementation was clearing java.util.Timer and java.util.TimerTasks
+     * This became a no-op when java.util.Timer was replaced with ScheduledThreadPoolExecutor
+     * Each time all the Timertasks are cancelled inside the timer, clear the corresponding entries
+     * to reduce the memory requirements
     */
     private def cancelTimerTask(): Unit = {
       timerFutures.asScala.foreach(_.cancel(true))
+      timerFutures.clear()
     }
 
     // Process the global sync request. The barrier() call succeed if collected enough requests
@@ -202,10 +205,6 @@ private[spark] class BarrierCoordinator(
           requesters.clear()
           requestMethods.clear()
           cancelTimerTask()
-          // Collections.synchronizedList should be synchronized for thread safety
-          timerFutures.synchronized {
-            timerFutures.clear()
-          }
         }
       }
     }
@@ -217,7 +216,6 @@ private[spark] class BarrierCoordinator(
       barrierEpoch = -1
       requesters.clear()
       cancelTimerTask()
-      timerFutures.clear()
     }
   }
 
