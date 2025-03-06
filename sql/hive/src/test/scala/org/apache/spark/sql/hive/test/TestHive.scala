@@ -72,8 +72,8 @@ private object TesSparkConf {
     // it is necessary to limit the number of threads in this case to avoid the issue of
     // memory resources being exhausted by frequent thread creation during testing.
     if (sys.env.contains("GITHUB_ACTIONS") && Utils.isMacOnAppleSilicon) {
-      conf.set(SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, 48)
-      conf.set(RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, 48)
+      sparkConf.set(SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, 48)
+      sparkConf.set(RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, 48)
     }
     sparkConf
   }
