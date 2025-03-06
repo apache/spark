@@ -99,6 +99,15 @@
               <shadedArtifactAttached>false</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <createDependencyReducedPom>false</createDependencyReducedPom>
+              <relocations>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>org.sparkproject.com.google</shadedPattern>
+                  <excludes>
+                    <exclude>com.google.common.**</exclude>
+                  </excludes>
+                </relocation>
+              </relocations>
               <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
