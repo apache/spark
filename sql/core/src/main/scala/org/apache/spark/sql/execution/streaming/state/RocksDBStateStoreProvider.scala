@@ -517,9 +517,6 @@ private[sql] class RocksDBStateStoreProvider
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
-
-    val rocksDBConf = RocksDBConf(storeConf)
-
     val localRootDir = Utils.createExecutorLocalTempDir(sparkConf, storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
