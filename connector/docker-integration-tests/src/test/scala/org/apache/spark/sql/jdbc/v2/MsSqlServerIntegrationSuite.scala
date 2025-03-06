@@ -225,4 +225,28 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     // scalastyle:on
     df.collect()
   }
+
+  test("SPARK-51321: SQLServer pushdown for RPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE rpad(name, 10, 'x') = 'amyxxxxxxx'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-51321: SQLServer pushdown for LPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE lpad(name, 10, 'x') = 'xxxxxxxamy'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
+  }
 }
