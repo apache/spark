@@ -802,6 +802,9 @@ object SparkSession extends SparkSessionCompanion with Logging {
             }
           }
 
+        // Let the server fully start to make less noise from retrying.
+        Thread.sleep(1000L)
+
         System.setProperty("spark.remote", s"sc://localhost/;token=$token")
 
         // scalastyle:off runtimeaddshutdownhook
