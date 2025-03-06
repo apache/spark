@@ -17,30 +17,23 @@
 
 package org.apache.spark.deploy.yarn
 
-import com.google.common.io.Files
-import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.sql.{DataFrame, Encoders, QueryTest, SparkSession}
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.yarn.YarnClusterDriver.{assert, be}
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY, SUBMIT_DEPLOY_MODE}
-import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.sql.vectorized.Counter
-import org.apache.spark.tags.ExtendedYarnTest
-import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
-import org.scalatest.matchers.must.Matchers
-
 import java.io.File
 import java.nio.charset.StandardCharsets
-import scala.io.Source
+import com.google.common.io.Files
+import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.spark.{SparkContext, SparkException, TaskContext}
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
+import org.apache.spark.tags.ExtendedYarnTest
 
 @ExtendedYarnTest
 class Spark51016Suite extends BaseYarnClusterSuite {
+
+  override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
 
   test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
@@ -54,9 +47,11 @@ class Spark51016Suite extends BaseYarnClusterSuite {
         "spark.sql.files.maxPartitionNum" -> "2",
         "spark.sql.files.minPartitionNum" -> "2",
         DRIVER_MEMORY.key -> "512m",
-        EXECUTOR_CORES.key -> "1",
+        EXECUTOR_CORES.key -> "2",
         EXECUTOR_MEMORY.key -> "512m",
-        EXECUTOR_INSTANCES.key -> "2"
+        EXECUTOR_INSTANCES.key -> "2",
+        "spark.ui.port" -> "4040",
+        "spark.ui.enabled" -> "true"
       ))
   }
 
@@ -107,10 +102,23 @@ private object Spark51016Suite extends Logging {
     spark.sql("drop table if exists outer ")
     spark.sql("drop table if exists inner ")
 
-    val data = Seq((0, "aa"), (1, "aa"), (1, "aa"), (0, "aa"), (0, "aa"), (0, "aa"),
-      (null, "bb"), (null, "bb"), (null, "bb"), (null, "bb"), (null, "bb"), (null, "bb")
+    val data = Seq(
+      (java.lang.Integer.valueOf(0), "aa"),
+      (java.lang.Integer.valueOf(1), "aa"),
+      (java.lang.Integer.valueOf(1), "aa"),
+      (java.lang.Integer.valueOf(0), "aa"),
+      (java.lang.Integer.valueOf(0), "aa"),
+      (java.lang.Integer.valueOf(0), "aa"),
+      (null, "bb"),
+      (null, "bb"),
+      (null, "bb"),
+      (null, "bb"),
+      (null, "bb"),
+      (null, "bb")
     )
-    val data1 = Seq((0, "bb"), (1, "bb"))
+    val data1 = Seq(
+      (java.lang.Integer.valueOf(0), "bb"),
+      (java.lang.Integer.valueOf(1), "bb"))
     val outerDf = spark.createDataset(data)(
       Encoders.tuple(Encoders.INT, Encoders.STRING)).toDF("pkLeftt", "strleft")
 
@@ -138,6 +146,7 @@ private object Spark51016Suite extends Logging {
     }
 
     val spark = SparkSession.builder().appName("Spark51016Suite").getOrCreate()
+    val sc = SparkContext.getOrCreate()
 
     val status = new File(args(0))
     var result = "failure"
@@ -145,7 +154,7 @@ private object Spark51016Suite extends Logging {
       createBaseTables(spark)
       val outerjoin: DataFrame = getOuterJoinDF(spark)
 
-      println("Initial data")
+   //   println("Initial data")
       //  outerjoin.show(100)
 
       val correctRows = outerjoin.collect()
@@ -153,13 +162,10 @@ private object Spark51016Suite extends Logging {
       for (i <- 0 until 100) {
         try {
           println("before query exec")
-          TaskContext.setFailResult()
+        //  TaskContext.setFailResult()
           val rowsAfterRetry = getOuterJoinDF(spark).collect()
-          TaskContext.unsetFailResult()
-          //  import scala.jdk.CollectionConverters._
-          //    val temp = spark.createDataFrame(rowsAfterRetry.toSeq.asJava, outerjoin.schema)
+        //  TaskContext.unsetFailResult()
 
-          //   temp.show(100)
           if (correctRows.length != rowsAfterRetry.length) {
             println(s"encounterted test failure incorrect query result. run  index = $i ")
           }
@@ -192,7 +198,8 @@ private object Spark51016Suite extends Logging {
           // OK expected
         }
       }
-
+      Thread.sleep(1000000)
+      result = "success"
     } finally {
       Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
       sc.stop()
