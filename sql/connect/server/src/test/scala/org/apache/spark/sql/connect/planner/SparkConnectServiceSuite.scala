@@ -201,7 +201,8 @@ class SparkConnectServiceSuite
       assert(done)
 
       // 4 Partitions + Metrics + optional progress messages
-      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      val filteredResponses = responses.filter(x =>
+        !(x.hasExecutionProgress || x.hasAcknowledgement))
       assert(filteredResponses.size == 6)
 
       // Make sure the first response is schema only
@@ -302,7 +303,8 @@ class SparkConnectServiceSuite
       assert(done)
 
       // 1 Partitions + Metrics
-      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      val filteredResponses = responses.filter(x =>
+        !(x.hasExecutionProgress || x.hasAcknowledgement))
       assert(filteredResponses.size == 3)
 
       // Make sure the first response is schema only
@@ -358,7 +360,8 @@ class SparkConnectServiceSuite
       assert(done)
 
       // 1 schema + 1 metric + at least 2 data batches
-      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      val filteredResponses = responses.filter(x =>
+        !(x.hasExecutionProgress || x.hasAcknowledgement))
       assert(filteredResponses.size > 3)
 
       val allocator = new RootAllocator()
@@ -539,7 +542,8 @@ class SparkConnectServiceSuite
       assert(done)
 
       // Result + Metrics
-      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      val filteredResponses = responses.filter(x =>
+        !(x.hasExecutionProgress || x.hasAcknowledgement))
       if (filteredResponses.size > 1) {
         assert(filteredResponses.size == 2)
 
@@ -793,7 +797,8 @@ class SparkConnectServiceSuite
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
-      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      val filteredResponses = responses.filter(x =>
+        !(x.hasExecutionProgress || x.hasAcknowledgement))
       assert(filteredResponses.size == 7)
 
       // Make sure the first response is schema only
