@@ -1294,7 +1294,7 @@ jobs:
           node --experimental-vm-modules node_modules/.bin/jest
 
   connect-examples-build:
-    name: Build server-library-example
+    name: "Build module: server-library-example"
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).connect-examples == 'true'
     runs-on: ubuntu-latest
