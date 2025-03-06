@@ -441,7 +441,7 @@ WITH RECURSIVE fibonacci AS (
 )
 SELECT a FROM fibonacci ORDER BY a;
 
--- Recursive CTE that can be pruned
+-- Recursive CTE with useless columns
 WITH RECURSIVE t1(a,b,c) AS (
     SELECT 1,1,1
     UNION ALL

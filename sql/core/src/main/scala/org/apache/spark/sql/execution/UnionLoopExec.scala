@@ -24,7 +24,7 @@ import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalLimit, LogicalPlan, Project, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LogicalPlan, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
