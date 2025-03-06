@@ -452,4 +452,21 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       assert(re.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND"))
     }
   }
+
+  test("Acknowledgement message is received") {
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      val response = iter.next()
+      assert(response.hasAcknowledgement)
+      assert(!iter.next().hasAcknowledgement)
+
+      // send reattach
+      val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
+      val reattachResponse = iter2.next()
+      assert(reattachResponse.hasAcknowledgement)
+      assert(!iter2.next().hasAcknowledgement)
+    }
+  }
 }
