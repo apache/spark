@@ -64,7 +64,7 @@ You can get values from DataFrame directly, by calling some actions, or transfor
 126
 
 >>> textFile.first()  # First row in this DataFrame
-Row(value=u'# Apache Spark')
+Row(value='# Apache Spark')
 {% endhighlight %}
 
 Now let's transform this DataFrame to a new one. We call `filter` to return a new DataFrame with a subset of the lines in the file.
@@ -147,7 +147,7 @@ Here, we use the `explode` function in `select`, to transform a Dataset of lines
 
 {% highlight python %}
 >>> wordCounts.collect()
-[Row(word=u'online', count=1), Row(word=u'graphs', count=1), ...]
+[Row(word='online', count=1), Row(word='graphs', count=1), ...]
 {% endhighlight %}
 
 </div>
