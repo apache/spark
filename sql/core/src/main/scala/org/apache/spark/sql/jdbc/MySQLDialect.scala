@@ -62,13 +62,13 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
     }
 
-    override def functionToSQL(funcName: String, inputs: Array[String]): String = {
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       funcName match {
         case "DATE_ADD" =>
           s"DATE_ADD(${inputs(0)}, INTERVAL ${inputs(1)} DAY)"
         case "DATE_DIFF" =>
           s"DATEDIFF(${inputs(0)}, ${inputs(1)})"
-        case _ => super.functionToSQL(funcName, inputs)
+        case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
 
@@ -101,7 +101,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
     }
 
-    override def aggregateFunctionToSQL(
+    override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
@@ -110,7 +110,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
       } else {
-        super.aggregateFunctionToSQL(funcName, isDistinct, inputs)
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
   }
 

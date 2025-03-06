@@ -260,7 +260,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
 
   class H2SQLBuilder extends JDBCSQLBuilder {
 
-    override def aggregateFunctionToSQL(
+    override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
@@ -269,7 +269,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
       } else {
-        super.aggregateFunctionToSQL(funcName, isDistinct, inputs)
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
     override def visitExtract(field: String, source: String): String = {
@@ -282,7 +282,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       s"EXTRACT($newField FROM $source)"
     }
 
-    override def functionToSQL(funcName: String, inputs: Array[String]): String = {
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       funcName match {
         case "MD5" =>
           "RAWTOHEX(HASH('MD5', " + inputs.mkString(",") + "))"
@@ -290,7 +290,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
           "RAWTOHEX(HASH('SHA-1', " + inputs.mkString(",") + "))"
         case "SHA2" =>
           "RAWTOHEX(HASH('SHA-" + inputs(1) + "'," + inputs(0) + "))"
-        case _ => super.functionToSQL(funcName, inputs)
+        case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
   }

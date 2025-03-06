@@ -48,7 +48,8 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
     supportedFunctions.contains(funcName)
 
   class DB2SQLBuilder extends JDBCSQLBuilder {
-    override def aggregateFunctionToSQL(
+
+    override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new SparkUnsupportedOperationException(
@@ -57,7 +58,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
       } else {
-        super.aggregateFunctionToSQL(funcName, isDistinct, inputs)
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
     override def dialectFunctionName(funcName: String): String = funcName match {
