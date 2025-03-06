@@ -3534,7 +3534,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
         val projection = TableOutputResolver.resolveOutputColumns(
-          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
+          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
+          supportColDefaultValue = true)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>

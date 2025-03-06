@@ -128,7 +128,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
+    val schema = CatalogV2Util.applySchemaChanges(
+      table.schema,
+      changes,
+      tableProvider = Some("in-memory"),
+      statementType = "ALTER TABLE")
     val finalPartitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
 
     // fail if the last column in the schema was dropped
