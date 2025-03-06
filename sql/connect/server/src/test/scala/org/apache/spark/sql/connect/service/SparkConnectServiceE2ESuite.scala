@@ -58,6 +58,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val response = client.analyze(request)
       val sparkVersionResponse = response.getSparkVersion
       assert(sparkVersionResponse.getJavaVersion == System.getProperty("java.version"))
+      assert(sparkVersionResponse.getScalaVersion.matches("""\d+\.\d+\.\d+"""))
       assert(sparkVersionResponse.getScalaVersion == scala.util.Properties.versionNumberString)
     }
   }
