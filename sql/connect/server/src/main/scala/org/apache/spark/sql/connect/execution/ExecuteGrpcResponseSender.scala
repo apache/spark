@@ -190,7 +190,6 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     deadlineTimeNs = startTime + (1000L * 60L * 60L * 24L * 180L * NANOS_PER_MILLIS)
   }
 
-
   /**
    * Enqueue an acknowledgement message to the response observer.
    */
