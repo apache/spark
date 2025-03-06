@@ -1198,28 +1198,30 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-51402: Test TimeType in UDF") {
+    // Constant
+    val mockTimeStr = "00:00:00.000000"
     // Regular case
-    val input = Seq(java.time.LocalDateTime.parse("2021-01-01T00:00:00.000000")).toDF("dateTime")
-    val plusHour = udf((l: java.time.LocalDateTime) => l.plusHours(1))
-    val result = input.select(plusHour($"dateTime").cast(TimeType).as("newTime"))
+    val input = Seq(java.time.LocalTime.parse(mockTimeStr)).toDF("currentTime")
+    val plusHour = udf((l: java.time.LocalTime) => l.plusHours(1))
+    val result = input.select(plusHour($"currentTime").cast(TimeType).as("newTime"))
     checkAnswer(result, Row(java.time.LocalTime.parse("01:00:00.000000")) :: Nil)
     assert(result.schema === new StructType().add("newTime", TimeType))
     // VALIDAR: UDF produces `null`
     val nullFunc = udf((_: java.time.LocalTime) => null.asInstanceOf[java.time.LocalTime])
-    val nullResult = input.select(nullFunc($"dateTime").as("nullTime"))
+    val nullResult = input.select(nullFunc($"currentTime").as("nullTime"))
     checkAnswer(nullResult, Row(null) :: Nil)
     assert(nullResult.schema === new StructType().add("nullTime", TimeType))
     // TODO: Input parameter of UDF is null
     val nullInput = Seq(null.asInstanceOf[java.time.LocalTime]).toDF("nullTime")
     val constDuration = udf((_: java.time.LocalTime) =>
-      java.time.LocalTime.parse("01:00:00.000000"))
-    val constResult = nullInput.select(constDuration($"nullTime").as("oneHour"))
-    checkAnswer(constResult, Row(java.time.LocalTime.parse("01:00:00.000000")) :: Nil)
-    assert(constResult.schema === new StructType().add("oneHour", TimeType))
+      java.time.LocalTime.parse(mockTimeStr))
+    val constResult = nullInput.select(constDuration($"nullTime").as("zeroHour"))
+    checkAnswer(constResult, Row(java.time.LocalTime.parse(mockTimeStr)) :: Nil)
+    assert(constResult.schema === new StructType().add("zeroHour", TimeType))
     // TODO: Error in the conversion of UDF result to the internal representation of time
     val overflowFunc = udf((l: java.time.LocalTime) => l.plusDays(Long.MaxValue))
     val e = intercept[SparkException] {
-      input.select(overflowFunc($"dateTime")).collect()
+      input.select(overflowFunc($"currentTime")).collect()
     }
     assert(e.getCondition == "FAILED_EXECUTE_UDF")
     assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
