@@ -39,9 +39,11 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 /**
- * Trait representing the different events reported from RocksDB instance.
- * Gives the RocksDB instance a reference to this provider so it can call back to report
- * specific events like snapshot uploads.
+ * Trait representing events reported from a RocksDB instance.
+ *
+ * The internal RocksDB instance can use a provider with a `RocksDBEventListener` reference to
+ * report specific events like snapshot uploads. This should only be used to report back to the
+ * coordinator for metrics and monitoring purposes.
  */
 trait RocksDBEventListener {
   def reportSnapshotUploaded(version: Long): Unit
