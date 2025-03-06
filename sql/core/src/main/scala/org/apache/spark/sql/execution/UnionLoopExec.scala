@@ -92,20 +92,6 @@ case class UnionLoopExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"))
 
-  private val simpleRecursion = {
-    recursion match {
-      case Project(_, Filter(_, Project(_, UnionLoopRef(_, _, _)))) =>
-        true
-      case Filter(_, Project(_, UnionLoopRef(_, _, _))) =>
-        true
-      case Project(_, Filter(_, UnionLoopRef(_, _, _))) =>
-        true
-      case Project(_, UnionLoopRef(_, _, _)) =>
-        true
-      case _ =>
-        false
-  }
-  }
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
@@ -120,15 +106,9 @@ case class UnionLoopExec(
       plan
     }
     val df = Dataset.ofRows(session, planOrLimitedPlan)
-    val newDF = {
-      if (!simpleRecursion) {
-        df.repartition()
-      } else {
-        df
-      }
-    }
-    val count = newDF.count()
-    (newDF, count)
+    val cachedDF = df.repartition()
+    val count = cachedDF.count()
+    (cachedDF, count)
   }
 
   /**

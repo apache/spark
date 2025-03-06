@@ -1050,41 +1050,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    case p @ Project(_, ul: UnionLoop) =>
-      if (!ul.outputSet.subsetOf(p.references)) {
-        val newAnchorChildProj = prunedChild(ul.anchor, p.references)
-        val neededIndicesListRef = {
-          ul.recursion.collect {
-            case pref @ Project(_, ulr: UnionLoopRef) if ulr.loopId == ul.id =>
-              collection.mutable.Set.from {
-                ulr.output.zipWithIndex.filter { case (_, i) =>
-                  pref.references.contains(ulr.output(i))
-                }
-              }
-          }
-        }
-        if (neededIndicesListRef.nonEmpty) {
-          val indicesForRef = neededIndicesListRef.head.map(_._2)
-          val newOutputProj = newAnchorChildProj.outputSet
-          val indicesForProj = collection.mutable.Set.from {
-            ul.anchor.output.zipWithIndex.filter { case (_, i) =>
-              newOutputProj.contains(ul.anchor.output(i))
-            }.map(_._2)
-          }
-          val indices = indicesForProj ++ indicesForRef
-          val newChildren = ul.children.map { p =>
-            val selected = p.output.zipWithIndex.filter { case (_, i) =>
-              indices.contains(i)
-            }.map(_._1)
-            Project(selected, p)
-          }
-          p.copy(child = ul.withNewChildren(newChildren))
-        } else {
-          p
-        }
-      } else {
-        p
-      }
+    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
+    //  `UnionLoopRef` nodes.
+    case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
