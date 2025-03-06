@@ -3202,7 +3202,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     if (scheduler != null) {
       this.afterEach()
     }
-    val resubmitFailedStageTriggered = Array.fill[Boolean](1)(false)
+    var resubmitFailedStageTriggered = false
     val monitor = new Object()
     this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
       override def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
@@ -3212,7 +3212,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
                // partition task completion.
               runEvent(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
             monitor.synchronized {
-              resubmitFailedStageTriggered(0) = true
+              resubmitFailedStageTriggered = true
               monitor.notify()
             }
 
@@ -3230,7 +3230,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
                 // does not exit and process the ResubmitFailedStage event, before
                 // the queue gets successful partition task completion
                 monitor.synchronized {
-                  if (!resubmitFailedStageTriggered(0)) {
+                  if (!resubmitFailedStageTriggered) {
                     monitor.wait()
                   }
                 }
