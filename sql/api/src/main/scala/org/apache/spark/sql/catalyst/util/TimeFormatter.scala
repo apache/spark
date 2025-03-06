@@ -29,10 +29,7 @@ sealed trait TimeFormatter extends Serializable {
   def format(micros: Long): String
 }
 
-class Iso8601TimeFormatter(
-    pattern: String,
-    locale: Locale,
-    isParsing: Boolean)
+class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
     extends TimeFormatter
     with DateTimeFormatterHelper {
 
@@ -59,14 +56,14 @@ object TimeFormatter {
 
   def defaultPattern(): String = "HH:mm:ss[.SSSSSS]"
 
-  private def getFormatter(
+  def apply(
       format: Option[String],
       locale: Locale = defaultLocale,
       isParsing: Boolean): TimeFormatter = {
     new Iso8601TimeFormatter(format.getOrElse(defaultPattern()), locale, isParsing)
   }
 
-  private def getFormatter(): TimeFormatter = {
-    getFormatter(format = None, isParsing = false)
-  }
+  def apply(isParsing: Boolean): TimeFormatter = apply(format = None, isParsing = isParsing)
+
+  def apply(): TimeFormatter = apply(isParsing = false)
 }
