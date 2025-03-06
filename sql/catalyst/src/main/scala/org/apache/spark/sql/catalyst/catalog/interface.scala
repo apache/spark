@@ -76,7 +76,7 @@ case class CatalogStorageFormat(
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    locationUri.foreach(l => map.put("Location", l.toString))
+    locationUri.foreach(l => map.put("Location", CatalogUtils.URIToString(l)))
     serde.foreach(map.put("Serde Library", _))
     inputFormat.foreach(map.put("InputFormat", _))
     outputFormat.foreach(map.put("OutputFormat", _))
