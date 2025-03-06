@@ -1219,7 +1219,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(constResult, Row(java.time.LocalTime.parse(mockTimeStr)) :: Nil)
     assert(constResult.schema === new StructType().add("zeroHour", TimeType))
     // TODO: Error in the conversion of UDF result to the internal representation of time
-    val overflowFunc = udf((l: java.time.LocalTime) => l.plusDays(Long.MaxValue))
+    val overflowFunc = udf((l: java.time.LocalTime) => l.plusHours(Long.MaxValue))
     val e = intercept[SparkException] {
       input.select(overflowFunc($"currentTime")).collect()
     }
