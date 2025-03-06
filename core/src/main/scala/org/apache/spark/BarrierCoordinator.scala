@@ -84,7 +84,7 @@ private[spark] class BarrierCoordinator(
       listenerBus.removeListener(listener)
     } finally {
       timerFutures.asScala.foreach(_.cancel(true))
-      //Collections.synchronizedList should be synchronized for thread safety
+      // Collections.synchronizedList should be synchronized for thread safety
       timerFutures.synchronized {
         timerFutures.clear()
       }
@@ -202,7 +202,7 @@ private[spark] class BarrierCoordinator(
           requesters.clear()
           requestMethods.clear()
           cancelTimerTask()
-          //Collections.synchronizedList should be synchronized for thread safety
+          // Collections.synchronizedList should be synchronized for thread safety
           timerFutures.synchronized {
             timerFutures.clear()
           }
