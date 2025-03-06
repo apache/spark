@@ -3199,9 +3199,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("SPARK-51272: retry all the succeeding stages when the map stage is indeterminate with" +
     " concurrent tasks completion") {
-    if (scheduler != null) {
-      this.afterEach()
-    }
     var resubmitFailedStageTriggered = false
     val monitor = new Object()
     this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
@@ -3242,8 +3239,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         }
       }
     }
-
-    this.beforeEach()
 
     val numPartitions = 2
     val (shuffleId1, shuffleId2) = constructTwoIndeterminateStage()
