@@ -477,7 +477,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
   private def parallelPoolAdjacentViolators(
       input: RDD[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
     val keyedInput = input.keyBy(_._2)
-    val parallelStepResult = keyedInput
+
+    keyedInput
       // Points with same or adjacent features must collocate within the same partition.
       .partitionBy(new RangePartitioner(keyedInput.getNumPartitions, keyedInput))
       .values
@@ -486,10 +487,11 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       // Aggregate points with equal features into a single point.
       .map(makeUnique)
       .flatMap(poolAdjacentViolators)
+      // Gather all partial results to a single partition.
+      .repartition(1)
+      .mapPartitions(p => Iterator(p.toArray.sortBy(_._2)))
+      .flatMap(poolAdjacentViolators)
       .collect()
-      // Sort again because collect() doesn't promise ordering.
-      .sortBy(_._2)
-    poolAdjacentViolators(parallelStepResult)
   }
 
   /**
