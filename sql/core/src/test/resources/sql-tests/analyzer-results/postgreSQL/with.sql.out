@@ -264,7 +264,7 @@ WithCTE
 :        +- OneRowRelation
 +- Project [x#x]
    +- SubqueryAlias q
-      +- CTERelationRef xxxx, true, [x#x], false, false
+      +- CTERelationRef xxxx, true, [x#x], false, false, 1
 
 
 -- !query
@@ -992,7 +992,7 @@ WithCTE
 :        +- UnionLoop xxxx
 :           :- Project [id#x]
 :           :  +- SubqueryAlias y
-:           :     +- CTERelationRef xxxx, true, [id#x], false, false
+:           :     +- CTERelationRef xxxx, true, [id#x], false, false, 1
 :           +- Project [(id#x + 1) AS (id + 1)#x]
 :              +- Filter (id#x < 5)
 :                 +- SubqueryAlias x

@@ -271,7 +271,7 @@ WithCTE
 :              +- OneRowRelation
 +- Project [n#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [n#x], false, false
+      +- CTERelationRef xxxx, true, [n#x], false, false, 2
 
 
 -- !query
