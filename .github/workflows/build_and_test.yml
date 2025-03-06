@@ -92,6 +92,7 @@ jobs:
           pyspark_pandas_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark-pandas')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
+          connect_examples=`./dev/is-changed.py -m "connect-examples"`
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -127,6 +128,7 @@ jobs:
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"connect-examples\": \"$connect_examples\"
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -1290,3 +1292,35 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  connect-examples-build:
+    name: Build spark-server-library-example
+    needs: precondition
+    if: fromJson(needs.precondition.outputs.required).connect-examples == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: ${{ inputs.java }}
+
+      - name: Build spark-server-library-example
+        run: |
+          cd connect-examples/spark-server-library-example
+          mvn clean package
