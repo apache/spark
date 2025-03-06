@@ -109,7 +109,7 @@ private[scheduler] abstract class Stage(
       this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
       resourceProfileId = resourceProfileId)
     nextAttemptId += 1
-    // clear the entry in the allPartitionsAsMissing set
+    // clear the attemptId set in the attemptIdAllPartitionsMissing
     attemptIdAllPartitionsMissing = -1
   }
 

@@ -3197,8 +3197,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       "Spark can only do this while using the new shuffle block fetching protocol"))
   }
 
-  test("SPARK-51272: retry all the succeeding stages when the map stage is indeterminate with" +
-    " concurrent tasks completion") {
+  test("SPARK-51272: retry all the partitions of result stage, if the first result task" +
+    " has failed and ShuffleMap stage is inDeterminate") {
     var resubmitFailedStageTriggered = false
     val monitor = new Object()
     this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
