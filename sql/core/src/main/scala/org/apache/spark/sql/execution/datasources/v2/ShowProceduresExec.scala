@@ -29,14 +29,10 @@ import org.apache.spark.sql.execution.LeafExecNode
 case class ShowProceduresExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
-    namespace: Seq[String],
-    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
+    namespace: Seq[String]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val procedureCatalog = catalog.asProcedureCatalog
-    val procedures = pattern match {
-      case Some(p) => procedureCatalog.listProcedures(namespace.toArray, p)
-      case _ => procedureCatalog.listProcedures(namespace.toArray)
-    }
+    val procedures = procedureCatalog.listProcedures(namespace.toArray)
     procedures.toSeq.map(p => toCatalystRow(p.namespace().quoted, p.name()))
   }
 }

@@ -6313,7 +6313,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       CurrentNamespace
     }
-    ShowProcedures(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
+    ShowProcedures(ns)
   }
 
   /**

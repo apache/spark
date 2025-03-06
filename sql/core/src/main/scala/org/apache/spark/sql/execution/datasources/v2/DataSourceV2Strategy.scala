@@ -566,8 +566,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case c: Call =>
       ExplainOnlySparkPlan(c) :: Nil
 
-    case ShowProcedures(ResolvedNamespace(catalog, ns, _), pattern, output) =>
-      ShowProceduresExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
+    case ShowProcedures(ResolvedNamespace(catalog, ns, _), output) =>
+      ShowProceduresExec(output, catalog.asTableCatalog, ns) :: Nil
 
     case _ => Nil
   }

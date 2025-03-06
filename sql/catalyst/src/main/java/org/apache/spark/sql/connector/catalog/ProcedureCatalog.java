@@ -48,17 +48,4 @@ public interface ProcedureCatalog extends CatalogPlugin {
   default Identifier[] listProcedures(String[] namespace) {
     throw QueryExecutionErrors.unsupportedShowProceduresError();
   }
-
-  /**
-   * List all procedures in the specified database matching the specified pattern.
-   */
-  default Identifier[] listProcedures(String[] namespace, String pattern) {
-    Identifier[] procedures = listProcedures(namespace);
-    return Arrays.stream(procedures).filter(proc ->
-      StringUtils
-        .filterPattern(
-          CollectionConverters.asScala(Lists.newArrayList(proc.name())).toSeq(), pattern)
-        .nonEmpty())
-      .toArray(Identifier[]::new);
-  }
 }

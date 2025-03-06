@@ -1669,9 +1669,8 @@ case class Call(
  * The logical plan of the SHOW PROCEDURES command.
  */
 case class ShowProcedures(
-  namespace: LogicalPlan,
-  pattern: Option[String],
-  override val output: Seq[Attribute] = ShowProcedures.getOutputAttrs) extends UnaryCommand {
+    namespace: LogicalPlan,
+    override val output: Seq[Attribute] = ShowProcedures.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
 
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowProcedures =
@@ -1681,5 +1680,5 @@ case class ShowProcedures(
 object ShowProcedures {
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("name", StringType, nullable = false)())
+    AttributeReference("procedure_name", StringType, nullable = false)())
 }
