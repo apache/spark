@@ -520,15 +520,7 @@ private[sql] class RocksDBStateStoreProvider
 
     val rocksDBConf = RocksDBConf(storeConf)
 
-    // When running on Yarn, we just use the java.io.tmpdir property, which Yarn sets to a
-    // container specific tmp directory. This makes sure the state data gets cleaned up when
-    // the executor stops, even from a hard shutdown or failure where the shutdown hooks
-    // don't get run. When not running on Yarn, fallback to a configured local directory.
-    val localRootDir = if (Utils.isRunningInYarnContainer(sparkConf)) {
-      Utils.createTempDir(namePrefix = storeIdStr)
-    } else {
-      Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    }
+    val localRootDir = Utils.createExecutorLocalTempDir(sparkConf, storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
   }
