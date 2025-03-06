@@ -46,7 +46,8 @@ class ObjectAggregationIterator(
     fallbackCountThreshold: Int,
     numOutputRows: SQLMetric,
     spillSize: SQLMetric,
-    numTasksFallBacked: SQLMetric)
+    numTasksFallBacked: SQLMetric,
+    aggregationInMemory: Boolean = false)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -81,17 +82,15 @@ class ObjectAggregationIterator(
       newExpressions, newFunctions.toImmutableArraySeq, newInputAttributes.toImmutableArraySeq)
   }
 
-  /**
-   * Start processing input rows.
-   */
-  processInputs()
-
   TaskContext.get().addTaskCompletionListener[Unit](_ => {
     // At the end of the task, update the task's spill size.
     spillSize.set(TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore)
   })
 
   override final def hasNext: Boolean = {
+    if (aggBufferIterator == null || (!aggBufferIterator.hasNext && inputRows.hasNext)) {
+      processInputs()
+    }
     aggBufferIterator.hasNext
   }
 
@@ -166,7 +165,8 @@ class ObjectAggregationIterator(
         processRow(buffer, inputRows.next())
       }
     } else {
-      while (inputRows.hasNext && !sortBased) {
+      var stop = false
+      while (inputRows.hasNext && !stop) {
         val newInput = inputRows.next()
         val groupingKey = groupingProjection.apply(newInput)
         val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
@@ -183,8 +183,11 @@ class ObjectAggregationIterator(
               log"${MDC(CONFIG, SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key)}"
           )
 
-          // Falls back to sort-based aggregation
-          sortBased = true
+          stop = true
+          if (!aggregationInMemory) {
+            // Falls back to sort-based aggregation
+            sortBased = true
+          }
           numTasksFallBacked += 1
         }
       }

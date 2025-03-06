@@ -74,13 +74,14 @@ object AggUtils {
       aggregateAttributes: Seq[Attribute] = Nil,
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
-      child: SparkPlan): SparkPlan = {
+      child: SparkPlan,
+      isFinalMode: Boolean = false): SparkPlan = {
     val useHash = Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
 
     val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
-    val forceSortAggregate = forceApplySortAggregate(child.conf)
-
+    val forceSortAggregate = (isFinalMode && SQLConf.get.sortedShuffleEnabled) ||
+      forceApplySortAggregate(child.conf)
     if (useHash && !forceSortAggregate && !forceObjHashAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
@@ -91,7 +92,8 @@ object AggUtils {
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
-        child = child)
+        child = child,
+        isFinalMode = isFinalMode)
     } else {
       val objectHashEnabled = child.conf.useObjectHashAggregation
       val useObjectHash = Aggregate.supportsObjectHashAggregate(aggregateExpressions)
@@ -106,7 +108,8 @@ object AggUtils {
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,
           resultExpressions = resultExpressions,
-          child = child)
+          child = child,
+          isFinalMode = isFinalMode)
       } else {
         SortAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
@@ -166,7 +169,8 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes,
         initialInputBufferOffset = groupingExpressions.length,
         resultExpressions = resultExpressions,
-        child = interExec)
+        child = interExec,
+        isFinalMode = true)
 
     finalAggregate :: Nil
   }
@@ -295,7 +299,8 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = resultExpressions,
-        child = partialDistinctAggregate)
+        child = partialDistinctAggregate,
+        isFinalMode = true)
     }
 
     finalAndCompleteAggregate :: Nil

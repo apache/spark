@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A hash-based aggregate operator that supports [[TypedImperativeAggregate]] functions that may
@@ -66,7 +67,8 @@ case class ObjectHashAggregateExec(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    child: SparkPlan)
+    child: SparkPlan,
+    isFinalMode: Boolean)
   extends BaseAggregateExec {
 
   override def allAttributes: AttributeSeq =
@@ -111,7 +113,8 @@ case class ObjectHashAggregateExec(
             fallbackCountThreshold,
             numOutputRows,
             spillSize,
-            numTasksFallBacked)
+            numTasksFallBacked,
+            !isStreaming && !isFinalMode && SQLConf.get.sortedShuffleEnabled)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())

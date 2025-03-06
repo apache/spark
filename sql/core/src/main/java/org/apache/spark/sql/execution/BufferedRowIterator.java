@@ -37,6 +37,7 @@ public abstract class BufferedRowIterator {
   private long startTimeNs = System.nanoTime();
 
   protected int partitionIndex = -1;
+  protected boolean shouldBreak = false;
 
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
@@ -80,6 +81,14 @@ public abstract class BufferedRowIterator {
    */
   public boolean shouldStop() {
     return !currentRows.isEmpty();
+  }
+
+  public boolean shouldBreak() {
+    if (shouldBreak) {
+      shouldBreak = false;
+      return true;
+    }
+    return false;
   }
 
   /**

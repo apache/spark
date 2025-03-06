@@ -141,9 +141,9 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
     val rowsRDD = spark.sparkContext.parallelize(
       Seq((0, unsafeRow), (1, unsafeRow), (0, unsafeRow))
-    ).asInstanceOf[RDD[Product2[Int, InternalRow]]]
+    ).asInstanceOf[RDD[Product2[SqlKey, InternalRow]]]
     val dependency =
-      new ShuffleDependency[Int, InternalRow, InternalRow](
+      new ShuffleDependency[SqlKey, InternalRow, InternalRow](
         rowsRDD,
         new PartitionIdPassthrough(2),
         new UnsafeRowSerializer(2))

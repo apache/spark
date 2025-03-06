@@ -379,10 +379,16 @@ trait CodegenSupport extends SparkPlan {
   /**
    * Helper default should stop check code.
    */
-  def shouldStopCheckCode: String = if (needStopCheck) {
-    "if (shouldStop()) return;"
-  } else {
-    "// shouldStop check is eliminated"
+  def shouldStopCheckCode: String = {
+    if (this.isInstanceOf[WholeStageCodegenExec] || this.parent == null) {
+      if (needStopCheck) {
+        "if (shouldStop()) return;"
+      } else {
+        "// shouldStop check is eliminated"
+      }
+    } else {
+      parent.shouldStopCheckCode
+    }
   }
 
   /**

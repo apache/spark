@@ -128,13 +128,13 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  * (i.e. the number of partitions of the map output).
  */
 class ShuffledRowRDD(
-    var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
+    var dependency: ShuffleDependency[SqlKey, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
     partitionSpecs: Array[ShufflePartitionSpec])
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   def this(
-      dependency: ShuffleDependency[Int, InternalRow, InternalRow],
+      dependency: ShuffleDependency[SqlKey, InternalRow, InternalRow],
       metrics: Map[String, SQLMetric]) = {
     this(dependency, metrics,
       Array.tabulate(dependency.partitioner.numPartitions)(i => CoalescedPartitionSpec(i, i + 1)))
@@ -229,7 +229,7 @@ class ShuffledRowRDD(
           context,
           sqlMetricsReporter)
     }
-    reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
+    reader.read().asInstanceOf[Iterator[Product2[SqlKey, InternalRow]]].map(_._2)
   }
 
   override def clearDependencies(): Unit = {

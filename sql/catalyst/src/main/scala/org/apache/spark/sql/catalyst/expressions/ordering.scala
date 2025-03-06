@@ -121,9 +121,17 @@ object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], 
    * Creates a row ordering for the given schema, in natural ascending order.
    */
   def createNaturalAscendingOrdering(dataTypes: Seq[DataType]): BaseOrdering = {
-    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
+    val order: Seq[SortOrder] = createNaturalAscendingSortOrder(dataTypes)
+    create(order, Seq.empty)
+  }
+
+  def createNaturalAscendingSortOrder(dataTypes: Seq[DataType]): Seq[SortOrder] = {
+    dataTypes.zipWithIndex.map {
       case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     }
-    create(order, Seq.empty)
+  }
+
+  def createNaturalInterpretedOrdering(sortOrder: Seq[SortOrder]): BaseOrdering = {
+    createInterpretedObject(bindReferences(sortOrder, Seq.empty))
   }
 }

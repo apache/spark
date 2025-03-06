@@ -58,7 +58,8 @@ case class HashAggregateExec(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    child: SparkPlan)
+    child: SparkPlan,
+    isFinalMode: Boolean)
   extends AggregateCodegenSupport {
 
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
@@ -89,6 +90,9 @@ case class HashAggregateExec(
     }
   }
 
+  val aggregationInMemory: Boolean = !isStreaming && !isFinalMode &&
+    SQLConf.get.sortedShuffleEnabled
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val peakMemory = longMetric("peakMemory")
@@ -118,12 +122,14 @@ case class HashAggregateExec(
               MutableProjection.create(expressions, inputSchema),
             inputAttributes,
             iter,
-            testFallbackStartsAt,
+            (if (aggregationInMemory) SQLConf.get.hashAggMaxRecordsInMemory
+              else testFallbackStartsAt.getOrElse((Int.MaxValue, Int.MaxValue))._2),
             numOutputRows,
             peakMemory,
             spillSize,
             avgHashProbe,
-            numTasksFallBacked)
+            numTasksFallBacked,
+            aggregationInMemory)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -406,7 +412,10 @@ case class HashAggregateExec(
         !conf.getConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY)
       }
 
-    isSupported && isNotByteArrayDecimalType && isEnabledForAggModes
+    // For now, if we do aggregation in memory, it will do partial aggregation according
+    // to hashAggMaxRecordsInMemory. If the fast map is used, it may frequently apply for
+    // memory. Therefore, the fast map is disabled when aggregation in memory.
+    isSupported && isNotByteArrayDecimalType && isEnabledForAggModes && !aggregationInMemory
   }
 
   private def enableTwoLevelHashMap(): Unit = {
@@ -609,23 +618,39 @@ case class HashAggregateExec(
 
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
+    val fetchNextRow = ctx.freshName("fetchNewRow")
+
+    ctx.addNewFunction(fetchNextRow,
+      s"""
+         |private void $fetchNextRow(int times) throws java.io.IOException {
+         |  if (!$initAgg) {
+         |    $initAgg = true;
+         |    $sorterTerm = null;
+         |    $createFastHashMap
+         |    $addHookToCloseFastHashMap
+         |    $hashMapTerm = $thisPlan.createHashMap();
+         |    long $beforeAgg = System.nanoTime();
+         |    $doAggFuncName();
+         |    $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+         |  }
+         |  // output the result
+         |  $outputFromFastHashMap
+         |  $outputFromRegularHashMap
+         |  if (times < 1) {
+         |    $initAgg = false;
+         |    $fetchNextRow(times + 1);
+         |  }
+         |}
+       """.stripMargin)
+
     s"""
-       |if (!$initAgg) {
-       |  $initAgg = true;
-       |  $createFastHashMap
-       |  $addHookToCloseFastHashMap
-       |  $hashMapTerm = $thisPlan.createHashMap();
-       |  long $beforeAgg = System.nanoTime();
-       |  $doAggFuncName();
-       |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
-       |}
-       |// output the result
-       |$outputFromFastHashMap
-       |$outputFromRegularHashMap
+       | $fetchNextRow(0);
      """.stripMargin
   }
 
   protected override def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val aggInMem = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "aggInMem",
+      v => s"$v = $aggregationInMemory;")
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, bindReferences[Expression](groupingExpressions, child.output))
@@ -648,12 +673,18 @@ case class HashAggregateExec(
       }
     }
 
-    val (checkFallbackForBytesToBytesMap, resetCounter, incCounter) = testFallbackStartsAt match {
-      case Some((_, regularMapCounter)) =>
-        val countTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "fallbackCounter")
-        (s"$countTerm < $regularMapCounter", s"$countTerm = 0;", s"$countTerm += 1;")
-      case _ => ("true", "", "")
-    }
+    val countTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "fallbackCounter")
+    val (checkFallbackForBytesToBytesMap, resetCounter, incCounter) =
+      if (aggregationInMemory) {
+        val maxRecords = SQLConf.get.hashAggMaxRecordsInMemory
+        (s"$countTerm < $maxRecords", s"$countTerm = 0;", s"$countTerm += 1;")
+      } else {
+        testFallbackStartsAt match {
+          case Some((_, regularMapCounter)) =>
+            (s"$countTerm < $regularMapCounter", s"$countTerm = 0;", s"$countTerm += 1;")
+          case _ => ("true", "", "")
+        }
+      }
 
     val oomeClassName = classOf[SparkOutOfMemoryError].getName
 
@@ -662,27 +693,40 @@ case class HashAggregateExec(
          |// generate grouping key
          |${unsafeRowKeyCode.code}
          |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
-         |if ($checkFallbackForBytesToBytesMap) {
-         |  // try to get the buffer from hash map
+         |if ($aggInMem) {
          |  $unsafeRowBuffer =
-         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
-         |}
-         |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
-         |// aggregation after processing all input rows.
-         |if ($unsafeRowBuffer == null) {
-         |  if ($sorterTerm == null) {
-         |    $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
-         |  } else {
-         |    $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-         |  }
-         |  $resetCounter
-         |  // the hash map had be spilled, it should have enough memory now,
-         |  // try to allocate buffer again.
-         |  $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-         |    $unsafeRowKeys, $unsafeRowKeyHash);
+         |  $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
-         |    // failed to allocate the first page
+         |    // failed to allocate page
          |    throw new $oomeClassName("_LEGACY_ERROR_TEMP_3302", new java.util.HashMap());
+         |  }
+         |  if (!($checkFallbackForBytesToBytesMap)) {
+         |    shouldBreak = true;
+         |    $resetCounter
+         |  }
+         |} else {
+         |  if ($checkFallbackForBytesToBytesMap) {
+         |    // try to get the buffer from hash map
+         |    $unsafeRowBuffer =
+         |      $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
+         |  }
+         |  // Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
+         |  // aggregation after processing all input rows.
+         |  if ($unsafeRowBuffer == null) {
+         |    if ($sorterTerm == null) {
+         |      $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
+         |    } else {
+         |    $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
+         |    }
+         |    $resetCounter
+         |    // the hash map had be spilled, it should have enough memory now,
+         |    // try to allocate buffer again.
+         |    $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
+         |      $unsafeRowKeys, $unsafeRowKeyHash);
+         |    if ($unsafeRowBuffer == null) {
+         |      // failed to allocate the first page
+         |      throw new $oomeClassName("_LEGACY_ERROR_TEMP_3302", new java.util.HashMap());
+         |    }
          |  }
          |}
        """.stripMargin
@@ -890,4 +934,18 @@ case class HashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
+
+  override def needStopCheck: Boolean = aggregationInMemory
+
+  override def shouldStopCheckCode: String = if (needStopCheck) {
+    "if (shouldBreak()) break;"
+  } else {
+    "// shouldStop check is eliminated"
+  }
+
+  // If we do aggregation in memory, it means that we wil not consume all the inputs first.
+  // If the parent is BlockingOperatorWithCodegen, the parent may consume partial result.
+  // So we disable supportCodegen when aggregation in memory so that we can avoid such two
+  // plans in the same codegen stage.
+  override def supportCodegen: Boolean = !aggregationInMemory && super.supportCodegen
 }

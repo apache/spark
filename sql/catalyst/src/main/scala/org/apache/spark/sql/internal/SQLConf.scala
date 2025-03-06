@@ -2786,13 +2786,31 @@ object SQLConf {
       .internal()
       .doc("In the case of ObjectHashAggregateExec, when the size of the in-memory hash map " +
         "grows too large, we will fall back to sort-based aggregation. This option sets a row " +
-        "count threshold for the size of the hash map.")
+        "count threshold for the size of the hash map." +
+        "There is a special case. If sorted shuffle is enabled and in Partial mode, will only " +
+        "aggregate partial records in memory, and perform complete aggregation in the Final stage.")
       .version("2.2.0")
       .intConf
       // We are trying to be conservative and use a relatively small default count threshold here
       // since the state object of some TypedImperativeAggregate function can be quite large (e.g.
       // percentile_approx).
       .createWithDefault(128)
+
+  val HASH_AGG_MAX_RECORD_IN_MEMORY = buildConf("spark.sql.hashAggregate.maxRecordInMemory")
+    .internal()
+    .doc("When sorted shuffle is enabled and in Partial mode, will only aggregate partial " +
+      "records in memory, and perform complete aggregation in the Final stage. This option " +
+      "sets max records in memory.")
+    .version("3.5.1")
+    .intConf
+    .createWithDefault(1024)
+
+  val SORTED_SHUFFLE_ENABLED = buildConf("spark.sql.execution.sortedShuffle.enabled")
+    .internal()
+    .doc("Whether to enable sorted shuffle for spark sql.")
+    .version("3.5.1")
+    .booleanConf
+    .createWithDefault(false)
 
   val USE_OBJECT_HASH_AGG = buildConf("spark.sql.execution.useObjectHashAggregateExec")
     .internal()
@@ -6190,6 +6208,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
+
+  def hashAggMaxRecordsInMemory: Int = getConf(HASH_AGG_MAX_RECORD_IN_MEMORY)
+
+  def sortedShuffleEnabled: Boolean = getConf(SORTED_SHUFFLE_ENABLED)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 

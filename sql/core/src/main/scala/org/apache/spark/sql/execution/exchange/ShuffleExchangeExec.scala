@@ -30,8 +30,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BoundReference, RowOrdering, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -203,8 +202,16 @@ case class ShuffleExchangeExec(
 
   override def nodeName: String = "Exchange"
 
+  lazy val sortKeyFields: Option[Int] = outputPartitioning match {
+    case HashPartitioning(expressions, _)
+      if SQLConf.get.sortedShuffleEnabled && expressions.size > 0 => Some(expressions.size)
+    case RangePartitioning(ordering, _)
+      if SQLConf.get.sortedShuffleEnabled && ordering.size > 0 => Some(ordering.size)
+    case _ => None
+  }
+
   private lazy val serializer: Serializer =
-    new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
+    new UnsafeRowSerializer(child.output.size, sortKeyFields, longMetric("dataSize"))
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
@@ -240,13 +247,14 @@ case class ShuffleExchangeExec(
    * the returned ShuffleDependency will be the input of shuffle.
    */
   @transient
-  lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
+  lazy val shuffleDependency : ShuffleDependency[SqlKey, InternalRow, InternalRow] = {
     val dep = ShuffleExchangeExec.prepareShuffleDependency(
       inputRDD,
       child.output,
       outputPartitioning,
       serializer,
-      writeMetrics)
+      writeMetrics,
+      Some(this))
     metrics("numPartitions").set(dep.partitioner.numPartitions)
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(
@@ -262,6 +270,42 @@ case class ShuffleExchangeExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =
     copy(child = newChild)
+
+  override def outputOrdering: Seq[SortOrder] = outputPartitioning match {
+    case HashPartitioning(expressions, _) if sortKeyFields.isDefined =>
+      expressions.map(SortOrder(_, Ascending))
+    case RangePartitioning(ordering, _) if sortKeyFields.isDefined => ordering
+    case _ => Nil
+  }
+
+  def keyOrdering: Option[Ordering[SqlKey]] = {
+    val ordering = outputPartitioning match {
+      case HashPartitioning(expressions, _) if sortKeyFields.isDefined =>
+        RowOrdering.createNaturalAscendingSortOrder(expressions.map(_.dataType))
+      case RangePartitioning(ordering, _) if sortKeyFields.isDefined =>
+        ordering.zipWithIndex.map {
+          case (order, index) =>
+            SortOrder(BoundReference(index, order.child.dataType, nullable = true), order.direction)
+        }
+      case _ => Nil
+    }
+    ordering match {
+      case sortOrders: Seq[SortOrder] =>
+        // The ordering as part of TaskDescription will be serialized and propagated to each
+        // Executor. However, if we use code generated class, other executors will not be able
+        // to find the code generated related classes.
+        val ordering = RowOrdering.createNaturalInterpretedOrdering(sortOrders)
+        Some(new Ordering[SqlKey] {
+          override def compare(x: SqlKey, y: SqlKey): Int = {
+            (x, y) match {
+              case (IntKey(a), IntKey(b)) => a - b
+              case (RowKey(a), RowKey(b)) => ordering.compare(a, b)
+            }
+          }
+        })
+      case Nil => None
+    }
+  }
 }
 
 object ShuffleExchangeExec {
@@ -336,14 +380,17 @@ object ShuffleExchangeExec {
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      writeMetrics: Map[String, SQLMetric])
-    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+      writeMetrics: Map[String, SQLMetric],
+      shuffleExchangeExec: Option[ShuffleExchangeExec] = None)
+    : ShuffleDependency[SqlKey, InternalRow, InternalRow] = {
+    val sortedShuffleEnabled =
+      shuffleExchangeExec.map(exec => exec.sortKeyFields.isDefined).getOrElse(false)
     val part: Partitioner = newPartitioning match {
-      case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
+      case RoundRobinPartitioning(numPartitions) => SqlKeyPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
-        new PartitionIdPassthrough(n)
+        new SqlKeyPartitioner(n)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
@@ -360,12 +407,12 @@ object ShuffleExchangeExec {
           ord.copy(child = BoundReference(i, ord.dataType, ord.nullable))
         }
         implicit val ordering = new LazilyGeneratedOrdering(orderingAttributes)
-        new RangePartitioner(
+        SqlKeyPartitioner(numPartitions, Some(new RangePartitioner(
           numPartitions,
           rddForSampling,
           ascending = true,
-          samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
-      case SinglePartition => new ConstantPartitioner
+          samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)))
+      case SinglePartition => SqlKeyPartitioner(1)
       case k @ KeyGroupedPartitioning(expressions, n, _, _) =>
         val valueMap = k.uniquePartitionValues.zipWithIndex.map {
           case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
@@ -374,7 +421,7 @@ object ShuffleExchangeExec {
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
-    def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
+    def getPartitionKeyExtractor(): InternalRow => SqlKey = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) =>
         // Distributes elements evenly across output partitions, starting from a random partition.
         // nextInt(numPartitions) implementation has a special case when bound is a power of 2,
@@ -388,24 +435,32 @@ object ShuffleExchangeExec {
         (row: InternalRow) => {
           // The HashPartitioner will handle the `mod` by the number of partitions
           position += 1
-          position
+          IntKey(position)
         }
       case h: HashPartitioning =>
-        val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
-        row => projection(row).getInt(0)
+        if (shuffleExchangeExec.map(exec => exec.sortKeyFields.isDefined).getOrElse(false)) {
+          val projection = UnsafeProjection.create(h.expressions, outputAttributes)
+          row => RowKey(projection(row))
+        } else {
+          val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
+          row => IntKey(projection(row).getInt(0))
+        }
       case RangePartitioning(sortingExpressions, _) =>
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
-        row => projection(row)
-      case SinglePartition => identity
+        row => RowKey(projection(row))
+      case SinglePartition =>
+        _ => IntKey(0)
       case KeyGroupedPartitioning(expressions, _, _, _) =>
-        row => bindReferences(expressions, outputAttributes).map(_.eval(row))
+        // row => RowKey(bindReferences(expressions, outputAttributes).map(_.eval(row)))
+        // TODO: support KeyGroupedPartitioning
+        throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
       newPartitioning.numPartitions > 1
 
-    val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
+    val rddWithPartitionIds: RDD[Product2[SqlKey, InternalRow]] = {
       // [SPARK-23207] Have to make sure the generated RoundRobinPartitioning is deterministic,
       // otherwise a retry task may output different rows and thus lead to data loss.
       //
@@ -457,13 +512,13 @@ object ShuffleExchangeExec {
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
-          iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
+          iter.map { row => (getPartitionKey(row), row.copy()) }
         }, isOrderSensitive = isOrderSensitive)
       } else {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
-          val mutablePair = new MutablePair[Int, InternalRow]()
-          iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
+          val mutablePair = new MutablePair[SqlKey, InternalRow]()
+          iter.map { row => mutablePair.update(getPartitionKey(row), row) }
         }, isOrderSensitive = isOrderSensitive)
       }
     }
@@ -472,10 +527,14 @@ object ShuffleExchangeExec {
     // are in the form of (partitionId, row) and every partitionId is in the expected range
     // [0, part.numPartitions - 1]. The partitioner of this is a PartitionIdPassthrough.
     val dependency =
-      new ShuffleDependency[Int, InternalRow, InternalRow](
+      new ShuffleDependency[SqlKey, InternalRow, InternalRow](
         rddWithPartitionIds,
-        new PartitionIdPassthrough(part.numPartitions),
+        part,
         serializer,
+        keyOrdering = shuffleExchangeExec match {
+          case Some(exec) if exec.sortKeyFields.isDefined => exec.keyOrdering
+          case _ => None
+        },
         shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics))
 
     dependency
