@@ -18,8 +18,10 @@
 package org.apache.spark.sql.test
 
 import scala.concurrent.duration._
+
 import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
+
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.SQLContext
