@@ -54,7 +54,7 @@ object TimeFormatter {
 
   val defaultLocale: Locale = Locale.US
 
-  def defaultPattern(): String = "HH:mm:ss[.SSSSSS]"
+  def defaultPattern(): String = "HH:mm:ss.SSSSSS"
 
   def apply(
       format: Option[String],
