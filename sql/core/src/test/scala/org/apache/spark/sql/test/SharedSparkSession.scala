@@ -18,10 +18,8 @@
 package org.apache.spark.sql.test
 
 import scala.concurrent.duration._
-
 import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
-
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.SQLContext
@@ -29,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.util.Utils
 
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
@@ -79,8 +78,15 @@ trait SharedSparkSessionBase
       StaticSQLConf.WAREHOUSE_PATH,
       conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
     conf.set(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH, false)
-    conf.set(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, 256)
-    conf.set(StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, 256)
+    // SPARK-51365: Due to the fact that the GitHub-hosted Runner on the `macOS + AppleSilicon chip`
+    // combination has only half the memory resources of Runners with other specifications,
+    // it is necessary to limit the number of threads in this case to avoid the issue of
+    // memory resources being exhausted by frequent thread creation during testing.
+    if (sys.env.contains("GITHUB_ACTIONS") && Utils.isMacOnAppleSilicon) {
+      conf.set(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, 256)
+      conf.set(StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, 256)
+    }
+    conf
   }
 
   /**
