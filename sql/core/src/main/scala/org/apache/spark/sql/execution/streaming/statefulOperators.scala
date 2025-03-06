@@ -203,20 +203,33 @@ trait StateStoreWriter
 
   def operatorStateMetadataVersion: Int = 1
 
-  override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
-      "number of rows which are dropped by watermark"),
-    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
-    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
-    "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
-    "numRemovedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of removed state rows"),
-    "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
-    "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
-    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
-    "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
-      "number of state store instances")
-  ) ++ stateStoreCustomMetrics ++ pythonMetrics ++ stateStoreInstanceMetrics
+  override lazy val metrics = {
+    // Lazy initialize instance metrics, but do not include these with regular metrics
+    instanceMetrics
+    statefulOperatorCustomMetrics ++ Map(
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numRowsDroppedByWatermark" -> SQLMetrics
+        .createMetric(sparkContext, "number of rows which are dropped by watermark"),
+      "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+      "numUpdatedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of updated state rows"),
+      "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
+      "numRemovedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of removed state rows"),
+      "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
+      "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
+      "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
+      "numStateStoreInstances" -> SQLMetrics
+        .createMetric(sparkContext, "number of state store instances")
+    ) ++ stateStoreCustomMetrics ++ pythonMetrics
+  }
+
+  lazy val instanceMetrics = stateStoreInstanceMetrics
+
+  override def resetMetrics(): Unit = {
+    super.resetMetrics()
+    instanceMetrics.valuesIterator.foreach(_.reset())
+  }
 
   val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
 
@@ -332,7 +345,7 @@ trait StateStoreWriter
         case (name, metricConfig) =>
           // Keep instance metrics that are updated or aren't marked to be ignored,
           // as their initial value could still be important.
-          !metricConfig.ignoreIfUnchanged || !longMetric(name).isZero
+          !metricConfig.ignoreIfUnchanged || !instanceMetrics(name).isZero
       }
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
@@ -347,8 +360,8 @@ trait StateStoreWriter
           metrics
             .map {
               case (_, metric) =>
-                metric.name -> (if (longMetric(metric.name).isZero) metricConf.initValue
-                                else longMetric(metric.name).value)
+                metric.name -> (if (instanceMetrics(metric.name).isZero) metricConf.initValue
+                                else instanceMetrics(metric.name).value)
             }
             .toSeq
             .sortBy(_._2)(metricConf.ordering)
@@ -434,12 +447,12 @@ trait StateStoreWriter
   }
 
   protected def setStoreInstanceMetrics(
-      instanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
-    instanceMetrics.foreach {
+      newInstanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
+    newInstanceMetrics.foreach {
       case (metric, value) =>
         val metricConfig = instanceMetricConfiguration(metric.name)
         // Update the metric's value based on the defined combine method
-        longMetric(metric.name).set(metricConfig.combine(longMetric(metric.name), value))
+        instanceMetrics(metric.name).set(metricConfig.combine(instanceMetrics(metric.name), value))
     }
   }
 
