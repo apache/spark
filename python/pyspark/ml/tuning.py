@@ -909,10 +909,6 @@ class CrossValidator(
                 ),
             )
 
-            # TODO(SPARK-48515): Use Arrow Python UDF
-            checker_udf = UserDefinedFunction(
-                checker, BooleanType(), evalType=PythonEvalType.SQL_BATCHED_UDF
-            )
             for i in range(nFolds):
                 training = checked.filter(F.col(foldCol) != F.lit(i))
                 validation = checked.filter(F.col(foldCol) == F.lit(i))
