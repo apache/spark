@@ -82,9 +82,7 @@ class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql
 
   /** @inheritdoc */
   def getOption(key: String): Option[String] = {
-    try Option(get(key)) catch {
-      case _: NoSuchElementException => None
-    }
+    sqlConf.getConfStringOption(key)
   }
 
   /** @inheritdoc */

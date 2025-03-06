@@ -27,7 +27,7 @@ from shutil import copyfile, copytree, rmtree
 from pathlib import Path
 
 if (
-    # When we package, the parent diectory 'classic' dir
+    # When we package, the parent directory 'classic' dir
     # (as we pip install -e python/packaging/classic)
     os.getcwd() == str(Path(__file__).parent.absolute())
     and str(Path(__file__).parent.name) == "classic"
@@ -148,8 +148,8 @@ if in_spark:
 # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
-# Also don't forget to update python/docs/source/getting_started/install.rst, and
-# python/packaging/connect/setup.py
+# Also don't forget to update python/docs/source/getting_started/install.rst,
+# python/packaging/client/setup.py, and python/packaging/connect/setup.py
 _minimum_pandas_version = "2.0.0"
 _minimum_numpy_version = "1.21"
 _minimum_pyarrow_version = "11.0.0"
@@ -291,6 +291,7 @@ try:
             "pyspark.sql.plot",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
+            "pyspark.sql.streaming.proto",
             "pyspark.sql.worker",
             "pyspark.streaming",
             "pyspark.bin",

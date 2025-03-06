@@ -256,6 +256,35 @@ class MLSuite extends MLHelper {
     }
   }
 
+  test("Exception: cannot retrieve object") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val modelId = trainLogisticRegressionModel(sessionHolder)
+
+    // Fetch summary attribute
+    val accuracyCommand = proto.MlCommand
+      .newBuilder()
+      .setFetch(
+        proto.Fetch
+          .newBuilder()
+          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod("accuracy")))
+      .build()
+
+    // Successfully fetch summary.accuracy from the cached model
+    MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
+
+    // Remove the model from cache
+    sessionHolder.mlCache.clear()
+
+    // No longer able to retrieve the model from cache
+    val e = intercept[MLCacheInvalidException] {
+      MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
+    }
+    val msg = e.getMessage
+    assert(msg.contains(s"$modelId from the ML cache"))
+  }
+
   test("access the attribute which is not in allowed list") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val modelId = trainLogisticRegressionModel(sessionHolder)

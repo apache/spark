@@ -35,8 +35,8 @@ Filter (udf(sum(v))#xL > cast(2 as bigint))
 SELECT udf(count(udf(k))) FROM hav GROUP BY v + 1 HAVING v + 1 = udf(2)
 -- !query analysis
 Project [udf(count(udf(k)))#xL]
-+- Filter ((v#x + 1)#x = cast(udf(cast(2 as string)) as int))
-   +- Aggregate [(v#x + 1)], [cast(udf(cast(count(cast(udf(cast(k#x as string)) as string)) as string)) as bigint) AS udf(count(udf(k)))#xL, (v#x + 1) AS (v#x + 1)#x]
++- Filter ((v + 1)#x = cast(udf(cast(2 as string)) as int))
+   +- Aggregate [(v#x + 1)], [cast(udf(cast(count(cast(udf(cast(k#x as string)) as string)) as string)) as bigint) AS udf(count(udf(k)))#xL, (v#x + 1) AS (v + 1)#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
@@ -49,8 +49,8 @@ Project [udf(count(udf(k)))#xL]
 SELECT udf(MIN(t.v)) FROM (SELECT * FROM hav WHERE v > 0) t HAVING(udf(COUNT(udf(1))) > 0)
 -- !query analysis
 Project [udf(min(v))#x]
-+- Filter (cast(udf(cast(count(cast(udf(cast(1 as string)) as int))#xL as string)) as bigint) > cast(0 as bigint))
-   +- Aggregate [cast(udf(cast(min(v#x) as string)) as int) AS udf(min(v))#x, count(cast(udf(cast(1 as string)) as int)) AS count(cast(udf(cast(1 as string)) as int))#xL]
++- Filter (cast(udf(cast(count(udf(1))#xL as string)) as bigint) > cast(0 as bigint))
+   +- Aggregate [cast(udf(cast(min(v#x) as string)) as int) AS udf(min(v))#x, count(cast(udf(cast(1 as string)) as int)) AS count(udf(1))#xL]
       +- SubqueryAlias t
          +- Project [k#x, v#x]
             +- Filter (v#x > 0)
@@ -66,7 +66,7 @@ Project [udf(min(v))#x]
 SELECT udf(a + b) FROM VALUES (1L, 2), (3L, 4) AS T(a, b) GROUP BY a + b HAVING a + b > udf(1)
 -- !query analysis
 Project [udf((a + b))#xL]
-+- Filter ((a#xL + cast(b#x as bigint))#xL > cast(cast(udf(cast(1 as string)) as int) as bigint))
-   +- Aggregate [(a#xL + cast(b#x as bigint))], [cast(udf(cast((a#xL + cast(b#x as bigint)) as string)) as bigint) AS udf((a + b))#xL, (a#xL + cast(b#x as bigint)) AS (a#xL + cast(b#x as bigint))#xL]
++- Filter ((a + b)#xL > cast(cast(udf(cast(1 as string)) as int) as bigint))
+   +- Aggregate [(a#xL + cast(b#x as bigint))], [cast(udf(cast((a#xL + cast(b#x as bigint)) as string)) as bigint) AS udf((a + b))#xL, (a#xL + cast(b#x as bigint)) AS (a + b)#xL]
       +- SubqueryAlias T
          +- LocalRelation [a#xL, b#x]

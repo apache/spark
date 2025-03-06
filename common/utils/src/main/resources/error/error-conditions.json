@@ -775,6 +775,11 @@
           "<attribute> in <className> is not allowed to be accessed."
         ]
       },
+      "CACHE_INVALID" : {
+        "message" : [
+          "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
+        ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"
@@ -3488,6 +3493,11 @@
         "message" : [
           "Scalar subquery must return only one column, but got <number>."
         ]
+      },
+      "STREAMING_QUERY" : {
+        "message" : [
+          "Streaming query is not allowed in subquery expressions."
+        ]
       }
     },
     "sqlState" : "42823"
@@ -3581,6 +3591,16 @@
       "ONLY_AT_BEGINNING" : {
         "message" : [
           "Variable <varName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_LOCAL_VARIABLE" : {
+        "message" : [
+          "The variable <varName> must be declared without a qualifier, as qualifiers are not allowed for local variable declarations."
+        ]
+      },
+      "REPLACE_LOCAL_VARIABLE" : {
+        "message" : [
+          "The variable <varName> does not support DECLARE OR REPLACE, as local variables cannot be replaced."
         ]
       }
     },
@@ -3725,6 +3745,12 @@
   "LABEL_ALREADY_EXISTS" : {
     "message" : [
       "The label <label> already exists. Choose another name or rename the existing label."
+    ],
+    "sqlState" : "42K0L"
+  },
+  "LABEL_NAME_FORBIDDEN" : {
+    "message" : [
+      "The label name <label> is forbidden."
     ],
     "sqlState" : "42K0L"
   },
@@ -5814,6 +5840,11 @@
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
         ]
       },
+      "SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE" : {
+        "message" : [
+          "DROP TEMPORARY VARIABLE is not supported within SQL scripts. To bypass this, use `EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE ...'` ."
+        ]
+      },
       "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
         "message" : [
           "Positional parameters are not supported with SQL Scripting."
@@ -6175,6 +6206,12 @@
       "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
     ],
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_TIME_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
+    ],
+    "sqlState" : "0A001"
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [

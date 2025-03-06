@@ -44,9 +44,9 @@ object PythonSQLMetrics {
 
   val pythonTimingMetricsDesc: Map[String, String] = {
     Map(
-      "pythonBootTime" -> "total time to start Python workers",
-      "pythonInitTime" -> "total time to initialize Python workers",
-      "pythonTotalTime" -> "total time to run Python workers"
+      "pythonBootTime" -> "time to start Python workers",
+      "pythonInitTime" -> "time to initialize Python workers",
+      "pythonTotalTime" -> "time to run Python workers"
     )
   }
 

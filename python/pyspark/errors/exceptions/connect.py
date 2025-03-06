@@ -37,6 +37,8 @@ from pyspark.errors.exceptions.base import (
     QueryContext as BaseQueryContext,
     QueryContextType,
     StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
+    PickleException as BasePickleException,
+    UnknownException as BaseUnknownException,
 )
 
 if TYPE_CHECKING:
@@ -94,6 +96,14 @@ def convert_exception(
     # Return exception based on class mapping
     for error_class_name in classes:
         ExceptionClass = EXCEPTION_CLASS_MAPPING.get(error_class_name)
+        if ExceptionClass is SparkException:
+            for third_party_exception_class in THIRD_PARTY_EXCEPTION_CLASS_MAPPING:
+                ExceptionClass = (
+                    THIRD_PARTY_EXCEPTION_CLASS_MAPPING.get(third_party_exception_class)
+                    if third_party_exception_class in message
+                    else SparkException
+                )
+
         if ExceptionClass:
             return ExceptionClass(
                 message,
@@ -105,8 +115,8 @@ def convert_exception(
                 contexts=contexts,
             )
 
-    # Return SparkConnectGrpcException if there is no matched exception class
-    return SparkConnectGrpcException(
+    # Return UnknownException if there is no matched exception class
+    return UnknownException(
         message,
         reason=info.reason,
         messageParameters=message_parameters,
@@ -206,6 +216,36 @@ class SparkConnectGrpcException(SparkConnectException):
 
     def __str__(self) -> str:
         return self.getMessage()
+
+
+class UnknownException(SparkConnectGrpcException, BaseUnknownException):
+    """
+    Exception for unmapped errors in Spark Connect.
+    This class is functionally identical to SparkConnectGrpcException but has a different name
+    for consistency.
+    """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        errorClass: Optional[str] = None,
+        messageParameters: Optional[Dict[str, str]] = None,
+        reason: Optional[str] = None,
+        sql_state: Optional[str] = None,
+        server_stacktrace: Optional[str] = None,
+        display_server_stacktrace: bool = False,
+        contexts: Optional[List[BaseQueryContext]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            errorClass=errorClass,
+            messageParameters=messageParameters,
+            reason=reason,
+            sql_state=sql_state,
+            server_stacktrace=server_stacktrace,
+            display_server_stacktrace=display_server_stacktrace,
+            contexts=contexts,
+        )
 
 
 class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):
@@ -316,6 +356,14 @@ class StreamingPythonRunnerInitializationException(
     """
 
 
+class PickleException(SparkConnectGrpcException, BasePickleException):
+    """
+    Represents an exception which is failed while pickling from server side
+    such as `net.razorvine.pickle.PickleException`. This is different from `PySparkPicklingError`
+    which represents an exception failed from Python built-in `pickle.PicklingError`.
+    """
+
+
 # Update EXCEPTION_CLASS_MAPPING here when adding a new exception
 EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.sql.catalyst.parser.ParseException": ParseException,
@@ -337,6 +385,10 @@ EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.sql.connect.common.InvalidCommandInput": InvalidCommandInput,
     "org.apache.spark.api.python.StreamingPythonRunner"
     "$StreamingPythonRunnerInitializationException": StreamingPythonRunnerInitializationException,
+}
+
+THIRD_PARTY_EXCEPTION_CLASS_MAPPING = {
+    "net.razorvine.pickle.PickleException": PickleException,
 }
 
 

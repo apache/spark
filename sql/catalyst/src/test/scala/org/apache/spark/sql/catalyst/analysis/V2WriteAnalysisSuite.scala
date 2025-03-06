@@ -420,12 +420,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorCondition(
-      parsedPlan,
-      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: case sensitive column resolution") {
@@ -435,12 +437,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorCondition(
-      parsedPlan,
-      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: case insensitive column resolution") {
@@ -513,12 +517,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorCondition(
-      parsedPlan,
-      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: insert safe cast") {

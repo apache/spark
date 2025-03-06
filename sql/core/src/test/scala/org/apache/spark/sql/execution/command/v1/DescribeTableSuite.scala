@@ -289,7 +289,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           "max_records" -> "1000"
         )),
         partition_provider = Some("Catalog"),
-        partition_columns = Some(List("department", "hire_date"))
+        partition_columns = Some(List("department", "hire_date")),
+        clustering_columns = None // no cluster spec for "CLUSTERED BY"
       )
 
       assert(parsedOutput.location.isDefined)
@@ -355,6 +356,65 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           "size_in_bytes" -> 0,
           "num_rows" -> 0
         ))
+      )
+
+      assert(parsedOutput.location.isDefined)
+      assert(iso8601Regex.matches(parsedOutput.created_time.get))
+      assert(expectedOutput == parsedOutput.copy(
+        location = None, created_time = None, storage_properties = None))
+    }
+  }
+
+  test("DESCRIBE AS JSON cluster spec") {
+    withNamespaceAndTable("ns", "table") { t =>
+      val tableCreationStr =
+        s"""
+           |CREATE TABLE $t (
+           |  id INT,
+           |  name STRING,
+           |  region STRING,
+           |  category STRING
+           |) USING parquet
+           |COMMENT 'test cluster spec'
+           |CLUSTER BY (id, name)
+           |TBLPROPERTIES ('t' = 'test')
+           |""".stripMargin
+      spark.sql(tableCreationStr)
+
+      val descriptionDf =
+        spark.sql(s"DESCRIBE FORMATTED $t AS JSON")
+      val firstRow = descriptionDf.select("json_metadata").head()
+      val jsonValue = firstRow.getString(0)
+      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+
+      val expectedOutput = DescribeTableJson(
+        table_name = Some("table"),
+        catalog_name = Some("spark_catalog"),
+        namespace = Some(List("ns")),
+        schema_name = Some("ns"),
+        columns = Some(List(
+          TableColumn("id", Type("int"), true),
+          TableColumn("name", Type("string"), true),
+          TableColumn("region", Type("string"), true),
+          TableColumn("category", Type("string"), true)
+        )),
+        last_access = Some("UNKNOWN"),
+        created_by = Some(s"Spark $SPARK_VERSION"),
+        `type` = Some("MANAGED"),
+        provider = Some("parquet"),
+        bucket_columns = Some(Nil),
+        sort_columns = Some(Nil),
+        comment = Some("test cluster spec"),
+        table_properties = Some(Map(
+          "t" -> "test",
+          "clusteringColumns" -> "[[\"id\"],[\"name\"]]"
+        )),
+        serde_library = if (getProvider() == "hive") {
+          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
+        } else {
+          None
+        },
+        clustering_columns = Some(List("id", "name"))
       )
 
       assert(parsedOutput.location.isDefined)
@@ -756,6 +816,7 @@ case class DescribeTableJson(
     partition_provider: Option[String] = None,
     partition_columns: Option[List[String]] = Some(Nil),
     partition_values: Option[Map[String, String]] = None,
+    clustering_columns: Option[List[String]] = None,
     statistics: Option[Map[String, Any]] = None,
     view_text: Option[String] = None,
     view_original_text: Option[String] = None,

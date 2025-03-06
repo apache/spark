@@ -215,6 +215,14 @@ class GaussianMixtureModel(
         return self._set(probabilityCol=value)
 
     @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
     @since("2.0.0")
     def weights(self) -> List[float]:
         """
@@ -687,6 +695,14 @@ class KMeansModel(
         return [vec for vec in matrix.toArray()]
 
     @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
     @since("2.1.0")
     def summary(self) -> KMeansSummary:
         """
@@ -1024,6 +1040,14 @@ class BisectingKMeansModel(
             FutureWarning,
         )
         return self._call_java("computeCost", dataset)
+
+    @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
 
     @property
     @since("2.1.0")
