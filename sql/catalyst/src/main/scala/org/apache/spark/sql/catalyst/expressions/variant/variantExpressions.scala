@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import java.time.ZoneId
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.util.parsing.combinator.RegexParsers
 
@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -434,11 +436,21 @@ case object VariantGet {
     }
     val variantType = v.getType
     if (variantType == Type.NULL) return null
+    // For types with no native Spark type, we only allow cast to string.
     variantType match {
-      case Type.UUID | Type.TIMESTAMP_NANOS | Type.TIMESTAMP_NANOS_NTZ | Type.TIME =>
-        // There's no native Spark type. We only allow these to be cast to string.
-        if (dataType == StringType) {
-          return UTF8String.fromString(v.getUuid.toString)
+      case Type.UUID | Type.TIMESTAMP_NANOS | Type.TIMESTAMP_NANOS_NTZ =>
+        if (dataType.isInstanceOf[StringType]) {
+          val result: String = variantType match {
+            case Type.UUID => v.getUuid.toString
+            case Type.TIMESTAMP_NANOS =>
+              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
+              TimestampFormatter.getFractionFormatter(castArgs.zoneId).format(instant)
+            case Type.TIMESTAMP_NANOS_NTZ =>
+              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
+              TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(instant)
+            case _ => ""
+          }
+          return UTF8String.fromString(result)
         } else {
           return invalidCast()
         }
@@ -466,6 +478,7 @@ case object VariantGet {
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
+          case Type.TIME => Literal(v.getLong, TimeType(6))
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
           case _ => throw new SparkRuntimeException(
@@ -851,12 +864,6 @@ object SchemaOfVariant {
     private[spark] override def asNullable: TimestampNanosNtzType = this
   }
   private case object TimestampNanosNtzType extends TimestampNanosNtzType
-  private class TimeType extends DataType {
-    override def defaultSize: Int = 16
-    override def typeName: String = "time"
-    private[spark] override def asNullable: TimeType = this
-  }
-  private case object TimeType extends TimeType
 
   /**
    * Return the schema of a variant. Struct fields are guaranteed to be sorted alphabetically.
@@ -899,7 +906,7 @@ object SchemaOfVariant {
     case Type.UUID => UuidType
     case Type.TIMESTAMP_NANOS => TimestampNanosType
     case Type.TIMESTAMP_NANOS_NTZ => TimestampNanosNtzType
-    case Type.TIME => TimeType
+    case Type.TIME => TimeType(6)
   }
 
   /**

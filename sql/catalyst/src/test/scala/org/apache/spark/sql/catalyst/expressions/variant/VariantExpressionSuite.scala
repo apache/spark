@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import java.time.{LocalDateTime, Period, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDateTime, Period, ZoneId, ZoneOffset}
+import java.time.format.DateTimeFormatter.ISO_DATE_TIME
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
@@ -856,6 +858,55 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val bytes = builder.result().getValue
     checkCast(bytes, StringType,
       "01020304-0506-0708-090a-0b0c0d0e0f10")
+
+// Time
+// TODO: Wait until we have OSS support?
+//    val times = Seq("23:23:59", "01:23:45.123", "00:00:00.123456")
+//    times.foreach { t =>
+//      val micros = LocalTime.parse(t).toNanoOfDay() / 1000
+//      val builder = new VariantBuilder(false)
+//      builder.appendTime(micros)
+//      val bytes = builder.result().getValue()
+//      checkToJson(bytes, "\"" + t + "\"")
+//      checkCast(bytes, StringType, t)
+//    }
+
+    // TimestampNanos
+    // Cast and to_json produce slightly different formats.
+    val timestamps = Seq(
+        ("2024-12-16T10:23:45-08:00", "2024-12-16 10:23:45", "2024-12-16 10:23:45-08:00"),
+        ("1970-01-01T00:00:00.123456789-08:00", "1970-01-01 00:00:00.123456789",
+         "1970-01-01 00:00:00.123456789-08:00"),
+        ("2100-12-31T23:59:59.00100-08:00", "2100-12-31 23:59:59.001",
+         "2100-12-31 23:59:59.001-08:00")
+    )
+    timestamps.foreach { case (in, cast, to_json) =>
+      val instant = Instant.from(ISO_DATE_TIME.parse(in))
+      val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
+      val builder = new VariantBuilder(false)
+      builder.appendTimestampNanos(nanos)
+      val bytes = builder.result().getValue()
+      checkToJson(bytes, "\"" + to_json + "\"")
+      checkCast(bytes, StringType, cast)
+    }
+
+    // TimestampNanosNtz
+    val timestamps_ntz = Seq(
+        ("2024-12-16T10:23:45Z", "2024-12-16 10:23:45", "2024-12-16 10:23:45"),
+        ("1970-01-01T00:00:00.123456789Z", "1970-01-01 00:00:00.123456789",
+         "1970-01-01 00:00:00.123456789"),
+        ("2100-12-31T23:59:59.00100Z", "2100-12-31 23:59:59.001",
+         "2100-12-31 23:59:59.001")
+    )
+    timestamps_ntz.foreach { case (in, cast, to_json) =>
+      val instant = Instant.from(ISO_DATE_TIME.parse(in))
+      val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
+      val builder = new VariantBuilder(false)
+      builder.appendTimestampNanosNtz(nanos)
+      val bytes = builder.result().getValue()
+      checkToJson(bytes, "\"" + to_json + "\"")
+      checkCast(bytes, StringType, cast)
+    }
   }
 
   test("SPARK-48150: ParseJson expression nullability") {
@@ -984,7 +1035,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val array2 = Cast(CreateArray(Seq(uuid, variantString)), VariantType)
     checkEvaluation(SchemaOfVariant(array2), s"ARRAY<VARIANT>")
 
-    Seq((TIME, "TIME"),
+    Seq((TIME, "TIME(6)"),
         (TIMESTAMP_NANOS, "TIMESTAMP_NANOS"),
         (TIMESTAMP_NANOS_NTZ, "TIMESTAMP_NANOS_NTZ")).foreach { case (hdr, typeString) =>
       val value = Array(primitiveHeader(hdr)) ++ Array.fill(8)(0.toByte)

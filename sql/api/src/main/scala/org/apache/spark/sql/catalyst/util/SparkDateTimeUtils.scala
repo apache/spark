@@ -117,6 +117,16 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Obtains an instance of `java.time.Instant` using nanoseconds from the epoch of 1970-01-01
+   * 00:00:00Z.
+   */
+  def nanosToInstant(nanos: Long): Instant = {
+    val secs = Math.floorDiv(nanos, NANOS_PER_SECOND)
+    val nos = nanos - secs * NANOS_PER_SECOND
+    Instant.ofEpochSecond(secs, nos)
+  }
+
+  /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
    * instance of `java.time.Instant`. The epoch microsecond count is a simple incrementing count
    * of microseconds where microsecond 0 is 1970-01-01 00:00:00Z.
