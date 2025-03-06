@@ -21,6 +21,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import warnings
 import sys
 import functools
 from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
@@ -86,7 +87,7 @@ def _create_py_udf(
         except ImportError:
             is_arrow_enabled = False
             warnings.warn(
-                "Arrow optimization failed to enable because PyArrow is not installed. "
+                "Arrow optimization failed to enable because PyArrow or Pandas is not installed. "
                 "Falling back to a non-Arrow-optimized UDF.",
                 RuntimeWarning,
             )

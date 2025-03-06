@@ -137,7 +137,7 @@ def _create_py_udf(
         except ImportError:
             is_arrow_enabled = False
             warnings.warn(
-                "Arrow optimization failed to enable because PyArrow/pandas is not installed. "
+                "Arrow optimization failed to enable because PyArrow or Pandas is not installed. "
                 "Falling back to a non-Arrow-optimized UDF.",
                 RuntimeWarning,
             )
