@@ -3478,9 +3478,9 @@ Command types in proto.</td>
 <tr>
   <td><code>spark.connect.ml.backend.classes</code></td>
   <td>
-    Comma separated list of classes that implement the trait org.apache.spark.sql.connect.plugin.MLBackendPlugin to replace the specified Spark ML operators with a backend-specific implementation.
+    (none)
   </td>
-  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface</td>
+  <td>Comma separated list of classes that implement the trait <code>org.apache.spark.sql.connect.plugin.MLBackendPlugin</code> to replace the specified Spark ML operators with a backend-specific implementation.</td>
   <td>4.0.0</td>
 </tr>
 <tr>
