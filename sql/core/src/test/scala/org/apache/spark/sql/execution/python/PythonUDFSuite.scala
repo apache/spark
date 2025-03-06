@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.Seq
-
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.functions.{array, col, count, countDistinct, transform}
 import org.apache.spark.sql.test.SharedSparkSession
