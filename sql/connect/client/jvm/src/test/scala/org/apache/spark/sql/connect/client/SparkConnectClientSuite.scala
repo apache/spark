@@ -645,7 +645,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val reattachableIter =
       ExecutePlanResponseReattachableIterator.fromIterator(iter)
     assert(reattachableIter.operationId == dummyUUID)
-    while(reattachableIter.hasNext) {
+    while (reattachableIter.hasNext) {
       val resp = reattachableIter.next()
       assert(resp.getOperationId == dummyUUID)
     }

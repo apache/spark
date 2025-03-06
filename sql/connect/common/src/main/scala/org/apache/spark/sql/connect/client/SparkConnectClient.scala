@@ -127,8 +127,8 @@ private[sql] class SparkConnectClient(
    * is garbage collected.
    */
   def execute(
-    plan: proto.Plan,
-    operationId: Option[String] = None): CloseableIterator[proto.ExecutePlanResponse] = {
+      plan: proto.Plan,
+      operationId: Option[String] = None): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()
@@ -139,8 +139,10 @@ private[sql] class SparkConnectClient(
       .addAllTags(tags.get.toSeq.asJava)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     operationId.foreach { opId =>
-      require(isValidUUID(opId), s"Invalid operationId: $opId. The id must be an UUID string of " +
-        "the format `00112233-4455-6677-8899-aabbccddeeff`")
+      require(
+        isValidUUID(opId),
+        s"Invalid operationId: $opId. The id must be an UUID string of " +
+          "the format `00112233-4455-6677-8899-aabbccddeeff`")
       request.setOperationId(opId)
     }
     if (configuration.useReattachableExecute) {
