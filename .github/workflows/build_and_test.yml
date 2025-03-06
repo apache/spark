@@ -1294,7 +1294,7 @@ jobs:
           node --experimental-vm-modules node_modules/.bin/jest
 
   connect-examples-build:
-    name: Build spark-server-library-example
+    name: Build server-library-example
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).connect-examples == 'true'
     runs-on: ubuntu-latest
@@ -1320,7 +1320,7 @@ jobs:
           distribution: zulu
           java-version: ${{ inputs.java }}
 
-      - name: Build spark-server-library-example
+      - name: Build server-library-example
         run: |
-          cd connect-examples/spark-server-library-example
+          cd connect-examples/server-library-example
           mvn clean package
