@@ -2426,7 +2426,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       checkAnswer(sql("SELECT * FROM t1"), sql("select 1, timestamp_ntz'2018-11-17 13:33:33'"))
       sql("ALTER TABLE t1 ADD COLUMN (c string)")
       checkAnswer(sql("SELECT * FROM t1"),
-        sql("select 1, timestamp_ntz'2018-11-17 13:33:33', null"))
+        sql("select 1, null, timestamp_ntz'2018-11-17 13:33:33'"))
     }
   }
 }
