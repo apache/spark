@@ -19,6 +19,7 @@ package org.apache.spark.sql.classic
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import java.util
+import java.util.UUID
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
@@ -112,6 +113,14 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame =
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+    }
+
+  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan, scriptId: UUID): DataFrame =
+    sparkSession.withActive {
+      val qe = sparkSession.sessionState.executePlan(logicalPlan)
+      qe.scriptId = Option(scriptId)
       if (!qe.isLazyAnalysis) qe.assertAnalyzed()
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.UUID
+
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.{SparkArithmeticException, SparkConf}
@@ -49,7 +51,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
-    val sse = new SqlScriptingExecution(compoundBody, spark, args)
+    val sse = new SqlScriptingExecution(compoundBody, spark, UUID.randomUUID(), args)
     sse.withLocalVariableManager {
       val result: ListBuffer[Array[Row]] = ListBuffer.empty
 

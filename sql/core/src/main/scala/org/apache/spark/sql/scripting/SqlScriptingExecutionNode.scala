@@ -122,6 +122,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
+    val scriptId: UUID,
     val args: Map[String, Expression],
     override val isInternal: Boolean,
     context: SqlScriptingExecutionContext)
@@ -161,7 +162,7 @@ class SingleStatementExec(
    *   The DataFrame.
    */
   def buildDataFrame(session: SparkSession): DataFrame = {
-    Dataset.ofRows(session, preparedPlan)
+    Dataset.ofRows(session, preparedPlan, scriptId)
   }
 
   override def reset(): Unit = isExecuted = false
@@ -235,6 +236,7 @@ class CompoundBodyExec(
     label: Option[String] = None,
     isScope: Boolean,
     context: SqlScriptingExecutionContext,
+    scriptId: UUID,
     triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap)
   extends NonLeafStatementExec {
 
@@ -624,6 +626,7 @@ class SimpleCaseStatementExec(
     conditionExpressions: Seq[Expression],
     conditionalBodies: Seq[CompoundBodyExec],
     elseBody: Option[CompoundBodyExec],
+    scriptId: UUID,
     session: SparkSession,
     context: SqlScriptingExecutionContext) extends NonLeafStatementExec {
   private object CaseState extends Enumeration {
@@ -703,6 +706,7 @@ class SimpleCaseStatementExec(
             startIndex = Some(0),
             stopIndex = Some(conditionText.length - 1),
             line = caseVariableExec.origin.line),
+          scriptId,
           Map.empty,
           isInternal = true,
           context = context
@@ -908,6 +912,7 @@ class ForStatementExec(
     variableName: Option[String],
     statements: Seq[CompoundStatementExec],
     val label: Option[String],
+    scriptId: UUID,
     session: SparkSession,
     context: SqlScriptingExecutionContext) extends NonLeafStatementExec {
 
@@ -989,6 +994,7 @@ class ForStatementExec(
             // compound bodies have generated label names if label is not specified.
             label = varScopeLabel,
             isScope = true,
+            scriptId = scriptId,
             context = context,
             triggerToExceptionHandlerMap = TriggerToExceptionHandlerMap.createEmptyMap()
           )
@@ -1069,7 +1075,13 @@ class ForStatementExec(
       defaultExpression,
       replace = true
     )
-    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true, context)
+    new SingleStatementExec(
+      declareVariable,
+      Origin(),
+      scriptId,
+      Map.empty,
+      isInternal = true,
+      context)
   }
 
   private def createSetVarExec(varName: String, variable: Expression): SingleStatementExec = {
@@ -1082,6 +1094,7 @@ class ForStatementExec(
     new SingleStatementExec(
       setIdentifierToCurrentRow,
       Origin(),
+      scriptId,
       Map.empty,
       isInternal = true,
       context)

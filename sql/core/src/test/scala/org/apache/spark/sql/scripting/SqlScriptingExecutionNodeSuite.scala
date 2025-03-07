@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.UUID
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
@@ -39,7 +41,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       isScope: Boolean = false,
       context: SqlScriptingExecutionContext = null,
       triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap = null)
-    extends CompoundBodyExec(statements, label, isScope, context, triggerToExceptionHandlerMap) {
+    extends CompoundBodyExec(
+      statements, label, isScope, context, UUID.randomUUID(), triggerToExceptionHandlerMap) {
 
     // No-op to remove unnecessary logic for these tests.
     override def enterScope(): Unit = ()
@@ -60,6 +63,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       variableName,
       body.statements,
       label,
+      UUID.randomUUID(),
       session,
       context)
 
@@ -71,6 +75,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     extends SingleStatementExec(
       parsedPlan = Project(Seq(Alias(Literal(condVal), description)()), OneRowRelation()),
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      UUID.randomUUID(),
       Map.empty,
       isInternal = false,
       null
@@ -80,6 +85,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     extends SingleStatementExec(
       parsedPlan = Project(Seq(Alias(Literal(value), description)()), OneRowRelation()),
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      UUID.randomUUID(),
       Map.empty,
       isInternal = false,
       null
@@ -103,6 +109,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     extends SingleStatementExec(
       parsedPlan = DummyLogicalPlan(),
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      UUID.randomUUID(),
       Map.empty,
       isInternal = false,
       null
@@ -152,6 +159,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       extends SingleStatementExec(
         DummyLogicalPlan(),
         Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+        UUID.randomUUID(),
         Map.empty,
         isInternal = false,
         null) {
@@ -766,6 +774,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
           TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+        scriptId = UUID.randomUUID(),
         session = spark,
         context = MockScriptingContext()
       )
@@ -785,6 +794,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
           TestCompoundBody(Seq(TestLeafStatement("body1")))
         ),
         elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body2")))),
+        scriptId = UUID.randomUUID(),
         session = spark,
         context = MockScriptingContext()
       )
@@ -806,6 +816,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
           TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = Some(TestCompoundBody(Seq(TestLeafStatement("body3")))),
+        scriptId = UUID.randomUUID(),
         session = spark,
         context = MockScriptingContext()
       )
@@ -827,6 +838,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
           TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = None,
+        scriptId = UUID.randomUUID(),
         session = spark,
         context = MockScriptingContext()
       )
@@ -848,6 +860,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
           TestCompoundBody(Seq(TestLeafStatement("body2")))
         ),
         elseBody = None,
+        scriptId = UUID.randomUUID(),
         session = spark,
         context = MockScriptingContext()
       )

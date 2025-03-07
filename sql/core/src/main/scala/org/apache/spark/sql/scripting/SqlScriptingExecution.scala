@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.UUID
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -38,6 +40,7 @@ import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession,
+    scriptId: UUID,
     args: Map[String, Expression]) {
 
   private val interpreter = SqlScriptingInterpreter(session)
@@ -45,7 +48,7 @@ class SqlScriptingExecution(
   // Frames to keep what is being executed.
   private val context: SqlScriptingExecutionContext = {
     val ctx = new SqlScriptingExecutionContext()
-    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, scriptId, args, ctx)
     // Add frame which represents SQL Script to the context.
     ctx.frames.append(
       new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT))

@@ -444,7 +444,9 @@ class SparkSession private(
   private def executeSqlScript(
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): DataFrame = {
-    val sse = new SqlScriptingExecution(script, this, args)
+    val scriptId: UUID = UUID.randomUUID()
+
+    val sse = new SqlScriptingExecution(script, this, scriptId, args)
     sse.withLocalVariableManager {
       var result: Option[Seq[Row]] = None
 

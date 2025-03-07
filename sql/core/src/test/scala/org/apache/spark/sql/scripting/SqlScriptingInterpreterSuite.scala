@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.UUID
+
 import org.apache.spark.{SparkConf, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SqlScriptingLocalVariableManager}
@@ -49,7 +51,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 
     // Initialize context so scopes can be entered correctly.
     val context = new SqlScriptingExecutionContext()
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
+    val executionPlan = interpreter
+      .buildExecutionPlan(compoundBody, UUID.randomUUID(), args, context)
     context.frames.append(new SqlScriptingExecutionFrame(
       executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
     executionPlan.enterScope()
