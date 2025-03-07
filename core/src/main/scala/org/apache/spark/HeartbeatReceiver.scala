@@ -113,8 +113,11 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   override def onStart(): Unit = {
     timeoutCheckingTask = eventLoopThread.scheduleAtFixedRate(
-      () => Utils.tryLogNonFatalError { Option(self).foreach(_.ask[Boolean](ExpireDeadHosts)) },
-      0, checkTimeoutIntervalMs, TimeUnit.MILLISECONDS)
+      () => try {
+        Utils.tryLogNonFatalError { Option(self).foreach(_.ask[Boolean](ExpireDeadHosts)) }
+      } catch {
+        case _: InterruptedException => // exit
+      }, 0, checkTimeoutIntervalMs, TimeUnit.MILLISECONDS)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
