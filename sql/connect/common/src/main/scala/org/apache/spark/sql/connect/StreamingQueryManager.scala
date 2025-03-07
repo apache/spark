@@ -119,7 +119,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession)
     // Set command.
     setCmdFn(managerCmdBuilder)
 
-    val resp = sparkSession.execute(cmdBuilder.build()).head
+    val resp =
+      sparkSession.execute(cmdBuilder.build()).find(_.hasStreamingQueryManagerCommandResult).head
 
     if (!resp.hasStreamingQueryManagerCommandResult) {
       throw new RuntimeException(

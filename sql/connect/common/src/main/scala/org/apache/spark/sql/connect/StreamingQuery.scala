@@ -126,7 +126,8 @@ class RemoteStreamingQuery(
     // Set command.
     setCmdFn(queryCmdBuilder)
 
-    val resp = sparkSession.execute(cmdBuilder.build()).head
+    val resp =
+      sparkSession.execute(cmdBuilder.build()).find(_.hasStreamingQueryCommandResult).head
 
     if (!resp.hasStreamingQueryCommandResult) {
       throw new RuntimeException("Unexpected missing response for streaming query command")
