@@ -204,6 +204,11 @@
       "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
     ]
   },
+  "DATA_SOURCE_PRUNING_DISABLED": {
+    "message": [
+      "<type> implements pruneColumns() but column pruning is disabled because '<conf>' is False. Run 'spark.conf.set(\"<conf>\", True)' to enable column pruning."
+    ]
+  },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
     "message": [
       "Return schema mismatch in the result from 'read' method. Expected: <expected> columns, Found: <actual> columns. Make sure the returned values match the required output schema."

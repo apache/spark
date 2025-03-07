@@ -346,6 +346,7 @@ def main(infile: IO, outfile: IO) -> None:
             f"'{max_arrow_batch_size}'"
         )
         enable_pushdown = read_bool(infile)
+        enable_column_pruning = read_bool(infile)
 
         is_streaming = read_bool(infile)
 
@@ -365,6 +366,7 @@ def main(infile: IO, outfile: IO) -> None:
                         "actual": f"'{type(reader).__name__}'",
                     },
                 )
+
             is_pushdown_implemented = (
                 getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
             )
@@ -376,6 +378,19 @@ def main(infile: IO, outfile: IO) -> None:
                     messageParameters={
                         "type": type(reader).__name__,
                         "conf": "spark.sql.python.filterPushdown.enabled",
+                    },
+                )
+
+            is_column_pruning_implemented = (
+                getattr(reader.pruneColumns, "__func__", None) is not DataSourceReader.pruneColumns
+            )
+            if is_column_pruning_implemented and not enable_column_pruning:
+                # Raise an error to ask the user to enable column pruning.
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_PRUNING_DISABLED",
+                    messageParameters={
+                        "type": type(reader).__name__,
+                        "conf": "spark.sql.python.columnPruning.enabled",
                     },
                 )
 

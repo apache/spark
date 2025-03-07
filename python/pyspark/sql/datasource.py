@@ -458,6 +458,35 @@ class StringContains(Filter):
     value: str
 
 
+@dataclass(frozen=True)
+class ColumnPruning:
+    fullSchema: StructType
+    """
+    The full schema of the data source.
+    """
+
+    requiredSchema: StructType
+    """
+    The schema of the data source that is required by the query.
+    This is a subset of the full schema.
+    """
+
+    requiredTopLevelSchema: StructType
+    """
+    The schema containing all top level columns that are required by the query.
+    This is a subset of the full schema and a superset of the required schema.
+    """
+
+    # @cached_property
+    # def requiredTopLevelSchema(self) -> StructType:
+    #     """
+    #     The schema containing all top level columns that are required by the query.
+    #     This is a subset of the full schema and a superset of the required schema.
+    #     """
+    #     required_names = set(self.requiredSchema.fieldNames())
+    #     return StructType([f for f in self.fullSchema if f.name in required_names])
+
+
 class InputPartition:
     """
     A base class representing an input partition returned by the `partitions()`
@@ -564,6 +593,9 @@ class DataSourceReader(ABC):
         ...             yield filter
         """
         return filters
+
+    def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+        return pruning.fullSchema
 
     def partitions(self) -> Sequence[InputPartition]:
         """

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
@@ -88,6 +89,21 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     } else {
       None
     }
+  }
+
+  /**
+   * (Driver-side) Run Python process to push down filters, get the updated
+   * data source instance and the filter pushdown result.
+   */
+  def pruneColumnsInPython(
+      pythonResult: PythonDataSourceCreationResult,
+      fullSchema: StructType,
+      requiredSchema: StructType): PythonDataSourceCreationResult = {
+    new UserDefinedPythonDataSourceColumnPruningRunner(
+      createPythonFunction(pythonResult.dataSource),
+      fullSchema,
+      requiredSchema
+    ).runInPython()
   }
 
   /**
@@ -478,6 +494,72 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
   }
 }
 
+/**
+ * Push down filters to a Python data source.
+ *
+ * @param dataSource
+ *   a Python data source instance
+ * @param schema
+ *   output schema of the Python data source
+ * @param filters
+ *   all filters to be pushed down
+ */
+private class UserDefinedPythonDataSourceColumnPruningRunner(
+    dataSource: PythonFunction,
+    fullSchema: StructType,
+    requiredSchema: StructType)
+    extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSource) {
+
+  // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
+  override val workerModule = "pyspark.sql.worker.data_source_prune_columns"
+
+  private val requiredTopLevelSchema = {
+    val isCaseSensitive = SQLConf.get.caseSensitiveAnalysis
+    val requiredCols =
+      requiredSchema.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+    val fields = fullSchema.fields.filter { field =>
+      val colName = PartitioningUtils.getColName(field, isCaseSensitive)
+      requiredCols.contains(colName)
+    }
+    StructType(fields)
+  }
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send Python data source
+    PythonWorkerUtils.writePythonFunction(dataSource, dataOut)
+
+    // Send schema
+    PythonWorkerUtils.writeUTF(fullSchema.json, dataOut)
+    PythonWorkerUtils.writeUTF(requiredSchema.json, dataOut)
+    PythonWorkerUtils.writeUTF(requiredTopLevelSchema.json, dataOut)
+  }
+
+  override protected def receiveFromPython(
+      dataIn: DataInputStream): PythonDataSourceCreationResult = {
+    // Receive the picked data source or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
+    }
+
+    // Receive the pickled data source.
+    val pickledDataSourceInstance: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+
+    // Receive the schema.
+    val schemaStr = PythonWorkerUtils.readUTF(dataIn)
+    val schema = DataType.fromJson(schemaStr)
+    if (!schema.isInstanceOf[StructType]) {
+      throw QueryCompilationErrors.schemaIsNotStructTypeError(schemaStr, schema)
+    }
+
+    PythonDataSourceCreationResult(
+      dataSource = pickledDataSourceInstance,
+      schema = schema.asInstanceOf[StructType]
+    )
+  }
+}
+
 case class PythonDataSourceReadInfo(
     func: Array[Byte],
     partitions: Seq[Array[Byte]])
@@ -547,6 +629,7 @@ private class UserDefinedPythonDataSourceReadRunner(
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
     dataOut.writeBoolean(SQLConf.get.pythonFilterPushDown)
+    dataOut.writeBoolean(SQLConf.get.pythonColumnPruning)
 
     dataOut.writeBoolean(isStreaming)
   }
