@@ -3199,19 +3199,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("SPARK-51272: retry all the partitions of result stage, if the first result task" +
     " has failed and ShuffleMap stage is inDeterminate") {
-    var resubmitFailedStageTriggered = false
-    val monitor = new Object()
+    val latch = new CountDownLatch(1)
     this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
       override def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
         event match {
           case ResubmitFailedStages =>
-               // Before the ResubmitFailedStages is added to the queue, add the successful
-               // partition task completion.
+              // Before the ResubmitFailedStages is added to the queue, add the successful
+              // partition task completion.
               runEvent(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
-            monitor.synchronized {
-              resubmitFailedStageTriggered = true
-              monitor.notify()
-            }
+              latch.countDown()
 
           case _ =>
         }
@@ -3226,11 +3222,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
                 // in callback is received. This is to ensure that this thread
                 // does not exit and process the ResubmitFailedStage event, before
                 // the queue gets successful partition task completion
-                monitor.synchronized {
-                  if (!resubmitFailedStageTriggered) {
-                    monitor.wait()
-                  }
-                }
+                latch.await(50, TimeUnit.SECONDS)
 
               case _ =>
             }
