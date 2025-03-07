@@ -1567,6 +1567,21 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class Acknowledgement(google.protobuf.message.Message):
+        """Server acknowledgement sent immediately upon registering an ExecutePlan or ReattachExecute
+        request.
+        This acknowledgement allows a client to disconnect right after registration, without waiting
+        for the full processing of the request.
+        It is especially useful when the server supports reattachment or otherwise, early termination
+        of the request.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     OPERATION_ID_FIELD_NUMBER: builtins.int
@@ -1583,6 +1598,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
     CHECKPOINT_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     ML_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    ACKNOWLEDGEMENT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1650,6 +1666,11 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def ml_command_result(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommandResult:
         """ML command response"""
     @property
+    def acknowledgement(self) -> global___ExecutePlanResponse.Acknowledgement:
+        """Acknowledgement sent by the server immediately upon registration of an ExecutePlan or
+        ReattachExecute request.
+        """
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1692,6 +1713,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
         ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResult | None = ...,
+        acknowledgement: global___ExecutePlanResponse.Acknowledgement | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1701,6 +1723,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "acknowledgement",
+            b"acknowledgement",
             "arrow_batch",
             b"arrow_batch",
             "checkpoint_command_result",
@@ -1738,6 +1762,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "acknowledgement",
+            b"acknowledgement",
             "arrow_batch",
             b"arrow_batch",
             "checkpoint_command_result",
@@ -1798,6 +1824,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "execution_progress",
             "checkpoint_command_result",
             "ml_command_result",
+            "acknowledgement",
             "extension",
         ]
         | None
