@@ -269,7 +269,9 @@ class Transformer(Params, metaclass=ABCMeta):
             #
             # output = fit_transform(df)
             if is_remote():
-                transformed.__source_transformer__ = self
+                # attach the source transformer to the internal plan,
+                # so that all descendant plans also keep it.
+                transformed._plan.__source_transformer__ = self  # type: ignore[attr-defined]
 
             return transformed
         else:

@@ -192,6 +192,30 @@ class PipelineTestsMixin:
         output = fit_transform(df)
         self.assertEqual(output.count(), 3)
 
+    def test_model_gc_II(self):
+        spark = self.spark
+        df1 = spark.createDataFrame(
+            [
+                Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
+                Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
+                Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0])),
+            ]
+        )
+
+        df2 = spark.range(10)
+
+        def fit_transform(df):
+            lr = LogisticRegression(maxIter=1, regParam=0.01, weightCol="weight")
+            model = lr.fit(df)
+            return model.transform(df)
+
+        def fit_transform_and_union(df1, df2):
+            output1 = fit_transform(df1)
+            return output1.unionByName(df2, True)
+
+        output = fit_transform_and_union(df1, df2)
+        self.assertEqual(output.count(), 13)
+
 
 class PipelineTests(PipelineTestsMixin, ReusedSQLTestCase):
     pass
