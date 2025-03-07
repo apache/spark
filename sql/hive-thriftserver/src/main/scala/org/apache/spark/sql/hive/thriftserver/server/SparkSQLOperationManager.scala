@@ -52,7 +52,7 @@ private[thriftserver] class SparkSQLOperationManager()
     val conf = sparkSession.sessionState.conf
     val runInBackground = async && conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
     val operation = new SparkExecuteStatementOperation(
-      sparkSession, parentSession, statement, confOverlay, runInBackground, queryTimeout)
+      sparkSession, parentSession, this, statement, confOverlay, runInBackground, queryTimeout)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created Operation for $statement with session=$parentSession, " +
       s"runInBackground=$runInBackground")
@@ -64,7 +64,7 @@ private[thriftserver] class SparkSQLOperationManager()
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetCatalogsOperation(session, parentSession)
+    val operation = new SparkGetCatalogsOperation(session, parentSession, this)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetCatalogsOperation with session=$parentSession.")
     operation
@@ -77,7 +77,8 @@ private[thriftserver] class SparkSQLOperationManager()
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetSchemasOperation(session, parentSession, catalogName, schemaName)
+    val operation = new SparkGetSchemasOperation(session, parentSession, this, catalogName,
+      schemaName)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetSchemasOperation with session=$parentSession.")
     operation
@@ -92,7 +93,7 @@ private[thriftserver] class SparkSQLOperationManager()
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetTablesOperation(session, parentSession,
+    val operation = new SparkGetTablesOperation(session, parentSession, this,
       catalogName, schemaName, tableName, tableTypes)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetTablesOperation with session=$parentSession.")
@@ -108,7 +109,7 @@ private[thriftserver] class SparkSQLOperationManager()
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetColumnsOperation(session, parentSession,
+    val operation = new SparkGetColumnsOperation(session, parentSession, this,
       catalogName, schemaName, tableName, columnName)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetColumnsOperation with session=$parentSession.")
@@ -120,21 +121,22 @@ private[thriftserver] class SparkSQLOperationManager()
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetTableTypesOperation(session, parentSession)
+    val operation = new SparkGetTableTypesOperation(session, parentSession, this)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetTableTypesOperation with session=$parentSession.")
     operation
   }
 
-  override def newGetFunctionsOperation(
+  def newGetFunctionsOperation(
       parentSession: HiveSession,
+      operationManager: OperationManager,
       catalogName: String,
       schemaName: String,
       functionName: String): GetFunctionsOperation = synchronized {
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetFunctionsOperation(session, parentSession,
+    val operation = new SparkGetFunctionsOperation(session, parentSession, operationManager,
       catalogName, schemaName, functionName)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetFunctionsOperation with session=$parentSession.")
@@ -146,7 +148,7 @@ private[thriftserver] class SparkSQLOperationManager()
     val session = sessionToContexts.get(parentSession.getSessionHandle)
     require(session != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetTypeInfoOperation(session, parentSession)
+    val operation = new SparkGetTypeInfoOperation(session, parentSession, this)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetTypeInfoOperation with session=$parentSession.")
     operation

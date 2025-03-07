@@ -30,6 +30,7 @@ import jline.console.history.FileHistory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
+import org.apache.hadoop.hive.common.io.SessionStream
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
@@ -99,9 +100,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.out = new SessionStream(System.out, true, UTF_8.name())
+      sessionState.info = new SessionStream(System.err, true, UTF_8.name())
+      sessionState.err = new SessionStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException =>
         closeHiveSessionStateIfStarted(sessionState)
@@ -182,9 +183,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // will set the output into an invalid buffer.
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.out = new SessionStream(System.out, true, UTF_8.name())
+      sessionState.info = new SessionStream(System.err, true, UTF_8.name())
+      sessionState.err = new SessionStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => exit(ERROR_PATH_NOT_FOUND)
     }
@@ -206,17 +207,27 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     cli.printMasterAndAppId()
 
     if (sessionState.execString != null) {
-      exit(cli.processLine(sessionState.execString))
+      try {
+        cli.processLine(sessionState.execString)
+        exit(0)
+      } catch {
+        case e: CommandProcessorException =>
+          logError(log"Could not execute. (${MDC(ERROR, e.getMessage)})")
+          exit(e.getErrorCode)
+      }
     }
 
     try {
       if (sessionState.fileName != null) {
-        exit(cli.processFile(sessionState.fileName))
+        cli.processFile(sessionState.fileName)
       }
     } catch {
       case e: FileNotFoundException =>
         logError(log"Could not open input file for reading. (${MDC(ERROR, e.getMessage)})")
         exit(ERROR_PATH_NOT_FOUND)
+      case e: CommandProcessorException =>
+        logError(log"Could not process input file. (${MDC(ERROR, e.getMessage)})")
+        exit(e.getErrorCode)
     }
 
     val reader = new ConsoleReader()
@@ -257,7 +268,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     }
 
-    var ret = 0
     var prefix = ""
 
     def currentDB = {
@@ -285,7 +295,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
         if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
           line = prefix + line
-          ret = cli.processLine(line, true)
+          try {
+            cli.processLine(line, true)
+          } catch {
+            case e: CommandProcessorException =>
+              exit(e.getErrorCode)
+          }
           prefix = ""
           currentPrompt = promptWithCurrentDB
         } else {
@@ -298,7 +313,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     closeHiveSessionStateIfStarted(sessionState)
 
-    exit(ret)
+    exit(0)
   }
 
   def printUsage(): Unit = {
@@ -421,7 +436,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     console.printInfo(s"Spark master: $master, Application Id: $appId")
   }
 
-  override def processCmd(cmd: String): Int = {
+  override def processCmd(cmd: String): CommandProcessorResponse = {
+    val ret = new CommandProcessorResponse()
     val cmd_trimmed: String = cmd.trim()
     val cmd_lower = cmd_trimmed.toLowerCase(Locale.ROOT)
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -437,9 +453,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val endTimeNs = System.nanoTime()
       val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(endTimeNs - startTimeNs) / 1000.0
       console.printInfo(s"Time taken: $timeTaken seconds")
-      0
+      ret
     } else {
-      var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
       val proc: CommandProcessor = CommandProcessorFactory.get(tokens, hconf)
 
@@ -451,7 +466,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           proc.isInstanceOf[ResetProcessor] ) {
           val driver = new SparkSQLDriver
 
-          driver.init()
           val out = sessionState.out
           val err = sessionState.err
           val startTimeNs: Long = System.nanoTime()
@@ -462,7 +476,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             driver.run(cmd)
           } catch {
             case t: Throwable =>
-              ret = 1
               val format = SparkSQLEnv.sparkSession.sessionState.conf.errorMessageFormat
               val msg = t match {
                 case st: SparkThrowable with Throwable =>
@@ -476,7 +489,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                 t.printStackTrace(err)
               }
               driver.close()
-              return ret
+              throw new CommandProcessorException(t)
           }
           val endTimeNs = System.nanoTime()
           val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(endTimeNs - startTimeNs) / 1000.0
@@ -506,13 +519,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
                    |${Utils.stringifyException(e)}
                  """.stripMargin)
-              ret = 1
+              throw new CommandProcessorException(e)
           }
 
-          val cret = driver.close()
-          if (ret == 0) {
-            ret = cret
-          }
+          driver.close()
 
           var responseMsg = s"Time taken: $timeTaken seconds"
           if (counter != 0) {
@@ -525,7 +535,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (sessionState.getIsVerbose) {
             sessionState.out.println(tokens(0) + " " + cmd_1)
           }
-          ret = proc.run(cmd_1).getResponseCode
+          proc.run(cmd_1)
         }
         // scalastyle:on println
       }
@@ -534,7 +544,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   // Adapted processLine from Hive 2.3's CliDriver.processLine.
-  override def processLine(line: String, allowInterrupting: Boolean): Int = {
+  override def processLine(line: String, allowInterrupting: Boolean): CommandProcessorResponse = {
     var oldSignal: SignalHandler = null
     var interruptSignal: Signal = null
 
@@ -566,7 +576,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
 
     try {
-      var lastRet: Int = 0
+      val ignoreErrors =
+        HiveConf.getBoolVar(conf, HiveConf.getConfVars("hive.cli.errors.ignore"))
+      var ret: CommandProcessorResponse = null
 
       // we can not use "split" function directly as ";" may be quoted
       val commands = splitSemiColon(line).asScala
@@ -577,20 +589,19 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         } else {
           command += oneCmd
           if (!SparkStringUtils.isBlank(command)) {
-            val ret = processCmd(command)
-            command = ""
-            lastRet = ret
-            val ignoreErrors =
-              HiveConf.getBoolVar(conf, HiveConf.getConfVars("hive.cli.errors.ignore"))
-            if (ret != 0 && !ignoreErrors) {
-              CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
-              return ret
+            try {
+              ret = processCmd(command)
+            } catch {
+              case e: CommandProcessorException =>
+                if (!ignoreErrors) {
+                  throw e
+                }
             }
+            command = ""
           }
         }
       }
-      CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
-      lastRet
+      ret
     } finally {
       // Once we are done processing the line, restore the old handler
       if (oldSignal != null && interruptSignal != null) {

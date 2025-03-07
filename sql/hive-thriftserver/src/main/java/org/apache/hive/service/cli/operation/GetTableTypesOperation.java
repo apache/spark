@@ -43,8 +43,8 @@ public class GetTableTypesOperation extends MetadataOperation {
   protected final RowSet rowSet;
   private final TableTypeMapping tableTypeMapping;
 
-  protected GetTableTypesOperation(HiveSession parentSession) {
-    super(parentSession, OperationType.GET_TABLE_TYPES);
+  protected GetTableTypesOperation(HiveSession parentSession, OperationManager operationManager) {
+    super(parentSession, operationManager, OperationType.GET_TABLE_TYPES);
     String tableMappingStr = getParentSession().getHiveConf()
       .getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING);
     tableTypeMapping =
