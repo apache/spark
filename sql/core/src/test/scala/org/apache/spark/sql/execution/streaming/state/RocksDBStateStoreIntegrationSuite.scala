@@ -339,7 +339,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   testWithChangelogCheckpointingEnabled(
     "SPARK-51097: Verify snapshot lag metrics are updated correctly with " +
-      "SkipMaintenanceOnCertainPartitionsProvider"
+    "SkipMaintenanceOnCertainPartitionsProvider"
   ) {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -404,7 +404,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   testWithChangelogCheckpointingEnabled(
     "SPARK-51097: Verify snapshot lag metrics are updated correctly for join queries with " +
-      "RocksDBStateStoreProvider"
+    "RocksDBStateStoreProvider"
   ) {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -458,7 +458,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   testWithChangelogCheckpointingEnabled(
     "SPARK-51097: Verify snapshot lag metrics are updated correctly for join queries with " +
-      "SkipMaintenanceOnCertainPartitionsProvider"
+    "SkipMaintenanceOnCertainPartitionsProvider"
   ) {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -498,7 +498,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               val badInstanceMetrics = allInstanceMetrics.filterKeys(
                 k =>
                   k.startsWith(snapshotLagMetricName(0, "")) ||
-                    k.startsWith(snapshotLagMetricName(1, ""))
+                  k.startsWith(snapshotLagMetricName(1, ""))
               )
               // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
               assert(
@@ -537,25 +537,25 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         val joined = df1.join(df2, expr("leftKey = rightKey"))
 
         testStream(joined)(
-            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-            AddData(input1, 1, 5),
-            ProcessAllAvailable(),
-            AddData(input2, 1, 5, 10),
-            ProcessAllAvailable(),
-            CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
-            AssertOnQuery { q =>
-              // Go through all elements in the execution plan and verify none of the metrics
-              // are generated from RocksDB's snapshot lag instance metrics.
-              q.lastExecution.executedPlan
-                .collect {
-                  case node => node.metrics
-                }
-                .forall { nodeMetrics =>
-                  nodeMetrics.forall(metric => !metric._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
-                }
-            },
-            StopStream
-          )
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1, 5),
+          ProcessAllAvailable(),
+          AddData(input2, 1, 5, 10),
+          ProcessAllAvailable(),
+          CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+          AssertOnQuery { q =>
+            // Go through all elements in the execution plan and verify none of the metrics
+            // are generated from RocksDB's snapshot lag instance metrics.
+            q.lastExecution.executedPlan
+              .collect {
+                case node => node.metrics
+              }
+              .forall { nodeMetrics =>
+                nodeMetrics.forall(metric => !metric._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
+              }
+          },
+          StopStream
+        )
       }
     }
   }
