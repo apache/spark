@@ -269,7 +269,7 @@ private[netty] class NettyRpcEnv(
         }
       }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
       promise.future.onComplete { v =>
-        timeoutCancelable.cancel(true)
+        timeoutCancelable.cancel(false)
       }(ThreadUtils.sameThread)
     } catch {
       case NonFatal(e) =>

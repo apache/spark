@@ -214,10 +214,10 @@ private[deploy] class Master(
     applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
     if (recoveryCompletionTask != null) {
-      recoveryCompletionTask.cancel(true)
+      recoveryCompletionTask.cancel(false)
     }
     if (checkForWorkerTimeOutTask != null) {
-      checkForWorkerTimeOutTask.cancel(true)
+      checkForWorkerTimeOutTask.cancel(false)
     }
     forwardMessageThread.shutdownNow()
     webUi.stop()

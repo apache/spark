@@ -277,7 +277,7 @@ private[spark] class StandaloneAppClient(
 
     override def onStop(): Unit = {
       if (registrationRetryTimer.get != null) {
-        registrationRetryTimer.get.cancel(true)
+        registrationRetryTimer.get.cancel(false)
       }
       registrationRetryThread.shutdownNow()
       registerMasterFutures.get.foreach(_.cancel(true))

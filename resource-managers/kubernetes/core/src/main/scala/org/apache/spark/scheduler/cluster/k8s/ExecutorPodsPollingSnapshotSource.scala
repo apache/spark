@@ -63,7 +63,7 @@ class ExecutorPodsPollingSnapshotSource(
   @Since("3.1.3")
   def stop(): Unit = {
     if (pollingFuture != null) {
-      pollingFuture.cancel(true)
+      pollingFuture.cancel(false)
       pollingFuture = null
     }
     ThreadUtils.shutdown(pollingExecutor)
