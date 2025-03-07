@@ -83,7 +83,7 @@ private[spark] class BarrierCoordinator(
       states.clear()
       listenerBus.removeListener(listener)
     } finally {
-      timerFutures.asScala.foreach(_.cancel(true))
+      timerFutures.asScala.foreach(_.cancel(false))
       timerFutures.clear()
       ThreadUtils.shutdown(timer)
       super.onStop()
@@ -136,14 +136,9 @@ private[spark] class BarrierCoordinator(
       }
     }
 
-    /* Cancel the tasks scheduled to run inside the ScheduledExecutor Threadpool
-     * The original implementation was clearing java.util.Timer and java.util.TimerTasks
-     * This became a no-op when java.util.Timer was replaced with ScheduledThreadPoolExecutor
-     * Each time all the Timertasks are cancelled inside the timer, clear the corresponding entries
-     * to reduce the memory requirements
-    */
+    // Cancel the current active TimerTask and release resources.
     private def cancelTimerTask(): Unit = {
-      timerFutures.asScala.foreach(_.cancel(true))
+      timerFutures.asScala.foreach(_.cancel(false))
       timerFutures.clear()
     }
 
