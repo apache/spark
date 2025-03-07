@@ -21,7 +21,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageSubmitted}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
@@ -47,17 +47,18 @@ class Spark51016Suite extends BaseYarnClusterSuite {
       Map(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2",
-        "spark.task.maxFailures" -> "4",
+        "spark.task.maxFailures" -> "8",
         "spark.network.timeout" -> "100000s",
         "spark.shuffle.sort.bypassMergeThreshold" -> "1",
         "spark.sql.files.maxPartitionNum" -> "2",
         "spark.sql.files.minPartitionNum" -> "2",
         DRIVER_MEMORY.key -> "512m",
-        EXECUTOR_CORES.key -> "2",
+        EXECUTOR_CORES.key -> "1",
         EXECUTOR_MEMORY.key -> "512m",
         EXECUTOR_INSTANCES.key -> "2",
         "spark.ui.port" -> "4040",
-        "spark.ui.enabled" -> "true"
+        "spark.ui.enabled" -> "true",
+        "spark.yarn.max.executor.failures" -> "100000"
       ))
   }
 
@@ -224,7 +225,7 @@ object PIDGetter {
     val output = Seq("ps", "-ef").#|(Seq("grep", "java")).#|(Seq("grep", "executor-id ")).lazyLines
    // println(output.mkString("\n\n"))
     if (output.nonEmpty && output.size > 3) {
-      val execPidsStr = Seq(output(1).trim, output(3).trim)
+      val execPidsStr = Seq(output(0).trim, output(2).trim)
       val pids = execPidsStr.map(str => str.split(" ")(1).toInt)
       pids
     } else {
@@ -253,8 +254,27 @@ private[spark] class JobListener extends SparkListener {
       count += 1
     }
   }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    if (stageCompleted.stageInfo.shuffleDepId.nonEmpty  && kill
+      && stageCompleted.stageInfo.shuffleDepId.get % 2 == 0 ) {
+      kill = false
+      val killThread = new Thread(new Runnable() {
+        override def run(): Unit = {
+          val execids = PIDGetter.getExecutorIds()
+          if (execids.size == 2) {
+            val pidToKill = execids(count % 2)
+            PIDGetter.killExecutor(pidToKill)
+          }
+        }
+      })
+      killThread.start()
+      killThread.join()
+    }
+  }
+
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-    if (stageSubmitted.stageInfo.attemptNumber() == 0 &&
+  /*  if (stageSubmitted.stageInfo.attemptNumber() == 0 &&
       stageSubmitted.stageInfo.shuffleDepId.nonEmpty && kill) {
       kill = false
       val killThread = new Thread(new Runnable() {
@@ -268,7 +288,7 @@ private[spark] class JobListener extends SparkListener {
       })
       killThread.start()
       killThread.join()
-    }
+    } */
   }
 
 }
