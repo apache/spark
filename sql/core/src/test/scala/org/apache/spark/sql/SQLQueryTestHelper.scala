@@ -59,6 +59,9 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
+      .replaceAll("UnionLoop \\d+", "UnionLoop xxxx")
+      .replaceAll("UnionLoopRef \\d+,", "UnionLoopRef xxxx,")
+      .replaceAll("Loop id: \\d+", "Loop id: xxxx")
       .replaceAll("@\\w*,", s"@xxxxxxxx,")
       .replaceAll("\\*\\(\\d+\\) ", "*")
       .replaceAll(
