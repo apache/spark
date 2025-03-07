@@ -335,7 +335,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         // Add and commit data multiple times to force new snapshot versions
         (0 until 5).foreach { _ =>
           input1.addData(1, 5)
-          query.processAllAvailable()
           input2.addData(1, 5, 10)
           query.processAllAvailable()
         }
@@ -392,7 +391,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         // Add and commit data multiple times to force new snapshot versions
         (0 until 5).foreach { _ =>
           input1.addData(1, 5)
-          query.processAllAvailable()
           input2.addData(1, 5, 10)
           query.processAllAvailable()
         }
