@@ -210,7 +210,7 @@ This is conceptually equivalent to the PySpark example as below:
 
 .. warning::
     Unlike `sequence`, since `distributed-sequence` is executed in a distributed environment,
-    the rows corresponding to each index may vary although the index itself is still
+    the rows corresponding to each index may vary although the index itself still
     remains globally sequential.
     This happens because the rows are distributed across multiple partitions and nodes,
     leading to indeterministic row-to-index mappings when the data is loaded.

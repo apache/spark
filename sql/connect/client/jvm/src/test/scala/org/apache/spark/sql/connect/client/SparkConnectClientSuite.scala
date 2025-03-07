@@ -70,6 +70,11 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
+  test("SPARK-51391: Use 'user.name' by default") {
+    client = SparkConnectClient.builder().build()
+    assert(client.userId == System.getProperty("user.name"))
+  }
+
   test("Placeholder test: Create SparkConnectClient") {
     client = SparkConnectClient.builder().userId("abc123").build()
     assert(client.userId == "abc123")

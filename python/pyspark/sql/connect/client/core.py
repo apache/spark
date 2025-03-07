@@ -666,7 +666,7 @@ class SparkConnectClient(object):
         elif user_id is not None:
             self._user_id = user_id
         else:
-            self._user_id = os.getenv("USER", None)
+            self._user_id = os.getenv("SPARK_USER", os.getenv("USER", None))
 
         self._channel = self._builder.toChannel()
         self._closed = False

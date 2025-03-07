@@ -423,7 +423,6 @@ object SparkConnectClient {
     def configuration: Configuration = _configuration
 
     def userId(id: String): Builder = {
-      // TODO this is not an optional field!
       require(id != null && id.nonEmpty)
       _configuration = _configuration.copy(userId = id)
       this
@@ -706,12 +705,15 @@ object SparkConnectClient {
       s"os/$osName").mkString(" ")
   }
 
+  private lazy val sparkUser =
+    sys.env.getOrElse("SPARK_USER", System.getProperty("user.name", null))
+
   /**
    * Helper class that fully captures the configuration for a [[SparkConnectClient]].
    */
   private[sql] case class Configuration(
-      userId: String = null,
-      userName: String = null,
+      userId: String = sparkUser,
+      userName: String = sparkUser,
       host: String = "localhost",
       port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT,
       token: Option[String] = None,

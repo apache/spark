@@ -6607,14 +6607,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   /** Return the value of Spark SQL configuration property for the given key. */
   @throws[NoSuchElementException]("if key is not set")
   def getConfString(key: String): String = {
-    getConfStringOption(key).getOrElse(throw QueryExecutionErrors.sqlConfigNotFoundError(key))
-  }
-
-  private[sql] def getConfStringOption(key: String): Option[String] = {
-    Option(settings.get(key)).orElse {
-      // Try to use the default value
-      Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
-    }
+    Option(settings.get(key)).
+      orElse {
+        // Try to use the default value
+        Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
+      }.
+      getOrElse(throw QueryExecutionErrors.sqlConfigNotFoundError(key))
   }
 
   /**
