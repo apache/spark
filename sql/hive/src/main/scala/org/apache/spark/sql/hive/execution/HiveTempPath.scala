@@ -149,7 +149,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
     try {
       stagingDirForCreating.foreach { stagingDir =>
         val fs: FileSystem = stagingDir.getFileSystem(hadoopConf)
-        if (!FileUtils.mkdir(fs, stagingDir, true, hadoopConf)) {
+        if (!FileUtils.mkdir(fs, stagingDir, hadoopConf)) {
           throw SparkException.internalError(
             "Cannot create staging directory  '" + stagingDir.toString + "'")
         }
