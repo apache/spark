@@ -3259,27 +3259,23 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         taskSets(2).tasks(0),
         FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
         null))
-
     val shuffleStage1 = this.scheduler.shuffleIdToMapStage(shuffleId1)
     val shuffleStage2 = this.scheduler.shuffleIdToMapStage(shuffleId2)
-    var keepGoing = true
-    while (keepGoing) {
-      Thread.sleep(500)
-      keepGoing = shuffleStage1.latestInfo.attemptNumber() != 1
-    }
     completeShuffleMapStageSuccessfully(0, 1, numPartitions)
-    keepGoing = true
-    while (keepGoing) {
-      Thread.sleep(500)
-      keepGoing = shuffleStage2.latestInfo.attemptNumber() != 1
+    import org.scalatest.concurrent.Eventually._
+    import org.scalatest.matchers.should.Matchers._
+    import org.scalatest.time.SpanSugar._
+    eventually(timeout(3.minutes), interval(500.milliseconds)) {
+      shuffleStage1.latestInfo.attemptNumber() should equal(1)
+    }
+    eventually(timeout(3.minutes), interval(500.milliseconds)) {
+      shuffleStage2.latestInfo.attemptNumber() should equal(1)
     }
     completeShuffleMapStageSuccessfully(1, 1, numPartitions)
-    keepGoing = true
-    while (keepGoing) {
-      Thread.sleep(500)
-      keepGoing = resultStage.latestInfo.attemptNumber() != 1
+    eventually(timeout(3.minutes), interval(500.milliseconds)) {
+      resultStage.latestInfo.attemptNumber() should equal(1)
     }
-    assert(resultStage.latestInfo.numTasks == 2)
+    org.scalatest.Assertions.assert(resultStage.latestInfo.numTasks == 2)
   }
 
   test("SPARK-25341: retry all the succeeding stages when the map stage is indeterminate") {
