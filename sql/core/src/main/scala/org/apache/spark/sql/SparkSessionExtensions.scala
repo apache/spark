@@ -35,6 +35,9 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * :: Experimental ::
  * Holder for injection points to the [[SparkSession]]. We make NO guarantee about the stability
  * regarding binary compatibility and source compatibility of methods here.
+ * 
+ * These extension points doesn't follow the exact order of sql execution
+ * E.g. Analyzer Rules are not the first point that gets called when sql execution begins.
  *
  * This current provides the following extension points:
  *
