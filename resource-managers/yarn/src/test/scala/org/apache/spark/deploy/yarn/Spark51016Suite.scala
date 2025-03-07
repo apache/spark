@@ -17,18 +17,24 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
-import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.spark.{SparkContext, SparkException, TaskContext}
-import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageSubmitted}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.apache.spark.tags.ExtendedYarnTest
+import org.apache.spark.{SparkContext, SparkException}
+import org.scalatest.concurrent.Eventually._
+
+import java.io.File
+import java.nio.charset.StandardCharsets
+import scala.concurrent.duration._
+
+
 
 @ExtendedYarnTest
 class Spark51016Suite extends BaseYarnClusterSuite {
@@ -145,7 +151,11 @@ private object Spark51016Suite extends Logging {
       System.exit(1)
     }
 
-    val spark = SparkSession.builder().appName("Spark51016Suite").getOrCreate()
+    val spark = SparkSession
+      .builder()
+      .appName("Spark51016Suite")
+      .config("spark.extraListeners", classOf[JobListener].getName)
+      .getOrCreate()
     val sc = SparkContext.getOrCreate()
 
     val status = new File(args(0))
@@ -158,13 +168,14 @@ private object Spark51016Suite extends Logging {
       //  outerjoin.show(100)
 
       val correctRows = outerjoin.collect()
-      TaskContext.unset()
+      JobListener.inKillMode = true
       for (i <- 0 until 100) {
         try {
+          eventually(timeout(3.minutes), interval(100.milliseconds)) {
+            assert(sc.getExecutorIds().size == 2)
+          }
           println("before query exec")
-        //  TaskContext.setFailResult()
           val rowsAfterRetry = getOuterJoinDF(spark).collect()
-        //  TaskContext.unsetFailResult()
 
           if (correctRows.length != rowsAfterRetry.length) {
             println(s"encounterted test failure incorrect query result. run  index = $i ")
@@ -198,12 +209,71 @@ private object Spark51016Suite extends Logging {
           // OK expected
         }
       }
-      Thread.sleep(1000000)
+
       result = "success"
     } finally {
       Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
       sc.stop()
     }
   }
+}
 
+object PIDGetter {
+  def getExecutorIds(): Seq[Int] = {
+    import scala.sys.process._
+    val output = Seq("ps", "-ef").#|(Seq("grep", "java")).#|(Seq("grep", "executor-id ")).lazyLines
+   // println(output.mkString("\n\n"))
+    if (output.nonEmpty && output.size > 3) {
+      val execPidsStr = Seq(output(1).trim, output(3).trim)
+      val pids = execPidsStr.map(str => str.split(" ")(1).toInt)
+      pids
+    } else {
+      Seq.empty
+    }
+
+  }
+
+  def killExecutor(pid: Int): Unit = {
+    import scala.sys.process._
+    Seq("kill", "-9", pid.toString).!
+
+  }
+
+  def main(args: Array[String]): Unit = {
+    getExecutorIds()
+  }
+}
+
+private[spark] class JobListener extends SparkListener {
+  private var kill: Boolean = false
+  private var count: Int = 0
+  override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+    if (JobListener.inKillMode) {
+      kill = true
+      count += 1
+    }
+  }
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+    if (stageSubmitted.stageInfo.attemptNumber() == 0 &&
+      stageSubmitted.stageInfo.shuffleDepId.nonEmpty && kill) {
+      kill = false
+      val killThread = new Thread(new Runnable() {
+        override def run(): Unit = {
+          val execids = PIDGetter.getExecutorIds()
+          if (execids.size == 2)  {
+            val pidToKill = execids(count % 2)
+            PIDGetter.killExecutor(pidToKill)
+          }
+        }
+      })
+      killThread.start()
+      killThread.join()
+    }
+  }
+
+}
+
+object JobListener {
+  @volatile
+  var inKillMode: Boolean = false
 }

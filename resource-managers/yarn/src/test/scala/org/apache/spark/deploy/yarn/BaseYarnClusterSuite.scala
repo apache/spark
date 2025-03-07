@@ -181,10 +181,12 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       launcher.setMainClass(klass)
       launcher.setAppResource(fakeSparkJar.getAbsolutePath())
     }
+
+    val numExecsOpt = extraConf.get(EXECUTOR_INSTANCES.key)
     launcher.setSparkHome(sys.props("spark.test.home"))
       .setMaster("yarn")
       .setDeployMode(deployMode)
-      .setConf(EXECUTOR_INSTANCES.key, "1")
+      .setConf(EXECUTOR_INSTANCES.key, numExecsOpt.getOrElse("1"))
       .setConf(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS,
         s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}")
       .setPropertiesFile(propsFile)
@@ -210,7 +212,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(3.minutes), interval(1.second)) {
+      eventually(timeout(30.minutes), interval(10.second)) {
         assert(handle.getState().isFinal())
       }
     } finally {
