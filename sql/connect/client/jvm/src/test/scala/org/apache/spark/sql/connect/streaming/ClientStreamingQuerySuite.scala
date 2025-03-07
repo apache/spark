@@ -56,8 +56,8 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
     withSQLConf(
-      "spark.sql.shuffle.partitions" -> "1", // Avoid too many reducers.
-      "spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport" -> "0") {
+      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+    ) {
       val readDF = spark.readStream
         .format("rate")
         .option("rowsPerSecond", "10")
@@ -103,7 +103,10 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           lastProgress.stateOperators.head.customMetrics.keySet().asScala == Set(
             "loadedMapCacheHitCount",
             "loadedMapCacheMissCount",
-            "stateOnCurrentVersionSizeBytes"))
+            "stateOnCurrentVersionSizeBytes",
+            "SnapshotLastUploaded.partition_0_default"
+          )
+        )
         assert(lastProgress.sources.nonEmpty)
         assert(lastProgress.sink.description == "MemorySink")
         assert(lastProgress.observedMetrics.isEmpty)
