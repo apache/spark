@@ -255,9 +255,23 @@ class Transformer(Params, metaclass=ABCMeta):
             params = dict()
         if isinstance(params, dict):
             if params:
-                return self.copy(params)._transform(dataset)
+                transformed = self.copy(params)._transform(dataset)
             else:
-                return self._transform(dataset)
+                transformed = self._transform(dataset)
+
+            from pyspark.sql.utils import is_remote
+
+            # Keep a reference to the source transformer in the client side, for this case:
+            #
+            # def fit_transform(df):
+            #     model = estimator.fit(df)
+            #     return model.transform(df)
+            #
+            # output = fit_transform(df)
+            if is_remote():
+                transformed.__source_transformer__ = self
+
+            return transformed
         else:
             raise TypeError("Params must be a param map but got %s." % type(params))
 
