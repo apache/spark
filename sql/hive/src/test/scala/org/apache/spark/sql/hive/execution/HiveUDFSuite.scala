@@ -18,11 +18,10 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{DataInput, DataOutput, File, PrintWriter}
-import java.util.{ArrayList, Arrays, Properties}
+import java.util.{ArrayList, Arrays}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
@@ -856,8 +855,6 @@ class TestPair(x: Int, y: Int) extends Writable with Serializable {
 }
 
 class PairSerDe extends AbstractSerDe {
-  override def initialize(p1: Configuration, p2: Properties): Unit = {}
-
   override def getObjectInspector: ObjectInspector = {
     ObjectInspectorFactory
       .getStandardStructObjectInspector(

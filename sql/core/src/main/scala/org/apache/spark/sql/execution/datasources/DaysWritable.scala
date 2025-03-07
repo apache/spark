@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.{DataInput, DataOutput, IOException}
-import java.sql.Date
 
-import org.apache.hadoop.hive.serde2.io.DateWritable
+import org.apache.hadoop.hive.common.`type`.Date
+import org.apache.hadoop.hive.serde2.io.DateWritableV2
 import org.apache.hadoop.io.WritableUtils
 
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseJulianToGregorianDays}
@@ -38,16 +38,16 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulia
 class DaysWritable(
     var gregorianDays: Int,
     var julianDays: Int)
-  extends DateWritable {
+  extends DateWritableV2 {
 
   def this() = this(0, 0)
   def this(gregorianDays: Int) =
     this(gregorianDays, rebaseGregorianToJulianDays(gregorianDays))
-  def this(dateWritable: DateWritable) = {
+  def this(dateWritable: DateWritableV2) = {
     this(
       gregorianDays = dateWritable match {
         case daysWritable: DaysWritable => daysWritable.gregorianDays
-        case dateWritable: DateWritable =>
+        case dateWritable: DateWritableV2 =>
         rebaseJulianToGregorianDays(dateWritable.getDays)
       },
       julianDays = dateWritable.getDays)
@@ -55,10 +55,7 @@ class DaysWritable(
 
   override def getDays: Int = julianDays
   override def get: Date = {
-    new Date(DateWritable.daysToMillis(julianDays))
-  }
-  override def get(doesTimeMatter: Boolean): Date = {
-    new Date(DateWritable.daysToMillis(julianDays, doesTimeMatter))
+    Date.ofEpochMilli(DateWritableV2.daysToMillis(julianDays))
   }
 
   override def set(d: Int): Unit = {
