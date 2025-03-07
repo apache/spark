@@ -318,7 +318,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         storage = table.storage.copy(
           locationUri = None,
           properties = storagePropsWithLocation),
-        schema = StructType(EMPTY_DATA_SCHEMA),
+        schema = StructType(EMPTY_DATA_SCHEMA ++ table.partitionSchema),
         bucketSpec = None)
     }
 
