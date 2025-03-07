@@ -859,18 +859,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(bytes, StringType,
       "01020304-0506-0708-090a-0b0c0d0e0f10")
 
-// Time
-// TODO: Wait until we have OSS support?
-//    val times = Seq("23:23:59", "01:23:45.123", "00:00:00.123456")
-//    times.foreach { t =>
-//      val micros = LocalTime.parse(t).toNanoOfDay() / 1000
-//      val builder = new VariantBuilder(false)
-//      builder.appendTime(micros)
-//      val bytes = builder.result().getValue()
-//      checkToJson(bytes, "\"" + t + "\"")
-//      checkCast(bytes, StringType, t)
-//    }
-
     // TimestampNanos
     // Cast and to_json produce slightly different formats.
     val timestamps = Seq(
@@ -1035,8 +1023,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val array2 = Cast(CreateArray(Seq(uuid, variantString)), VariantType)
     checkEvaluation(SchemaOfVariant(array2), s"ARRAY<VARIANT>")
 
-    Seq((TIME, "TIME(6)"),
-        (TIMESTAMP_NANOS, "TIMESTAMP_NANOS"),
+    Seq((TIMESTAMP_NANOS, "TIMESTAMP_NANOS"),
         (TIMESTAMP_NANOS_NTZ, "TIMESTAMP_NANOS_NTZ")).foreach { case (hdr, typeString) =>
       val value = Array(primitiveHeader(hdr)) ++ Array.fill(8)(0.toByte)
       val v = Literal(new VariantVal(value, emptyMetadata))

@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -271,13 +270,6 @@ public final class Variant {
       .appendOffset("+HH:MM", "+00:00")
       .toFormatter(Locale.US);
 
-  private static final DateTimeFormatter TIME_FORMATTER = new DateTimeFormatterBuilder()
-      .appendPattern("HH:mm:ss")
-      .optionalStart()
-      .appendFraction(ChronoField.MICRO_OF_SECOND, 0, 6, true)
-      .optionalEnd()
-      .toFormatter(Locale.US);
-
   private static Instant microsToInstant(long timestamp) {
     return Instant.EPOCH.plus(timestamp, ChronoUnit.MICROS);
   }
@@ -337,10 +329,6 @@ public final class Variant {
         break;
       case DATE:
         appendQuoted(sb, LocalDate.ofEpochDay((int) VariantUtil.getLong(value, pos)).toString());
-        break;
-      case TIME:
-        appendQuoted(sb, TIME_FORMATTER.format(
-            LocalTime.ofNanoOfDay(VariantUtil.getLong(value, pos) * 1_000)));
         break;
       case TIMESTAMP_NANOS:
         appendQuoted(sb, TIMESTAMP_FORMATTER.format(

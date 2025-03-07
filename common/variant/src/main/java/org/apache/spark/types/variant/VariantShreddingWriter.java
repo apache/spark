@@ -283,11 +283,6 @@ public class VariantShreddingWriter {
           return v.getLong();
         }
         break;
-      case TIME:
-        if (targetType instanceof VariantSchema.TimeType) {
-          return v.getLong();
-        }
-        break;
       case FLOAT:
         if (targetType instanceof VariantSchema.FloatType) {
           return v.getFloat();

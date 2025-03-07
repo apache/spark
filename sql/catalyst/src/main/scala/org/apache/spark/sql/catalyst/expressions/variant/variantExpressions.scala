@@ -478,7 +478,6 @@ case object VariantGet {
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
-          case Type.TIME => Literal(v.getLong, TimeType(6))
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
           case _ => throw new SparkRuntimeException(
@@ -906,7 +905,6 @@ object SchemaOfVariant {
     case Type.UUID => UuidType
     case Type.TIMESTAMP_NANOS => TimestampNanosType
     case Type.TIMESTAMP_NANOS_NTZ => TimestampNanosNtzType
-    case Type.TIME => TimeType(6)
   }
 
   /**

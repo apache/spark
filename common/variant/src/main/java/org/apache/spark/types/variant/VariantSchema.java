@@ -105,9 +105,6 @@ public class VariantSchema {
   public static final class TimestampNanosNTZType extends ScalarType {
   }
 
-  public static final class TimeType extends ScalarType {
-  }
-
   public static final class UuidType extends ScalarType {
   }
 
