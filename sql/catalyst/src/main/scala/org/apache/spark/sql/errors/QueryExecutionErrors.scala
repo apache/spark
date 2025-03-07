@@ -2750,6 +2750,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.PURGE_TABLE")
   }
 
+  def unsupportedShowProceduresError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.SHOW_PROCEDURES")
+  }
+
   def raiseError(
       errorClass: UTF8String,
       errorParms: MapData): RuntimeException = {
