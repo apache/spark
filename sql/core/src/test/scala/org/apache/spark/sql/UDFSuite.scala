@@ -1219,12 +1219,11 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(constResult, Row(java.time.LocalTime.parse(mockTimeStr)) :: Nil)
     assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
     // Error in the conversion of UDF result to the internal representation of time
-    val overflowFunc = udf((l: java.time.LocalTime) => l.plusHours(Long.MaxValue))
+    val invalidFunc = udf((l: java.time.LocalTime) => l.plusHours("Zero").toLong)
     val e = intercept[SparkException] {
-      input.select(overflowFunc($"currentTime")).collect()
+      input.select(invalidFunc($"currentTime")).collect()
     }
-    assert(e.getCondition == "FAILED_EXECUTE_UDF")
-    assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
+    assert(e.getCause.isInstanceOf[java.lang.NumberFormatException])
   }
 
   test("char/varchar as UDF return type") {
