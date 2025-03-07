@@ -82,7 +82,7 @@ case class ArrowEvalPythonUDTFExec(
 
       val actualDataTypes = (0 until flattenedBatch.numCols()).map(
         i => flattenedBatch.column(i).dataType())
-      if (outputTypes == actualDataTypes) {
+      if (outputTypes != actualDataTypes) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
           "Python UDTF", outputTypes, actualDataTypes)
       }

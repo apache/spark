@@ -126,7 +126,7 @@ class ArrowEvalPythonEvaluatorFactory(
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      if (outputTypes == actualDataTypes) {
+      if (outputTypes != actualDataTypes) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
           "pandas_udf()", outputTypes, actualDataTypes)
       }

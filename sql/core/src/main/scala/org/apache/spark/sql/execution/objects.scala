@@ -253,7 +253,7 @@ case class MapPartitionsInRWithArrowExec(
       val outputProject = UnsafeProjection.create(output, output)
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        if (outputTypes == actualDataTypes) {
+        if (outputTypes != actualDataTypes) {
           throw QueryExecutionErrors.arrowDataTypeMismatchError(
             "dapply()", outputTypes, actualDataTypes)
         }
@@ -601,7 +601,7 @@ case class FlatMapGroupsInRWithArrowExec(
 
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        if (outputTypes == actualDataTypes) {
+        if (outputTypes != actualDataTypes) {
           throw QueryExecutionErrors.arrowDataTypeMismatchError(
             "gapply()", outputTypes, actualDataTypes)
         }
