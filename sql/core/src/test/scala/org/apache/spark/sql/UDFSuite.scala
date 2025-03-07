@@ -1219,7 +1219,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(constResult, Row(java.time.LocalTime.parse(mockTimeStr)) :: Nil)
     assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
     // Error in the conversion of UDF result to the internal representation of time
-    val invalidFunc = udf((l: java.time.LocalTime) => l.plusHours("Zero").toLong)
+    val invalidFunc = udf((l: java.time.LocalTime) => "Zero".toLong)
     val e = intercept[SparkException] {
       input.select(invalidFunc($"currentTime")).collect()
     }
