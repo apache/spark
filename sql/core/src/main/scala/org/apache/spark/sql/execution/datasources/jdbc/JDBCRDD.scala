@@ -276,6 +276,7 @@ class JDBCRDD(
     }
 
     val sqlText = generateJdbcQuery(Some(part))
+
     logInfo(log"Executing SQL text on partition ${MDC(PARTITION_ID, thePart.index)}" +
       log": ${MDC(SQL_TEXT, sqlText)}")
 
