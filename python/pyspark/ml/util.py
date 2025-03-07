@@ -284,7 +284,7 @@ def try_remote_del(f: FuncT) -> FuncT:
         if in_remote:
             # Delete the model if possible
             model_id = self._java_obj
-            del_remote_cache(model_id)
+            del_remote_cache(cast(str, model_id))
             return
         else:
             return f(self)
