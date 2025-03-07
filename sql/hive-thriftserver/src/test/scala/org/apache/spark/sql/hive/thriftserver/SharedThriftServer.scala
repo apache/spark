@@ -113,7 +113,7 @@ trait SharedThriftServer extends SharedSparkSession {
         val interceptor = new HttpBasicAuthInterceptor(
           username,
           "anonymous",
-          null, null, true, new util.HashMap[String, String]())
+          null, null, true, new util.HashMap[String, String](), new util.HashMap[String, String]())
         new THttpClient(
           s"http://localhost:$serverPort/cliservice",
           HttpClientBuilder.create.addInterceptorFirst(interceptor).build())

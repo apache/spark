@@ -43,11 +43,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A trait for subclasses that handle table scans.
@@ -96,7 +95,7 @@ class HadoopTableReader(
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
       hiveTable,
-      Utils.classForName[Deserializer](tableDesc.getSerdeClassName),
+      tableDesc.getDeserializer(_broadcastedHadoopConf.value.value),
       filterOpt = None)
 
   /**
@@ -110,7 +109,7 @@ class HadoopTableReader(
    */
   def makeRDDForTable(
       hiveTable: HiveTable,
-      deserializerClass: Class[_ <: Deserializer],
+      deserializer: Deserializer,
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
 
     assert(!hiveTable.isPartitioned,
@@ -132,11 +131,6 @@ class HadoopTableReader(
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHadoopConf.value.value
-      val deserializer = deserializerClass.getConstructor().newInstance()
-      DeserializerLock.synchronized {
-        deserializer.initialize(hconf, localTableDesc.getProperties)
-      }
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }
 
@@ -144,8 +138,7 @@ class HadoopTableReader(
   }
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
-    val partitionToDeserializer = partitions.map(part =>
-      (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
+    val partitionToDeserializer = partitions.map(part => (part, part.getDeserializer)).toMap
     makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None)
   }
 
@@ -160,7 +153,7 @@ class HadoopTableReader(
    *     subdirectory of each partition being read. If None, then all files are accepted.
    */
   def makeRDDForPartitionedTable(
-      partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
+      partitionToDeserializer: Map[HivePartition, Deserializer],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
     val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true)
@@ -210,7 +203,7 @@ class HadoopTableReader(
 
       createHadoopRDD(partDesc, inputPathStr).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
-        val deserializer = localDeserializer.getConstructor().newInstance()
+        val deserializer = localDeserializer
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties
         // and partition properties before initializing the deserializer. Note that partition
@@ -225,14 +218,8 @@ class HadoopTableReader(
         }.foreach {
           case (key, value) => props.setProperty(key, value)
         }
-        DeserializerLock.synchronized {
-          deserializer.initialize(hconf, props)
-        }
         // get the table deserializer
-        val tableSerDe = localTableDesc.getDeserializerClass.getConstructor().newInstance()
-        DeserializerLock.synchronized {
-          tableSerDe.initialize(hconf, tableProperties)
-        }
+        val tableSerDe = localTableDesc.getDeserializer(hconf)
 
         // fill the non partition key attributes
         HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs,
@@ -488,10 +475,11 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
             row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))
         case oi: TimestampObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
-            row.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
+            row.setLong(ordinal,
+              HiveDateTimeUtils.fromHiveTimestamp(oi.getPrimitiveJavaObject(value)))
         case oi: DateObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
-            row.setInt(ordinal, DateTimeUtils.fromJavaDate(oi.getPrimitiveJavaObject(value)))
+            row.setInt(ordinal, HiveDateTimeUtils.fromHiveDate(oi.getPrimitiveJavaObject(value)))
         case oi: BinaryObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
             row.update(ordinal, oi.getPrimitiveJavaObject(value))

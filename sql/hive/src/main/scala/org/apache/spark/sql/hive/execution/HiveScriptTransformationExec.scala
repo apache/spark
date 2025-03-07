@@ -284,7 +284,7 @@ object HiveScriptIOSchema extends HiveInspectors {
 
     val properties = new Properties()
     properties.putAll(propsMap.asJava)
-    serde.initialize(null, properties)
+    serde.initialize(null, properties, null)
 
     serde
   }

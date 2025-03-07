@@ -21,11 +21,13 @@ import java.io.FileNotFoundException;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.QueryState;
+import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.FetchOrientation;
@@ -46,6 +48,7 @@ import org.apache.spark.internal.MDC;
 
 public abstract class Operation {
   protected final HiveSession parentSession;
+  protected final OperationManager operationManager;
   private OperationState state = OperationState.INITIALIZED;
   private final OperationHandle opHandle;
   private HiveConf configuration;
@@ -56,6 +59,7 @@ public abstract class Operation {
   protected volatile HiveSQLException operationException;
   protected final boolean runAsync;
   protected volatile Future<?> backgroundHandle;
+  protected File operationLogFile;
   protected OperationLog operationLog;
   protected boolean isOperationLogEnabled;
   protected Map<String, String> confOverlay = new HashMap<String, String>();
@@ -71,25 +75,29 @@ public abstract class Operation {
           FetchOrientation.FETCH_FIRST,
           FetchOrientation.FETCH_PRIOR);
 
-  protected Operation(HiveSession parentSession, OperationType opType) {
-    this(parentSession, null, opType);
+  protected Operation(HiveSession parentSession, OperationManager operationManager, OperationType opType) {
+    this(parentSession, operationManager, null, opType);
   }
 
-  protected Operation(HiveSession parentSession, Map<String, String> confOverlay,
+  protected Operation(HiveSession parentSession,  OperationManager operationManager, Map<String, String> confOverlay,
       OperationType opType) {
-    this(parentSession, confOverlay, opType, false);
+    this(parentSession, operationManager, confOverlay, opType, false);
   }
 
   protected Operation(HiveSession parentSession,
-      Map<String, String> confOverlay, OperationType opType, boolean runInBackground) {
+      OperationManager operationManager, Map<String, String> confOverlay, OperationType opType, boolean runInBackground) {
     this.parentSession = parentSession;
+    this.operationManager = Objects.requireNonNull(operationManager);
     this.confOverlay = confOverlay;
     this.runAsync = runInBackground;
     this.opHandle = new OperationHandle(opType, parentSession.getProtocolVersion());
     lastAccessTime = System.currentTimeMillis();
     operationTimeout = HiveConf.getTimeVar(parentSession.getHiveConf(),
         HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS);
-    queryState = new QueryState(parentSession.getHiveConf(), confOverlay, runInBackground);
+    queryState = new QueryState.Builder()
+        .withHiveConf(parentSession.getHiveConf())
+        .withConfOverlay(confOverlay)
+        .build();
   }
 
   public Future<?> getBackgroundHandle() {
@@ -204,7 +212,7 @@ public abstract class Operation {
 
   protected void createOperationLog() {
     if (parentSession.isOperationLogEnabled()) {
-      File operationLogFile = new File(parentSession.getOperationLogSessionDir(),
+      operationLogFile = new File(parentSession.getOperationLogSessionDir(),
           opHandle.getHandleIdentifier().toString());
       isOperationLogEnabled = true;
 
@@ -244,13 +252,13 @@ public abstract class Operation {
       }
 
       // register this operationLog to current thread
-      OperationLog.setCurrentOperationLog(operationLog);
+      operationManager.setCurrentOperationLog(operationLog, operationLogFile);
     }
   }
 
   protected void unregisterOperationLog() {
     if (isOperationLogEnabled) {
-      OperationLog.removeCurrentOperationLog();
+      operationManager.removeCurrentOperationLog();
     }
   }
 
@@ -336,11 +344,11 @@ public abstract class Operation {
     }
   }
 
-  protected HiveSQLException toSQLException(String prefix, CommandProcessorResponse response) {
-    HiveSQLException ex = new HiveSQLException(prefix + ": " + response.getErrorMessage(),
-        response.getSQLState(), response.getResponseCode());
-    if (response.getException() != null) {
-      ex.initCause(response.getException());
+  protected HiveSQLException toSQLException(String prefix, CommandProcessorException exception) {
+    HiveSQLException ex = new HiveSQLException(prefix + ": " + exception.getMessage(),
+        exception.getSqlState(), exception.getResponseCode());
+    if (exception.getCause() != null) {
+      ex.initCause(exception.getCause());
     }
     return ex;
   }

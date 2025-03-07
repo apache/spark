@@ -20,7 +20,7 @@ package org.apache.hive.service.server;
 
 import java.util.Map;
 
-import org.apache.hadoop.hive.metastore.HiveMetaStore;
+import org.apache.hadoop.hive.metastore.HMSHandler;
 import org.apache.hadoop.hive.metastore.RawStore;
 
 import org.apache.spark.internal.SparkLogger;
@@ -67,7 +67,7 @@ public class ThreadWithGarbageCleanup extends Thread {
    */
   public void cacheThreadLocalRawStore() {
     Long threadId = this.getId();
-    RawStore threadLocalRawStore = HiveMetaStore.HMSHandler.getRawStore();
+    RawStore threadLocalRawStore = HMSHandler.getRawStore();
     if (threadLocalRawStore != null && !threadRawStoreMap.containsKey(threadId)) {
       LOG.debug("Adding RawStore: " + threadLocalRawStore + ", for the thread: " +
           this.getName() + " to threadRawStoreMap for future cleanup.");

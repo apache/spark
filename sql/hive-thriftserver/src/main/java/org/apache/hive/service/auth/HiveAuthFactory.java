@@ -30,10 +30,10 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.shims.HadoopShims.KerberosNameShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
-import org.apache.hadoop.hive.thrift.DBTokenStore;
-import org.apache.hadoop.hive.thrift.HiveDelegationTokenManager;
-import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge;
-import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge.Server.ServerMode;
+import org.apache.hadoop.hive.metastore.security.DBTokenStore;
+import org.apache.hadoop.hive.metastore.security.MetastoreDelegationTokenManager;
+import org.apache.hadoop.hive.metastore.security.HadoopThriftAuthBridge;
+import org.apache.hadoop.hive.metastore.security.HadoopThriftAuthBridge.Server.ServerMode;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.ProxyUsers;
@@ -80,7 +80,7 @@ public class HiveAuthFactory {
   private String authTypeStr;
   private final String transportMode;
   private final HiveConf conf;
-  private HiveDelegationTokenManager delegationTokenManager = null;
+  private MetastoreDelegationTokenManager delegationTokenManager = null;
 
   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
   public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
@@ -114,18 +114,19 @@ public class HiveAuthFactory {
         authTypeStr = AuthTypes.NONE.getAuthName();
       }
       if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
-        String principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL);
         String keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
+        String principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL);
+        String client = conf.getVar(ConfVars.HIVE_SERVER2_CLIENT_KERBEROS_PRINCIPAL);
         if (needUgiLogin(UserGroupInformation.getCurrentUser(),
           SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
-          saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(keytab, principal);
+          saslServer = HadoopThriftAuthBridge.getBridge().createServer(keytab, principal, client);
         } else {
           // Using the default constructor to avoid unnecessary UGI login.
           saslServer = new HadoopThriftAuthBridge.Server();
         }
 
         // start delegation token manager
-        delegationTokenManager = new HiveDelegationTokenManager();
+        delegationTokenManager = new MetastoreDelegationTokenManager();
         try {
           // rawStore is only necessary for DBTokenStore
           Object rawStore = null;

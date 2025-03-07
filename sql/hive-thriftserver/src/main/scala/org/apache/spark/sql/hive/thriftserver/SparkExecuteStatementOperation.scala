@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.ExecuteStatementOperation
+import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
@@ -42,11 +42,13 @@ import org.apache.spark.util.{Utils => SparkUtils}
 private[hive] class SparkExecuteStatementOperation(
     val session: SparkSession,
     parentSession: HiveSession,
+    operationManager: OperationManager,
     statement: String,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true,
     queryTimeout: Long)
-  extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
+  extends ExecuteStatementOperation(parentSession, operationManager, statement, confOverlay,
+    runInBackground)
   with SparkOperation
   with Logging {
 

@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetTablesOperation
+import org.apache.hive.service.cli.operation.{GetTablesOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
@@ -45,11 +45,13 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 private[hive] class SparkGetTablesOperation(
     val session: SparkSession,
     parentSession: HiveSession,
+    operationManager: OperationManager,
     catalogName: String,
     schemaName: String,
     tableName: String,
     tableTypes: JList[String])
-  extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
+  extends GetTablesOperation(parentSession, operationManager, catalogName, schemaName, tableName,
+    tableTypes)
   with SparkOperation
   with Logging {
 

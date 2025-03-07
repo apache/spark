@@ -44,9 +44,9 @@ public class GetSchemasOperation extends MetadataOperation {
 
   protected RowSet rowSet;
 
-  protected GetSchemasOperation(HiveSession parentSession,
+  protected GetSchemasOperation(HiveSession parentSession, OperationManager operationManager,
       String catalogName, String schemaName) {
-    super(parentSession, OperationType.GET_SCHEMAS);
+    super(parentSession, operationManager, OperationType.GET_SCHEMAS);
     this.catalogName = catalogName;
     this.schemaName = schemaName;
     this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);

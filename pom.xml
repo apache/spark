@@ -134,7 +134,7 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.10</hive.version>
+    <hive.version>4.0.1</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
@@ -1807,6 +1807,10 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.tez</groupId>
+            <artifactId>tez-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1958,6 +1962,14 @@
           <exclusion>
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-intg</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-registry</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2263,6 +2275,10 @@
             <artifactId>hive-serde</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
@@ -2304,6 +2320,11 @@
             <artifactId>slf4j-api</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-udf</artifactId>
+        <version>${hive.version}</version>
       </dependency>
 
       <dependency>

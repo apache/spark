@@ -123,7 +123,11 @@
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
-      <artifactId>hive-storage-api</artifactId>
+      <artifactId>hive-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-serde</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
