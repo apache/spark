@@ -103,6 +103,7 @@ class SQLAppStatusListener(
           executionData.stages = sqlStoreData.stages
           executionData.metricsValues = sqlStoreData.metricValues
           executionData.endEvents.set(sqlStoreData.jobs.size + 1)
+          executionData.sqlScriptId = sqlStoreData.sqlScriptId
           liveExecutions.put(executionId, executionData)
           Some(executionData)
         } catch {
@@ -343,7 +344,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _, sqlScriptId) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -364,6 +365,7 @@ class SQLAppStatusListener(
     exec.modifiedConfigs = modifiedConfigs
     exec.addMetrics(sqlPlanMetrics)
     exec.submissionTime = time
+    exec.sqlScriptId = sqlScriptId
     update(exec)
   }
 
@@ -511,6 +513,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   // end events arrived so that the listener can stop tracking the execution.
   val endEvents = new AtomicInteger()
 
+  var sqlScriptId: Option[String] = None
+
   override protected def doUpdate(): Any = {
     new SQLExecutionUIData(
       executionId,
@@ -525,7 +529,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       errorMessage,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      sqlScriptId)
   }
 
   def addMetrics(newMetrics: collection.Seq[SQLPlanMetric]): Unit = {

@@ -2527,6 +2527,42 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("for statement - nulls") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          |create table t ( id int not null, name string) using parquet;
+          |
+          |insert into t values (1, 'A'), (2, null);
+          |
+          |begin
+          |  for c_test as (select * from t order by Id asc)
+          |  do
+          |      select coalesce(c_test.name, 'NULL');
+          |  end for;
+          |end;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq(Row("A")), // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq(Row("NULL")), // drop local var
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
   test("for statement - nested - leave inner loop") {
     withTable("t", "t2") {
       val sqlScript =

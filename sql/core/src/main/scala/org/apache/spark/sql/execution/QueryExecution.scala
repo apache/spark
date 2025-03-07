@@ -65,6 +65,7 @@ class QueryExecution(
     val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
+  var scriptId: Option[String] = Some("testID")
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
