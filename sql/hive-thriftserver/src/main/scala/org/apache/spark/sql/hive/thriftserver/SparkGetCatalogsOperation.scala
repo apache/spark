@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli.OperationState
-import org.apache.hive.service.cli.operation.GetCatalogsOperation
+import org.apache.hive.service.cli.operation.{GetCatalogsOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
@@ -34,8 +34,9 @@ import org.apache.spark.sql.SparkSession
  */
 private[hive] class SparkGetCatalogsOperation(
     val session: SparkSession,
-    parentSession: HiveSession)
-  extends GetCatalogsOperation(parentSession)
+    parentSession: HiveSession,
+    operationManager: OperationManager)
+  extends GetCatalogsOperation(parentSession, operationManager)
   with SparkOperation
   with Logging {
 

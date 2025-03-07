@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.QueryState
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.SparkThrowable
@@ -38,14 +39,11 @@ import org.apache.spark.util.Utils
 
 
 private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.sparkSession)
-  extends Driver
+  extends Driver(new QueryState.Builder().build())
   with Logging {
 
   private[hive] var tableSchema: Schema = _
   private[hive] var hiveResponse: Seq[String] = _
-
-  override def init(): Unit = {
-  }
 
   private def getResultSetSchema(query: QueryExecution): Schema = {
     val analyzed = query.analyzed
@@ -79,7 +77,7 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
           }
       }
       tableSchema = getResultSetSchema(execution)
-      new CommandProcessorResponse(0)
+      new CommandProcessorResponse()
     } catch {
         case st: SparkThrowable =>
           logDebug(s"Failed in [$command]", st)
@@ -90,10 +88,9 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
     }
   }
 
-  override def close(): Int = {
+  override def close(): Unit = {
     hiveResponse = null
     tableSchema = null
-    0
   }
 
   override def getResults(res: JList[_]): Boolean = {

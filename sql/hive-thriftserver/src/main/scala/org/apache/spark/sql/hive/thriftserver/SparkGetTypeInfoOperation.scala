@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hadoop.hive.serde2.thrift.Type
 import org.apache.hadoop.hive.serde2.thrift.Type._
 import org.apache.hive.service.cli.OperationState
-import org.apache.hive.service.cli.operation.GetTypeInfoOperation
+import org.apache.hive.service.cli.operation.{GetTypeInfoOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
@@ -38,8 +38,9 @@ import org.apache.spark.sql.SparkSession
  */
 private[hive] class SparkGetTypeInfoOperation(
     val session: SparkSession,
-    parentSession: HiveSession)
-  extends GetTypeInfoOperation(parentSession)
+    parentSession: HiveSession,
+    operationManager: OperationManager)
+  extends GetTypeInfoOperation(parentSession, operationManager)
   with SparkOperation
   with Logging {
 

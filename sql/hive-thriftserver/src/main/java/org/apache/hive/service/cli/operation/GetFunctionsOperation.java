@@ -66,9 +66,9 @@ public class GetFunctionsOperation extends MetadataOperation {
 
   protected final RowSet rowSet;
 
-  public GetFunctionsOperation(HiveSession parentSession,
+  public GetFunctionsOperation(HiveSession parentSession, OperationManager operationManager,
       String catalogName, String schemaName, String functionName) {
-    super(parentSession, OperationType.GET_FUNCTIONS);
+    super(parentSession, operationManager, OperationType.GET_FUNCTIONS);
     this.catalogName = catalogName;
     this.schemaName = schemaName;
     this.functionName = functionName;
