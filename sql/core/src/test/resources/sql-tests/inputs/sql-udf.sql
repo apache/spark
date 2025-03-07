@@ -151,6 +151,8 @@ SELECT * FROM foo4_2(2);
 SELECT * FROM foo4_3(0);
 -- with non-deterministic inputs
 SELECT * FROM foo4_1(rand(0) * 0);
+-- named arguments
+SELECT * FROM foo4_1(x => 1);
 
 -- 4.2 SQL table function with lateral references
 SELECT * FROM t1, LATERAL foo4_1(c1);

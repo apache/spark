@@ -2726,11 +2726,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(SQL_TABLE_FUNCTION)) {
       case SQLTableFunction(name, function, inputs, output) =>
-        val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
         // Resolve the SQL table function plan using its function context.
         val conf = new SQLConf()
         function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
         val resolved = SQLConf.withExistingConf(conf) {
+          val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
             executeSameContext(plan)
           }

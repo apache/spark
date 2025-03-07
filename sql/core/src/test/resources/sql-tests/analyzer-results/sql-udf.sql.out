@@ -786,6 +786,17 @@ SELECT * FROM foo4_1(rand(0) * 0)
 
 
 -- !query
+SELECT * FROM foo4_1(x => 1)
+-- !query analysis
+Project [a#x]
++- SQLFunctionNode spark_catalog.default.foo4_1
+   +- SubqueryAlias foo4_1
+      +- Project [cast(x#x as int) AS a#x]
+         +- Project [cast(1 as int) AS x#x]
+            +- OneRowRelation
+
+
+-- !query
 SELECT * FROM t1, LATERAL foo4_1(c1)
 -- !query analysis
 Project [c1#x, c2#x, a#x]
