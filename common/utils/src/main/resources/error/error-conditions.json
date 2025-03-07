@@ -4416,6 +4416,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "ARROW_TYPE_MISMATCH": {
+    "message": [
+      "Invalid schema from <operation>: expected <outputTypes>, got <actualDataTypes>."
+    ],
+    "sqlState" : "42K0G"
+  },
   "PROTOBUF_MESSAGE_NOT_FOUND" : {
     "message" : [
       "Unable to locate Message <messageName> in Descriptor."
