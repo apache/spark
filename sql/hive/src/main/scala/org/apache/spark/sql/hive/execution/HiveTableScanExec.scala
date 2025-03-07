@@ -123,8 +123,7 @@ case class HiveTableScanExec(
 
     HiveShim.appendReadColumns(hiveConf, neededColumnIDs, neededColumnNames)
 
-    val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
-    deserializer.initialize(hiveConf, tableDesc.getProperties)
+    val deserializer = tableDesc.getDeserializer(hiveConf)
 
     // Specifies types and object inspectors of columns to be scanned.
     val structOI = ObjectInspectorUtils

@@ -31,6 +31,7 @@ import java.util.StringTokenizer;
 import javax.security.auth.Subject;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.hadoop.hive.metastore.security.HadoopThriftAuthBridge;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.http.protocol.BasicHttpContext;
@@ -68,8 +69,7 @@ public final class HttpAuthUtils {
    */
   public static String getKerberosServiceTicket(String principal, String host,
       String serverHttpUrl, boolean assumeSubject) throws Exception {
-    String serverPrincipal =
-        ShimLoader.getHadoopThriftAuthBridge().getServerPrincipal(principal, host);
+    String serverPrincipal = HadoopThriftAuthBridge.getBridge().getServerPrincipal(principal, host);
     if (assumeSubject) {
       // With this option, we're assuming that the external application,
       // using the JDBC driver has done a JAAS kerberos login already
@@ -82,7 +82,7 @@ public final class HttpAuthUtils {
     } else {
       // JAAS login from ticket cache to setup the client UserGroupInformation
       UserGroupInformation clientUGI =
-          ShimLoader.getHadoopThriftAuthBridge().getCurrentUGIWithConf("kerberos");
+          HadoopThriftAuthBridge.getBridge().getCurrentUGIWithConf("kerberos");
       return clientUGI.doAs(new HttpKerberosClientAction(serverPrincipal, serverHttpUrl));
     }
   }
