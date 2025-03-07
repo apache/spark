@@ -315,8 +315,8 @@ Filter cast(true as boolean)
 SELECT 1 FROM range(10) HAVING MAX(id) > 0
 -- !query analysis
 Project [1#x]
-+- Filter (max(id#xL)#xL > cast(0 as bigint))
-   +- Aggregate [1 AS 1#x, max(id#xL) AS max(id#xL)#xL]
++- Filter (max(id)#xL > cast(0 as bigint))
+   +- Aggregate [1 AS 1#x, max(id#xL) AS max(id)#xL]
       +- Range (0, 10, step=1)
 
 

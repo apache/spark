@@ -224,7 +224,7 @@ case class StreamingSymmetricHashJoinExec(
 
   override def shortName: String = "symmetricHashJoin"
 
-  override val stateStoreNames: Seq[String] =
+  private val stateStoreNames =
     SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
 
   override def operatorStateMetadata(
@@ -527,8 +527,9 @@ case class StreamingSymmetricHashJoinExec(
           (leftSideJoiner.numUpdatedStateRows + rightSideJoiner.numUpdatedStateRows)
         numTotalStateRows += combinedMetrics.numKeys
         stateMemory += combinedMetrics.memoryUsedBytes
-        setStoreCustomMetrics(combinedMetrics.customMetrics)
-        setStoreInstanceMetrics(combinedMetrics.instanceMetrics)
+        combinedMetrics.customMetrics.foreach { case (metric, value) =>
+          longMetric(metric.name) += value
+        }
       }
 
       val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide);

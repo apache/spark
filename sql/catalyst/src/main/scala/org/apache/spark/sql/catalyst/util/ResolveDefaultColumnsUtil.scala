@@ -40,6 +40,7 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -120,7 +121,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
       schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
       val keywords: Array[String] = SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
         .toLowerCase().split(",").map(_.trim)
-      val allowedTableProviders: Array[String] = keywords.map(_.stripSuffix("*"))
+      val allowedTableProviders: Array[String] = if (Utils.isTesting) {
+        "in-memory" +: keywords.map(_.stripSuffix("*"))
+      } else {
+        keywords.map(_.stripSuffix("*"))
+      }
       val addColumnExistingTableBannedProviders: Array[String] =
         keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
       val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
@@ -459,15 +464,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
    *         Any type suitable for assigning into a row using the InternalRow.update method.
    */
   def getExistenceDefaultValues(schema: StructType): Array[Any] = {
-    schema.fields.map { field: StructField =>
-      val defaultValue: Option[String] = field.getExistenceDefaultValue()
-      defaultValue.map { _: String =>
-        val expr = analyzeExistenceDefaultValue(field)
+    schema.fields.map(getExistenceDefaultValue)
+  }
 
-        // The expression should be a literal value by this point, possibly wrapped in a cast
-        // function. This is enforced by the execution of commands that assign default values.
-        expr.eval()
-      }.orNull
+  def getExistenceDefaultValue(field: StructField): Any = {
+    if (field.hasExistenceDefaultValue) {
+      val expr = analyzeExistenceDefaultValue(field)
+      // The expression should be a literal value by this point, possibly wrapped in a cast
+      // function. This is enforced by the execution of commands that assign default values.
+      expr.eval()
+    } else {
+      null
     }
   }
 
