@@ -1229,8 +1229,8 @@ class SparkConnectClient(object):
         return self._builder.token
 
     def _execute_plan_request_with_metadata(
-            self,
-            operation_id: Optional[str] = None) -> pb2.ExecutePlanRequest:
+        self, operation_id: Optional[str] = None
+    ) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest(
             session_id=self._session_id,
             client_type=self._builder.userAgent,

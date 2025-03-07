@@ -261,7 +261,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
         mock = MockService(client._session_id)
         client._stub = mock
         req = client._execute_plan_request_with_metadata(
-            operation_id="10a4c38e-7e87-40ee-9d6f-60ff0751e63b")
+            operation_id="10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+        )
         for resp in client._stub.ExecutePlan(req, metadata=None):
             assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
 
