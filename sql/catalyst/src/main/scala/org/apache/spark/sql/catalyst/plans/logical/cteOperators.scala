@@ -35,13 +35,14 @@ import org.apache.spark.sql.internal.SQLConf
  * @param anchor The plan of the initial element of the loop.
  * @param recursion The plan that describes the recursion with an [[UnionLoopRef]] node.
  * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
+ * @param isGlobal Defines whether the limit parameter is a local limit or a global limit.
  */
 case class UnionLoop(
     id: Long,
     anchor: LogicalPlan,
     recursion: LogicalPlan,
-    localLimit: Option[Int] = None,
-    globalLimit: Option[Int] = None) extends UnionBase {
+    limit: Option[Int] = None,
+    isGlobal: Boolean = false) extends UnionBase {
   override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): UnionLoop =
