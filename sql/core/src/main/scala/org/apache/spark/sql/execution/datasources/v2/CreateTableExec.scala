@@ -43,7 +43,10 @@ case class CreateTableExec(
   override protected def run(): Seq[InternalRow] = {
     if (!catalog.tableExists(identifier)) {
       try {
-        catalog.createTable(identifier, columns, partitioning.toArray, tableProperties.asJava)
+        catalog.buildTable(identifier, columns)
+          .withPartitions(partitioning.toArray)
+          .withProperties(tableProperties.asJava)
+          .create()
       } catch {
         case _: TableAlreadyExistsException if ignoreIfExists =>
           logWarning(

@@ -152,6 +152,66 @@ class CatalogSuite extends SparkFunSuite {
     assert(catalog.tableExists(testIdent))
   }
 
+  test("createTable: using builder non-partitioned table") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+
+    val table = catalog.buildTable(testIdent, columns)
+        .withPartitions(emptyTrans)
+        .withProperties(emptyProps)
+        .create()
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+    assert(parsed == Seq("test", "`", ".", "test_table"))
+    assert(table.columns === columns)
+    assert(table.properties.asScala == Map())
+
+    assert(catalog.tableExists(testIdent))
+  }
+
+  test("createTable: using builder partitioned table") {
+    val partCatalog = new InMemoryPartitionTableCatalog
+    partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
+
+    assert(!partCatalog.tableExists(testIdent))
+
+    val columns = Array(
+      Column.create("col0", IntegerType),
+      Column.create("part0", IntegerType))
+    val table = partCatalog.buildTable(testIdent, columns)
+      .withPartitions(Array[Transform](Expressions.identity("part0")))
+      .withProperties(util.Collections.emptyMap[String, String])
+      .create()
+
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+    assert(parsed == Seq("test", "`", ".", "test_table"))
+    assert(table.columns === columns)
+    assert(table.properties.asScala == Map())
+
+    assert(partCatalog.tableExists(testIdent))
+  }
+
+
+  test("createTable: using builder with properties") {
+    val catalog = newCatalog()
+
+    val properties = new util.HashMap[String, String]()
+    properties.put("property", "value")
+
+    assert(!catalog.tableExists(testIdent))
+
+    val table = catalog.buildTable(testIdent, columns)
+      .withPartitions(emptyTrans)
+      .withProperties(properties).create()
+
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+    assert(parsed == Seq("test", "`", ".", "test_table"))
+    assert(table.columns === columns)
+    assert(table.properties == properties)
+
+    assert(catalog.tableExists(testIdent))
+  }
+
   test("createTable: table already exists") {
     val catalog = newCatalog()
 
