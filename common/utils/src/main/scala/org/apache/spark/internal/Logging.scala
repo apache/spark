@@ -87,7 +87,7 @@ object MDC {
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.
  */
-case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
+case class MessageWithContext(message: String, context: java.util.Map[String, String]) {
   def +(mdc: MessageWithContext): MessageWithContext = {
     val resultMap = new java.util.HashMap(context)
     resultMap.putAll(mdc.context)
@@ -105,7 +105,7 @@ class LogEntry(messageWithContext: => MessageWithContext) {
 
   def message: String = cachedMessageWithContext.message
 
-  def context: java.util.HashMap[String, String] = cachedMessageWithContext.context
+  def context: java.util.Map[String, String] = cachedMessageWithContext.context
 }
 
 /**
@@ -166,7 +166,7 @@ trait Logging {
     }
   }
 
-  protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+  protected def withLogContext(context: java.util.Map[String, String])(body: => Unit): Unit = {
     // put into thread context only when structured logging is enabled
     val closeableThreadContextOpt = if (Logging.isStructuredLoggingEnabled) {
       Some(CloseableThreadContext.putAll(context))

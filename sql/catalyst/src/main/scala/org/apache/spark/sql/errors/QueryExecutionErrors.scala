@@ -844,6 +844,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def arrowDataTypeMismatchError(
+      operation: String,
+      outputTypes: Seq[DataType],
+      actualDataTypes: Seq[DataType]): Throwable = {
+    new SparkException(
+      errorClass = "ARROW_TYPE_MISMATCH",
+      messageParameters = Map(
+        "operation" -> operation,
+        "outputTypes" -> outputTypes.mkString(", "),
+        "actualDataTypes" -> actualDataTypes.mkString(", ")),
+      cause = null)
+  }
+
   def cannotReadFilesError(
       e: Throwable,
       path: String): Throwable = {

@@ -22,7 +22,7 @@ import java.util.Locale
 import java.util.Set
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
@@ -149,10 +149,6 @@ class RocksDB(
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
-
-  // Can be updated by whichever thread uploaded a snapshot, which could be either task,
-  // maintenance, or both. -1 represents no version has ever been uploaded.
-  protected val lastUploadedSnapshotVersion: AtomicLong = new AtomicLong(-1L)
 
   // variables to manage checkpoint ID. Once a checkpointing finishes, it needs to return
   // `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
@@ -674,16 +670,15 @@ class RocksDB(
 
         if (useColumnFamilies) {
           changelogReader.foreach { case (recordType, key, value) =>
-            val (keyWithoutPrefix, cfName) = decodeStateRowWithPrefix(key)
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(keyWithoutPrefix, value, cfName)
+                put(key, value, includesPrefix = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(keyWithoutPrefix, cfName)
+                remove(key, includesPrefix = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(keyWithoutPrefix, value, cfName)
+                merge(key, value, includesPrefix = true)
             }
           }
         } else {
@@ -804,8 +799,9 @@ class RocksDB(
   def put(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -830,8 +826,9 @@ class RocksDB(
   def merge(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -846,8 +843,11 @@ class RocksDB(
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte], cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+  def remove(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -1300,7 +1300,6 @@ class RocksDB(
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
-      lastUploadedSnapshotVersion = lastUploadedSnapshotVersion.get(),
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics)
   }
@@ -1469,7 +1468,6 @@ class RocksDB(
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
-      lastUploadedSnapshotVersion.set(snapshot.version)
       // Report to coordinator that the snapshot has been uploaded when
       // changelog checkpointing is enabled, since that is when stores can lag behind.
       if (enableChangelogCheckpointing) {
@@ -1926,8 +1924,7 @@ case class RocksDBMetrics(
     bytesCopied: Long,
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
-    nativeOpsMetrics: Map[String, Long],
-    lastUploadedSnapshotVersion: Long) {
+    nativeOpsMetrics: Map[String, Long]) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

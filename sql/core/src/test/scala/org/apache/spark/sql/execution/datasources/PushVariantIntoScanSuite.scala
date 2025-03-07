@@ -77,6 +77,17 @@ class PushVariantIntoScanSuite extends SharedSparkSession {
       case _ => fail()
     }
 
+    // Validate _metadata works.
+    sql("select variant_get(v, '$.a', 'int') as a, _metadata from T")
+      .queryExecution.optimizedPlan match {
+      case Project(projectList, l: LogicalRelation) =>
+        val output = l.output
+        val v = output(0)
+        checkAlias(projectList(0), "a", GetStructField(v, 0))
+        assert(projectList(1).dataType.isInstanceOf[StructType])
+      case _ => fail()
+    }
+
     sql("select 1 from T where isnotnull(v)")
       .queryExecution.optimizedPlan match {
       case Project(projectList, Filter(condition, l: LogicalRelation)) =>

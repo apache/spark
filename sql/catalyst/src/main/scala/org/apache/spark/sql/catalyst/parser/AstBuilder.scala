@@ -813,12 +813,15 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Parameters used for writing query to a table:
-   *   (table ident, options, tableColumnList, partitionKeys, ifPartitionNotExists, byName).
+   * Parameters used for writing query to a table.
    */
-  type InsertTableParams =
-    (IdentifierReferenceContext, Option[OptionsClauseContext], Seq[String],
-      Map[String, Option[String]], Boolean, Boolean)
+  case class InsertTableParams(
+      relationCtx: IdentifierReferenceContext,
+      options: Option[OptionsClauseContext],
+      userSpecifiedCols: Seq[String],
+      partitionSpec: Map[String, Option[String]],
+      ifPartitionNotExists: Boolean,
+      byName: Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -845,31 +848,36 @@ class AstBuilder extends DataTypeAstBuilder
       //   2. Write commands do not hold the table logical plan as a child, and we need to add
       //      additional resolution code to resolve identifiers inside the write commands.
       case table: InsertIntoTableContext =>
-        val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
-        = visitInsertIntoTable(table)
-        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
+        val insertParams = visitInsertIntoTable(table)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options, Seq(TableWritePrivilege.INSERT)),
-            partition,
-            cols,
-            otherPlans.head,
+            table = createUnresolvedRelation(
+              ctx = insertParams.relationCtx,
+              ident = ident,
+              optionsClause = insertParams.options,
+              writePrivileges = Seq(TableWritePrivilege.INSERT)),
+            partitionSpec = insertParams.partitionSpec,
+            userSpecifiedCols = insertParams.userSpecifiedCols,
+            query = otherPlans.head,
             overwrite = false,
-            ifPartitionNotExists,
-            byName)
+            ifPartitionNotExists = insertParams.ifPartitionNotExists,
+            byName = insertParams.byName)
         })
       case table: InsertOverwriteTableContext =>
-        val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
-        = visitInsertOverwriteTable(table)
-        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
+        val insertParams = visitInsertOverwriteTable(table)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
-            partition,
-            cols,
-            otherPlans.head,
+            table = createUnresolvedRelation(
+              ctx = insertParams.relationCtx,
+              ident = ident,
+              optionsClause = insertParams.options,
+              writePrivileges = Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+            partitionSpec = insertParams.partitionSpec,
+            userSpecifiedCols = insertParams.userSpecifiedCols,
+            query = otherPlans.head,
             overwrite = true,
-            ifPartitionNotExists,
-            byName)
+            ifPartitionNotExists = insertParams.ifPartitionNotExists,
+            byName = insertParams.byName)
         })
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
@@ -896,8 +904,9 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitInsertIntoTable(
       ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
-    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
-    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
+    val userSpecifiedCols =
+      Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
+    val partitionSpec = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     blockBang(ctx.errorCapturingNot())
 
@@ -905,8 +914,13 @@ class AstBuilder extends DataTypeAstBuilder
       invalidStatement("INSERT INTO ... IF NOT EXISTS", ctx)
     }
 
-    (ctx.identifierReference, Option(ctx.optionsClause()), cols, partitionKeys, false,
-      ctx.NAME() != null)
+    InsertTableParams(
+      relationCtx = ctx.identifierReference(),
+      options = Option(ctx.optionsClause()),
+      userSpecifiedCols = userSpecifiedCols,
+      partitionSpec = partitionSpec,
+      ifPartitionNotExists = false,
+      byName = ctx.NAME() != null)
   }
 
   /**
@@ -915,19 +929,25 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitInsertOverwriteTable(
       ctx: InsertOverwriteTableContext): InsertTableParams = withOrigin(ctx) {
     assert(ctx.OVERWRITE() != null)
-    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
-    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
+    val userSpecifiedCols =
+      Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
+    val partitionSpec = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     blockBang(ctx.errorCapturingNot())
 
-    val dynamicPartitionKeys: Map[String, Option[String]] = partitionKeys.filter(_._2.isEmpty)
+    val dynamicPartitionKeys: Map[String, Option[String]] = partitionSpec.filter(_._2.isEmpty)
     if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
       operationNotAllowed("IF NOT EXISTS with dynamic partitions: " +
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (ctx.identifierReference, Option(ctx.optionsClause()), cols, partitionKeys,
-      ctx.EXISTS() != null, ctx.NAME() != null)
+    InsertTableParams(
+      relationCtx = ctx.identifierReference,
+      options = Option(ctx.optionsClause()),
+      userSpecifiedCols = userSpecifiedCols,
+      partitionSpec = partitionSpec,
+      ifPartitionNotExists = ctx.EXISTS() != null,
+      byName = ctx.NAME() != null)
   }
 
   /**

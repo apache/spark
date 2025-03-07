@@ -38,13 +38,13 @@ group by ten
 having exists (select 1 from onek b where sum(distinct a.four) = b.four)
 -- !query analysis
 Project [ten#x, sum(DISTINCT four) FILTER (WHERE (four > 10))#xL]
-+- Filter exists#x [sum(distinct four#x)#xL]
++- Filter exists#x [sum(DISTINCT four)#xL]
    :  +- Project [1 AS 1#x]
-   :     +- Filter (outer(sum(distinct four#x)#xL) = cast(four#x as bigint))
+   :     +- Filter (outer(sum(DISTINCT four)#xL) = cast(four#x as bigint))
    :        +- SubqueryAlias b
    :           +- SubqueryAlias spark_catalog.default.onek
    :              +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
-   +- Aggregate [ten#x], [ten#x, sum(distinct four#x) FILTER (WHERE (four#x > 10)) AS sum(DISTINCT four) FILTER (WHERE (four > 10))#xL, sum(distinct four#x) AS sum(distinct four#x)#xL]
+   +- Aggregate [ten#x], [ten#x, sum(distinct four#x) FILTER (WHERE (four#x > 10)) AS sum(DISTINCT four) FILTER (WHERE (four > 10))#xL, sum(distinct four#x) AS sum(DISTINCT four)#xL]
       +- SubqueryAlias a
          +- SubqueryAlias spark_catalog.default.onek
             +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet

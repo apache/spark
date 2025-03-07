@@ -249,7 +249,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   // Visible for testing.
   private[connect] def periodicMaintenance(timeoutNs: Long): Unit = {
     // Find any detached executions that expired and should be removed.
-    logInfo("Started periodic run of SparkConnectExecutionManager maintenance.")
+    logDebug("Started periodic run of SparkConnectExecutionManager maintenance.")
 
     val nowNs = System.nanoTime()
     executions.forEach((_, executeHolder) => {
@@ -266,7 +266,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       }
     })
 
-    logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")
+    logDebug("Finished periodic run of SparkConnectExecutionManager maintenance.")
   }
 
   // For testing.
