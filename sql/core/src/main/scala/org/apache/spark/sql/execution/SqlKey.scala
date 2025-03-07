@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.Partitioner
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, UnsafeRow}
 import org.apache.spark.util.Utils
 
 trait SqlKey extends Serializable
@@ -52,5 +52,21 @@ class SqlKeyPartitioner(partitions: Int, real: Option[Partitioner] = None) exten
       real.map(par => par.getPartition(row)).
         getOrElse(Utils.nonNegativeMod(row.hashCode(), partitions))
     case IntKey(v) => Utils.nonNegativeMod(v, partitions)
+  }
+}
+
+object SqlKeyOrdering {
+  def apply(ordering: BaseOrdering): SqlKeyOrdering = new SqlKeyOrdering(ordering)
+}
+
+class SqlKeyOrdering(ordering: BaseOrdering) extends Ordering[SqlKey] {
+
+  def this() = this(null)
+
+  override def compare(x: SqlKey, y: SqlKey): Int = {
+    (x, y) match {
+      case (IntKey(a), IntKey(b)) => a - b
+      case (RowKey(a), RowKey(b)) => ordering.compare(a, b)
+    }
   }
 }

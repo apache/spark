@@ -295,14 +295,7 @@ case class ShuffleExchangeExec(
         // Executor. However, if we use code generated class, other executors will not be able
         // to find the code generated related classes.
         val ordering = RowOrdering.createNaturalInterpretedOrdering(sortOrders)
-        Some(new Ordering[SqlKey] {
-          override def compare(x: SqlKey, y: SqlKey): Int = {
-            (x, y) match {
-              case (IntKey(a), IntKey(b)) => a - b
-              case (RowKey(a), RowKey(b)) => ordering.compare(a, b)
-            }
-          }
-        })
+        Some(SqlKeyOrdering(ordering))
       case Nil => None
     }
   }
