@@ -1898,24 +1898,34 @@ private[spark] class DAGScheduler(
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
     // only updated in certain cases.
-    event.reason match {
+    val isIndeterministicZombie = event.reason match {
       case Success =>
-        task match {
-          case rt: ResultTask[_, _] =>
-            val resultStage = stage.asInstanceOf[ResultStage]
-            resultStage.activeJob match {
-              case Some(job) =>
-                // Only update the accumulator once for each result task.
-                if (!job.finished(rt.outputId)) {
-                  updateAccumulators(event)
-                }
-              case None => // Ignore update if task's job has finished.
-            }
-          case _ =>
-            updateAccumulators(event)
+        val isZombieIndeterminate =
+          (task.stageAttemptId < stage.latestInfo.attemptNumber()
+            && stage.isIndeterminate) ||
+            stage.treatAllPartitionsMissing(task.stageAttemptId)
+        if (!isZombieIndeterminate) {
+          task match {
+            case rt: ResultTask[_, _] =>
+              val resultStage = stage.asInstanceOf[ResultStage]
+              resultStage.activeJob match {
+                case Some(job) =>
+                  // Only update the accumulator once for each result task.
+                  if (!job.finished(rt.outputId)) {
+                    updateAccumulators(event)
+                  }
+                case _ => // Ignore update if task's job has finished.
+              }
+            case _ => updateAccumulators(event)
+          }
         }
-      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
-      case _ =>
+        isZombieIndeterminate
+
+      case _: ExceptionFailure | _: TaskKilled =>
+        updateAccumulators(event)
+        false
+
+      case _ => false
     }
     if (trackingCacheVisibility) {
       // Update rdd blocks' visibility status.
@@ -1936,7 +1946,7 @@ private[spark] class DAGScheduler(
         }
 
         task match {
-          case rt: ResultTask[_, _] =>
+          case rt: ResultTask[_, _] if !isIndeterministicZombie =>
             // Cast to ResultStage here because it's part of the ResultTask
             // TODO Refactor this out to a function that accepts a ResultStage
             val resultStage = stage.asInstanceOf[ResultStage]
@@ -1984,7 +1994,7 @@ private[spark] class DAGScheduler(
                 logInfo(log"Ignoring result from ${MDC(RESULT, rt)} because its job has finished")
             }
 
-          case smt: ShuffleMapTask =>
+          case smt: ShuffleMapTask if !isIndeterministicZombie =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
             // Ignore task completion for old attempt of indeterminate stage
             val ignoreIndeterminate = stage.isIndeterminate &&
@@ -2017,6 +2027,8 @@ private[spark] class DAGScheduler(
                 processShuffleMapStageCompletion(shuffleStage)
               }
             }
+
+          case _ => // ignore
         }
 
       case FetchFailed(bmAddress, shuffleId, _, mapIndex, reduceId, failureMessage) =>
@@ -2171,15 +2183,23 @@ private[spark] class DAGScheduler(
                         abortStage(mapStage, reason, None)
                       } else {
                         rollingBackStages += mapStage
+                          mapStage.markAttemptIdForAllPartitionsMissing(
+                            mapStage.latestInfo.attemptNumber())
+                        }
+                      } else {
+                        mapStage.markAttemptIdForAllPartitionsMissing(
+                          mapStage.latestInfo.attemptNumber())
                       }
-                    }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>
                     val numMissingPartitions = resultStage.findMissingPartitions().length
                     if (numMissingPartitions < resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
                       abortStage(resultStage, generateErrorMessage(resultStage), None)
-                    }
+                      } else {
+                        resultStage.markAttemptIdForAllPartitionsMissing(
+                          resultStage.latestInfo.attemptNumber())
+                      }
 
                   case _ =>
                 }
