@@ -1124,18 +1124,21 @@ object SQLConf {
     .createWithDefault(false)
 
   val PARQUET_INT96_AS_TIMESTAMP = buildConf("spark.sql.parquet.int96AsTimestamp")
-    .doc("Some Parquet-producing systems, in particular Impala, store Timestamp into INT96. " +
-      "Spark would also store Timestamp as INT96 because we need to avoid precision lost of the " +
-      "nanoseconds field. This flag tells Spark SQL to interpret INT96 data as a timestamp to " +
-      "provide compatibility with these systems.")
+    .doc( "This flag tells Spark SQL to interpret INT96 data as a timestamp " +
+      "to provide compatibility with any older versions of applications." +
+      "When this flag is enabled, Spark would also store Timestamp as INT96 " +
+      "because we need to avoid precision lost of the nanoseconds field." +
+      "The default value is set to false " +
+      "since INT96 has been deprecated in Parquet (see PARQUET-323).")
     .version("1.3.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val PARQUET_INT96_TIMESTAMP_CONVERSION = buildConf("spark.sql.parquet.int96TimestampConversion")
     .doc("This controls whether timestamp adjustments should be applied to INT96 data when " +
-      "converting to timestamps, for data written by Impala.  This is necessary because Impala " +
-      "stores INT96 data with a different timezone offset than Hive & Spark.")
+      "converting to timestamps, for data written by older versions of applications.  " +
+      "Keeping this flag to ensure compatibility with any older versions of applications " +
+      "that stores INT96 data with a different timezone offset than Hive & Spark.")
     .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -1146,15 +1149,17 @@ object SQLConf {
 
   val PARQUET_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.parquet.outputTimestampType")
     .doc("Sets which Parquet timestamp type to use when Spark writes data to Parquet files. " +
-      "INT96 is a non-standard but commonly used timestamp type in Parquet. TIMESTAMP_MICROS " +
-      "is a standard timestamp type in Parquet, which stores number of microseconds from the " +
-      "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
-      "means Spark has to truncate the microsecond portion of its timestamp value.")
+      "INT96 is a legacy, non-standard timestamp type, " +
+      "which has been deprecated in Parquet (see PARQUET-323)." +
+      "TIMESTAMP_MICROS (equivalent to INT64) is a standard timestamp type in Parquet, " +
+      "which stores number of microseconds from the Unix epoch. " +
+      "TIMESTAMP_MILLIS is also standard, but with millisecond precision, " +
+      "which means Spark has to truncate the microsecond portion of its timestamp value.")
     .version("2.3.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+    .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
