@@ -54,6 +54,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   with ExpectsInputTypes
   with DefaultStringProducingExpression {
 
+  override protected[spark] val _expectedCost = 100
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
@@ -373,6 +374,8 @@ case class StructsToJson(
   with TimeZoneAwareExpression
   with DefaultStringProducingExpression
   with QueryErrorsBase {
+
+  override protected[spark] val _expectedCost = 200
 
   override def nullable: Boolean = true
 
