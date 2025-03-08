@@ -2573,11 +2573,15 @@ case class MakeTime(
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
   
   override protected def nullSafeEval(hours: Any, minutes: Any, seconds: Any): Any = {
+    val wholeSecs = seconds.asInstanceOf[Int]
+    val nanoSecs = ((seconds.asInstanceOf[Double] - wholeSecs) * 1e9).asInstanceOf[Int]
+    
     try {
       val lt = LocalTime.of(
         hours.asInstanceOf[Int],
         minutes.asInstanceOf[Int],
-        seconds.asInstanceOf[Double] // TODO how to handle this?
+        wholeSecs,
+        nanoSecs
       )
       localTimeToMicros(lt)
     } catch {
