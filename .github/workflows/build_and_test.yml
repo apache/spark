@@ -300,11 +300,11 @@ jobs:
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
+      SPARK_LOCAL_HOST: localhost
       NOLINT_ON_COMPILE: true
-      SKIP_UNIDOC: true
-      SKIP_MIMA: true
-      SKIP_PACKAGING: true
+      SKHOST_UNIDOC: true
+      SKHOST_MIMA: true
+      SKHOST_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -542,10 +542,10 @@ jobs:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
-      SKIP_UNIDOC: true
-      SKIP_MIMA: true
-      SKIP_PACKAGING: true
+      SPARK_LOCAL_HOST: localhost
+      SKHOST_UNIDOC: true
+      SKHOST_MIMA: true
+      SKHOST_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
     steps:
@@ -614,7 +614,7 @@ jobs:
       run: |
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
           export PATH=$CONDA/bin:$PATH
-          export SKIP_PACKAGING=false
+          export SKHOST_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
         if [ ! -z "$PYTHON_TO_TEST" ]; then
@@ -661,10 +661,10 @@ jobs:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
-      SKIP_UNIDOC: true
-      SKIP_MIMA: true
-      SKIP_PACKAGING: true
+      SPARK_LOCAL_HOST: localhost
+      SKHOST_UNIDOC: true
+      SKHOST_MIMA: true
+      SKHOST_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -995,21 +995,21 @@ jobs:
       run: |
         # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
         ln -s "$(which python3.9)" "/usr/local/bin/python3"
-        # Build docs first with SKIP_API to ensure they are buildable without requiring any
+        # Build docs first with SKHOST_API to ensure they are buildable without requiring any
         # language docs to be built beforehand.
-        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
+        cd docs; SKHOST_ERRORDOC=1 SKHOST_API=1 bundle exec jekyll build; cd ..
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
-          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
+          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKHOST_PYTHONDOC=1; fi
+          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKHOST_RDOC=1; fi
         fi
-        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
-        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
-        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
-        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
-        echo "SKIP_RDOC: $SKIP_RDOC"
-        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
+        # Print the values of environment variables `SKHOST_ERRORDOC`, `SKHOST_SCALADOC`, `SKHOST_PYTHONDOC`, `SKHOST_RDOC` and `SKHOST_SQLDOC`
+        echo "SKHOST_ERRORDOC: $SKHOST_ERRORDOC"
+        echo "SKHOST_SCALADOC: $SKHOST_SCALADOC"
+        echo "SKHOST_PYTHONDOC: $SKHOST_PYTHONDOC"
+        echo "SKHOST_RDOC: $SKHOST_RDOC"
+        echo "SKHOST_SQLDOC: $SKHOST_SQLDOC"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
@@ -1031,7 +1031,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      SPARK_LOCAL_IP: localhost
+      SPARK_LOCAL_HOST: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -1136,10 +1136,10 @@ jobs:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
-      SKIP_UNIDOC: true
-      SKIP_MIMA: true
-      SKIP_PACKAGING: true
+      SPARK_LOCAL_HOST: localhost
+      SKHOST_UNIDOC: true
+      SKHOST_MIMA: true
+      SKHOST_PACKAGING: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4

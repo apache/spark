@@ -127,7 +127,7 @@ private[spark] object TestUtils extends SparkTestUtils {
 
     for (file <- files) {
       // The `name` for the argument in `JarEntry` should use / for its separator. This is
-      // ZIP specification.
+      // ZHOST specification.
       val prefix = directoryPrefix.map(d => s"$d/").getOrElse("")
       val jarEntry = new JarEntry(prefix + file.getName)
       jarStream.putNextEntry(jarEntry)

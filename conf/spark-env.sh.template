@@ -23,11 +23,11 @@
 # Options read when launching programs locally with
 # ./bin/run-example or ./bin/spark-submit
 # - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files
-# - SPARK_LOCAL_IP, to set the IP address Spark binds to on this node
+# - SPARK_LOCAL_HOST, to set the HOST address Spark binds to on this node
 # - SPARK_PUBLIC_DNS, to set the public dns name of the driver program
 
 # Options read by executors and drivers running inside the cluster
-# - SPARK_LOCAL_IP, to set the IP address Spark binds to on this node
+# - SPARK_LOCAL_HOST, to set the HOST address Spark binds to on this node
 # - SPARK_PUBLIC_DNS, to set the public DNS name of the driver program
 # - SPARK_LOCAL_DIRS, storage directories to use on this node for shuffle and RDD data
 
@@ -44,7 +44,7 @@
 # - YARN_CONF_DIR, to point Spark towards YARN configuration files when you use YARN
 
 # Options for the daemons used in the standalone deploy mode
-# - SPARK_MASTER_HOST, to bind the master to a different IP address or hostname
+# - SPARK_MASTER_HOST, to bind the master to a different HOST address or hostname
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports for the master
 # - SPARK_MASTER_OPTS, to set config properties only for the master (e.g. "-Dx=y")
 # - SPARK_WORKER_CORES, to set the number of cores to use on this machine

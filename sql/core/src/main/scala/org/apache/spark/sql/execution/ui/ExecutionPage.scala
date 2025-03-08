@@ -26,9 +26,9 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 
-class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+class ExecutionPage(parent: SQLTab) extends WebUHOSTage("execution") with Logging {
 
   private val pandasOnSparkConfPrefix = "pandas_on_Spark."
 

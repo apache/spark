@@ -245,7 +245,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.merge,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )
     globs["spark"].stop()
     if failure_count:

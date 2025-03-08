@@ -1019,7 +1019,7 @@ Spark considers the following log in options, in order of preference:
 
       ./bin/spark-submit \
           --keytab <KEYTAB_FILE> \
-          --principal <PRINCIPAL> \
+          --principal <PRINCHOSTAL> \
           --conf spark.kafka.clusters.${cluster}.auth.bootstrap.servers=<KAFKA_SERVERS> \
           ...
 

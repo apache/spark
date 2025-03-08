@@ -194,7 +194,7 @@ case class StreamingSymmetricHashJoinExec(
     new SerializableConfiguration(SessionState.newHadoopConf(
       sparkContext.hadoopConfiguration, conf)))
   private val allowMultipleStatefulOperators =
-    conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+    conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE)
 
   val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
@@ -612,7 +612,7 @@ case class StreamingSymmetricHashJoinExec(
 
     private[this] var updatedStateRowsCount = 0
     private[this] val allowMultipleStatefulOperators: Boolean =
-      conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+      conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE)
 
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered
@@ -789,7 +789,7 @@ case class StreamingSymmetricHashJoinExec(
     override def next(): JoinedRow = iter.next()
   }
 
-  // If `STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS` is enabled, counting the number
+  // If `STATE_STORE_SKHOST_NULLS_FOR_STREAM_STREAM_JOINS` is enabled, counting the number
   // of skipped null values as custom metric of stream join operator.
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] =
     if (storeConf.skipNullsForStreamStreamJoins) {

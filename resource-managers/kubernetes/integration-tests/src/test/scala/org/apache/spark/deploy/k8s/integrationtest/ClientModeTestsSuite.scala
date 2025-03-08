@@ -39,7 +39,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .withName(s"$driverPodName-svc")
           .endMetadata()
         .withNewSpec()
-          .withClusterIP("None")
+          .withClusterHOST("None")
           .withSelector(labels.asJava)
           .addNewPort()
             .withName("driver-port")

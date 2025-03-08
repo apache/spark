@@ -30,7 +30,7 @@ import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends WebUIPage("rdd") {
+private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends WebUHOSTage("rdd") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val parameterId = request.getParameter("id")

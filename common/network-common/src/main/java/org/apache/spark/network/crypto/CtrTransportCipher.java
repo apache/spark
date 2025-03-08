@@ -49,7 +49,7 @@ public class CtrTransportCipher implements TransportCipher {
   static final int STREAM_BUFFER_SIZE = 1024 * 32;
 
   private final Properties conf;
-  private static final String CIPHER_ALGORITHM = "AES/CTR/NoPadding";
+  private static final String CHOSTHER_ALGORITHM = "AES/CTR/NoPadding";
   private final SecretKeySpec key;
   private final byte[] inIv;
   private final byte[] outIv;
@@ -90,12 +90,12 @@ public class CtrTransportCipher implements TransportCipher {
 
   @VisibleForTesting
   CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
-    return new CryptoOutputStream(CIPHER_ALGORITHM, conf, ch, key, new IvParameterSpec(outIv));
+    return new CryptoOutputStream(CHOSTHER_ALGORITHM, conf, ch, key, new IvParameterSpec(outIv));
   }
 
   @VisibleForTesting
   CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
-    return new CryptoInputStream(CIPHER_ALGORITHM, conf, ch, key, new IvParameterSpec(inIv));
+    return new CryptoInputStream(CHOSTHER_ALGORITHM, conf, ch, key, new IvParameterSpec(inIv));
   }
 
   /**

@@ -52,7 +52,7 @@ if sys.version_info >= (3, 10):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class _StreamingQueryEventType:
     ValueType = typing.NewType("ValueType", builtins.int)
@@ -62,7 +62,7 @@ class _StreamingQueryEventTypeEnumTypeWrapper(
     google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_StreamingQueryEventType.ValueType],
     builtins.type,
 ):  # noqa: F821
-    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
     QUERY_PROGRESS_UNSPECIFIED: _StreamingQueryEventType.ValueType  # 0
     QUERY_PROGRESS_EVENT: _StreamingQueryEventType.ValueType  # 1
     QUERY_TERMINATED_EVENT: _StreamingQueryEventType.ValueType  # 2
@@ -87,7 +87,7 @@ class Command(google.protobuf.message.Message):
     produce a relational result.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     REGISTER_FUNCTION_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
@@ -313,10 +313,10 @@ class SqlCommand(google.protobuf.message.Message):
     almost oblivious to the server-side behavior.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ArgsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -337,7 +337,7 @@ class SqlCommand(google.protobuf.message.Message):
         ) -> None: ...
 
     class NamedArgumentsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -448,7 +448,7 @@ global___SqlCommand = SqlCommand
 class CreateDataFrameViewCommand(google.protobuf.message.Message):
     """A command that can create DataFrame global temp view or local temp view."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
@@ -490,7 +490,7 @@ global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
 class WriteOperation(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _SaveMode:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -502,7 +502,7 @@ class WriteOperation(google.protobuf.message.Message):
         ],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         SAVE_MODE_UNSPECIFIED: WriteOperation._SaveMode.ValueType  # 0
         SAVE_MODE_APPEND: WriteOperation._SaveMode.ValueType  # 1
         SAVE_MODE_OVERWRITE: WriteOperation._SaveMode.ValueType  # 2
@@ -517,7 +517,7 @@ class WriteOperation(google.protobuf.message.Message):
     SAVE_MODE_IGNORE: WriteOperation.SaveMode.ValueType  # 4
 
     class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -534,7 +534,7 @@ class WriteOperation(google.protobuf.message.Message):
         ) -> None: ...
 
     class SaveTable(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class _TableSaveMethod:
             ValueType = typing.NewType("ValueType", builtins.int)
@@ -546,7 +546,7 @@ class WriteOperation(google.protobuf.message.Message):
             ],
             builtins.type,
         ):  # noqa: F821
-            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
             TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 0
             TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 1
             TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 2
@@ -576,7 +576,7 @@ class WriteOperation(google.protobuf.message.Message):
         ) -> None: ...
 
     class BucketBy(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         BUCKET_COLUMN_NAMES_FIELD_NUMBER: builtins.int
         NUM_BUCKETS_FIELD_NUMBER: builtins.int
@@ -717,7 +717,7 @@ global___WriteOperation = WriteOperation
 class WriteOperationV2(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _Mode:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -729,7 +729,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         ],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         MODE_UNSPECIFIED: WriteOperationV2._Mode.ValueType  # 0
         MODE_CREATE: WriteOperationV2._Mode.ValueType  # 1
         MODE_OVERWRITE: WriteOperationV2._Mode.ValueType  # 2
@@ -748,7 +748,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     MODE_CREATE_OR_REPLACE: WriteOperationV2.Mode.ValueType  # 6
 
     class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -765,7 +765,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         ) -> None: ...
 
     class TablePropertiesEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -891,10 +891,10 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     query are returned.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -1059,7 +1059,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
 class StreamingForeachFunction(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PYTHON_FUNCTION_FIELD_NUMBER: builtins.int
     SCALA_FUNCTION_FIELD_NUMBER: builtins.int
@@ -1102,7 +1102,7 @@ class StreamingForeachFunction(google.protobuf.message.Message):
 global___StreamingForeachFunction = StreamingForeachFunction
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
@@ -1160,7 +1160,7 @@ class StreamingQueryInstanceId(google.protobuf.message.Message):
     streaming query that resumes from the checkpoint.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ID_FIELD_NUMBER: builtins.int
     RUN_ID_FIELD_NUMBER: builtins.int
@@ -1189,10 +1189,10 @@ global___StreamingQueryInstanceId = StreamingQueryInstanceId
 class StreamingQueryCommand(google.protobuf.message.Message):
     """Commands for a streaming query."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ExplainCommand(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         EXTENDED_FIELD_NUMBER: builtins.int
         extended: builtins.bool
@@ -1209,7 +1209,7 @@ class StreamingQueryCommand(google.protobuf.message.Message):
         ) -> None: ...
 
     class AwaitTerminationCommand(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         TIMEOUT_MS_FIELD_NUMBER: builtins.int
         timeout_ms: builtins.int
@@ -1348,10 +1348,10 @@ global___StreamingQueryCommand = StreamingQueryCommand
 class StreamingQueryCommandResult(google.protobuf.message.Message):
     """Response for commands on a streaming query."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class StatusResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         STATUS_MESSAGE_FIELD_NUMBER: builtins.int
         IS_DATA_AVAILABLE_FIELD_NUMBER: builtins.int
@@ -1385,7 +1385,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         ) -> None: ...
 
     class RecentProgressResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RECENT_PROGRESS_JSON_FIELD_NUMBER: builtins.int
         @property
@@ -1404,7 +1404,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         ) -> None: ...
 
     class ExplainResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RESULT_FIELD_NUMBER: builtins.int
         result: builtins.str
@@ -1419,7 +1419,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         ) -> None: ...
 
     class ExceptionResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
         ERROR_CLASS_FIELD_NUMBER: builtins.int
@@ -1488,7 +1488,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["stack_trace"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         TERMINATED_FIELD_NUMBER: builtins.int
         terminated: builtins.bool
@@ -1582,10 +1582,10 @@ global___StreamingQueryCommandResult = StreamingQueryCommandResult
 class StreamingQueryManagerCommand(google.protobuf.message.Message):
     """Commands for the streaming query manager."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class AwaitAnyTerminationCommand(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         TIMEOUT_MS_FIELD_NUMBER: builtins.int
         timeout_ms: builtins.int
@@ -1612,7 +1612,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["timeout_ms"] | None: ...
 
     class StreamingQueryListenerCommand(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         LISTENER_PAYLOAD_FIELD_NUMBER: builtins.int
         PYTHON_LISTENER_PAYLOAD_FIELD_NUMBER: builtins.int
@@ -1764,10 +1764,10 @@ global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
 class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     """Response for commands on the streaming query manager."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ActiveResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         ACTIVE_QUERIES_FIELD_NUMBER: builtins.int
         @property
@@ -1789,7 +1789,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         ) -> None: ...
 
     class StreamingQueryInstance(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         ID_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int
@@ -1817,7 +1817,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["name"] | None: ...
 
     class AwaitAnyTerminationResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         TERMINATED_FIELD_NUMBER: builtins.int
         terminated: builtins.bool
@@ -1831,7 +1831,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         ) -> None: ...
 
     class StreamingQueryListenerInstance(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         LISTENER_PAYLOAD_FIELD_NUMBER: builtins.int
         listener_payload: builtins.bytes
@@ -1845,7 +1845,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         ) -> None: ...
 
     class ListStreamingQueryListenerResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         LISTENER_IDS_FIELD_NUMBER: builtins.int
         @property
@@ -1964,7 +1964,7 @@ class StreamingQueryListenerBusCommand(google.protobuf.message.Message):
     The remove_listener_bus_listener command will only be set true in the second case.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ADD_LISTENER_BUS_LISTENER_FIELD_NUMBER: builtins.int
     REMOVE_LISTENER_BUS_LISTENER_FIELD_NUMBER: builtins.int
@@ -2010,7 +2010,7 @@ global___StreamingQueryListenerBusCommand = StreamingQueryListenerBusCommand
 class StreamingQueryListenerEvent(google.protobuf.message.Message):
     """The protocol for the returned events in the long-running response channel."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     EVENT_JSON_FIELD_NUMBER: builtins.int
     EVENT_TYPE_FIELD_NUMBER: builtins.int
@@ -2034,7 +2034,7 @@ class StreamingQueryListenerEvent(google.protobuf.message.Message):
 global___StreamingQueryListenerEvent = StreamingQueryListenerEvent
 
 class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     EVENTS_FIELD_NUMBER: builtins.int
     LISTENER_BUS_LISTENER_ADDED_FIELD_NUMBER: builtins.int
@@ -2083,7 +2083,7 @@ global___StreamingQueryListenerEventsResult = StreamingQueryListenerEventsResult
 class GetResourcesCommand(google.protobuf.message.Message):
     """Command to get the output of 'SparkContext.resources'"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -2094,10 +2094,10 @@ global___GetResourcesCommand = GetResourcesCommand
 class GetResourcesCommandResult(google.protobuf.message.Message):
     """Response for command 'GetResourcesCommand'."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ResourcesEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -2141,7 +2141,7 @@ global___GetResourcesCommandResult = GetResourcesCommandResult
 class CreateResourceProfileCommand(google.protobuf.message.Message):
     """Command to create ResourceProfile"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PROFILE_FIELD_NUMBER: builtins.int
     @property
@@ -2162,7 +2162,7 @@ global___CreateResourceProfileCommand = CreateResourceProfileCommand
 class CreateResourceProfileCommandResult(google.protobuf.message.Message):
     """Response for command 'CreateResourceProfileCommand'."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PROFILE_ID_FIELD_NUMBER: builtins.int
     profile_id: builtins.int
@@ -2181,7 +2181,7 @@ global___CreateResourceProfileCommandResult = CreateResourceProfileCommandResult
 class RemoveCachedRemoteRelationCommand(google.protobuf.message.Message):
     """Command to remove `CashedRemoteRelation`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     RELATION_FIELD_NUMBER: builtins.int
     @property
@@ -2202,7 +2202,7 @@ class RemoveCachedRemoteRelationCommand(google.protobuf.message.Message):
 global___RemoveCachedRemoteRelationCommand = RemoveCachedRemoteRelationCommand
 
 class CheckpointCommand(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     RELATION_FIELD_NUMBER: builtins.int
     LOCAL_FIELD_NUMBER: builtins.int
@@ -2261,7 +2261,7 @@ class CheckpointCommand(google.protobuf.message.Message):
 global___CheckpointCommand = CheckpointCommand
 
 class MergeIntoTableCommand(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TARGET_TABLE_NAME_FIELD_NUMBER: builtins.int
     SOURCE_TABLE_PLAN_FIELD_NUMBER: builtins.int
@@ -2352,10 +2352,10 @@ global___MergeIntoTableCommand = MergeIntoTableCommand
 class ExecuteExternalCommand(google.protobuf.message.Message):
     """Execute an arbitrary string command inside an external execution engine"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int

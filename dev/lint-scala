@@ -17,11 +17,11 @@
 # limitations under the License.
 #
 
-SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
+SCRHOSTT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname $SCRHOSTT_DIR)"
 
 set -e
-"$SCRIPT_DIR/scalastyle" "$1"
+"$SCRHOSTT_DIR/scalastyle" "$1"
 
 set +e
 # For Spark Connect, we actively enforce scalafmt and check that the produced diff is empty.

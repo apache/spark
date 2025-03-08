@@ -171,7 +171,7 @@ class MicroBatchExecution(
           nextSourceId += 1
           logInfo(log"Using Source [${MDC(LogKeys.STREAMING_SOURCE, source)}] " +
             log"from DataSourceV1 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
-            log"[${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dataSourceV1)}]")
+            log"[${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRHOSTTION, dataSourceV1)}]")
           StreamingExecutionRelation(source, output, dataSourceV1.catalogTable)(sparkSession)
         })
 
@@ -186,7 +186,7 @@ class MicroBatchExecution(
             nextSourceId += 1
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
-              log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
+              log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRHOSTTION, dsStr)}")
             // TODO: operator pushdown.
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
@@ -206,7 +206,7 @@ class MicroBatchExecution(
             nextSourceId += 1
             logInfo(log"Using Source [${MDC(LogKeys.STREAMING_SOURCE, source)}] from " +
               log"DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
-              log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
+              log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRHOSTTION, dsStr)}")
             // We don't have a catalog table but may have a table identifier. Given this is about
             // v1 fallback path, we just give up and set the catalog table as None.
             StreamingExecutionRelation(source, output, None)(sparkSession)

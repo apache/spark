@@ -43,7 +43,7 @@ object ListenerEventsTestHelper {
 
   def createJobProps(): Properties = {
     val jobProps = new Properties()
-    jobProps.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, "jobDescription")
+    jobProps.setProperty(SparkContext.SPARK_JOB_DESCRHOSTTION, "jobDescription")
     jobProps.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "jobGroup")
     jobProps.setProperty(SparkContext.SPARK_SCHEDULER_POOL, "schedPool")
     jobProps

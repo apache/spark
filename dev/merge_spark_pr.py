@@ -59,7 +59,7 @@ JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
 JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
 # OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
 # will be unauthenticated. You should only need to configure this if you find yourself regularly
-# exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
+# exceeding your HOST's unauthenticated request rate limit. You can create an OAuth key at
 # https://github.com/settings/tokens. This script only requires the "public_repo" scope.
 GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 
@@ -492,8 +492,8 @@ def standardize_jira_ref(text):
     ...     "[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
     '[SPARK-5821][SQL] ParquetRelation2 CTAS should check if delete is successful'
     >>> standardize_jira_ref(
-    ...     "[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
-    '[SPARK-4123][PROJECT INFRA][WIP] Show new dependencies added in pull requests'
+    ...     "[SPARK-4123][Project Infra][WHOST]: Show new dependencies added in pull requests")
+    '[SPARK-4123][PROJECT INFRA][WHOST] Show new dependencies added in pull requests'
     >>> standardize_jira_ref("[MLlib] Spark  5954: Top by key")
     '[SPARK-5954][MLLIB] Top by key'
     >>> standardize_jira_ref("[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl")
@@ -501,8 +501,8 @@ def standardize_jira_ref(text):
     >>> standardize_jira_ref(
     ...     "SPARK-1094 Support MiMa for reporting binary compatibility across versions.")
     '[SPARK-1094] Support MiMa for reporting binary compatibility across versions.'
-    >>> standardize_jira_ref("[WIP]  [SPARK-1146] Vagrant support for Spark")
-    '[SPARK-1146][WIP] Vagrant support for Spark'
+    >>> standardize_jira_ref("[WHOST]  [SPARK-1146] Vagrant support for Spark")
+    '[SPARK-1146][WHOST] Vagrant support for Spark'
     >>> standardize_jira_ref(
     ...     "SPARK-1032. If Yarn app fails before registering, app master stays aroun...")
     '[SPARK-1032] If Yarn app fails before registering, app master stays aroun...'
@@ -616,9 +616,9 @@ def main():
 
     url = pr["url"]
 
-    # Warn if the PR is WIP
-    if "[WIP]" in pr["title"]:
-        msg = "The PR title has `[WIP]`:\n%s\nContinue?" % pr["title"]
+    # Warn if the PR is WHOST
+    if "[WHOST]" in pr["title"]:
+        msg = "The PR title has `[WHOST]`:\n%s\nContinue?" % pr["title"]
         continue_maybe(msg)
 
     # Decide whether to use the modified title or not

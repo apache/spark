@@ -29,7 +29,7 @@
     ],
     "sqlState" : "KD005"
   },
-  "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
+  "ALTER_TABLE_COLUMN_DESCRHOSTTOR_DUPLICATE" : {
     "message" : [
       "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
     ],
@@ -394,7 +394,7 @@
     ],
     "sqlState" : "2203G"
   },
-  "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
+  "CANNOT_PARSE_PROTOBUF_DESCRHOSTTOR" : {
     "message" : [
       "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
     ],
@@ -818,7 +818,7 @@
     ],
     "sqlState" : "0A000"
   },
-  "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
+  "CREATE_TABLE_COLUMN_DESCRHOSTTOR_DUPLICATE" : {
     "message" : [
       "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
     ],
@@ -1003,7 +1003,7 @@
           "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
         ]
       },
-      "MAP_ZIP_WITH_DIFF_TYPES" : {
+      "MAP_ZHOST_WITH_DIFF_TYPES" : {
         "message" : [
           "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
         ]
@@ -1677,7 +1677,7 @@
     ],
     "sqlState" : "39000"
   },
-  "FOUND_MULTIPLE_DATA_SOURCES" : {
+  "FOUND_MULTHOSTLE_DATA_SOURCES" : {
     "message" : [
       "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
     ],
@@ -3901,19 +3901,19 @@
     ],
     "sqlState" : "42P20"
   },
-  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+  "MULTHOSTLE_QUERY_RESULT_CLAUSES_WITH_PHOSTE_OPERATORS" : {
     "message" : [
       "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
     ],
     "sqlState" : "42000"
   },
-  "MULTIPLE_TIME_TRAVEL_SPEC" : {
+  "MULTHOSTLE_TIME_TRAVEL_SPEC" : {
     "message" : [
       "Cannot specify time travel in both the time travel clause and options."
     ],
     "sqlState" : "42K0E"
   },
-  "MULTIPLE_XML_DATA_SOURCE" : {
+  "MULTHOSTLE_XML_DATA_SOURCE" : {
     "message" : [
       "Detected multiple data sources with the name <provider> (<sourceNames>). Please specify the fully qualified class name or remove <externalSource> from the classpath."
     ],
@@ -4047,7 +4047,7 @@
     },
     "sqlState" : "42601"
   },
-  "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE" : {
+  "NOT_ALLOWED_IN_PHOSTE_OPERATOR_WHERE" : {
     "message" : [
       "Not allowed in the pipe WHERE clause:"
     ],
@@ -4368,13 +4368,13 @@
     ],
     "sqlState" : "42K03"
   },
-  "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
+  "PHOSTE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
     ],
     "sqlState" : "0A000"
   },
-  "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION" : {
+  "PHOSTE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION" : {
     "message" : [
       "Aggregate function <expr> is not allowed when using the pipe operator |> <clause> clause; please use the pipe operator |> AGGREGATE clause instead."
     ],
@@ -4410,7 +4410,7 @@
     ],
     "sqlState" : "42K0G"
   },
-  "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" : {
+  "PROTOBUF_DESCRHOSTTOR_FILE_NOT_FOUND" : {
     "message" : [
       "Error reading Protobuf descriptor file at path: <filePath>."
     ],
@@ -4669,7 +4669,7 @@
     ],
     "sqlState" : "42K0I"
   },
-  "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
+  "SQL_SCRHOSTT_IN_EXECUTE_IMMEDIATE" : {
     "message" : [
       "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script. Make sure the sql_string is a well-formed SQL statement and does not contain BEGIN and END."
     ],
@@ -5620,7 +5620,7 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "CLAUSE_WITH_PIPE_OPERATORS" : {
+      "CLAUSE_WITH_PHOSTE_OPERATORS" : {
         "message" : [
           "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
@@ -5720,7 +5720,7 @@
           "Literal for '<value>' of <type>."
         ]
       },
-      "MULTIPLE_BUCKET_TRANSFORMS" : {
+      "MULTHOSTLE_BUCKET_TRANSFORMS" : {
         "message" : [
           "Multiple bucket TRANSFORMs."
         ]
@@ -5765,7 +5765,7 @@
           "Invalid partitioning: <cols> is missing or is in a map or array."
         ]
       },
-      "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
+      "PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
         "message" : [
           "The SQL pipe operator syntax with aggregation (using |> AGGREGATE) does not support <case>."
         ]
@@ -5847,22 +5847,22 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
-      "SQL_SCRIPTING" : {
+      "SQL_SCRHOSTTING" : {
         "message" : [
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
         ]
       },
-      "SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE" : {
+      "SQL_SCRHOSTTING_DROP_TEMPORARY_VARIABLE" : {
         "message" : [
           "DROP TEMPORARY VARIABLE is not supported within SQL scripts. To bypass this, use `EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE ...'` ."
         ]
       },
-      "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
+      "SQL_SCRHOSTTING_WITH_POSITIONAL_PARAMETERS" : {
         "message" : [
           "Positional parameters are not supported with SQL Scripting."
         ]
       },
-      "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
+      "STATE_STORE_MULTHOSTLE_COLUMN_FAMILIES" : {
         "message" : [
           "Creating multiple column families with <stateStoreProvider> is not supported."
         ]

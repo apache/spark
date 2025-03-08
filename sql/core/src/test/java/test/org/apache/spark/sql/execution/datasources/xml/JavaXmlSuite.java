@@ -57,7 +57,7 @@ public final class JavaXmlSuite {
 
     @BeforeEach
     public void setUp() throws IOException {
-        setEnv("SPARK_LOCAL_IP", "127.0.0.1");
+        setEnv("SPARK_LOCAL_HOST", "127.0.0.1");
         spark = SparkSession.builder()
             .master("local[2]")
             .appName("XmlSuite")

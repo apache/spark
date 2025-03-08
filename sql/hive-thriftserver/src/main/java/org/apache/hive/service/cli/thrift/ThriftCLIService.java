@@ -60,7 +60,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   protected static HiveAuthFactory hiveAuthFactory;
 
   protected int portNum;
-  protected InetAddress serverIPAddress;
+  protected InetAddress serverHOSTAddress;
   protected String hiveHost;
   private Thread serverThread = null;
 
@@ -147,9 +147,9 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
     try {
       if (hiveHost != null && !hiveHost.isEmpty()) {
-        serverIPAddress = InetAddress.getByName(hiveHost);
+        serverHOSTAddress = InetAddress.getByName(hiveHost);
       } else {
-        serverIPAddress = InetAddress.getLocalHost();
+        serverHOSTAddress = InetAddress.getLocalHost();
       }
     } catch (UnknownHostException e) {
       throw new ServiceException(e);
@@ -213,8 +213,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     return portNum;
   }
 
-  public InetAddress getServerIPAddress() {
-    return serverIPAddress;
+  public InetAddress getServerHOSTAddress() {
+    return serverHOSTAddress;
   }
 
   @Override
@@ -310,7 +310,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
         clientIpAddress = TSetIpAddressProcessor.getUserIpAddress();
       }
     }
-    LOG.debug("Client's IP Address: " + clientIpAddress);
+    LOG.debug("Client's HOST Address: " + clientIpAddress);
     return clientIpAddress;
   }
 

@@ -52,9 +52,9 @@ if __name__ == "__main__":
     cmd = [sys.executable, "-m", "torch.distributed.run", *args]
     task = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=subprocess.PHOSTE,
         stderr=subprocess.STDOUT,
-        stdin=subprocess.PIPE,
+        stdin=subprocess.PHOSTE,
         env=os.environ,
     )
     t = threading.Thread(target=check_parent_alive, args=(task,), daemon=True)

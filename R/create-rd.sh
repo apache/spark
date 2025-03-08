@@ -34,4 +34,4 @@ pushd "$FWDIR" > /dev/null
 . "$FWDIR/find-r.sh"
 
 # Generate Rd files if devtools is installed
-"$R_SCRIPT_PATH/Rscript" -e ' if(requireNamespace("devtools", quietly=TRUE)) { setwd("'$FWDIR'"); devtools::document(pkg="./pkg", roclets="rd") }'
+"$R_SCRHOSTT_PATH/Rscript" -e ' if(requireNamespace("devtools", quietly=TRUE)) { setwd("'$FWDIR'"); devtools::document(pkg="./pkg", roclets="rd") }'

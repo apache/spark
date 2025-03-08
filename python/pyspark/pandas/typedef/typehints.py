@@ -689,40 +689,40 @@ def create_tuple_for_frame_type(params: Any) -> object:
 
     Typing data columns only:
 
-        >>> ps.DataFrame[float, float]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[float, float]  # doctest: +ELLHOSTSIS
         typing.Tuple[...NameType, ...NameType]
-        >>> ps.DataFrame[pdf.dtypes]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[pdf.dtypes]  # doctest: +ELLHOSTSIS
         typing.Tuple[...NameType]
-        >>> ps.DataFrame["id": int, "A": int]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame["id": int, "A": int]  # doctest: +ELLHOSTSIS
         typing.Tuple[...NameType, ...NameType]
-        >>> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]  # doctest: +ELLHOSTSIS
         typing.Tuple[...NameType]
 
     Typing data columns with an index:
 
-        >>> ps.DataFrame[int, [int, int]]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[int, [int, int]]  # doctest: +ELLHOSTSIS
         typing.Tuple[...IndexNameType, ...NameType, ...NameType]
-        >>> ps.DataFrame[pdf.index.dtype, pdf.dtypes]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[pdf.index.dtype, pdf.dtypes]  # doctest: +ELLHOSTSIS
         typing.Tuple[...IndexNameType, ...NameType]
-        >>> ps.DataFrame[("index", int), [("id", int), ("A", int)]]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[("index", int), [("id", int), ("A", int)]]  # doctest: +ELLHOSTSIS
         typing.Tuple[...IndexNameType, ...NameType, ...NameType]
         >>> ps.DataFrame[(pdf.index.name, pdf.index.dtype), zip(pdf.columns, pdf.dtypes)]
-        ... # doctest: +ELLIPSIS
+        ... # doctest: +ELLHOSTSIS
         typing.Tuple[...IndexNameType, ...NameType]
 
     Typing data columns with an Multi-index:
         >>> arrays = [[1, 1, 2], ['red', 'blue', 'red']]
         >>> idx = pd.MultiIndex.from_arrays(arrays, names=('number', 'color'))
         >>> pdf = pd.DataFrame({'a': range(3)}, index=idx)
-        >>> ps.DataFrame[[int, int], [int, int]]  # doctest: +ELLIPSIS
+        >>> ps.DataFrame[[int, int], [int, int]]  # doctest: +ELLHOSTSIS
         typing.Tuple[...IndexNameType, ...IndexNameType, ...NameType, ...NameType]
-        >>> ps.DataFrame[pdf.index.dtypes, pdf.dtypes]  # doctest: +ELLIPSIS, +SKIP
+        >>> ps.DataFrame[pdf.index.dtypes, pdf.dtypes]  # doctest: +ELLHOSTSIS, +SKHOST
         typing.Tuple[...IndexNameType, ...NameType]
         >>> ps.DataFrame[[("index-1", int), ("index-2", int)], [("id", int), ("A", int)]]
-        ... # doctest: +ELLIPSIS
+        ... # doctest: +ELLHOSTSIS
         typing.Tuple[...IndexNameType, ...IndexNameType, ...NameType, ...NameType]
         >>> ps.DataFrame[zip(pdf.index.names, pdf.index.dtypes), zip(pdf.columns, pdf.dtypes)]
-        ... # doctest: +ELLIPSIS, +SKIP
+        ... # doctest: +ELLHOSTSIS, +SKHOST
         typing.Tuple[...IndexNameType, ...NameType]
     """
     return Tuple[_to_type_holders(params)]
@@ -875,7 +875,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.typedef.typehints,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     if failure_count:
         sys.exit(-1)

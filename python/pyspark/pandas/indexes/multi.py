@@ -79,13 +79,13 @@ class MultiIndex(Index):
 
     Examples
     --------
-    >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index  # doctest: +SKIP
+    >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index  # doctest: +SKHOST
     MultiIndex([(1, 4),
                 (2, 5),
                 (3, 6)],
                )
 
-    >>> ps.DataFrame({'a': [1, 2, 3]}, index=[list('abc'), list('def')]).index  # doctest: +SKIP
+    >>> ps.DataFrame({'a': [1, 2, 3]}, index=[list('abc'), list('def')]).index  # doctest: +SKHOST
     MultiIndex([('a', 'd'),
                 ('b', 'e'),
                 ('c', 'f')],
@@ -174,7 +174,7 @@ class MultiIndex(Index):
 
         >>> tuples = [(1, 'red'), (1, 'blue'),
         ...           (2, 'red'), (2, 'blue')]
-        >>> ps.MultiIndex.from_tuples(tuples, names=('number', 'color'))  # doctest: +SKIP
+        >>> ps.MultiIndex.from_tuples(tuples, names=('number', 'color'))  # doctest: +SKHOST
         MultiIndex([(1,  'red'),
                     (1, 'blue'),
                     (2,  'red'),
@@ -215,7 +215,7 @@ class MultiIndex(Index):
         --------
 
         >>> arrays = [[1, 1, 2, 2], ['red', 'blue', 'red', 'blue']]
-        >>> ps.MultiIndex.from_arrays(arrays, names=('number', 'color'))  # doctest: +SKIP
+        >>> ps.MultiIndex.from_arrays(arrays, names=('number', 'color'))  # doctest: +SKHOST
         MultiIndex([(1,  'red'),
                     (1, 'blue'),
                     (2,  'red'),
@@ -262,7 +262,7 @@ class MultiIndex(Index):
         >>> numbers = [0, 1, 2]
         >>> colors = ['green', 'purple']
         >>> ps.MultiIndex.from_product([numbers, colors],
-        ...                            names=['number', 'color'])  # doctest: +SKIP
+        ...                            names=['number', 'color'])  # doctest: +SKHOST
         MultiIndex([(0,  'green'),
                     (0, 'purple'),
                     (1,  'green'),
@@ -309,14 +309,14 @@ class MultiIndex(Index):
         >>> df = ps.DataFrame([['HI', 'Temp'], ['HI', 'Precip'],
         ...                    ['NJ', 'Temp'], ['NJ', 'Precip']],
         ...                   columns=['a', 'b'])
-        >>> df  # doctest: +SKIP
+        >>> df  # doctest: +SKHOST
               a       b
         0    HI    Temp
         1    HI  Precip
         2    NJ    Temp
         3    NJ  Precip
 
-        >>> ps.MultiIndex.from_frame(df)  # doctest: +SKIP
+        >>> ps.MultiIndex.from_frame(df)  # doctest: +SKHOST
         MultiIndex([('HI',   'Temp'),
                     ('HI', 'Precip'),
                     ('NJ',   'Temp'),
@@ -325,7 +325,7 @@ class MultiIndex(Index):
 
         Using explicit names, instead of the column names
 
-        >>> ps.MultiIndex.from_frame(df, names=['state', 'observation'])  # doctest: +SKIP
+        >>> ps.MultiIndex.from_frame(df, names=['state', 'observation'])  # doctest: +SKHOST
         MultiIndex([('HI',   'Temp'),
                     ('HI', 'Precip'),
                     ('NJ',   'Temp'),
@@ -423,17 +423,17 @@ class MultiIndex(Index):
         Examples
         --------
         >>> midx = ps.MultiIndex.from_arrays([['a', 'b'], [1, 2]], names = ['word', 'number'])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('a', 1),
                     ('b', 2)],
                    names=['word', 'number'])
 
-        >>> midx.swaplevel(0, 1)  # doctest: +SKIP
+        >>> midx.swaplevel(0, 1)  # doctest: +SKHOST
         MultiIndex([(1, 'a'),
                     (2, 'b')],
                    names=['number', 'word'])
 
-        >>> midx.swaplevel('number', 'word')  # doctest: +SKIP
+        >>> midx.swaplevel('number', 'word')  # doctest: +SKHOST
         MultiIndex([(1, 'a'),
                     (2, 'b')],
                    names=['number', 'word'])
@@ -479,7 +479,7 @@ class MultiIndex(Index):
         Examples
         --------
         >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z')],
@@ -621,7 +621,7 @@ class MultiIndex(Index):
         >>> tuples = [(1, 'red'), (1, 'blue'),
         ...           (2, 'red'), (2, 'blue')]
         >>> idx = ps.MultiIndex.from_tuples(tuples, names=('number', 'color'))
-        >>> idx  # doctest: +SKIP
+        >>> idx  # doctest: +SKHOST
         MultiIndex([(1,  'red'),
                     (1, 'blue'),
                     (2,  'red'),
@@ -680,7 +680,7 @@ class MultiIndex(Index):
         >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'],
         ...                   index=[list('abcd'), list('efgh')])
-        >>> df['dogs'].index.to_pandas()  # doctest: +SKIP
+        >>> df['dogs'].index.to_pandas()  # doctest: +SKHOST
         MultiIndex([('a', 'e'),
                     ('b', 'f'),
                     ('c', 'g'),
@@ -716,7 +716,7 @@ class MultiIndex(Index):
         >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'],
         ...                   index=[list('abcd'), list('efgh')])
-        >>> df['dogs'].index  # doctest: +SKIP
+        >>> df['dogs'].index  # doctest: +SKHOST
         MultiIndex([('a', 'e'),
                     ('b', 'f'),
                     ('c', 'g'),
@@ -725,7 +725,7 @@ class MultiIndex(Index):
 
         Copy index
 
-        >>> df.index.copy()  # doctest: +SKIP
+        >>> df.index.copy()  # doctest: +SKHOST
         MultiIndex([('a', 'e'),
                     ('b', 'f'),
                     ('c', 'g'),
@@ -778,28 +778,28 @@ class MultiIndex(Index):
         >>> s2 = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...              index=midx2)
 
-        >>> s1.index.symmetric_difference(s2.index)  # doctest: +SKIP
+        >>> s1.index.symmetric_difference(s2.index)  # doctest: +SKHOST
         MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    )
 
         You can set names of the result Index.
 
-        >>> s1.index.symmetric_difference(s2.index, result_name=['a', 'b'])  # doctest: +SKIP
+        >>> s1.index.symmetric_difference(s2.index, result_name=['a', 'b'])  # doctest: +SKHOST
         MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    names=['a', 'b'])
 
         You can set sort to `True`, if you want to sort the resulting index.
 
-        >>> s1.index.symmetric_difference(s2.index, sort=True)  # doctest: +SKIP
+        >>> s1.index.symmetric_difference(s2.index, sort=True)  # doctest: +SKHOST
         MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    )
 
         You can also use the ``^`` operator:
 
-        >>> s1.index ^ s2.index  # doctest: +SKIP
+        >>> s1.index ^ s2.index  # doctest: +SKHOST
         MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    )
@@ -849,18 +849,18 @@ class MultiIndex(Index):
         Examples
         --------
         >>> index = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> index # doctest: +SKIP
+        >>> index # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z')],
                    )
 
-        >>> index.drop(['a']) # doctest: +SKIP
+        >>> index.drop(['a']) # doctest: +SKHOST
         MultiIndex([('b', 'y'),
                     ('c', 'z')],
                    )
 
-        >>> index.drop(['x', 'y'], level=1) # doctest: +SKIP
+        >>> index.drop(['x', 'y'], level=1) # doctest: +SKHOST
         MultiIndex([('c', 'z')],
                    )
         """
@@ -1081,7 +1081,7 @@ class MultiIndex(Index):
         Examples
         --------
         >>> psmidx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        >>> psmidx.insert(3, ("h", "j"))  # doctest: +SKIP
+        >>> psmidx.insert(3, ("h", "j"))  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z'),
@@ -1090,7 +1090,7 @@ class MultiIndex(Index):
 
         For negative values
 
-        >>> psmidx.insert(-2, ("h", "j"))  # doctest: +SKIP
+        >>> psmidx.insert(-2, ("h", "j"))  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('h', 'j'),
                     ('b', 'y'),
@@ -1156,7 +1156,7 @@ class MultiIndex(Index):
         --------
         >>> midx1 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         >>> midx2 = ps.MultiIndex.from_tuples([("c", "z"), ("d", "w")])
-        >>> midx1.intersection(midx2).sort_values()  # doctest: +SKIP
+        >>> midx1.intersection(midx2).sort_values()  # doctest: +SKHOST
         MultiIndex([('c', 'z')],
                    )
         """
@@ -1281,7 +1281,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.indexes.multi,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

@@ -99,11 +99,11 @@ public class CLIService extends CompositeService implements ICLIService {
       }
 
       // Also try creating a UGI object for the SPNego principal
-      String principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL);
+      String principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCHOSTAL);
       String keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB);
       if (principal.isEmpty() || keyTabFile.isEmpty()) {
         LOG.info("SPNego httpUGI not created, spNegoPrincipal: {}, keytabFile: {}",
-          MDC.of(LogKeys.PRINCIPAL$.MODULE$, principal),
+          MDC.of(LogKeys.PRINCHOSTAL$.MODULE$, principal),
           MDC.of(LogKeys.KEYTAB_FILE$.MODULE$, keyTabFile));
       } else {
         try {

@@ -303,7 +303,7 @@ def _test() -> None:
 
     globs = pyspark.logger.logger.__dict__.copy()
     (failure_count, test_count) = doctest.testmod(
-        pyspark.logger.logger, globs=globs, optionflags=doctest.ELLIPSIS
+        pyspark.logger.logger, globs=globs, optionflags=doctest.ELLHOSTSIS
     )
 
     if failure_count:

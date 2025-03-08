@@ -31,11 +31,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   // Tests setup
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConfString(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+    conf.setConfString(SQLConf.SQL_SCRHOSTTING_ENABLED.key, "true")
   }
 
   protected override def afterAll(): Unit = {
-    conf.unsetConf(SQLConf.SQL_SCRIPTING_ENABLED.key)
+    conf.unsetConf(SQLConf.SQL_SCRHOSTTING_ENABLED.key)
     super.afterAll()
   }
 

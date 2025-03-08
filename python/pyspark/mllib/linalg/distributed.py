@@ -1652,7 +1652,7 @@ def _test() -> None:
     )
     globs["sc"] = spark.sparkContext
     globs["Matrices"] = Matrices
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

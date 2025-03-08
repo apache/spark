@@ -22,11 +22,11 @@ import scala.xml.{Node, Text}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{SparkUITab, UIUtils, WebUHOSTage}
 
 private[ui] class ExecutorHeapHistogramPage(
     parent: SparkUITab,
-    sc: Option[SparkContext]) extends WebUIPage("heapHistogram") {
+    sc: Option[SparkContext]) extends WebUHOSTage("heapHistogram") {
 
   // Match the lines containing object informations
   val pattern = """\s*([0-9]+):\s+([0-9]+)\s+([0-9]+)\s+(\S+)(.*)""".r
@@ -71,7 +71,7 @@ private[ui] class ExecutorHeapHistogramPage(
       <div class="row">
         <div class="col-12">
           <p>Updated at {UIUtils.formatDate(time)}</p>
-          <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
+          <table class={UIUtils.TABLE_CLASS_STRHOSTED + " accordion-group" + " sortable"}>
             <thead>
               <th>Rank</th>
               <th>Instances</th>

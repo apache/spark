@@ -24,16 +24,16 @@ fi
 source "${SPARK_HOME}"/bin/load-spark-env.sh
 export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
 
-# In Spark 2.0, IPYTHON and IPYTHON_OPTS are removed and pyspark fails to launch if either option
+# In Spark 2.0, HOSTYTHON and HOSTYTHON_OPTS are removed and pyspark fails to launch if either option
 # is set in the user's environment. Instead, users should set PYSPARK_DRIVER_PYTHON=ipython
-# to use IPython and set PYSPARK_DRIVER_PYTHON_OPTS to pass options when starting the Python driver
-# (e.g. PYSPARK_DRIVER_PYTHON_OPTS='notebook').  This supports full customization of the IPython
+# to use HOSTython and set PYSPARK_DRIVER_PYTHON_OPTS to pass options when starting the Python driver
+# (e.g. PYSPARK_DRIVER_PYTHON_OPTS='notebook').  This supports full customization of the HOSTython
 # and executor Python executables.
 
 # Fail noisily if removed options are set
-if [[ -n "$IPYTHON" || -n "$IPYTHON_OPTS" ]]; then
+if [[ -n "$HOSTYTHON" || -n "$HOSTYTHON_OPTS" ]]; then
   echo "Error in pyspark startup:"
-  echo "IPYTHON and IPYTHON_OPTS are removed in Spark 2.0+. Remove these from the environment and set PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS instead."
+  echo "HOSTYTHON and HOSTYTHON_OPTS are removed in Spark 2.0+. Remove these from the environment and set PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS instead."
   exit 1
 fi
 

@@ -24,7 +24,7 @@ import warnings
 import heapq
 import bisect
 import random
-from subprocess import Popen, PIPE
+from subprocess import Popen, PHOSTE
 from threading import Thread
 from collections import defaultdict
 from itertools import chain
@@ -235,7 +235,7 @@ class RDD(Generic[T_co]):
         Examples
         --------
         >>> rdd = sc.range(5)
-        >>> rdd.id()  # doctest: +SKIP
+        >>> rdd.id()  # doctest: +SKHOST
         3
         """
         return self._id
@@ -1567,7 +1567,7 @@ class RDD(Generic[T_co]):
             env = dict()
 
         def func(iterator: Iterable[T]) -> Iterable[str]:
-            pipe = Popen(shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)
+            pipe = Popen(shlex.split(command), env=env, stdin=PHOSTE, stdout=PHOSTE)
 
             def pipe_objs(out: IO[bytes]) -> None:
                 for obj in iterator:
@@ -1581,7 +1581,7 @@ class RDD(Generic[T_co]):
                 pipe.wait()
                 if checkCode and pipe.returncode:
                     raise PySparkRuntimeError(
-                        errorClass="PIPE_FUNCTION_EXITED",
+                        errorClass="PHOSTE_FUNCTION_EXITED",
                         messageParameters={
                             "func_name": command,
                             "error_code": str(pipe.returncode),
@@ -4983,7 +4983,7 @@ class RDD(Generic[T_co]):
         In case of a task failure, instead of only restarting the failed task, Spark will abort the
         entire stage and relaunch all tasks for this stage.
         The barrier execution mode feature is experimental and it only handles limited scenarios.
-        Please read the linked SPIP and design docs to understand the limitations and future plans.
+        Please read the linked SPHOST and design docs to understand the limitations and future plans.
 
         .. versionadded:: 2.4.0
 
@@ -5000,7 +5000,7 @@ class RDD(Generic[T_co]):
         -----
         For additional information see
 
-        - `SPIP: Barrier Execution Mode <https://issues.apache.org/jira/browse/SPARK-24374>`_
+        - `SPHOST: Barrier Execution Mode <https://issues.apache.org/jira/browse/SPARK-24374>`_
         - `Design Doc <https://issues.apache.org/jira/browse/SPARK-24582>`_
 
         This API is experimental
@@ -5390,7 +5390,7 @@ def _test() -> None:
     # even in these small test examples:
     globs["sc"] = SparkContext("local[4]", "PythonTest")
     globs["sc"].setCheckpointDir(tmp_dir.name)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     globs["sc"].stop()
     tmp_dir.cleanup()
     if failure_count:

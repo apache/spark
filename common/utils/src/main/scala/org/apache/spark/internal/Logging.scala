@@ -595,7 +595,7 @@ class LogThrottler(
   def throttledWithSkippedLogMessage(thunk: MessageWithContext => Unit): Unit = {
     this.throttled { numSkipped =>
       val skippedStr = if (numSkipped != 0L) {
-        log"[${MDC(LogKeys.NUM_SKIPPED, numSkipped)} similar messages were skipped.]"
+        log"[${MDC(LogKeys.NUM_SKHOSTPED, numSkipped)} similar messages were skipped.]"
       } else {
         log""
       }

@@ -31,7 +31,7 @@ import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
-import java.util.zip.{GZIPInputStream, ZipInputStream}
+import java.util.zip.{GZHOSTInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -867,13 +867,13 @@ private[spark] object Utils
   }
 
   /**
-   * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
+   * Get the local host's HOST address in dotted-quad format (e.g. 1.2.3.4).
    * Note, this is typically not used from within core spark.
    */
   private lazy val localIpAddress: InetAddress = findLocalInetAddress()
 
   private def findLocalInetAddress(): InetAddress = {
-    val defaultIpOverride = System.getenv("SPARK_LOCAL_IP")
+    val defaultIpOverride = System.getenv("SPARK_LOCAL_HOST")
     if (defaultIpOverride != null) {
       InetAddress.getByName(defaultIpOverride)
     } else {
@@ -899,14 +899,14 @@ private[spark] object Utils
               log"resolves to a loopback address: ${MDC(HOST_PORT, address.getHostAddress)}; " +
               log"using ${MDC(HOST_PORT2, strippedAddress.getHostAddress)} instead (on interface " +
               log"${MDC(NETWORK_IF, ni.getName)})")
-            logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
+            logWarning("Set SPARK_LOCAL_HOST if you need to bind to another address")
             return strippedAddress
           }
         }
         logWarning(log"Your hostname, ${MDC(HOST, InetAddress.getLocalHost.getHostName)}, " +
           log"resolves to a loopback address: ${MDC(HOST_PORT, address.getHostAddress)}, " +
-          log"but we couldn't find any external IP address!")
-        logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
+          log"but we couldn't find any external HOST address!")
+        logWarning("Set SPARK_LOCAL_HOST if you need to bind to another address")
       }
       address
     }
@@ -932,7 +932,7 @@ private[spark] object Utils
 
   /**
    * Get the local machine's hostname.
-   * In case of IPv6, getHostAddress may return '0:0:0:0:0:0:0:1'.
+   * In case of HOSTv6, getHostAddress may return '0:0:0:0:0:0:0:1'.
    */
   def localHostName(): String = {
     addBracketsIfNeeded(customHostname.getOrElse(localIpAddress.getHostAddress))
@@ -954,7 +954,7 @@ private[spark] object Utils
   }
 
   /**
-   * Normalize IPv6 IPs and no-op on all other hosts.
+   * Normalize HOSTv6 HOSTs and no-op on all other hosts.
    */
   private[spark] def normalizeIpIfNeeded(host: String): String = {
     // Is this a v6 address. We ask users to add [] around v6 addresses as strs but
@@ -973,14 +973,14 @@ private[spark] object Utils
 
   /**
    * Checks if the host contains only valid hostname/ip without port
-   * NOTE: Incase of IPV6 ip it should be enclosed inside []
+   * NOTE: Incase of HOSTV6 ip it should be enclosed inside []
    */
   def checkHost(host: String): Unit = {
     if (host != null && host.split(":").length > 2) {
       assert(host.startsWith("[") && host.endsWith("]"),
-        s"Expected hostname or IPv6 IP enclosed in [] but got $host")
+        s"Expected hostname or HOSTv6 HOST enclosed in [] but got $host")
     } else {
-      assert(host != null && host.indexOf(':') == -1, s"Expected hostname or IP but got $host")
+      assert(host != null && host.indexOf(':') == -1, s"Expected hostname or HOST but got $host")
     }
   }
 
@@ -1010,7 +1010,7 @@ private[spark] object Utils
       hostPortParseResults.put(hostPort, retval)
       retval
     }
-    // checks if the hostport contains IPV6 ip and parses the host, port
+    // checks if the hostport contains HOSTV6 ip and parses the host, port
     if (hostPort != null && hostPort.split(":").length > 2) {
       val index: Int = hostPort.lastIndexOf("]:")
       if (-1 == index) {
@@ -1553,11 +1553,11 @@ private[spark] object Utils
 
   /** Return uncompressed file length of a compressed file. */
   private def getCompressedFileLength(file: File): Long = {
-    var gzInputStream: GZIPInputStream = null
+    var gzInputStream: GZHOSTInputStream = null
     try {
       // Uncompress .gz file to determine file size.
       var fileSize = 0L
-      gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      gzInputStream = new GZHOSTInputStream(new FileInputStream(file))
       val bufSize = 1024
       val buf = new Array[Byte](bufSize)
       var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
@@ -1584,7 +1584,7 @@ private[spark] object Utils
     val effectiveStart = math.max(0, start)
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
     val stream = if (path.endsWith(".gz")) {
-      new GZIPInputStream(new FileInputStream(file))
+      new GZHOSTInputStream(new FileInputStream(file))
     } else {
       new FileInputStream(file)
     }
@@ -1879,9 +1879,9 @@ private[spark] object Utils
   val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
 
   /**
-   * Whether the underlying JVM prefer IPv6 addresses.
+   * Whether the underlying JVM prefer HOSTv6 addresses.
    */
-  val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
+  val preferHOSTv6 = "true".equals(System.getProperty("java.net.preferHOSTv6Addresses"))
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
@@ -3225,7 +3225,7 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[HadoopCallerContext]], which is included in IPC calls,
+   * [[HadoopCallerContext]], which is included in HOSTC calls,
    * and the Hadoop audit context, which may be included in cloud storage
    * requests.
    */

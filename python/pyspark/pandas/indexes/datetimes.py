@@ -290,8 +290,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')  # doctest: +SKIP
-        >>> idx.dayofweek  # doctest: +SKIP
+        >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')  # doctest: +SKHOST
+        >>> idx.dayofweek  # doctest: +SKHOST
         Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
         """
         warnings.warn(
@@ -369,8 +369,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2018-02-27", periods=3)  # doctest: +SKIP
-        >>> idx.is_month_start  # doctest: +SKIP
+        >>> idx = ps.date_range("2018-02-27", periods=3)  # doctest: +SKHOST
+        >>> idx.is_month_start  # doctest: +SKHOST
         Index([False, False, True], dtype='bool')
         """
         return Index(self.to_series().dt.is_month_start)
@@ -392,8 +392,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2018-02-27", periods=3)  # doctest: +SKIP
-        >>> idx.is_month_end  # doctest: +SKIP
+        >>> idx = ps.date_range("2018-02-27", periods=3)  # doctest: +SKHOST
+        >>> idx.is_month_end  # doctest: +SKHOST
         Index([False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_month_end)
@@ -415,8 +415,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range('2017-03-30', periods=4)  # doctest: +SKIP
-        >>> idx.is_quarter_start  # doctest: +SKIP
+        >>> idx = ps.date_range('2017-03-30', periods=4)  # doctest: +SKHOST
+        >>> idx.is_quarter_start  # doctest: +SKHOST
         Index([False, False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_quarter_start)
@@ -438,8 +438,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range('2017-03-30', periods=4)  # doctest: +SKIP
-        >>> idx.is_quarter_end  # doctest: +SKIP
+        >>> idx = ps.date_range('2017-03-30', periods=4)  # doctest: +SKHOST
+        >>> idx.is_quarter_end  # doctest: +SKHOST
         Index([False, True, False, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_quarter_end)
@@ -460,8 +460,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2017-12-30", periods=3)  # doctest: +SKIP
-        >>> idx.is_year_start  # doctest: +SKIP
+        >>> idx = ps.date_range("2017-12-30", periods=3)  # doctest: +SKHOST
+        >>> idx.is_year_start  # doctest: +SKHOST
         Index([False, False, True], dtype='bool')
         """
         return Index(self.to_series().dt.is_year_start)
@@ -482,8 +482,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2017-12-30", periods=3)  # doctest: +SKIP
-        >>> idx.is_year_end  # doctest: +SKIP
+        >>> idx = ps.date_range("2017-12-30", periods=3)  # doctest: +SKHOST
+        >>> idx.is_year_end  # doctest: +SKHOST
         Index([False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_year_end)
@@ -505,8 +505,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")  # doctest: +SKIP
-        >>> idx.is_leap_year  # doctest: +SKIP
+        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")  # doctest: +SKHOST
+        >>> idx.is_leap_year  # doctest: +SKHOST
         Index([True, False, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_leap_year)
@@ -553,8 +553,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKIP
-        >>> rng.ceil('H')  # doctest: +SKIP
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKHOST
+        >>> rng.ceil('H')  # doctest: +SKHOST
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 13:00:00'],
                       dtype='datetime64[ns]', freq=None)
@@ -583,8 +583,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKIP
-        >>> rng.floor("H")  # doctest: +SKIP
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKHOST
+        >>> rng.floor("H")  # doctest: +SKHOST
         DatetimeIndex(['2018-01-01 11:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
                       dtype='datetime64[ns]', freq=None)
@@ -613,8 +613,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKIP
-        >>> rng.round("H")  # doctest: +SKIP
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')  # doctest: +SKHOST
+        >>> rng.round("H")  # doctest: +SKHOST
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
                       dtype='datetime64[ns]', freq=None)
@@ -640,8 +640,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2018-01', freq='ME', periods=3)  # doctest: +SKIP
-        >>> idx.month_name()  # doctest: +SKIP
+        >>> idx = ps.date_range(start='2018-01', freq='ME', periods=3)  # doctest: +SKHOST
+        >>> idx.month_name()  # doctest: +SKHOST
         Index(['January', 'February', 'March'], dtype='object')
         """
         return Index(self.to_series().dt.month_name(locale))
@@ -663,8 +663,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2018-01-01', freq='D', periods=3)  # doctest: +SKIP
-        >>> idx.day_name()  # doctest: +SKIP
+        >>> idx = ps.date_range(start='2018-01-01', freq='D', periods=3)  # doctest: +SKHOST
+        >>> idx.day_name()  # doctest: +SKHOST
         Index(['Monday', 'Tuesday', 'Wednesday'], dtype='object')
         """
         return Index(self.to_series().dt.day_name(locale))
@@ -693,8 +693,8 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='H', periods=3)  # doctest: +SKIP
-        >>> idx.normalize()  # doctest: +SKIP
+        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='H', periods=3)  # doctest: +SKHOST
+        >>> idx.normalize()  # doctest: +SKHOST
         DatetimeIndex(['2014-08-01', '2014-08-01', '2014-08-01'], dtype='datetime64[ns]', freq=None)
         """
         return DatetimeIndex(self.to_series().dt.normalize())
@@ -727,8 +727,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range(pd.Timestamp("2018-03-10 09:00"), periods=3, freq='s')
-        ... # doctest: +SKIP
-        >>> idx.strftime('%B %d, %Y, %r')  # doctest: +SKIP
+        ... # doctest: +SKHOST
+        >>> idx.strftime('%B %d, %Y, %r')  # doctest: +SKHOST
         Index(['March 10, 2018, 09:00:00 AM', 'March 10, 2018, 09:00:01 AM',
                'March 10, 2018, 09:00:02 AM'],
               dtype='object')
@@ -815,16 +815,16 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKIP
-        >>> psidx  # doctest: +SKIP
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKHOST
+        >>> psidx  # doctest: +SKHOST
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> psidx.indexer_at_time("00:00")  # doctest: +SKIP
+        >>> psidx.indexer_at_time("00:00")  # doctest: +SKHOST
         Index([0], dtype='int64')
 
-        >>> psidx.indexer_at_time("00:01")  # doctest: +SKIP
+        >>> psidx.indexer_at_time("00:01")  # doctest: +SKHOST
         Index([1], dtype='int64')
         """
         if asof:
@@ -871,7 +871,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.indexes.datetimes,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

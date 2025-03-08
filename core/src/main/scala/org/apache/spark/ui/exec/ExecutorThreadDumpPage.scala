@@ -24,13 +24,13 @@ import jakarta.servlet.http.HttpServletRequest
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
-import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{SparkUITab, UIUtils, WebUHOSTage}
 import org.apache.spark.ui.UIUtils.{formatImportJavaScript, prependBaseUri}
 import org.apache.spark.ui.flamegraph.FlamegraphNode
 
 private[ui] class ExecutorThreadDumpPage(
     parent: SparkUITab,
-    sc: Option[SparkContext]) extends WebUIPage("threadDump") {
+    sc: Option[SparkContext]) extends WebUHOSTage("threadDump") {
 
   private val flamegraphEnabled = sc.isDefined && sc.get.conf.get(UI_FLAMEGRAPH_ENABLED)
 
@@ -105,7 +105,7 @@ private[ui] class ExecutorThreadDumpPage(
           </div>
           <p></p>
         }
-        <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thead-stack-trace-table collapsible-table"}>
+        <table class={UIUtils.TABLE_CLASS_STRHOSTED + " accordion-group" + " sortable" + " thead-stack-trace-table collapsible-table"}>
           <thead>
             <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
             <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>

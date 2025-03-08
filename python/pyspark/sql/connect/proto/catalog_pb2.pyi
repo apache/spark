@@ -48,12 +48,12 @@ if sys.version_info >= (3, 8):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class Catalog(google.protobuf.message.Message):
     """Catalog messages are marked as unstable."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     CURRENT_DATABASE_FIELD_NUMBER: builtins.int
     SET_CURRENT_DATABASE_FIELD_NUMBER: builtins.int
@@ -320,7 +320,7 @@ global___Catalog = Catalog
 class CurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.currentDatabase`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -331,7 +331,7 @@ global___CurrentDatabase = CurrentDatabase
 class SetCurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentDatabase`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
@@ -348,7 +348,7 @@ global___SetCurrentDatabase = SetCurrentDatabase
 class ListDatabases(google.protobuf.message.Message):
     """See `spark.catalog.listDatabases`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PATTERN_FIELD_NUMBER: builtins.int
     pattern: builtins.str
@@ -373,7 +373,7 @@ global___ListDatabases = ListDatabases
 class ListTables(google.protobuf.message.Message):
     """See `spark.catalog.listTables`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     DB_NAME_FIELD_NUMBER: builtins.int
     PATTERN_FIELD_NUMBER: builtins.int
@@ -427,7 +427,7 @@ global___ListTables = ListTables
 class ListFunctions(google.protobuf.message.Message):
     """See `spark.catalog.listFunctions`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     DB_NAME_FIELD_NUMBER: builtins.int
     PATTERN_FIELD_NUMBER: builtins.int
@@ -481,7 +481,7 @@ global___ListFunctions = ListFunctions
 class ListColumns(google.protobuf.message.Message):
     """See `spark.catalog.listColumns`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     DB_NAME_FIELD_NUMBER: builtins.int
@@ -513,7 +513,7 @@ global___ListColumns = ListColumns
 class GetDatabase(google.protobuf.message.Message):
     """See `spark.catalog.getDatabase`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
@@ -530,7 +530,7 @@ global___GetDatabase = GetDatabase
 class GetTable(google.protobuf.message.Message):
     """See `spark.catalog.getTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     DB_NAME_FIELD_NUMBER: builtins.int
@@ -562,7 +562,7 @@ global___GetTable = GetTable
 class GetFunction(google.protobuf.message.Message):
     """See `spark.catalog.getFunction`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
     DB_NAME_FIELD_NUMBER: builtins.int
@@ -594,7 +594,7 @@ global___GetFunction = GetFunction
 class DatabaseExists(google.protobuf.message.Message):
     """See `spark.catalog.databaseExists`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
@@ -611,7 +611,7 @@ global___DatabaseExists = DatabaseExists
 class TableExists(google.protobuf.message.Message):
     """See `spark.catalog.tableExists`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     DB_NAME_FIELD_NUMBER: builtins.int
@@ -643,7 +643,7 @@ global___TableExists = TableExists
 class FunctionExists(google.protobuf.message.Message):
     """See `spark.catalog.functionExists`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
     DB_NAME_FIELD_NUMBER: builtins.int
@@ -675,10 +675,10 @@ global___FunctionExists = FunctionExists
 class CreateExternalTable(google.protobuf.message.Message):
     """See `spark.catalog.createExternalTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -778,10 +778,10 @@ global___CreateExternalTable = CreateExternalTable
 class CreateTable(google.protobuf.message.Message):
     """See `spark.catalog.createTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -800,7 +800,7 @@ class CreateTable(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
-    DESCRIPTION_FIELD_NUMBER: builtins.int
+    DESCRHOSTTION_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
     table_name: builtins.str
@@ -897,7 +897,7 @@ global___CreateTable = CreateTable
 class DropTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropTempView`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VIEW_NAME_FIELD_NUMBER: builtins.int
     view_name: builtins.str
@@ -916,7 +916,7 @@ global___DropTempView = DropTempView
 class DropGlobalTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropGlobalTempView`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VIEW_NAME_FIELD_NUMBER: builtins.int
     view_name: builtins.str
@@ -935,7 +935,7 @@ global___DropGlobalTempView = DropGlobalTempView
 class RecoverPartitions(google.protobuf.message.Message):
     """See `spark.catalog.recoverPartitions`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
@@ -954,7 +954,7 @@ global___RecoverPartitions = RecoverPartitions
 class IsCached(google.protobuf.message.Message):
     """See `spark.catalog.isCached`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
@@ -973,7 +973,7 @@ global___IsCached = IsCached
 class CacheTable(google.protobuf.message.Message):
     """See `spark.catalog.cacheTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     STORAGE_LEVEL_FIELD_NUMBER: builtins.int
@@ -1014,7 +1014,7 @@ global___CacheTable = CacheTable
 class UncacheTable(google.protobuf.message.Message):
     """See `spark.catalog.uncacheTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
@@ -1033,7 +1033,7 @@ global___UncacheTable = UncacheTable
 class ClearCache(google.protobuf.message.Message):
     """See `spark.catalog.clearCache`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -1044,7 +1044,7 @@ global___ClearCache = ClearCache
 class RefreshTable(google.protobuf.message.Message):
     """See `spark.catalog.refreshTable`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
@@ -1063,7 +1063,7 @@ global___RefreshTable = RefreshTable
 class RefreshByPath(google.protobuf.message.Message):
     """See `spark.catalog.refreshByPath`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PATH_FIELD_NUMBER: builtins.int
     path: builtins.str
@@ -1080,7 +1080,7 @@ global___RefreshByPath = RefreshByPath
 class CurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.currentCatalog`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -1091,7 +1091,7 @@ global___CurrentCatalog = CurrentCatalog
 class SetCurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentCatalog`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     CATALOG_NAME_FIELD_NUMBER: builtins.int
     catalog_name: builtins.str
@@ -1110,7 +1110,7 @@ global___SetCurrentCatalog = SetCurrentCatalog
 class ListCatalogs(google.protobuf.message.Message):
     """See `spark.catalog.listCatalogs`"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PATTERN_FIELD_NUMBER: builtins.int
     pattern: builtins.str

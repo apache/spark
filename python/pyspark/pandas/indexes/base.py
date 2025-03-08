@@ -321,7 +321,7 @@ class Index(IndexOpsMixin):
         (3,)
 
         >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z')],
@@ -464,13 +464,13 @@ class Index(IndexOpsMixin):
         For MultiIndex
 
         >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z')],
                    )
 
-        >>> midx.transpose()  # doctest: +SKIP
+        >>> midx.transpose()  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('c', 'z')],
@@ -771,12 +771,12 @@ class Index(IndexOpsMixin):
 
         >>> psidx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
         >>> psidx.names = ['hello', 'pandas-on-Spark']
-        >>> psidx  # doctest: +SKIP
+        >>> psidx  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
                    names=['hello', 'pandas-on-Spark'])
 
-        >>> psidx.rename(['aloha', 'databricks'])  # doctest: +SKIP
+        >>> psidx.rename(['aloha', 'databricks'])  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
                    names=['aloha', 'databricks'])
@@ -1110,7 +1110,7 @@ class Index(IndexOpsMixin):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df  # doctest: +SKIP
+        >>> df  # doctest: +SKHOST
                max_speed  shield
         cobra          1       2
         viper          4       5
@@ -1124,18 +1124,18 @@ class Index(IndexOpsMixin):
 
         >>> tuples = [(np.nan, 1.0), (2.0, 2.0), (np.nan, np.nan), (3.0, np.nan)]
         >>> midx = ps.MultiIndex.from_tuples(tuples)
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([(nan, 1.0),
                     (2.0, 2.0),
                     (nan, nan),
                     (3.0, nan)],
                    )
 
-        >>> midx.dropna()  # doctest: +SKIP
+        >>> midx.dropna()  # doctest: +SKHOST
         MultiIndex([(2.0, 2.0)],
                    )
 
-        >>> midx.dropna(how="all")  # doctest: +SKIP
+        >>> midx.dropna(how="all")  # doctest: +SKHOST
         MultiIndex([(nan, 1.0),
                     (2.0, 2.0),
                     (3.0, nan)],
@@ -1185,7 +1185,7 @@ class Index(IndexOpsMixin):
         MultiIndex
 
         >>> ps.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("A", "X")]).unique()
-        ... # doctest: +SKIP
+        ... # doctest: +SKHOST
         MultiIndex([('A', 'X'),
                     ('A', 'Y')],
                    )
@@ -1336,18 +1336,18 @@ class Index(IndexOpsMixin):
         Examples
         --------
         >>> midx = ps.DataFrame({'a': ['a', 'b']}, index=[['a', 'x'], ['b', 'y'], [1, 2]]).index
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('a', 'b', 1),
                     ('x', 'y', 2)],
                    )
         >>> midx.droplevel([0, 1])
         Index([1, 2], dtype='int64')
-        >>> midx.droplevel(0)  # doctest: +SKIP
+        >>> midx.droplevel(0)  # doctest: +SKHOST
         MultiIndex([('b', 1),
                     ('y', 2)],
                    )
         >>> midx.names = [("a", "b"), "b", "c"]
-        >>> midx.droplevel([('a', 'b')])  # doctest: +SKIP
+        >>> midx.droplevel([('a', 'b')])  # doctest: +SKHOST
         MultiIndex([('b', 1),
                     ('y', 2)],
                    names=['b', 'c'])
@@ -1546,19 +1546,19 @@ class Index(IndexOpsMixin):
         Support for MultiIndex.
 
         >>> psidx = ps.MultiIndex.from_tuples([('a', 'x', 1), ('c', 'y', 2), ('b', 'z', 3)])
-        >>> psidx  # doctest: +SKIP
+        >>> psidx  # doctest: +SKHOST
         MultiIndex([('a', 'x', 1),
                     ('c', 'y', 2),
                     ('b', 'z', 3)],
                    )
 
-        >>> psidx.sort_values()  # doctest: +SKIP
+        >>> psidx.sort_values()  # doctest: +SKHOST
         MultiIndex([('a', 'x', 1),
                     ('b', 'z', 3),
                     ('c', 'y', 2)],
                    )
 
-        >>> psidx.sort_values(ascending=False)  # doctest: +SKIP
+        >>> psidx.sort_values(ascending=False)  # doctest: +SKHOST
         MultiIndex([('c', 'y', 2),
                     ('b', 'z', 3),
                     ('a', 'x', 1)],
@@ -1717,13 +1717,13 @@ class Index(IndexOpsMixin):
         MultiIndex
 
         >>> psidx = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2), ('c', 'z', 3)])
-        >>> psidx  # doctest: +SKIP
+        >>> psidx  # doctest: +SKHOST
         MultiIndex([('a', 'x', 1),
                     ('b', 'y', 2),
                     ('c', 'z', 3)],
                    )
 
-        >>> psidx.delete([0, 2]).sort_values()  # doctest: +SKIP
+        >>> psidx.delete([0, 2]).sort_values()  # doctest: +SKHOST
         MultiIndex([('b', 'y', 2)],
                    )
         """
@@ -1830,12 +1830,12 @@ class Index(IndexOpsMixin):
         Support for MiltiIndex
 
         >>> psidx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
-        >>> psidx  # doctest: +SKIP
+        >>> psidx  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
                    )
 
-        >>> psidx.append(psidx)  # doctest: +SKIP
+        >>> psidx.append(psidx)  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
                     ('a', 'x'),
@@ -1998,18 +1998,18 @@ class Index(IndexOpsMixin):
         For MultiIndex
 
         >>> idx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
-        >>> idx  # doctest: +SKIP
+        >>> idx  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
                    )
 
         >>> idx.set_names(['kind', 'year'], inplace=True)
-        >>> idx  # doctest: +SKIP
+        >>> idx  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
                    names=['kind', 'year'])
 
-        >>> idx.set_names('species', level=0)  # doctest: +SKIP
+        >>> idx.set_names('species', level=0)  # doctest: +SKHOST
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
                    names=['species', 'year'])
@@ -2053,7 +2053,7 @@ class Index(IndexOpsMixin):
 
         >>> midx1 = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2), ('c', 'z', 3)])
         >>> midx2 = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'z', 2), ('k', 'z', 3)])
-        >>> midx1.difference(midx2)  # doctest: +SKIP
+        >>> midx1.difference(midx2)  # doctest: +SKHOST
         MultiIndex([('b', 'y', 2),
                     ('c', 'z', 3)],
                    )
@@ -2152,12 +2152,12 @@ class Index(IndexOpsMixin):
         For MultiIndex,
 
         >>> midx = ps.MultiIndex.from_tuples([('x', 'a'), ('x', 'b'), ('y', 'c')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
                     ('y', 'c')],
                    )
-        >>> midx.repeat(2)  # doctest: +SKIP
+        >>> midx.repeat(2)  # doctest: +SKHOST
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
                     ('y', 'c'),
@@ -2165,7 +2165,7 @@ class Index(IndexOpsMixin):
                     ('x', 'b'),
                     ('y', 'c')],
                    )
-        >>> midx.repeat(0)  # doctest: +SKIP
+        >>> midx.repeat(0)  # doctest: +SKHOST
         MultiIndex([], )
         """
         if not isinstance(repeats, int):
@@ -2296,7 +2296,7 @@ class Index(IndexOpsMixin):
 
         >>> midx1 = ps.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")])
         >>> midx2 = ps.MultiIndex.from_tuples([("x", "c"), ("x", "d"), ("x", "e"), ("x", "f")])
-        >>> midx1.union(midx2).sort_values()  # doctest: +SKIP
+        >>> midx1.union(midx2).sort_values()  # doctest: +SKHOST
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
                     ('x', 'c'),
@@ -2665,7 +2665,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.indexes.base,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

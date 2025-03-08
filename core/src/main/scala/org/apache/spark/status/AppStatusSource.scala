@@ -43,7 +43,7 @@ private[spark] class AppStatusSource extends Source {
 
   val FAILED_STAGES = getCounter("stages", "failedStages")
 
-  val SKIPPED_STAGES = getCounter("stages", "skippedStages")
+  val SKHOSTPED_STAGES = getCounter("stages", "skippedStages")
 
   val COMPLETED_STAGES = getCounter("stages", "completedStages")
 
@@ -57,7 +57,7 @@ private[spark] class AppStatusSource extends Source {
 
   val KILLED_TASKS = getCounter("tasks", "killedTasks")
 
-  val SKIPPED_TASKS = getCounter("tasks", "skippedTasks")
+  val SKHOSTPED_TASKS = getCounter("tasks", "skippedTasks")
 
   // This is the count of how many executors have been blacklisted at the application level,
   // does not include stage level blacklisting.

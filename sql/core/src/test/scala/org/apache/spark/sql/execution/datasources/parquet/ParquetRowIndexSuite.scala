@@ -99,11 +99,11 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
       useFilter: Boolean = false,
       useDataSourceV2: Boolean = false) {
 
-    val NUM_MULTIPLE_FILES = 4
+    val NUM_MULTHOSTLE_FILES = 4
     // The test doesn't work correctly if the number of records per file is uneven.
-    assert(!useMultipleFiles || (numRows % NUM_MULTIPLE_FILES == 0))
+    assert(!useMultipleFiles || (numRows % NUM_MULTHOSTLE_FILES == 0))
 
-    def numFiles: Int = if (useMultipleFiles) { NUM_MULTIPLE_FILES } else { 1 }
+    def numFiles: Int = if (useMultipleFiles) { NUM_MULTHOSTLE_FILES } else { 1 }
 
     def rowGroupSize: Long = if (useSmallRowGroups) {
       if (useSmallPages) {

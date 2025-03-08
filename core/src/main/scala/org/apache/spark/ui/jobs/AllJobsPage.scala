@@ -37,7 +37,7 @@ import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished jobs */
-private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("") {
+private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUHOSTage("") {
 
   import ApiHelper._
 

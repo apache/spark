@@ -248,7 +248,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     // Copy offsetRanges to immutable.List to prevent from being modified by the user
     val metadata = Map(
       "offsets" -> offsetRanges.toList,
-      StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
+      StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> description)
     val inputInfo = StreamInputInfo(id, rdd.count(), metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 

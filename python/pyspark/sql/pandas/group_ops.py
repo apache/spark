@@ -72,12 +72,12 @@ class PandasGroupedOpsMixin:
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
+        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKHOST
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
         ...
-        >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
+        >>> df.groupby("id").apply(normalize).show()  # doctest: +SKHOST
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
@@ -152,17 +152,17 @@ class PandasGroupedOpsMixin:
 
         Examples
         --------
-        >>> import pandas as pd  # doctest: +SKIP
+        >>> import pandas as pd  # doctest: +SKHOST
         >>> from pyspark.sql.functions import ceil
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))  # doctest: +SKHOST
         >>> def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
         ...
         >>> df.groupby("id").applyInPandas(
-        ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
+        ...     normalize, schema="id long, v double").show()  # doctest: +SKHOST
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
@@ -182,14 +182,14 @@ class PandasGroupedOpsMixin:
 
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))  # doctest: +SKHOST
         >>> def mean_func(key, pdf):
         ...     # key is a tuple of one numpy.int64, which is the value
         ...     # of 'id' for the current group
         ...     return pd.DataFrame([key + (pdf.v.mean(),)])
         ...
         >>> df.groupby('id').applyInPandas(
-        ...     mean_func, schema="id long, v double").show()  # doctest: +SKIP
+        ...     mean_func, schema="id long, v double").show()  # doctest: +SKHOST
         +---+---+
         | id|  v|
         +---+---+
@@ -203,7 +203,7 @@ class PandasGroupedOpsMixin:
         ...     return pd.DataFrame([key + (pdf.v.sum(),)])
         ...
         >>> df.groupby(df.id, ceil(df.v / 2)).applyInPandas(
-        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKIP
+        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKHOST
         +---+-----------+----+
         | id|ceil(v / 2)|   v|
         +---+-----------+----+
@@ -304,7 +304,7 @@ class PandasGroupedOpsMixin:
 
         Examples
         --------
-        >>> import pandas as pd  # doctest: +SKIP
+        >>> import pandas as pd  # doctest: +SKHOST
         >>> from pyspark.sql.streaming.state import GroupStateTimeout
         >>> def count_fn(key, pdf_iter, state):
         ...     assert isinstance(state, GroupStateImpl)
@@ -317,7 +317,7 @@ class PandasGroupedOpsMixin:
         >>> df.groupby("id").applyInPandasWithState(
         ...     count_fn, outputStructType="id long, countAsString string",
         ...     stateStructType="len long", outputMode="Update",
-        ...     timeoutConf=GroupStateTimeout.NoTimeout) # doctest: +SKIP
+        ...     timeoutConf=GroupStateTimeout.NoTimeout) # doctest: +SKHOST
 
         Notes
         -----
@@ -407,7 +407,7 @@ class PandasGroupedOpsMixin:
         --------
         >>> from typing import Iterator
         ...
-        >>> import pandas as pd # doctest: +SKIP
+        >>> import pandas as pd # doctest: +SKHOST
         ...
         >>> from pyspark.sql import Row
         >>> from pyspark.sql.functions import col, split
@@ -467,7 +467,7 @@ class PandasGroupedOpsMixin:
 
         >>> df.groupBy("value").transformWithStateInPandas(statefulProcessor =
         ...     SimpleStatefulProcessor(), outputStructType=output_schema, outputMode="Update",
-        ...     timeMode="None") # doctest: +SKIP
+        ...     timeMode="None") # doctest: +SKHOST
 
         Output DataFrame:
         +---+-----+
@@ -557,17 +557,17 @@ class PandasGroupedOpsMixin:
         Examples
         --------
         >>> from pyspark.sql.functions import ceil
-        >>> import pyarrow  # doctest: +SKIP
-        >>> import pyarrow.compute as pc  # doctest: +SKIP
+        >>> import pyarrow  # doctest: +SKHOST
+        >>> import pyarrow.compute as pc  # doctest: +SKHOST
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))  # doctest: +SKHOST
         >>> def normalize(table):
         ...     v = table.column("v")
         ...     norm = pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1))
         ...     return table.set_column(1, "v", norm)
         >>> df.groupby("id").applyInArrow(
-        ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
+        ...     normalize, schema="id long, v double").show()  # doctest: +SKHOST
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
@@ -587,14 +587,14 @@ class PandasGroupedOpsMixin:
 
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))  # doctest: +SKHOST
         >>> def mean_func(key, table):
         ...     # key is a tuple of one pyarrow.Int64Scalar, which is the value
         ...     # of 'id' for the current group
         ...     mean = pc.mean(table.column("v"))
         ...     return pyarrow.Table.from_pydict({"id": [key[0].as_py()], "v": [mean.as_py()]})
         >>> df.groupby('id').applyInArrow(
-        ...     mean_func, schema="id long, v double")  # doctest: +SKIP
+        ...     mean_func, schema="id long, v double")  # doctest: +SKHOST
         +---+---+
         | id|  v|
         +---+---+
@@ -612,7 +612,7 @@ class PandasGroupedOpsMixin:
         ...         "v": [sum.as_py()]
         ...     })
         >>> df.groupby(df.id, ceil(df.v / 2)).applyInArrow(
-        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKIP
+        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKHOST
         +---+-----------+----+
         | id|ceil(v / 2)|   v|
         +---+-----------+----+
@@ -729,7 +729,7 @@ class PandasCogroupedOps:
         ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
         ...     asof_join, schema="time int, id int, v1 double, v2 string"
-        ... ).show()  # doctest: +SKIP
+        ... ).show()  # doctest: +SKHOST
         +--------+---+---+---+
         |    time| id| v1| v2|
         +--------+---+---+---+
@@ -752,7 +752,7 @@ class PandasCogroupedOps:
         ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
         ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-        ...     asof_join, "time int, id int, v1 double, v2 string").show()  # doctest: +SKIP
+        ...     asof_join, "time int, id int, v1 double, v2 string").show()  # doctest: +SKHOST
         +--------+---+---+---+
         |    time| id| v1| v2|
         +--------+---+---+---+
@@ -816,7 +816,7 @@ class PandasCogroupedOps:
 
         Examples
         --------
-        >>> import pyarrow  # doctest: +SKIP
+        >>> import pyarrow  # doctest: +SKHOST
         >>> df1 = spark.createDataFrame([(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)], ("id", "v1"))
         >>> df2 = spark.createDataFrame([(1, "x"), (2, "y")], ("id", "v2"))
         >>> def summarize(l, r):
@@ -826,7 +826,7 @@ class PandasCogroupedOps:
         ...     })
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
         ...     summarize, schema="left long, right long"
-        ... ).show()  # doctest: +SKIP
+        ... ).show()  # doctest: +SKHOST
         +----+-----+
         |left|right|
         +----+-----+
@@ -848,7 +848,7 @@ class PandasCogroupedOps:
         ...     })
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
         ...     summarize, schema="key long, left long, right long"
-        ... ).show()  # doctest: +SKIP
+        ... ).show()  # doctest: +SKHOST
         +---+----+-----+
         |key|left|right|
         +---+----+-----+
@@ -897,7 +897,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.pandas.group_ops,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )
     spark.stop()
     if failure_count:

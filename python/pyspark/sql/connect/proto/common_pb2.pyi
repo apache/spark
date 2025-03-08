@@ -46,12 +46,12 @@ if sys.version_info >= (3, 8):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class StorageLevel(google.protobuf.message.Message):
     """StorageLevel for persisting Datasets/Tables."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     USE_DISK_FIELD_NUMBER: builtins.int
     USE_MEMORY_FIELD_NUMBER: builtins.int
@@ -100,7 +100,7 @@ class ResourceInformation(google.protobuf.message.Message):
     The corresponding class is 'org.apache.spark.resource.ResourceInformation'
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
     ADDRESSES_FIELD_NUMBER: builtins.int
@@ -126,11 +126,11 @@ global___ResourceInformation = ResourceInformation
 class ExecutorResourceRequest(google.protobuf.message.Message):
     """An executor resource request."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     RESOURCE_NAME_FIELD_NUMBER: builtins.int
     AMOUNT_FIELD_NUMBER: builtins.int
-    DISCOVERY_SCRIPT_FIELD_NUMBER: builtins.int
+    DISCOVERY_SCRHOSTT_FIELD_NUMBER: builtins.int
     VENDOR_FIELD_NUMBER: builtins.int
     resource_name: builtins.str
     """(Required) resource name."""
@@ -192,7 +192,7 @@ global___ExecutorResourceRequest = ExecutorResourceRequest
 class TaskResourceRequest(google.protobuf.message.Message):
     """A task resource request."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     RESOURCE_NAME_FIELD_NUMBER: builtins.int
     AMOUNT_FIELD_NUMBER: builtins.int
@@ -218,10 +218,10 @@ class TaskResourceRequest(google.protobuf.message.Message):
 global___TaskResourceRequest = TaskResourceRequest
 
 class ResourceProfile(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ExecutorResourcesEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -242,7 +242,7 @@ class ResourceProfile(google.protobuf.message.Message):
         ) -> None: ...
 
     class TaskResourcesEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -298,7 +298,7 @@ class ResourceProfile(google.protobuf.message.Message):
 global___ResourceProfile = ResourceProfile
 
 class Origin(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PYTHON_ORIGIN_FIELD_NUMBER: builtins.int
     JVM_ORIGIN_FIELD_NUMBER: builtins.int
@@ -331,7 +331,7 @@ class Origin(google.protobuf.message.Message):
 global___Origin = Origin
 
 class PythonOrigin(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     FRAGMENT_FIELD_NUMBER: builtins.int
     CALL_SITE_FIELD_NUMBER: builtins.int
@@ -353,7 +353,7 @@ class PythonOrigin(google.protobuf.message.Message):
 global___PythonOrigin = PythonOrigin
 
 class JvmOrigin(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     LINE_FIELD_NUMBER: builtins.int
     START_POSITION_FIELD_NUMBER: builtins.int
@@ -498,7 +498,7 @@ global___JvmOrigin = JvmOrigin
 class StackTraceElement(google.protobuf.message.Message):
     """A message to hold a [[java.lang.StackTraceElement]]."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     CLASS_LOADER_NAME_FIELD_NUMBER: builtins.int
     MODULE_NAME_FIELD_NUMBER: builtins.int
@@ -600,7 +600,7 @@ class StackTraceElement(google.protobuf.message.Message):
 global___StackTraceElement = StackTraceElement
 
 class Bools(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUES_FIELD_NUMBER: builtins.int
     @property
@@ -617,7 +617,7 @@ class Bools(google.protobuf.message.Message):
 global___Bools = Bools
 
 class Ints(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUES_FIELD_NUMBER: builtins.int
     @property
@@ -634,7 +634,7 @@ class Ints(google.protobuf.message.Message):
 global___Ints = Ints
 
 class Longs(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUES_FIELD_NUMBER: builtins.int
     @property
@@ -651,7 +651,7 @@ class Longs(google.protobuf.message.Message):
 global___Longs = Longs
 
 class Floats(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUES_FIELD_NUMBER: builtins.int
     @property
@@ -668,7 +668,7 @@ class Floats(google.protobuf.message.Message):
 global___Floats = Floats
 
 class Doubles(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUES_FIELD_NUMBER: builtins.int
     @property
@@ -685,7 +685,7 @@ class Doubles(google.protobuf.message.Message):
 global___Doubles = Doubles
 
 class Strings(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUES_FIELD_NUMBER: builtins.int
     @property

@@ -1033,7 +1033,7 @@ object SQLConf {
       .checkValue(_ >= 0, "The maximum must not be negative")
       .createWithDefault(100)
 
-  val SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR =
+  val SUBEXPRESSION_ELIMINATION_SKHOST_FOR_SHORTCUT_EXPR =
     buildConf("spark.sql.subexpressionElimination.skipForShortcutExpr")
       .internal()
       .doc("When true, shortcut eliminate subexpression with `AND`, `OR`. " +
@@ -2245,7 +2245,7 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
-  val FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS =
+  val FLATMAPGROUPSWITHSTATE_SKHOST_EMITTING_INITIAL_STATE_KEYS =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.skipEmittingInitialStateKeys")
       .internal()
       .doc("When true, the flatMapGroupsWithState operation in a streaming query will not emit " +
@@ -2470,7 +2470,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATEFUL_OPERATOR_ALLOW_MULTIPLE =
+  val STATEFUL_OPERATOR_ALLOW_MULTHOSTLE =
     buildConf("spark.sql.streaming.statefulOperator.allowMultiple")
       .internal()
       .doc("When true, multiple stateful operators are allowed to be present in a streaming " +
@@ -2518,7 +2518,7 @@ object SQLConf {
    * Its possible for us to see nulls if state was written with an older version of Spark,
    * the state was corrupted on disk or if we had an issue with the state iterators.
    */
-  val STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS =
+  val STATE_STORE_SKHOST_NULLS_FOR_STREAM_STREAM_JOINS =
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
     .doc("When true, this config will skip null values in hash based stream-stream joins. " +
@@ -2725,7 +2725,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS =
+  val ALLOW_TEMP_VIEW_CREATION_WITH_MULTHOSTLE_NAME_PARTS =
     buildConf("spark.sql.legacy.allowTempViewCreationWithMultipleNameparts")
       .internal()
       .doc("When true, temp view creation Dataset APIs will allow the view creation even if " +
@@ -2751,7 +2751,7 @@ object SQLConf {
       .stringConf
       .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol")
 
-  val STREAMING_MULTIPLE_WATERMARK_POLICY =
+  val STREAMING_MULTHOSTLE_WATERMARK_POLICY =
     buildConf("spark.sql.streaming.multipleWatermarkPolicy")
       .doc("Policy to calculate the global watermark value when there are multiple watermark " +
         "operators in a streaming query. The default value is 'min' which chooses " +
@@ -3179,7 +3179,7 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
-  val SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED =
+  val SHUFFLE_DEPENDENCY_SKHOST_MIGRATION_ENABLED =
     buildConf("spark.sql.shuffleDependency.skipMigration.enabled")
       .doc("When enabled, shuffle dependencies for a Spark Connect SQL execution are marked at " +
         "the end of the execution, and they will not be migrated during decommissions.")
@@ -3236,7 +3236,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
+  val TVF_ALLOW_MULTHOSTLE_TABLE_ARGUMENTS_ENABLED =
     buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
       .doc("When true, allows multiple table arguments for table-valued functions, " +
         "receiving the cartesian product of all the rows of these tables.")
@@ -3616,7 +3616,7 @@ object SQLConf {
       .version("2.3.0")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
-  val SQL_SCRIPTING_ENABLED =
+  val SQL_SCRHOSTTING_ENABLED =
     buildConf("spark.sql.scripting.enabled")
       .doc("SQL Scripting feature is under development and its use should be done under this " +
         "feature flag. SQL Scripting enables users to write procedural SQL including control " +
@@ -3893,7 +3893,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
+  val SKHOST_TYPE_VALIDATION_ON_ALTER_PARTITION =
     buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")
       .internal()
       .doc("When true, skip validation for partition spec in ALTER PARTITION. E.g., " +
@@ -4923,7 +4923,7 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
-  val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
+  val SCRHOSTT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
       .internal()
       .doc("Timeout for executor to wait for the termination of transformation script when EOF.")
@@ -5337,7 +5337,7 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
-  val OPERATOR_PIPE_SYNTAX_ENABLED =
+  val OPERATOR_PHOSTE_SYNTAX_ENABLED =
     buildConf("spark.sql.operatorPipeSyntaxEnabled")
       .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +
         "pipe marker |> to indicate separation between clauses of SQL in a manner that describes " +
@@ -5774,7 +5774,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
 
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
-    getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
+    getConf(STATE_STORE_SKHOST_NULLS_FOR_STREAM_STREAM_JOINS)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
@@ -6069,7 +6069,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES)
 
   def subexpressionEliminationSkipForShotcutExpr: Boolean =
-    getConf(SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR)
+    getConf(SUBEXPRESSION_ELIMINATION_SKHOST_FOR_SHORTCUT_EXPR)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
@@ -6283,7 +6283,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
-  def tvfAllowMultipleTableArguments: Boolean = getConf(TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED)
+  def tvfAllowMultipleTableArguments: Boolean = getConf(TVF_ALLOW_MULTHOSTLE_TABLE_ARGUMENTS_ENABLED)
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
@@ -6552,7 +6552,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def globalTempDatabase: String = getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
 
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
-    getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
+    getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTHOSTLE_NAME_PARTS)
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
 

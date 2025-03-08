@@ -116,7 +116,7 @@ class SparkSubmitTests(unittest.TestCase):
             |print(sc.parallelize([1, 2, 3]).map(lambda x: x * 2).collect())
             """,
         )
-        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PHOSTE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 4, 6]", out.decode("utf-8"))
@@ -135,7 +135,7 @@ class SparkSubmitTests(unittest.TestCase):
             |print(sc.parallelize([1, 2, 3]).map(foo).collect())
             """,
         )
-        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PIPE)
+        proc = subprocess.Popen(self.sparkSubmit + [script], stdout=subprocess.PHOSTE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[3, 6, 9]", out.decode("utf-8"))
@@ -160,7 +160,7 @@ class SparkSubmitTests(unittest.TestCase):
             """,
         )
         proc = subprocess.Popen(
-            self.sparkSubmit + ["--py-files", zip, script], stdout=subprocess.PIPE
+            self.sparkSubmit + ["--py-files", zip, script], stdout=subprocess.PHOSTE
         )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -187,7 +187,7 @@ class SparkSubmitTests(unittest.TestCase):
         )
         proc = subprocess.Popen(
             self.sparkSubmit + ["--py-files", zip, "--master", "local-cluster[1,1,1024]", script],
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PHOSTE,
         )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -209,7 +209,7 @@ class SparkSubmitTests(unittest.TestCase):
         proc = subprocess.Popen(
             self.sparkSubmit
             + ["--packages", "a:mylib:0.1", "--repositories", "file:" + self.programDir, script],
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PHOSTE,
         )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -239,7 +239,7 @@ class SparkSubmitTests(unittest.TestCase):
                 "local-cluster[1,1,1024]",
                 script,
             ],
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PHOSTE,
         )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -263,7 +263,7 @@ class SparkSubmitTests(unittest.TestCase):
         # in conf/spark-defaults.conf
         proc = subprocess.Popen(
             self.sparkSubmit + ["--master", "local-cluster[1,1,1024]", script],
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PHOSTE,
         )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -287,7 +287,7 @@ class SparkSubmitTests(unittest.TestCase):
         )
         proc = subprocess.Popen(
             self.sparkSubmit + ["--master", "local", script],
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PHOSTE,
             stderr=subprocess.STDOUT,
         )
         out, err = proc.communicate()

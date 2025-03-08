@@ -87,7 +87,7 @@ class ContinuousExecution(
           nextSourceId += 1
           logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
-            log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
+            log"${MDC(STREAMING_DATA_SOURCE_DESCRHOSTTION, dsStr)}")
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)

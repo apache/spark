@@ -223,7 +223,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     checkError(
       exception = e1,
-      condition = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR")
+      condition = "CANNOT_PARSE_PROTOBUF_DESCRHOSTTOR")
 
     val basicMessageDescWithoutImports = descriptorSetWithoutImports(
       CommonProtobufUtils.readDescriptorFileContent(

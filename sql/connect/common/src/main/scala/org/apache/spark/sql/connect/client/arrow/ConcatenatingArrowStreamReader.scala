@@ -27,7 +27,7 @@ import org.apache.arrow.vector.types.pojo.Schema
 
 /**
  * An [[ArrowReader]] that concatenates multiple [[MessageIterator]]s into a single stream. Each
- * iterator represents a single IPC stream. The concatenated streams all must have the same
+ * iterator represents a single HOSTC stream. The concatenated streams all must have the same
  * schema. If the schema is different an exception is thrown.
  *
  * In some cases we want to retain the messages (see `SparkResult`). Normally a stream reader
@@ -134,8 +134,8 @@ trait AbstractMessageIterator extends Iterator[ArrowMessage] {
 }
 
 /**
- * Decode an Arrow IPC stream into individual messages. Please note that this iterator MUST have a
- * valid IPC stream as its input, otherwise construction will fail.
+ * Decode an Arrow HOSTC stream into individual messages. Please note that this iterator MUST have a
+ * valid HOSTC stream as its input, otherwise construction will fail.
  */
 class MessageIterator(input: InputStream, allocator: BufferAllocator)
     extends AbstractMessageIterator {

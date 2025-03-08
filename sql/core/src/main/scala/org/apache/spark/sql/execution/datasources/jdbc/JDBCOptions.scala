@@ -229,7 +229,7 @@ class JDBCOptions(
     }
   }
   // The principal name of user's keytab file
-  val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
+  val principal = parameters.getOrElse(JDBC_PRINCHOSTAL, null)
 
   val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "")
 
@@ -322,7 +322,7 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_OFFSET = newOption("pushDownOffset")
   val JDBC_PUSHDOWN_TABLESAMPLE = newOption("pushDownTableSample")
   val JDBC_KEYTAB = newOption("keytab")
-  val JDBC_PRINCIPAL = newOption("principal")
+  val JDBC_PRINCHOSTAL = newOption("principal")
   val JDBC_TABLE_COMMENT = newOption("tableComment")
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")

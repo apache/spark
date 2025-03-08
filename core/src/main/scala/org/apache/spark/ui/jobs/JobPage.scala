@@ -33,7 +33,7 @@ import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
 
 /** Page showing statistics and stage list for a given job */
-private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("job") {
+private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUHOSTage("job") {
 
   private val TIMELINE_ENABLED = parent.conf.get(UI_TIMELINE_ENABLED)
   private val MAX_TIMELINE_STAGES = parent.conf.get(UI_TIMELINE_STAGES_MAXIMUM)

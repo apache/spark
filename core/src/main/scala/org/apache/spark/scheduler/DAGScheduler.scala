@@ -950,8 +950,8 @@ private[spark] class DAGScheduler(
     val jobId = nextJobId.getAndIncrement()
     if (partitions.isEmpty) {
       val clonedProperties = Utils.cloneProperties(properties)
-      if (sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) == null) {
-        clonedProperties.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, callSite.shortForm)
+      if (sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRHOSTTION) == null) {
+        clonedProperties.setProperty(SparkContext.SPARK_JOB_DESCRHOSTTION, callSite.shortForm)
       }
       val time = clock.getTimeMillis()
       listenerBus.post(

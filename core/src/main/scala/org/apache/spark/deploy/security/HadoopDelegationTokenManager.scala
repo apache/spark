@@ -67,7 +67,7 @@ private[spark] class HadoopDelegationTokenManager(
     protected val hadoopConf: Configuration,
     protected val schedulerRef: RpcEndpointRef) extends Logging {
 
-  private val principal = sparkConf.get(PRINCIPAL).orNull
+  private val principal = sparkConf.get(PRINCHOSTAL).orNull
 
   // The keytab can be a local: URI for cluster mode, so translate it to a regular path. If it is
   // needed later on, the code will check that it exists.
@@ -248,7 +248,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   private def doLogin(): UserGroupInformation = {
     if (principal != null) {
-      logInfo(log"Attempting to login to KDC using principal: ${MDC(LogKeys.PRINCIPAL, principal)}")
+      logInfo(log"Attempting to login to KDC using principal: ${MDC(LogKeys.PRINCHOSTAL, principal)}")
       require(new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
       logInfo("Successfully logged into KDC.")
@@ -256,7 +256,7 @@ private[spark] class HadoopDelegationTokenManager(
     } else if (!SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser())) {
       logInfo("Attempting to load user's ticket cache.")
       val ccache = sparkConf.getenv("KRB5CCNAME")
-      val user = Option(sparkConf.getenv("KRB5PRINCIPAL")).getOrElse(
+      val user = Option(sparkConf.getenv("KRB5PRINCHOSTAL")).getOrElse(
         UserGroupInformation.getCurrentUser().getUserName())
       UserGroupInformation.getUGIFromTicketCache(ccache, user)
     } else {

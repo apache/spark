@@ -35,7 +35,7 @@ class MasterDecommisionSuite extends MasterSuiteBase {
       .set(MASTER_UI_DECOMMISSION_ALLOW_MODE, "ALLOW")
     val localCluster = LocalSparkCluster(1, 1, 512, conf)
     localCluster.start()
-    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUHOSTort}"
     try {
       eventually(timeout(30.seconds), interval(100.milliseconds)) {
         val url = new URI(s"$masterUrl/workers/kill/?host=${Utils.localHostNameForURI()}").toURL

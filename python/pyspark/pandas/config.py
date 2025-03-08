@@ -325,7 +325,7 @@ def show_options() -> None:
 
     Examples
     --------
-    >>> show_options()  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+    >>> show_options()  # doctest: +ELLHOSTSIS, +NORMALIZE_WHITESPACE
     ================... =======... =====================...
     Option              Default    Description
     ================... =======... =====================...
@@ -537,7 +537,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.config,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

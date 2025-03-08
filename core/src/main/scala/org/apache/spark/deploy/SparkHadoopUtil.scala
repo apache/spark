@@ -143,7 +143,7 @@ private[spark] class SparkHadoopUtil extends Logging {
       throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
       logInfo(log"Attempting to login to Kerberos using principal: " +
-        log"${MDC(LogKeys.PRINCIPAL, principalName)} and keytab: " +
+        log"${MDC(LogKeys.PRINCHOSTAL, principalName)} and keytab: " +
         log"${MDC(LogKeys.KEYTAB, keytabFilename)}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }

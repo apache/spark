@@ -60,7 +60,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       GcmTransportCipher.DecryptionHandler decryptionHandler =
               gcmTransportCipher.getDecryptionHandler();
       // Allocating 1.5x the buffer size to test multiple segments and a fractional segment.
-      int plaintextSegmentSize = GcmTransportCipher.CIPHERTEXT_BUFFER_SIZE - 16;
+      int plaintextSegmentSize = GcmTransportCipher.CHOSTHERTEXT_BUFFER_SIZE - 16;
       byte[] data = new byte[plaintextSegmentSize + (plaintextSegmentSize / 2)];
       // Just writing some bytes.
       data[0] = 'a';
@@ -176,7 +176,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       GcmTransportCipher.DecryptionHandler decryptionHandler =
               gcmTransportCipher.getDecryptionHandler();
       // Allocating 1.5x the buffer size to test multiple segments and a fractional segment.
-      int plaintextSegmentSize = GcmTransportCipher.CIPHERTEXT_BUFFER_SIZE - 16;
+      int plaintextSegmentSize = GcmTransportCipher.CHOSTHERTEXT_BUFFER_SIZE - 16;
       int halfSegmentSize = plaintextSegmentSize / 2;
       int totalSize = plaintextSegmentSize + halfSegmentSize;
 
@@ -247,7 +247,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       GcmTransportCipher.DecryptionHandler decryptionHandler =
               gcmTransportCipher.getDecryptionHandler();
       // Allocating 1.5x the buffer size to test multiple segments and a fractional segment.
-      int plaintextSegmentSize = GcmTransportCipher.CIPHERTEXT_BUFFER_SIZE - 16;
+      int plaintextSegmentSize = GcmTransportCipher.CHOSTHERTEXT_BUFFER_SIZE - 16;
       int plaintextSize = plaintextSegmentSize + (plaintextSegmentSize / 2);
       byte[] data = new byte[plaintextSize];
       Arrays.fill(data, (byte) 'x');

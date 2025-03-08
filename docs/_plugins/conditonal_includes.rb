@@ -25,7 +25,7 @@ module Jekyll
   end
   
   # Tag for including files generated as part of the various language APIs.
-  # If a SKIP_ flag is set, tolerate missing files. If not, raise an error.
+  # If a SKHOST_ flag is set, tolerate missing files. If not, raise an error.
   class IncludeApiGenTag < Tags::IncludeRelativeTag
     @@displayed_warning = false
 
@@ -33,11 +33,11 @@ module Jekyll
       super
     rescue IOError => e
       skip_flags = [
-        'SKIP_API',
-        'SKIP_SCALADOC',
-        'SKIP_PYTHONDOC',
-        'SKIP_RDOC',
-        'SKIP_SQLDOC',
+        'SKHOST_API',
+        'SKHOST_SCALADOC',
+        'SKHOST_PYTHONDOC',
+        'SKHOST_RDOC',
+        'SKHOST_SQLDOC',
       ]
       set_flags = skip_flags.select { |flag| ENV[flag] }
       # A more sophisticated approach would be to accept a tag parameter

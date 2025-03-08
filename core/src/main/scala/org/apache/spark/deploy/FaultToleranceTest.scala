@@ -278,10 +278,10 @@ private object FaultToleranceTest extends App with Logging {
     var numAlive = 0
     var numStandby = 0
     var numLiveApps = 0
-    var liveWorkerIPs: Seq[String] = List()
+    var liveWorkerHOSTs: Seq[String] = List()
 
     def stateValid(): Boolean = {
-      workers.map(_.ip).forall(liveWorkerIPs.contains) &&
+      workers.map(_.ip).forall(liveWorkerHOSTs.contains) &&
         numAlive == 1 && numStandby == masters.size - 1 && numLiveApps >= 1
     }
 
@@ -300,7 +300,7 @@ private object FaultToleranceTest extends App with Logging {
             master.state match {
               case RecoveryState.ALIVE =>
                 numAlive += 1
-                liveWorkerIPs = master.liveWorkerIPs
+                liveWorkerHOSTs = master.liveWorkerHOSTs
               case RecoveryState.STANDBY =>
                 numStandby += 1
               case _ => // ignore
@@ -323,7 +323,7 @@ private object FaultToleranceTest extends App with Logging {
       case e: TimeoutException =>
         logError("Master states: " + masters.map(_.state))
         logError("Num apps: " + numLiveApps)
-        logError("IPs expected: " + workers.map(_.ip) + " / found: " + liveWorkerIPs)
+        logError("HOSTs expected: " + workers.map(_.ip) + " / found: " + liveWorkerHOSTs)
         throw new RuntimeException("Failed to get into acceptable cluster state after 2 min.", e)
     }
   }
@@ -343,7 +343,7 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
 
   implicit val formats: Formats = org.json4s.DefaultFormats
   var state: RecoveryState.Value = _
-  var liveWorkerIPs: List[String] = _
+  var liveWorkerHOSTs: List[String] = _
   var numLiveApps = 0
 
   logDebug("Created master: " + this)
@@ -356,9 +356,9 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
 
       val workers = json \ "workers"
       val liveWorkers = workers.children.filter(w => (w \ "state").extract[String] == "ALIVE")
-      // Extract the worker IP from "webuiaddress" (rather than "host") because the host name
-      // on containers is a weird hash instead of the actual IP address.
-      liveWorkerIPs = liveWorkers.map {
+      // Extract the worker HOST from "webuiaddress" (rather than "host") because the host name
+      // on containers is a weird hash instead of the actual HOST address.
+      liveWorkerHOSTs = liveWorkers.map {
         w => (w \ "webuiaddress").extract[String].stripPrefix("http://").stripSuffix(":8081")
       }
 
@@ -412,7 +412,7 @@ private object SparkDocker {
     val outFile = File.createTempFile("fault-tolerance-test", "", Utils.createTempDir())
     val outStream: FileWriter = new FileWriter(outFile)
     def findIpAndLog(line: String): Unit = {
-      if (line.startsWith("CONTAINER_IP=")) {
+      if (line.startsWith("CONTAINER_HOST=")) {
         val ip = line.split("=")(1)
         ipPromise.success(ip)
       }

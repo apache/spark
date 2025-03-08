@@ -2,7 +2,7 @@
 DROP TABLE IF EXISTS UserVisits_web_text_none;
 
 CREATE TABLE UserVisits_web_text_none (
-  sourceIP string,
+  sourceHOST string,
   destURL string,
   visitDate string,
   adRevenue float,
@@ -16,12 +16,12 @@ row format delimited fields terminated by '|'  stored as textfile;
 LOAD DATA LOCAL INPATH "../../data/files/UserVisits.dat" INTO TABLE UserVisits_web_text_none;
 
 explain 
-analyze table UserVisits_web_text_none compute statistics for columns sourceIP, avgTimeOnSite, adRevenue;
+analyze table UserVisits_web_text_none compute statistics for columns sourceHOST, avgTimeOnSite, adRevenue;
 
 explain extended
-analyze table UserVisits_web_text_none compute statistics for columns sourceIP, avgTimeOnSite, adRevenue;
+analyze table UserVisits_web_text_none compute statistics for columns sourceHOST, avgTimeOnSite, adRevenue;
 
-analyze table UserVisits_web_text_none compute statistics for columns sourceIP, avgTimeOnSite, adRevenue;
+analyze table UserVisits_web_text_none compute statistics for columns sourceHOST, avgTimeOnSite, adRevenue;
 
 CREATE TABLE empty_tab(
    a int,

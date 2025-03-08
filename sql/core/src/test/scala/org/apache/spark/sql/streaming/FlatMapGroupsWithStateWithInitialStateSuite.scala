@@ -355,7 +355,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   // they will not be emitted as part of the result with skipEmittingInitialStateKeys set to true
   testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
     s"skipEmittingInitialStateKeys=true") {
-    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "true") {
+    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKHOST_EMITTING_INITIAL_STATE_KEYS.key -> "true") {
       val initialState = Seq(
         ("apple", 1L),
         ("orange", 2L),
@@ -387,7 +387,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   // they will be emitted as part of the result with skipEmittedInitialStateKeys set to false
   testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
     s"skipEmittingInitialStateKeys=false") {
-    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "false") {
+    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKHOST_EMITTING_INITIAL_STATE_KEYS.key -> "false") {
       val initialState = Seq(
         ("apple", 1L),
         ("orange", 2L),
@@ -420,7 +420,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   Seq(true, false).foreach { skipEmittingInitialStateKeys =>
     testWithAllStateVersions("flatMapGroupsWithState - initial state and initial batch " +
       s"have same keys and skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
-      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
+      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKHOST_EMITTING_INITIAL_STATE_KEYS.key ->
         skipEmittingInitialStateKeys.toString) {
         val initialState = Seq(
           ("apple", 1L),
@@ -453,7 +453,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   Seq(true, false).foreach { skipEmittingInitialStateKeys =>
     testWithAllStateVersions("flatMapGroupsWithState - batch query and " +
       s"skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
-      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
+      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKHOST_EMITTING_INITIAL_STATE_KEYS.key ->
         skipEmittingInitialStateKeys.toString) {
         val initialState = Seq(
           ("apple", 1L),

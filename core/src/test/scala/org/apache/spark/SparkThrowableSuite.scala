@@ -189,7 +189,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(ex1.getMessage.contains("Cannot find main error class"))
 
     val ex2 = intercept[SparkException] {
-      getMessage("LOREM_IPSUM", Map.empty[String, String])
+      getMessage("LOREM_HOSTSUM", Map.empty[String, String])
     }
     assert(ex2.getMessage.contains("Cannot find main error class"))
   }

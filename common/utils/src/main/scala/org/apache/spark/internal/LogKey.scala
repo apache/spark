@@ -200,7 +200,7 @@ private[spark] object LogKeys {
   case object DELTA extends LogKey
   case object DEPRECATED_KEY extends LogKey
   case object DERIVATIVE extends LogKey
-  case object DESCRIPTION extends LogKey
+  case object DESCRHOSTTION extends LogKey
   case object DESIRED_NUM_PARTITIONS extends LogKey
   case object DESIRED_TREE_DEPTH extends LogKey
   case object DESTINATION_PATH extends LogKey
@@ -550,7 +550,7 @@ private[spark] object LogKeys {
   case object NUM_ROWS extends LogKey
   case object NUM_RULE_OF_RUNS extends LogKey
   case object NUM_SEQUENCES extends LogKey
-  case object NUM_SKIPPED extends LogKey
+  case object NUM_SKHOSTPED extends LogKey
   case object NUM_SLOTS extends LogKey
   case object NUM_SPILLS extends LogKey
   case object NUM_SPILL_WRITERS extends LogKey
@@ -603,7 +603,7 @@ private[spark] object LogKeys {
   case object PEER extends LogKey
   case object PENDING_TIMES extends LogKey
   case object PERCENT extends LogKey
-  case object PIPELINE_STAGE_UID extends LogKey
+  case object PHOSTELINE_STAGE_UID extends LogKey
   case object PLUGIN_NAME extends LogKey
   case object POD_ID extends LogKey
   case object POD_NAME extends LogKey
@@ -621,7 +621,7 @@ private[spark] object LogKeys {
   case object PREFERRED_SERVICE_NAME extends LogKey
   case object PREFIX extends LogKey
   case object PRETTY_ID_STRING extends LogKey
-  case object PRINCIPAL extends LogKey
+  case object PRINCHOSTAL extends LogKey
   case object PROCESS extends LogKey
   case object PROCESSING_TIME extends LogKey
   case object PRODUCER_ID extends LogKey
@@ -660,7 +660,7 @@ private[spark] object LogKeys {
   case object RDD extends LogKey
   case object RDD_CHECKPOINT_DIR extends LogKey
   case object RDD_DEBUG_STRING extends LogKey
-  case object RDD_DESCRIPTION extends LogKey
+  case object RDD_DESCRHOSTTION extends LogKey
   case object RDD_ID extends LogKey
   case object READ_LIMIT extends LogKey
   case object REASON extends LogKey
@@ -791,7 +791,7 @@ private[spark] object LogKeys {
   case object STORE_ID extends LogKey
   case object STRATEGY extends LogKey
   case object STREAMING_CONTEXT extends LogKey
-  case object STREAMING_DATA_SOURCE_DESCRIPTION extends LogKey
+  case object STREAMING_DATA_SOURCE_DESCRHOSTTION extends LogKey
   case object STREAMING_DATA_SOURCE_NAME extends LogKey
   case object STREAMING_OFFSETS_END extends LogKey
   case object STREAMING_OFFSETS_START extends LogKey
@@ -841,7 +841,7 @@ private[spark] object LogKeys {
   case object TIMER extends LogKey
   case object TIMESTAMP extends LogKey
   case object TIME_UNITS extends LogKey
-  case object TIP extends LogKey
+  case object THOST extends LogKey
   case object TOKEN extends LogKey
   case object TOKEN_KIND extends LogKey
   case object TOKEN_REGEX extends LogKey

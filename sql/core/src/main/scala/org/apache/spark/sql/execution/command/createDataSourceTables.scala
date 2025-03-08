@@ -203,7 +203,7 @@ case class CreateDataSourceTableAsSelectCommand(
           sessionState.executePlan(RepairTableCommand(
             table.identifier,
             enableAddPartitions = true,
-            enableDropPartitions = false), CommandExecutionMode.SKIP).toRdd
+            enableDropPartitions = false), CommandExecutionMode.SKHOST).toRdd
         case _ =>
       }
     }

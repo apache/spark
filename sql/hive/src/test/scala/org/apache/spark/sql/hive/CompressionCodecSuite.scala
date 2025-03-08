@@ -291,10 +291,10 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       tableCompressCodecs = List(
         ParquetCompressionCodec.UNCOMPRESSED.name,
         ParquetCompressionCodec.SNAPPY.name,
-        ParquetCompressionCodec.GZIP.name),
+        ParquetCompressionCodec.GZHOST.name),
       sessionCompressCodecs = List(
         ParquetCompressionCodec.SNAPPY.name,
-        ParquetCompressionCodec.GZIP.name,
+        ParquetCompressionCodec.GZHOST.name,
         ParquetCompressionCodec.SNAPPY.name))
     checkForTableWithCompressProp("orc",
       tableCompressCodecs =
@@ -315,7 +315,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       sessionCompressCodecs = List(
         ParquetCompressionCodec.UNCOMPRESSED.name,
         ParquetCompressionCodec.SNAPPY.name,
-        ParquetCompressionCodec.GZIP.name))
+        ParquetCompressionCodec.GZHOST.name))
     checkForTableWithCompressProp("orc",
       tableCompressCodecs = List.empty,
       sessionCompressCodecs =
@@ -360,7 +360,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       List(
         ParquetCompressionCodec.UNCOMPRESSED.name,
         ParquetCompressionCodec.SNAPPY.name,
-        ParquetCompressionCodec.GZIP.name))
+        ParquetCompressionCodec.GZHOST.name))
     checkTableWriteWithCompressionCodecs(
       "orc",
       List(

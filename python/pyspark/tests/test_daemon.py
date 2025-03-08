@@ -27,7 +27,7 @@ class DaemonTests(unittest.TestCase):
         from socket import socket, AF_INET, AF_INET6, SOCK_STREAM
 
         family, host = AF_INET, "127.0.0.1"
-        if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+        if os.environ.get("SPARK_PREFER_HOSTV6", "false").lower() == "true":
             family, host = AF_INET6, "::1"
         sock = socket(family, SOCK_STREAM)
         sock.connect((host, port))
@@ -37,13 +37,13 @@ class DaemonTests(unittest.TestCase):
         return True
 
     def do_termination_test(self, terminator):
-        from subprocess import Popen, PIPE
+        from subprocess import Popen, PHOSTE
         from errno import ECONNREFUSED
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "..", "daemon.py")
         python_exec = sys.executable or os.environ.get("PYSPARK_PYTHON")
-        daemon = Popen([python_exec, daemon_path], stdin=PIPE, stdout=PIPE)
+        daemon = Popen([python_exec, daemon_path], stdin=PHOSTE, stdout=PHOSTE)
 
         # read the port number
         port = read_int(daemon.stdout)

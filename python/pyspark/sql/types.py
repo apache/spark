@@ -3327,7 +3327,7 @@ def _test() -> None:
     globs = globals()
     globs["spark"] = SparkSession.builder.getOrCreate()
     (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+        globs=globs, optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE
     )
     if failure_count:
         sys.exit(-1)

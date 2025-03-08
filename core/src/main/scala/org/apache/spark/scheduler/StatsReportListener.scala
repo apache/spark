@@ -112,7 +112,7 @@ private[spark] object StatsReportListener extends Logging {
   def showDistribution(heading: String, d: Distribution, formatNumber: Double => String): Unit = {
     val stats = d.statCounter
     val quantiles = d.getQuantiles(probabilities).map(formatNumber)
-    logInfo(log"${MDC(LogKeys.DESCRIPTION, heading)}${MDC(LogKeys.STATS, stats)}")
+    logInfo(log"${MDC(LogKeys.DESCRHOSTTION, heading)}${MDC(LogKeys.STATS, stats)}")
     logInfo(percentilesHeader)
     logInfo(log"\t" + log"${MDC(LogKeys.QUANTILES, quantiles.mkString("\t"))}")
   }

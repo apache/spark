@@ -186,9 +186,9 @@ def load_model(
     >>> features = df[["x1", "x2"]]
     >>> y = model.predict(features)
     >>> # Works:
-    >>> features["y"] = y   # doctest: +SKIP
+    >>> features["y"] = y   # doctest: +SKHOST
     >>> # Will fail with a message about dataframes not aligned.
-    >>> df["y"] = y   # doctest: +SKIP
+    >>> df["y"] = y   # doctest: +SKHOST
 
     A current workaround is to use the .merge() function, using the feature values
     as merging keys.
@@ -219,7 +219,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.mlflow,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

@@ -29,7 +29,7 @@ import org.apache.spark.ui.storage.ToolTips._
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
-private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends WebUIPage("") {
+private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends WebUHOSTage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content = rddTable(request, store.rddList()) ++

@@ -310,7 +310,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("monitor app using launcher library") {
     val env = new JHashMap[String, String]()
     env.put("YARN_CONF_DIR", hadoopConfDir.getAbsolutePath())
-    env.put("SPARK_PREFER_IPV6", Utils.preferIPv6.toString)
+    env.put("SPARK_PREFER_HOSTV6", Utils.preferHOSTv6.toString)
 
     val propsFile = createConfFile()
     val handle = new SparkLauncher(env)
@@ -429,7 +429,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/${PythonUtils.PY4J_ZIP_NAME}",
+        s"$sparkHome/python/lib/${PythonUtils.PY4J_ZHOST_NAME}",
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),

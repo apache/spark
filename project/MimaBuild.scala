@@ -57,7 +57,7 @@ object MimaBuild {
     ProblemFilters.exclude[Problem]("org.apache.spark." + packageName + ".*")
   }
 
-  def ignoredABIProblems(base: File, currentSparkVersion: String) = {
+  def ignoredABHOSTroblems(base: File, currentSparkVersion: String) = {
 
     // Excludes placed here will be used for all Spark versions
     val defaultExcludes = Seq()
@@ -93,7 +93,7 @@ object MimaBuild {
     Seq(
       mimaFailOnNoPrevious := true,
       mimaPreviousArtifacts := Set(organization %% id % previousSparkVersion),
-      mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value)
+      mimaBinaryIssueFilters ++= ignoredABHOSTroblems(sparkHome, version.value)
     )
   }
 

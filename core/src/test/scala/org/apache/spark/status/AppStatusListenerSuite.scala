@@ -163,7 +163,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     val jobProps = new Properties()
-    jobProps.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, "jobDescription")
+    jobProps.setProperty(SparkContext.SPARK_JOB_DESCRHOSTTION, "jobDescription")
     jobProps.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "jobGroup")
     jobProps.setProperty(SparkContext.SPARK_SCHEDULER_POOL, "schedPool")
 
@@ -1229,7 +1229,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     stage1.completionTime = Some(time)
     listener.onStageCompleted(SparkListenerStageCompleted(stage1))
 
-    // Stop job 1 and stage 2 will become SKIPPED
+    // Stop job 1 and stage 2 will become SKHOSTPED
     time += 1
     listener.onJobEnd(SparkListenerJobEnd(1, time, JobSucceeded))
 

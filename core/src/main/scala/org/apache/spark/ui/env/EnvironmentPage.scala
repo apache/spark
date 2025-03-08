@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
 private[ui] class EnvironmentPage(
     parent: EnvironmentTab,
     conf: SparkConf,
-    store: AppStatusStore) extends WebUIPage("") {
+    store: AppStatusStore) extends WebUHOSTage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appEnv = store.environmentInfo()

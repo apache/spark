@@ -84,7 +84,7 @@ case "$1" in
     CMD=(
       "$SPARK_HOME/bin/spark-submit"
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
-      --conf "spark.executorEnv.SPARK_DRIVER_POD_IP=$SPARK_DRIVER_BIND_ADDRESS"
+      --conf "spark.executorEnv.SPARK_DRIVER_POD_HOST=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
       "$@"
     )
@@ -102,7 +102,7 @@ case "$1" in
       --executor-id $SPARK_EXECUTOR_ID
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
-      --hostname $SPARK_EXECUTOR_POD_IP
+      --hostname $SPARK_EXECUTOR_POD_HOST
       --resourceProfileId $SPARK_RESOURCE_PROFILE_ID
       --podName $SPARK_EXECUTOR_POD_NAME
     )

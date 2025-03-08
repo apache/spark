@@ -50,7 +50,7 @@ def sql(
     in the SQL statement by wrapping them in curly braces. See examples section for details.
 
     In addition to the locals, globals and parameters, the function will also attempt
-    to determine if the program currently runs in an IPython (or Jupyter) environment
+    to determine if the program currently runs in an HOSTython (or Jupyter) environment
     and to import the variables from this environment. The variables have the same
     precedence as globals.
 
@@ -213,10 +213,10 @@ def _get_local_scope() -> Dict[str, Any]:
 def _get_ipython_scope() -> Dict[str, Any]:
     """
     Tries to extract the dictionary of variables if the program is running
-    in an IPython notebook environment.
+    in an HOSTython notebook environment.
     """
     try:
-        from IPython import get_ipython
+        from HOSTython import get_ipython
 
         shell = get_ipython()
         return shell.user_ns
@@ -379,7 +379,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.sql_processor,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

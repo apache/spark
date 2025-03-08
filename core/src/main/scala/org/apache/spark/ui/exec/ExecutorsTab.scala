@@ -22,7 +22,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUHOSTage}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
 
@@ -49,7 +49,7 @@ private[ui] class ExecutorsPage(
     parent: SparkUITab,
     threadDumpEnabled: Boolean,
     heapHistogramEnabled: Boolean)
-  extends WebUIPage("") {
+  extends WebUHOSTage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val imported = UIUtils.formatImportJavaScript(

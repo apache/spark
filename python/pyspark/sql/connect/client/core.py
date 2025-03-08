@@ -1882,7 +1882,7 @@ class SparkConnectClient(object):
         status = rpc_status.from_call(cast(grpc.Call, rpc_error))
         if status:
             for d in status.details:
-                if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
+                if d.Is(error_details_pb2.ErrorInfo.DESCRHOSTTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
                     logger.debug(f"Received ErrorInfo: {info}")

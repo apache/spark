@@ -273,7 +273,7 @@ class SparkConf:
 def _test() -> None:
     import doctest
 
-    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLHOSTSIS)
     if failure_count:
         sys.exit(-1)
 

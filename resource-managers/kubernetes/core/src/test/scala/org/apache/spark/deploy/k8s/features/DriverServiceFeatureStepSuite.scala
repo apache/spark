@@ -152,7 +152,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(e1.getMessage ===
       s"requirement failed: ${DriverServiceFeatureStep.DRIVER_BIND_ADDRESS_KEY} is" +
       " not supported in Kubernetes mode, as the driver's bind address is managed" +
-      " and set to the driver pod's IP address.")
+      " and set to the driver pod's HOST address.")
 
     sparkConf.remove(DRIVER_BIND_ADDRESS)
     sparkConf.set(DRIVER_HOST_ADDRESS, "host")
@@ -166,7 +166,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       " a Kubernetes service.")
   }
 
-  test("Support ipFamilies spec with default SingleStack and IPv4") {
+  test("Support ipFamilies spec with default SingleStack and HOSTv4") {
     val sparkConf = new SparkConf(false)
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
@@ -181,12 +181,12 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       .asInstanceOf[Service]
     assert(driverService.getSpec.getIpFamilyPolicy() == "SingleStack")
     assert(driverService.getSpec.getIpFamilies.size() === 1)
-    assert(driverService.getSpec.getIpFamilies.get(0) == "IPv4")
+    assert(driverService.getSpec.getIpFamilies.get(0) == "HOSTv4")
   }
 
-  test("Support ipFamilies spec with SingleStack and IPv6") {
+  test("Support ipFamilies spec with SingleStack and HOSTv6") {
     val sparkConf = new SparkConf(false)
-      .set(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, "IPv6")
+      .set(KUBERNETES_DRIVER_SERVICE_HOST_FAMILIES, "HOSTv6")
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       labels = DRIVER_LABELS,
@@ -200,18 +200,18 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       .asInstanceOf[Service]
     assert(driverService.getSpec.getIpFamilyPolicy() == "SingleStack")
     assert(driverService.getSpec.getIpFamilies.size() === 1)
-    assert(driverService.getSpec.getIpFamilies.get(0) == "IPv6")
+    assert(driverService.getSpec.getIpFamilies.get(0) == "HOSTv6")
   }
 
   test("Support DualStack") {
     Seq("PreferDualStack", "RequireDualStack").foreach { stack =>
       val configAndAnswers = Seq(
-        ("IPv4,IPv6", Seq("IPv4", "IPv6")),
-        ("IPv6,IPv4", Seq("IPv6", "IPv4")))
+        ("HOSTv4,HOSTv6", Seq("HOSTv4", "HOSTv6")),
+        ("HOSTv6,HOSTv4", Seq("HOSTv6", "HOSTv4")))
       configAndAnswers.foreach { case (config, answer) =>
         val sparkConf = new SparkConf(false)
-          .set(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY, stack)
-          .set(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, config)
+          .set(KUBERNETES_DRIVER_SERVICE_HOST_FAMILY_POLICY, stack)
+          .set(KUBERNETES_DRIVER_SERVICE_HOST_FAMILIES, config)
         val kconf = KubernetesTestConf.createDriverConf(
           sparkConf = sparkConf,
           labels = DRIVER_LABELS,
@@ -232,14 +232,14 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
   private def verifyService(
       driverPort: Int,
       blockManagerPort: Int,
-      drierUIPort: Int,
+      drierUHOSTort: Int,
       expectedServiceName: String,
       appId: String,
       service: Service): Unit = {
     assert(service.getMetadata.getName === expectedServiceName)
     assert(service.getMetadata.getLabels.containsKey(SPARK_APP_ID_LABEL) &&
       service.getMetadata.getLabels.get(SPARK_APP_ID_LABEL).equals(appId))
-    assert(service.getSpec.getClusterIP === "None")
+    assert(service.getSpec.getClusterHOST === "None")
     DRIVER_LABELS.foreach { case (k, v) =>
       assert(service.getSpec.getSelector.get(k) === v)
     }
@@ -258,7 +258,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(driverServicePorts(1).getPort.intValue() === blockManagerPort)
     assert(driverServicePorts(1).getTargetPort.getIntVal === blockManagerPort)
     assert(driverServicePorts(2).getName === UI_PORT_NAME)
-    assert(driverServicePorts(2).getPort.intValue() === drierUIPort)
-    assert(driverServicePorts(2).getTargetPort.getIntVal === drierUIPort)
+    assert(driverServicePorts(2).getPort.intValue() === drierUHOSTort)
+    assert(driverServicePorts(2).getTargetPort.getIntVal === drierUHOSTort)
   }
 }

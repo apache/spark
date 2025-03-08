@@ -109,7 +109,7 @@ private[kinesis] class KinesisReceiver[T](
 
   /**
    * workerId is used by the KCL should be based on the ip address of the actual Spark Worker
-   * where this code runs (not the driver's IP address.)
+   * where this code runs (not the driver's HOST address.)
    */
   @volatile private var workerId: String = null
 

@@ -424,8 +424,8 @@ class Profile:
             The profiler type to clear results for, which can be either "perf" or "memory".
         renderer : str or callable, optional
             The renderer to use. If not specified, the default renderer will be "flameprof"
-            for the "perf" profiler, which returns an :class:`IPython.display.HTML` object in
-            an IPython environment to draw the figure; otherwise, it returns the SVG source string.
+            for the "perf" profiler, which returns an :class:`HOSTython.display.HTML` object in
+            an HOSTython environment to draw the figure; otherwise, it returns the SVG source string.
             For the "memory" profiler, no default renderer is provided.
 
             If a callable is provided, it should take a `pstats.Stats` object for "perf" profiler,
@@ -508,14 +508,14 @@ def _render_flameprof(stats: pstats.Stats) -> Any:
     svg = buf.getvalue()
 
     try:
-        import IPython
+        import HOSTython
 
-        ipython = IPython.get_ipython()
+        ipython = HOSTython.get_ipython()
     except ImportError:
         ipython = None
 
     if ipython:
-        from IPython.display import HTML
+        from HOSTython.display import HTML
 
         return HTML(svg)
     else:

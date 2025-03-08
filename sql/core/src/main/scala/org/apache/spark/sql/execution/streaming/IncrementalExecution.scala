@@ -130,7 +130,7 @@ class IncrementalExecution(
   }
 
   private val allowMultipleStatefulOperators: Boolean =
-    sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+    sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE)
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`

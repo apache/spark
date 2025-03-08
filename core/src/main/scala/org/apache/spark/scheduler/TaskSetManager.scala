@@ -79,12 +79,12 @@ private[spark] class TaskSetManager(
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
   private val efficientTaskProcessMultiplier =
-    conf.get(SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER)
+    conf.get(SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTHOSTLIER)
   private val efficientTaskDurationFactor = conf.get(SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR)
 
   // Quantile of tasks at which to start speculation
   val speculationQuantile = conf.get(SPECULATION_QUANTILE)
-  val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
+  val speculationMultiplier = conf.get(SPECULATION_MULTHOSTLIER)
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
@@ -1033,7 +1033,7 @@ private[spark] class TaskSetManager(
             log"Lost ${MDC(TASK_NAME, task)} on ${MDC(HOST, info.host)}, " +
             log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}: " +
             log"${MDC(CLASS_NAME, ef.className)} " +
-            log"(${MDC(DESCRIPTION, ef.description)}) [duplicate ${MDC(COUNT, dupCount)}]")
+            log"(${MDC(DESCRHOSTTION, ef.description)}) [duplicate ${MDC(COUNT, dupCount)}]")
         }
         ef.exception
 

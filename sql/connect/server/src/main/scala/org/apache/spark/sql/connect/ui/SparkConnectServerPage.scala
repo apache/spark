@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 
 /** Page for Spark UI that shows statistics for a Spark Connect Server. */
 private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
-    extends WebUIPage("")
+    extends WebUHOSTage("")
     with Logging {
 
   private val store = parent.store

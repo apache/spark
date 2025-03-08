@@ -349,8 +349,8 @@ object HistoryServer extends Logging {
     // occur from the keytab.
     if (conf.get(History.KERBEROS_ENABLED)) {
       // if you have enabled kerberos the following 2 params must be set
-      val principalName = conf.get(History.KERBEROS_PRINCIPAL)
-        .getOrElse(throw new NoSuchElementException(History.KERBEROS_PRINCIPAL.key))
+      val principalName = conf.get(History.KERBEROS_PRINCHOSTAL)
+        .getOrElse(throw new NoSuchElementException(History.KERBEROS_PRINCHOSTAL.key))
       val keytabFilename = conf.get(History.KERBEROS_KEYTAB)
         .getOrElse(throw new NoSuchElementException(History.KERBEROS_KEYTAB.key))
       SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)

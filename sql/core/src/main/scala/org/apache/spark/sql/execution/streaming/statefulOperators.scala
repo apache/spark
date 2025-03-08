@@ -466,7 +466,7 @@ trait WatermarkSupport extends SparkPlan {
     watermarkExpression(eventTimeWatermarkForEviction)
 
   lazy val allowMultipleStatefulOperators: Boolean =
-    conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+    conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE)
 
   /** Generate an expression that matches data older than the watermark */
   private def watermarkExpression(watermark: Option[Long]): Option[Expression] = {

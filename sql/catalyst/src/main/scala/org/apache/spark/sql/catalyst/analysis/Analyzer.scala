@@ -3967,7 +3967,7 @@ object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
  */
 object ResolveExpressionsWithNamePlaceholders extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
-    _.containsAnyPattern(ARRAYS_ZIP, CREATE_NAMED_STRUCT), ruleId) {
+    _.containsAnyPattern(ARRAYS_ZHOST, CREATE_NAMED_STRUCT), ruleId) {
     case e: ArraysZip if !e.resolved =>
       val names = e.children.zip(e.names).map {
         case (e: NamedExpression, NamePlaceholder) if e.resolved =>

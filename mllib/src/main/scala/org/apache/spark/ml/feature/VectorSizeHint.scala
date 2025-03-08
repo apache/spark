@@ -118,13 +118,13 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
               lit(s"VectorSizeHint Expecting a vector of size $localSize but got "),
               sizeCol.cast(StringType))))
             .otherwise(vecCol)
-        case VectorSizeHint.SKIP_INVALID =>
+        case VectorSizeHint.SKHOST_INVALID =>
           when(!vecCol.isNull && sizeCol === localSize, vecCol)
             .otherwise(lit(null))
       }
 
       val res = dataset.withColumn(localInputCol, newVecCol, newGroup.toMetadata())
-      if (localHandleInvalid == VectorSizeHint.SKIP_INVALID) {
+      if (localHandleInvalid == VectorSizeHint.SKHOST_INVALID) {
         res.na.drop(Array(localInputCol))
       } else {
         res
@@ -182,9 +182,9 @@ object VectorSizeHint extends DefaultParamsReadable[VectorSizeHint] {
 
   private[feature] val OPTIMISTIC_INVALID = "optimistic"
   private[feature] val ERROR_INVALID = "error"
-  private[feature] val SKIP_INVALID = "skip"
+  private[feature] val SKHOST_INVALID = "skip"
   private[feature] val supportedHandleInvalids: Array[String] =
-    Array(OPTIMISTIC_INVALID, ERROR_INVALID, SKIP_INVALID)
+    Array(OPTIMISTIC_INVALID, ERROR_INVALID, SKHOST_INVALID)
 
   @Since("2.3.0")
   override def load(path: String): VectorSizeHint = super.load(path)

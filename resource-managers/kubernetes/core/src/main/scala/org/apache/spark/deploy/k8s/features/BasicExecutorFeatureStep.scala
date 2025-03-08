@@ -168,7 +168,7 @@ private[spark] class BasicExecutorFeatureStep(
           ++ allOpts) ++
       KubernetesUtils.buildEnvVarsWithFieldRef(
         Seq(
-          (ENV_EXECUTOR_POD_IP, "v1", "status.podIP"),
+          (ENV_EXECUTOR_POD_HOST, "v1", "status.podHOST"),
           (ENV_EXECUTOR_POD_NAME, "v1", "metadata.name")
         ))
     }
@@ -246,7 +246,7 @@ private[spark] class BasicExecutorFeatureStep(
         new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
           .withNewPreStop()
             .withNewExec()
-              .addToCommand(kubernetesConf.get(DECOMMISSION_SCRIPT))
+              .addToCommand(kubernetesConf.get(DECOMMISSION_SCRHOSTT))
             .endExec()
           .endPreStop()
           .endLifecycle()

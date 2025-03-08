@@ -1769,7 +1769,7 @@ if __name__ == "__main__":
     sc = spark.sparkContext
     globs["sc"] = sc
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

@@ -116,13 +116,13 @@ private[spark] object IvyTestUtils {
         |License: Apache License (== 2.0)
         |Collate: 'mylib.R'
       """.stripMargin
-    val descFile = writeFile(rFilesDir, "DESCRIPTION", description)
+    val descFile = writeFile(rFilesDir, "DESCRHOSTTION", description)
     val namespace =
       """import(SparkR)
         |export("myfunc")
       """.stripMargin
     val nameFile = writeFile(rFilesDir, "NAMESPACE", namespace)
-    Seq(("R/pkg/R/mylib.R", source), ("R/pkg/DESCRIPTION", descFile), ("R/pkg/NAMESPACE", nameFile))
+    Seq(("R/pkg/R/mylib.R", source), ("R/pkg/DESCRHOSTTION", descFile), ("R/pkg/NAMESPACE", nameFile))
   }
 
   /** Create a simple testable Class. */

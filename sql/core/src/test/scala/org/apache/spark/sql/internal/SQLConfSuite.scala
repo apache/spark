@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
 import org.apache.spark.sql.classic.{SparkSession, SQLContext}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec.{GZIP, LZO}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec.{GZHOST, LZO}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -380,8 +380,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       .get
     assert(displayValue === fallback.defaultValueString)
 
-    sqlConf.setConf(SQLConf.PARQUET_COMPRESSION, GZIP.lowerCaseName())
-    assert(spark.conf.get(fallback.key) === GZIP.lowerCaseName())
+    sqlConf.setConf(SQLConf.PARQUET_COMPRESSION, GZHOST.lowerCaseName())
+    assert(spark.conf.get(fallback.key) === GZHOST.lowerCaseName())
 
     sqlConf.setConf(fallback, LZO.lowerCaseName())
     assert(spark.conf.get(fallback.key) === LZO.lowerCaseName())

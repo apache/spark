@@ -49,7 +49,7 @@ function should_build {
   [ -z "$RELEASE_STEP" ] || [ "$WHAT" = "$RELEASE_STEP" ]
 }
 
-if should_build "tag" && [ $SKIP_TAG = 0 ]; then
+if should_build "tag" && [ $SKHOST_TAG = 0 ]; then
   run_silent "Creating release tag $RELEASE_TAG..." "tag.log" \
     "$SELF/release-tag.sh"
   echo "It may take some time for the tag to be synchronized to github."

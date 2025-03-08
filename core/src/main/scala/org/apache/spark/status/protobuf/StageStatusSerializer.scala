@@ -28,7 +28,7 @@ private[protobuf] object StageStatusSerializer {
       case StageStatus.COMPLETE => GStageStatus.STAGE_STATUS_COMPLETE
       case StageStatus.FAILED => GStageStatus.STAGE_STATUS_FAILED
       case StageStatus.PENDING => GStageStatus.STAGE_STATUS_PENDING
-      case StageStatus.SKIPPED => GStageStatus.STAGE_STATUS_SKIPPED
+      case StageStatus.SKHOSTPED => GStageStatus.STAGE_STATUS_SKHOSTPED
     }
   }
 
@@ -38,7 +38,7 @@ private[protobuf] object StageStatusSerializer {
       case GStageStatus.STAGE_STATUS_COMPLETE => StageStatus.COMPLETE
       case GStageStatus.STAGE_STATUS_FAILED => StageStatus.FAILED
       case GStageStatus.STAGE_STATUS_PENDING => StageStatus.PENDING
-      case GStageStatus.STAGE_STATUS_SKIPPED => StageStatus.SKIPPED
+      case GStageStatus.STAGE_STATUS_SKHOSTPED => StageStatus.SKHOSTPED
       case _ => null
     }
   }

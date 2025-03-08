@@ -339,7 +339,7 @@ if __name__ == "__main__":
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs["sc"] = SparkContext("local", "test")
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

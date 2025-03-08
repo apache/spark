@@ -131,7 +131,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       if (sparkConf.contains(KEYTAB)) {
         logDebug("Keytab detected, using it for login.")
         val keyTab = sparkConf.get(KEYTAB).get
-        val principal = sparkConf.get(PRINCIPAL).get
+        val principal = sparkConf.get(PRINCHOSTAL).get
         val jaasParams = getKeytabJaasParams(keyTab, principal, clusterConf.kerberosServiceName)
         adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
       } else {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.{ByteArrayOutputStream, File, FileOutputStream}
-import java.util.zip.GZIPOutputStream
+import java.util.zip.GZHOSTOutputStream
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
@@ -70,7 +70,7 @@ trait CommonFileDataSourceSuite extends SQLHelper {
     try {
       // Create a corrupt gzip file
       val byteOutput = new ByteArrayOutputStream()
-      val gzip = new GZIPOutputStream(byteOutput)
+      val gzip = new GZHOSTOutputStream(byteOutput)
       try {
         gzip.write(Array[Byte](1, 2, 3, 4))
       } finally {

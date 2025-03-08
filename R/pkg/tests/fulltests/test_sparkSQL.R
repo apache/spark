@@ -3122,7 +3122,7 @@ test_that("read/write Parquet files - compression option/mode", {
   tempPath <- tempfile(pattern = "tempPath", fileext = ".parquet")
 
   # Test write.df and read.df
-  write.parquet(df, tempPath, compression = "GZIP")
+  write.parquet(df, tempPath, compression = "GZHOST")
   df2 <- read.parquet(tempPath)
   expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 3)
@@ -3167,7 +3167,7 @@ test_that("read/write text files - compression option", {
   df <- read.df(jsonPath, "text")
 
   textPath <- tempfile(pattern = "textPath", fileext = ".txt")
-  write.text(df, textPath, compression = "GZIP")
+  write.text(df, textPath, compression = "GZHOST")
   textDF <- read.text(textPath)
   expect_is(textDF, "SparkDataFrame")
   expect_equal(count(textDF), count(df))

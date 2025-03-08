@@ -35,7 +35,7 @@ else
   SPARKR_SUPPRESS_DEPRECATION_WARNING=1 SPARK_TESTING=1 NOT_CRAN=true $FWDIR/../bin/spark-submit --jars $SPARK_JARS --driver-java-options "-Dlog4j.configurationFile=file:$FWDIR/log4j2.properties" --conf spark.hadoop.fs.defaultFS="file:///" --conf spark.driver.extraJavaOptions="-Dio.netty.tryReflectionSetAccessible=true -Xss4M" --conf spark.executor.extraJavaOptions="-Dio.netty.tryReflectionSetAccessible=true -Xss4M" $FWDIR/pkg/tests/run-all.R 2>&1 | tee -a $LOGFILE
 fi
 
-FAILED=$((PIPESTATUS[0]||$FAILED))
+FAILED=$((PHOSTESTATUS[0]||$FAILED))
 
 NUM_TEST_WARNING="$(grep -c -e 'Warnings ----------------' $LOGFILE)"
 
@@ -44,7 +44,7 @@ CRAN_CHECK_LOG_FILE=$FWDIR/cran-check.out
 rm -f $CRAN_CHECK_LOG_FILE
 
 NO_TESTS=1 NO_MANUAL=1 $FWDIR/check-cran.sh 2>&1 | tee -a $CRAN_CHECK_LOG_FILE
-FAILED=$((PIPESTATUS[0]||$FAILED))
+FAILED=$((PHOSTESTATUS[0]||$FAILED))
 
 NUM_CRAN_WARNING="$(grep -c WARNING$ $CRAN_CHECK_LOG_FILE)"
 NUM_CRAN_ERROR="$(grep -c ERROR$ $CRAN_CHECK_LOG_FILE)"

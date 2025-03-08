@@ -687,11 +687,11 @@ def assertDataFrameEqual(
     >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
     >>> assertDataFrameEqual(df1, list_of_rows)  # pass, actual and expected data are equal
 
-    >>> import pyspark.pandas as ps  # doctest: +SKIP
-    >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKIP
-    >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKIP
+    >>> import pyspark.pandas as ps  # doctest: +SKHOST
+    >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKHOST
+    >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKHOST
     >>> # pass, pandas-on-Spark DataFrames are equal
-    >>> assertDataFrameEqual(df1, df2)  # doctest: +SKIP
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +SKHOST
 
     >>> df1 = spark.createDataFrame(
     ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
@@ -1050,7 +1050,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

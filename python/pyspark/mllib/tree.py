@@ -877,7 +877,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[4]").appName("mllib.tree tests").getOrCreate()
     globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+        globs=globs, optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()
     if failure_count:

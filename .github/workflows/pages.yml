@@ -86,7 +86,7 @@ jobs:
           sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
           sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
           cd docs
-          SKIP_RDOC=1 bundle exec jekyll build
+          SKHOST_RDOC=1 bundle exec jekyll build
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

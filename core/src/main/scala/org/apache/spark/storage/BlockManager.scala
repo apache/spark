@@ -550,7 +550,7 @@ private[spark] class BlockManager(
       logInfo(log"external shuffle service port = ${MDC(PORT, externalShuffleServicePort)}")
       shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
         externalShuffleServicePort)
-      if (!isDriver && !(Utils.isTesting && conf.get(Tests.TEST_SKIP_ESS_REGISTER))) {
+      if (!isDriver && !(Utils.isTesting && conf.get(Tests.TEST_SKHOST_ESS_REGISTER))) {
         registerWithExternalShuffleServer()
       }
     }

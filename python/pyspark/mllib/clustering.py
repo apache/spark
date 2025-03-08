@@ -1308,7 +1308,7 @@ def _test() -> None:
         pass
     globs = pyspark.mllib.clustering.__dict__.copy()
     globs["sc"] = SparkContext("local[4]", "PythonTest", batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

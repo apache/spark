@@ -215,24 +215,24 @@ def build_error_docs
   || raise("Error doc generation failed")
 end
 
-if not (ENV['SKIP_ERRORDOC'] == '1')
+if not (ENV['SKHOST_ERRORDOC'] == '1')
   build_error_docs
 end
 
-if not (ENV['SKIP_API'] == '1')
-  if not (ENV['SKIP_SCALADOC'] == '1')
+if not (ENV['SKHOST_API'] == '1')
+  if not (ENV['SKHOST_SCALADOC'] == '1')
     build_scala_and_java_docs
   end
 
-  if not (ENV['SKIP_PYTHONDOC'] == '1')
+  if not (ENV['SKHOST_PYTHONDOC'] == '1')
     build_python_docs
   end
 
-  if not (ENV['SKIP_RDOC'] == '1')
+  if not (ENV['SKHOST_RDOC'] == '1')
     build_r_docs
   end
 
-  if not (ENV['SKIP_SQLDOC'] == '1')
+  if not (ENV['SKHOST_SQLDOC'] == '1')
     build_sql_docs
   end
 end

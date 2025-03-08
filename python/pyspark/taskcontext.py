@@ -88,7 +88,7 @@ class TaskContext:
 
     Get a task context instance from a dataframe via Pandas UDF.
 
-    >>> import pandas as pd  # doctest: +SKIP
+    >>> import pandas as pd  # doctest: +SKHOST
     >>> from pyspark.sql.functions import pandas_udf
     >>> @pandas_udf("STRUCT<"
     ...     "anum: INT, partid: INT, stageid: INT, taskaid: INT, prop: STRING, cpus: INT>")
@@ -101,12 +101,12 @@ class TaskContext:
     ...        "taskaid": [taskcontext.taskAttemptId()],
     ...        "prop": [taskcontext.getLocalProperty("key3")],
     ...        "cpus": [taskcontext.cpus()]
-    ...    })  # doctest: +SKIP
+    ...    })  # doctest: +SKHOST
     ...
-    >>> spark.sparkContext.setLocalProperty("key3", "value")  # doctest: +SKIP
+    >>> spark.sparkContext.setLocalProperty("key3", "value")  # doctest: +SKHOST
     >>> [(anum, partid, stageid, taskaid, prop, cpus)] = (
     ...     spark.range(1).select(taskcontext_as_row("id")).first()
-    ... )  # doctest: +SKIP
+    ... )  # doctest: +SKHOST
     >>> isinstance(anum, int)
     True
     >>> isinstance(partid, int)
@@ -475,7 +475,7 @@ class BarrierTaskInfo:
     Attributes
     ----------
     address : str
-        The IPv4 address (host:port) of the executor that the barrier task is running on
+        The HOSTv4 address (host:port) of the executor that the barrier task is running on
 
     Notes
     -----
@@ -495,7 +495,7 @@ def _test() -> None:
     globs["spark"] = (
         SparkSession.builder.master("local[2]").appName("taskcontext tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     globs["spark"].stop()
 
     if failure_count:

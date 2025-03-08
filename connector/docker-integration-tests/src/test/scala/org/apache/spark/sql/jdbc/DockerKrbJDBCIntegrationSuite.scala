@@ -78,7 +78,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     }
   }
 
-  protected def replaceIp(s: String): String = s.replace("__IP_ADDRESS_REPLACE_ME__", dockerIp)
+  protected def replaceIp(s: String): String = s.replace("__HOST_ADDRESS_REPLACE_ME__", dockerIp)
 
   protected def copyExecutableResource(
       fileName: String, dir: File, processLine: String => String = identity) = {

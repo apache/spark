@@ -1614,8 +1614,8 @@ object TestSettings {
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
     (Test / javaOptions) ++= {
-      if ("true".equals(System.getProperty("java.net.preferIPv6Addresses"))) {
-        Seq("-Djava.net.preferIPv6Addresses=true")
+      if ("true".equals(System.getProperty("java.net.preferHOSTv6Addresses"))) {
+        Seq("-Djava.net.preferHOSTv6Addresses=true")
       } else {
         Seq.empty
       }

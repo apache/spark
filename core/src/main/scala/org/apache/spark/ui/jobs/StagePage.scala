@@ -33,7 +33,7 @@ import org.apache.spark.ui.UIUtils.formatImportJavaScript
 import org.apache.spark.util.Utils
 
 /** Page showing statistics and task list for a given stage */
-private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends WebUIPage("stage") {
+private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends WebUHOSTage("stage") {
   import ApiHelper._
 
   private val TIMELINE_ENABLED = parent.conf.get(UI_TIMELINE_ENABLED)

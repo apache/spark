@@ -210,7 +210,7 @@ private[spark] class StandaloneSchedulerBackend(
       triggeredByExecutor = false)
     logInfo(
       log"Executor ${MDC(LogKeys.EXECUTOR_ID, fullId)} " +
-        log"decommissioned: ${MDC(LogKeys.DESCRIPTION, decommissionInfo)}"
+        log"decommissioned: ${MDC(LogKeys.DESCRHOSTTION, decommissionInfo)}"
       )
   }
 

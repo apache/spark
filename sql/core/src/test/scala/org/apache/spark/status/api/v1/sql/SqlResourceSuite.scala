@@ -36,8 +36,8 @@ object SqlResourceSuite {
   val METADATA_TIME = "metadata time"
   val NUMBER_OF_FILES_READ = "number of files read"
   val SIZE_OF_FILES_READ = "size of files read"
-  val PLAN_DESCRIPTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text..."
-  val DESCRIPTION = "csv at MyDataFrames.scala:57"
+  val PLAN_DESCRHOSTTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text..."
+  val DESCRHOSTTION = "csv at MyDataFrames.scala:57"
 
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
@@ -82,9 +82,9 @@ object SqlResourceSuite {
     new SQLExecutionUIData(
       executionId = 0,
       rootExecutionId = 1,
-      description = DESCRIPTION,
+      description = DESCRHOSTTION,
       details = "",
-      physicalPlanDescription = PLAN_DESCRIPTION,
+      physicalPlanDescription = PLAN_DESCRHOSTTION,
       Map.empty,
       metrics = metrics,
       submissionTime = 1586768888233L,
@@ -132,7 +132,7 @@ object SqlResourceSuite {
 
     assert(executionData.id == 0)
     assert(executionData.status == "COMPLETED")
-    assert(executionData.description == DESCRIPTION)
+    assert(executionData.description == DESCRHOSTTION)
     assert(executionData.planDescription == planDescription)
     assert(executionData.submissionTime == new Date(1586768888233L))
     assert(executionData.duration == 766L)
@@ -182,7 +182,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
       executionData,
       nodes = getNodes(),
       edges = edges,
-      planDescription = PLAN_DESCRIPTION)
+      planDescription = PLAN_DESCRHOSTTION)
   }
 
   test("Prepare ExecutionData when details = true and planDescription = false and WSCG = off") {
@@ -207,9 +207,9 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     val d = new SQLExecutionUIData(
       0,
       1,
-      DESCRIPTION,
+      DESCRHOSTTION,
       details = "",
-      PLAN_DESCRIPTION,
+      PLAN_DESCRHOSTTION,
       Map.empty,
       metrics = metrics,
       submissionTime = 1586768888233L,

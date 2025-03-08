@@ -578,7 +578,7 @@ if __name__ == "__main__":
     globs["spark"] = spark
 
     failure_count, test_count = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+        globs=globs, optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()
     if failure_count:

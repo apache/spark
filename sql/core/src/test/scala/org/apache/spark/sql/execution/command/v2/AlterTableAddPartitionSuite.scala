@@ -141,7 +141,7 @@ class AlterTableAddPartitionSuite
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
 
-      withSQLConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
+      withSQLConf(SQLConf.SKHOST_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
         withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
           checkError(
             exception = intercept[SparkNumberFormatException] {

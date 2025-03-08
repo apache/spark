@@ -4031,7 +4031,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def foundMultipleDataSources(provider: String): Throwable = {
     new AnalysisException(
-      errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
+      errorClass = "FOUND_MULTHOSTLE_DATA_SOURCES",
       messageParameters = Map("provider" -> provider))
   }
 
@@ -4039,7 +4039,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       sourceNames: Seq[String],
       externalSource: String): Throwable = {
     new AnalysisException(
-      errorClass = "MULTIPLE_XML_DATA_SOURCE",
+      errorClass = "MULTHOSTLE_XML_DATA_SOURCE",
       messageParameters = Map("provider" -> provider,
         "sourceNames" -> sourceNames.mkString(", "),
         "externalSource" -> externalSource)
@@ -4105,7 +4105,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def sqlScriptInExecuteImmediate(sqlScriptString: String): Throwable = {
     throw new AnalysisException(
-      errorClass = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",
+      errorClass = "SQL_SCRHOSTT_IN_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(sqlScriptString)))
   }
 
@@ -4259,7 +4259,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def pipeOperatorAggregateExpressionContainsNoAggregateFunction(expr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+      errorClass = "PHOSTE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
       messageParameters = Map(
         "expr" -> expr.toString),
       origin = expr.origin)
@@ -4267,7 +4267,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def pipeOperatorContainsAggregateFunction(expr: Expression, clause: String): Throwable = {
     new AnalysisException(
-      errorClass = "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+      errorClass = "PHOSTE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
       messageParameters = Map(
         "expr" -> expr.toString,
         "clause" -> clause),

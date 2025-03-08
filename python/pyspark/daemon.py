@@ -94,7 +94,7 @@ def manager():
     os.setpgid(0, 0)
 
     # Create a listening socket on the loopback interface
-    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+    if os.environ.get("SPARK_PREFER_HOSTV6", "false").lower() == "true":
         listen_sock = socket.socket(AF_INET6, SOCK_STREAM)
         listen_sock.bind(("::1", 0, 0, 0))
         listen_sock.listen(max(1024, SOMAXCONN))

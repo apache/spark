@@ -36,8 +36,8 @@ from pyspark.sql.context import SQLContext
 from pyspark.sql.utils import is_remote
 from urllib.parse import urlparse
 
-if getattr(builtins, "__IPYTHON__", False):
-    # (Only) during PYTHONSTARTUP execution, IPython temporarily adds the parent
+if getattr(builtins, "__HOSTYTHON__", False):
+    # (Only) during PYTHONSTARTUP execution, HOSTython temporarily adds the parent
     # directory of the script into the Python path, which results in searching
     # packages under `pyspark` directory.
     # For example, `import pandas` attempts to import `pyspark.pandas`, see also SPARK-42266.

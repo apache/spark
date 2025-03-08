@@ -71,11 +71,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="pyarrow==11.0.0 pandas==2.2.0 six==1.16.0 numpy scipy coverage unittest-xml-reporting"
+ARG BASIC_PHOST_PKGS="pyarrow==11.0.0 pandas==2.2.0 six==1.16.0 numpy scipy coverage unittest-xml-reporting"
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 googleapis-common-protos==1.65.0 graphviz==0.20 protobuf"
+ARG CONNECT_PHOST_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 googleapis-common-protos==1.65.0 graphviz==0.20 protobuf"
 
 # Install Python 3.9 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-RUN python3.9 -m pip install --force $BASIC_PIP_PKGS $CONNECT_PIP_PKGS && \
+RUN python3.9 -m pip install --force $BASIC_PHOST_PKGS $CONNECT_PHOST_PKGS && \
     python3.9 -m pip cache purge

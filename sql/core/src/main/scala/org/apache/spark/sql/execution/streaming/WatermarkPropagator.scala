@@ -193,7 +193,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         if (inputWatermarks.nonEmpty) {
           throw new AnalysisException(
             errorClass = "_LEGACY_ERROR_TEMP_3076",
-            messageParameters = Map("config" -> SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
+            messageParameters = Map("config" -> SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE.key))
         }
 
         nodeToOutputWatermark.put(node.id, Some(originWatermark))
@@ -311,7 +311,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
 
 object WatermarkPropagator {
   def apply(conf: SQLConf): WatermarkPropagator = {
-    if (conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
+    if (conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE)) {
       new PropagateWatermarkSimulator
     } else {
       new UseSingleWatermarkPropagator

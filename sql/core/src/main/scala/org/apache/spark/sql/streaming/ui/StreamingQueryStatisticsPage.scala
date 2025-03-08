@@ -31,11 +31,11 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreProvider
 import org.apache.spark.sql.internal.SQLConf.STATE_STORE_PROVIDER_CLASS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.ui.UIUtils._
-import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUHOSTage}
 import org.apache.spark.util.ArrayImplicits._
 
 private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
-  extends WebUIPage("statistics") with Logging {
+  extends WebUHOSTage("statistics") with Logging {
 
   // State store provider implementation mustn't do any heavyweight initialiation in constructor
   // but in its init method.

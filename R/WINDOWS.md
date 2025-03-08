@@ -25,7 +25,7 @@ To build SparkR on Windows, the following steps are required
 2. Install R (>= 3.5) and [Rtools](https://cloud.r-project.org/bin/windows/Rtools/). Make sure to
 include Rtools and R in `PATH`.
 
-3. Install JDK that SparkR supports (see `R/pkg/DESCRIPTION`), and set `JAVA_HOME` in the system environment variables.
+3. Install JDK that SparkR supports (see `R/pkg/DESCRHOSTTION`), and set `JAVA_HOME` in the system environment variables.
 
 4. Download and install [Maven](https://maven.apache.org/download.html). Also include the `bin`
 directory in Maven in `PATH`.

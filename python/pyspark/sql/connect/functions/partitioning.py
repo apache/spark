@@ -97,7 +97,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.functions.partitioning,
         globs=globs,
-        optionflags=doctest.ELLIPSIS
+        optionflags=doctest.ELLHOSTSIS
         | doctest.NORMALIZE_WHITESPACE
         | doctest.IGNORE_EXCEPTION_DETAIL,
     )

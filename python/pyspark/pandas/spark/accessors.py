@@ -665,7 +665,7 @@ class SparkFrameMethods:
         ...                     'value': [5, 6, 7, 8]},
         ...                    columns=['rkey', 'value']).set_index('rkey')
         >>> merged = df1.merge(df2.spark.hint("broadcast"), left_index=True, right_index=True)
-        >>> merged.spark.explain()  # doctest: +ELLIPSIS
+        >>> merged.spark.explain()  # doctest: +ELLHOSTSIS
         == Physical Plan ==
         ...
         ...BroadcastHashJoin...
@@ -840,11 +840,11 @@ class SparkFrameMethods:
         Examples
         --------
         >>> df = ps.DataFrame({'id': range(10)})
-        >>> df.spark.explain()  # doctest: +ELLIPSIS
+        >>> df.spark.explain()  # doctest: +ELLHOSTSIS
         == Physical Plan ==
         ...
 
-        >>> df.spark.explain(True)  # doctest: +ELLIPSIS
+        >>> df.spark.explain(True)  # doctest: +ELLHOSTSIS
         == Parsed Logical Plan ==
         ...
         == Analyzed Logical Plan ==
@@ -854,7 +854,7 @@ class SparkFrameMethods:
         == Physical Plan ==
         ...
 
-        >>> df.spark.explain("extended")  # doctest: +ELLIPSIS
+        >>> df.spark.explain("extended")  # doctest: +ELLHOSTSIS
         == Parsed Logical Plan ==
         ...
         == Analyzed Logical Plan ==
@@ -864,7 +864,7 @@ class SparkFrameMethods:
         == Physical Plan ==
         ...
 
-        >>> df.spark.explain(mode="extended")  # doctest: +ELLIPSIS
+        >>> df.spark.explain(mode="extended")  # doctest: +ELLHOSTSIS
         == Parsed Logical Plan ==
         ...
         == Analyzed Logical Plan ==
@@ -1059,8 +1059,8 @@ class SparkFrameMethods:
         0  a
         1  b
         2  c
-        >>> new_psdf = psdf.spark.checkpoint()  # doctest: +SKIP
-        >>> new_psdf  # doctest: +SKIP
+        >>> new_psdf = psdf.spark.checkpoint()  # doctest: +SKHOST
+        >>> new_psdf  # doctest: +SKHOST
            a
         0  a
         1  b
@@ -1260,7 +1260,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.spark.accessors,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
 
     shutil.rmtree(path, ignore_errors=True)

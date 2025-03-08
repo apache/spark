@@ -28,7 +28,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
-import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
+import org.apache.parquet.format.converter.ParquetMetadataConverter.SKHOST_ROW_GROUPS
 import org.apache.parquet.hadoop._
 
 import org.apache.spark.TaskContext
@@ -213,7 +213,7 @@ class ParquetFileFormat
         // push down (no need to read the footer metadata again).
         ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.WITH_ROW_GROUPS)
       } else {
-        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.SKHOST_ROW_GROUPS)
       }
 
       val footerFileMetaData = fileFooter.getFileMetaData
@@ -448,7 +448,7 @@ object ParquetFileFormat extends Logging {
         // when it can't read the footer.
         Some(new Footer(currentFile.getPath(),
           ParquetFooterReader.readFooter(
-            conf, currentFile, SKIP_ROW_GROUPS)))
+            conf, currentFile, SKHOST_ROW_GROUPS)))
       } catch { case e: RuntimeException =>
         if (ignoreCorruptFiles) {
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, currentFile)}", e)

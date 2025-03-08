@@ -149,12 +149,12 @@ class RPackageUtilsSuite
       val fakeSparkRDir = new File(tempDir, "SparkR")
       assert(fakeSparkRDir.mkdirs())
       IvyTestUtils.writeFile(fakeSparkRDir, "abc.R", "abc")
-      IvyTestUtils.writeFile(fakeSparkRDir, "DESCRIPTION", "abc")
+      IvyTestUtils.writeFile(fakeSparkRDir, "DESCRHOSTTION", "abc")
       IvyTestUtils.writeFile(tempDir, "package.zip", "abc") // fake zip file :)
       val fakePackageDir = new File(tempDir, "packageTest")
       assert(fakePackageDir.mkdirs())
       IvyTestUtils.writeFile(fakePackageDir, "def.R", "abc")
-      IvyTestUtils.writeFile(fakePackageDir, "DESCRIPTION", "abc")
+      IvyTestUtils.writeFile(fakePackageDir, "DESCRHOSTTION", "abc")
       val finalZip = RPackageUtils.zipRLibraries(tempDir, "sparkr.zip")
       assert(finalZip.exists())
       val zipFile = new ZipFile(finalZip)
@@ -162,10 +162,10 @@ class RPackageUtilsSuite
         val entries = zipFile.entries().asScala.map(_.getName).toSeq
         assert(entries.contains("/test.R"))
         assert(entries.contains("/SparkR/abc.R"))
-        assert(entries.contains("/SparkR/DESCRIPTION"))
+        assert(entries.contains("/SparkR/DESCRHOSTTION"))
         assert(!entries.contains("/package.zip"))
         assert(entries.contains("/packageTest/def.R"))
-        assert(entries.contains("/packageTest/DESCRIPTION"))
+        assert(entries.contains("/packageTest/DESCRHOSTTION"))
       } {
         zipFile.close()
       }

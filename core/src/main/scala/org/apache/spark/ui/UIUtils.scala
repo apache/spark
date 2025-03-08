@@ -39,9 +39,9 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-sm"
-  val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
-  val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
+  val TABLE_CLASS_NOT_STRHOSTED = "table table-bordered table-sm"
+  val TABLE_CLASS_STRHOSTED = TABLE_CLASS_NOT_STRHOSTED + " table-striped"
+  val TABLE_CLASS_STRHOSTED_SORTABLE = TABLE_CLASS_STRHOSTED + " sortable"
 
   private val dateTimeFormatter = DateTimeFormatter
     .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
@@ -377,7 +377,7 @@ private[spark] object UIUtils extends Logging {
       tooltipHeaders: Seq[Option[String]] = Seq.empty): Seq[Node] = {
 
     val listingTableClass = {
-      val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
+      val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRHOSTED else TABLE_CLASS_NOT_STRHOSTED
       if (sortable) {
         _tableClass + " sortable"
       } else {

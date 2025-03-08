@@ -50,24 +50,24 @@ if sys.version_info >= (3, 10):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class Expression(google.protobuf.message.Message):
     """Expression used to refer to fields, functions and similar. This can be used everywhere
     expressions in SQL appear.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Window(google.protobuf.message.Message):
         """Expression for the OVER clause or WINDOW clause."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class WindowFrame(google.protobuf.message.Message):
             """The window frame"""
 
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             class _FrameType:
                 ValueType = typing.NewType("ValueType", builtins.int)
@@ -79,7 +79,7 @@ class Expression(google.protobuf.message.Message):
                 ],
                 builtins.type,
             ):  # noqa: F821
-                DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+                DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
                 FRAME_TYPE_UNDEFINED: Expression.Window.WindowFrame._FrameType.ValueType  # 0
                 FRAME_TYPE_ROW: Expression.Window.WindowFrame._FrameType.ValueType  # 1
                 """RowFrame treats rows in a partition individually."""
@@ -98,7 +98,7 @@ class Expression(google.protobuf.message.Message):
             """
 
             class FrameBoundary(google.protobuf.message.Message):
-                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+                DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
                 CURRENT_ROW_FIELD_NUMBER: builtins.int
                 UNBOUNDED_FIELD_NUMBER: builtins.int
@@ -238,7 +238,7 @@ class Expression(google.protobuf.message.Message):
         It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class _SortDirection:
             ValueType = typing.NewType("ValueType", builtins.int)
@@ -250,7 +250,7 @@ class Expression(google.protobuf.message.Message):
             ],
             builtins.type,
         ):  # noqa: F821
-            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
             SORT_DIRECTION_UNSPECIFIED: Expression.SortOrder._SortDirection.ValueType  # 0
             SORT_DIRECTION_ASCENDING: Expression.SortOrder._SortDirection.ValueType  # 1
             SORT_DIRECTION_DESCENDING: Expression.SortOrder._SortDirection.ValueType  # 2
@@ -270,7 +270,7 @@ class Expression(google.protobuf.message.Message):
             ],
             builtins.type,
         ):  # noqa: F821
-            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
             SORT_NULLS_UNSPECIFIED: Expression.SortOrder._NullOrdering.ValueType  # 0
             SORT_NULLS_FIRST: Expression.SortOrder._NullOrdering.ValueType  # 1
             SORT_NULLS_LAST: Expression.SortOrder._NullOrdering.ValueType  # 2
@@ -308,7 +308,7 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
 
     class Cast(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class _EvalMode:
             ValueType = typing.NewType("ValueType", builtins.int)
@@ -320,7 +320,7 @@ class Expression(google.protobuf.message.Message):
             ],
             builtins.type,
         ):  # noqa: F821
-            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
             EVAL_MODE_UNSPECIFIED: Expression.Cast._EvalMode.ValueType  # 0
             EVAL_MODE_LEGACY: Expression.Cast._EvalMode.ValueType  # 1
             EVAL_MODE_ANSI: Expression.Cast._EvalMode.ValueType  # 2
@@ -386,10 +386,10 @@ class Expression(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["type", "type_str"] | None: ...
 
     class Literal(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class Decimal(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             VALUE_FIELD_NUMBER: builtins.int
             PRECISION_FIELD_NUMBER: builtins.int
@@ -447,7 +447,7 @@ class Expression(google.protobuf.message.Message):
             ) -> typing_extensions.Literal["scale"] | None: ...
 
         class CalendarInterval(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             MONTHS_FIELD_NUMBER: builtins.int
             DAYS_FIELD_NUMBER: builtins.int
@@ -470,7 +470,7 @@ class Expression(google.protobuf.message.Message):
             ) -> None: ...
 
         class Array(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             ELEMENT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
@@ -499,7 +499,7 @@ class Expression(google.protobuf.message.Message):
             ) -> None: ...
 
         class Map(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             KEY_TYPE_FIELD_NUMBER: builtins.int
             VALUE_TYPE_FIELD_NUMBER: builtins.int
@@ -550,7 +550,7 @@ class Expression(google.protobuf.message.Message):
             ) -> None: ...
 
         class Struct(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             STRUCT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
@@ -579,7 +579,7 @@ class Expression(google.protobuf.message.Message):
             ) -> None: ...
 
         class SpecializedArray(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             BOOLS_FIELD_NUMBER: builtins.int
             INTS_FIELD_NUMBER: builtins.int
@@ -863,7 +863,7 @@ class Expression(google.protobuf.message.Message):
         is resolved during analysis by name.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
         PLAN_ID_FIELD_NUMBER: builtins.int
@@ -926,7 +926,7 @@ class Expression(google.protobuf.message.Message):
         is resolved during analysis following Sparks name resolution rules.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         FUNCTION_NAME_FIELD_NUMBER: builtins.int
         ARGUMENTS_FIELD_NUMBER: builtins.int
@@ -994,7 +994,7 @@ class Expression(google.protobuf.message.Message):
     class ExpressionString(google.protobuf.message.Message):
         """Expression as string."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         EXPRESSION_FIELD_NUMBER: builtins.int
         expression: builtins.str
@@ -1011,7 +1011,7 @@ class Expression(google.protobuf.message.Message):
     class UnresolvedStar(google.protobuf.message.Message):
         """UnresolvedStar is used to expand all the fields of a relation or struct."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         UNPARSED_TARGET_FIELD_NUMBER: builtins.int
         PLAN_ID_FIELD_NUMBER: builtins.int
@@ -1069,7 +1069,7 @@ class Expression(google.protobuf.message.Message):
         "SELECT `(id)?+.+` FROM ...".
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         COL_NAME_FIELD_NUMBER: builtins.int
         PLAN_ID_FIELD_NUMBER: builtins.int
@@ -1100,7 +1100,7 @@ class Expression(google.protobuf.message.Message):
     class UnresolvedExtractValue(google.protobuf.message.Message):
         """Extracts a value or values from an Expression"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         CHILD_FIELD_NUMBER: builtins.int
         EXTRACTION_FIELD_NUMBER: builtins.int
@@ -1132,7 +1132,7 @@ class Expression(google.protobuf.message.Message):
     class UpdateFields(google.protobuf.message.Message):
         """Add, replace or drop a field of `StructType` expression by name."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         STRUCT_EXPRESSION_FIELD_NUMBER: builtins.int
         FIELD_NAME_FIELD_NUMBER: builtins.int
@@ -1174,7 +1174,7 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
 
     class Alias(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         EXPR_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int
@@ -1216,7 +1216,7 @@ class Expression(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["metadata"] | None: ...
 
     class LambdaFunction(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         FUNCTION_FIELD_NUMBER: builtins.int
         ARGUMENTS_FIELD_NUMBER: builtins.int
@@ -1252,7 +1252,7 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
 
     class UnresolvedNamedLambdaVariable(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         NAME_PARTS_FIELD_NUMBER: builtins.int
         @property
@@ -1501,7 +1501,7 @@ class Expression(google.protobuf.message.Message):
 global___Expression = Expression
 
 class ExpressionCommon(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ORIGIN_FIELD_NUMBER: builtins.int
     @property
@@ -1520,7 +1520,7 @@ class ExpressionCommon(google.protobuf.message.Message):
 global___ExpressionCommon = ExpressionCommon
 
 class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
     DETERMINISTIC_FIELD_NUMBER: builtins.int
@@ -1598,7 +1598,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
 global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
 class PythonUDF(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     OUTPUT_TYPE_FIELD_NUMBER: builtins.int
     EVAL_TYPE_FIELD_NUMBER: builtins.int
@@ -1650,7 +1650,7 @@ class PythonUDF(google.protobuf.message.Message):
 global___PythonUDF = PythonUDF
 
 class ScalarScalaUDF(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PAYLOAD_FIELD_NUMBER: builtins.int
     INPUTTYPES_FIELD_NUMBER: builtins.int
@@ -1705,7 +1705,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
 global___ScalarScalaUDF = ScalarScalaUDF
 
 class JavaUDF(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     CLASS_NAME_FIELD_NUMBER: builtins.int
     OUTPUT_TYPE_FIELD_NUMBER: builtins.int
@@ -1750,7 +1750,7 @@ class JavaUDF(google.protobuf.message.Message):
 global___JavaUDF = JavaUDF
 
 class TypedAggregateExpression(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
     @property
@@ -1771,7 +1771,7 @@ class TypedAggregateExpression(google.protobuf.message.Message):
 global___TypedAggregateExpression = TypedAggregateExpression
 
 class CallFunction(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
     ARGUMENTS_FIELD_NUMBER: builtins.int
@@ -1798,7 +1798,7 @@ class CallFunction(google.protobuf.message.Message):
 global___CallFunction = CallFunction
 
 class NamedArgumentExpression(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     KEY_FIELD_NUMBER: builtins.int
     VALUE_FIELD_NUMBER: builtins.int
@@ -1823,7 +1823,7 @@ class NamedArgumentExpression(google.protobuf.message.Message):
 global___NamedArgumentExpression = NamedArgumentExpression
 
 class MergeAction(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _ActionType:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -1835,7 +1835,7 @@ class MergeAction(google.protobuf.message.Message):
         ],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         ACTION_TYPE_INVALID: MergeAction._ActionType.ValueType  # 0
         ACTION_TYPE_DELETE: MergeAction._ActionType.ValueType  # 1
         ACTION_TYPE_INSERT: MergeAction._ActionType.ValueType  # 2
@@ -1852,7 +1852,7 @@ class MergeAction(google.protobuf.message.Message):
     ACTION_TYPE_UPDATE_STAR: MergeAction.ActionType.ValueType  # 5
 
     class Assignment(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -1923,7 +1923,7 @@ class MergeAction(google.protobuf.message.Message):
 global___MergeAction = MergeAction
 
 class SubqueryExpression(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _SubqueryType:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -1935,7 +1935,7 @@ class SubqueryExpression(google.protobuf.message.Message):
         ],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         SUBQUERY_TYPE_UNKNOWN: SubqueryExpression._SubqueryType.ValueType  # 0
         SUBQUERY_TYPE_SCALAR: SubqueryExpression._SubqueryType.ValueType  # 1
         SUBQUERY_TYPE_EXISTS: SubqueryExpression._SubqueryType.ValueType  # 2
@@ -1950,7 +1950,7 @@ class SubqueryExpression(google.protobuf.message.Message):
     class TableArgOptions(google.protobuf.message.Message):
         """Nested message for table argument options."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PARTITION_SPEC_FIELD_NUMBER: builtins.int
         ORDER_SPEC_FIELD_NUMBER: builtins.int

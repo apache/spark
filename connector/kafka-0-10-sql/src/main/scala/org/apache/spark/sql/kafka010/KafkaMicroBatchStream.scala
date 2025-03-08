@@ -26,7 +26,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, TIP}
+import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, THOST}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
@@ -310,7 +310,7 @@ private[kafka010] class KafkaMicroBatchStream(
     if (failOnDataLoss) {
       throw getException()
     } else {
-      logWarning(log"${MDC(ERROR, message)}. ${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
+      logWarning(log"${MDC(ERROR, message)}. ${MDC(THOST, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
     }
   }
 

@@ -48,7 +48,7 @@ class ResourceID(val componentName: String, val resourceName: String) {
     s"$componentName.${ResourceUtils.RESOURCE_PREFIX}.$resourceName."
   }
   private[spark] def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
-  private[spark] def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
+  private[spark] def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRHOSTT}"
   private[spark] def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
 
   override def equals(obj: Any): Boolean = {
@@ -133,7 +133,7 @@ private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[Stri
 
 private[spark] object ResourceUtils extends Logging {
   // config suffixes
-  val DISCOVERY_SCRIPT = "discoveryScript"
+  val DISCOVERY_SCRHOSTT = "discoveryScript"
   val VENDOR = "vendor"
   // user facing configs use .amount to allow to extend in the future,
   // internally we currently only support addresses, so its just an integer count
@@ -144,7 +144,7 @@ private[spark] object ResourceUtils extends Logging {
     val amount = settings.getOrElse(AMOUNT,
       throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
     ).toInt
-    val discoveryScript = Optional.ofNullable(settings.get(DISCOVERY_SCRIPT).orNull)
+    val discoveryScript = Optional.ofNullable(settings.get(DISCOVERY_SCRHOSTT).orNull)
     val vendor = Optional.ofNullable(settings.get(VENDOR).orNull)
     new ResourceRequest(resourceId, amount, discoveryScript, vendor)
   }

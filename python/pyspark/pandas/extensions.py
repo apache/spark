@@ -201,10 +201,10 @@ def register_dataframe_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
         >>> # from my_ext_lib import GeoAccessor
         >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> psdf.geo.center  # doctest: +SKIP
+        >>> psdf.geo.center  # doctest: +SKHOST
         (5.0, 10.0)
 
-        >>> psdf.geo.plot()  # doctest: +SKIP
+        >>> psdf.geo.plot()  # doctest: +SKHOST
     """
     from pyspark.pandas import DataFrame
 
@@ -275,7 +275,7 @@ def register_series_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
         >>> # from my_ext_lib import GeoAccessor
         >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> psdf.longitude.geo.is_valid  # doctest: +SKIP
+        >>> psdf.longitude.geo.is_valid  # doctest: +SKHOST
         True
     """
     from pyspark.pandas import Series
@@ -348,7 +348,7 @@ def register_index_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
         >>> # from my_ext_lib import CustomAccessor
         >>> psdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
-        >>> psdf.index.foo.bar  # doctest: +SKIP
+        >>> psdf.index.foo.bar  # doctest: +SKHOST
         'baz'
     """
     from pyspark.pandas import Index
@@ -377,7 +377,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.extensions,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

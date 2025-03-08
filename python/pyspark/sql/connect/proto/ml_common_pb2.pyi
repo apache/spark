@@ -48,15 +48,15 @@ if sys.version_info >= (3, 10):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class MlParams(google.protobuf.message.Message):
     """MlParams stores param settings for ML Estimator / Transformer / Evaluator"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ParamsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -99,7 +99,7 @@ global___MlParams = MlParams
 class MlOperator(google.protobuf.message.Message):
     """MLOperator represents the ML operators like (Estimator, Transformer or Evaluator)"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _OperatorType:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -111,7 +111,7 @@ class MlOperator(google.protobuf.message.Message):
         ],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         OPERATOR_TYPE_UNSPECIFIED: MlOperator._OperatorType.ValueType  # 0
         OPERATOR_TYPE_ESTIMATOR: MlOperator._OperatorType.ValueType  # 1
         """ML estimator"""
@@ -160,7 +160,7 @@ class ObjectRef(google.protobuf.message.Message):
     or summary evaluated by a model
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ID_FIELD_NUMBER: builtins.int
     id: builtins.str

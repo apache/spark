@@ -609,7 +609,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 3, 2])
-            >>> s.plot.line()  # doctest: +SKIP
+            >>> s.plot.line()  # doctest: +SKHOST
 
         For DataFrame:
 
@@ -621,7 +621,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.DataFrame({'pig': [20, 18, 489, 675, 1776],
             ...                    'horse': [4, 25, 281, 600, 1900]},
             ...                   index=[1990, 1997, 2003, 2009, 2014])
-            >>> df.plot.line()  # doctest: +SKIP
+            >>> df.plot.line()  # doctest: +SKHOST
 
         .. plotly::
 
@@ -631,7 +631,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.DataFrame({'pig': [20, 18, 489, 675, 1776],
             ...                    'horse': [4, 25, 281, 600, 1900]},
             ...                   index=[1990, 1997, 2003, 2009, 2014])
-            >>> df.plot.line(x='pig', y='horse')  # doctest: +SKIP
+            >>> df.plot.line(x='pig', y='horse')  # doctest: +SKHOST
         """
         return self(kind="line", x=x, y=y, **kwargs)
 
@@ -673,14 +673,14 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 3, 2])
-            >>> s.plot.bar()  # doctest: +SKIP
+            >>> s.plot.bar()  # doctest: +SKHOST
 
         For DataFrame:
 
         .. plotly::
 
             >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
-            >>> df.plot.bar(x='lab', y='val')  # doctest: +SKIP
+            >>> df.plot.bar(x='lab', y='val')  # doctest: +SKHOST
 
         Plot a whole dataframe to a bar plot. Each column is stacked with a
         distinct color along the horizontal axis.
@@ -693,7 +693,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
             >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
-            >>> df.plot.bar()  # doctest: +SKIP
+            >>> df.plot.bar()  # doctest: +SKHOST
 
         Instead of stacking, the figure can be split by column with plotly
         APIs.
@@ -711,7 +711,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...        .add_trace(df.plot.bar(y='speed').data[0], row=1, col=1)
             ...        .add_trace(df.plot.bar(y='speed').data[0], row=1, col=1)
             ...        .add_trace(df.plot.bar(y='lifespan').data[0], row=2, col=1))
-            >>> fig  # doctest: +SKIP
+            >>> fig  # doctest: +SKHOST
 
         Plot a single column.
 
@@ -723,7 +723,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
             >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
-            >>> df.plot.bar(y='speed')  # doctest: +SKIP
+            >>> df.plot.bar(y='speed')  # doctest: +SKHOST
 
         Plot only selected categories for the DataFrame.
 
@@ -735,7 +735,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
             >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
-            >>> df.plot.bar(x='lifespan')  # doctest: +SKIP
+            >>> df.plot.bar(x='lifespan')  # doctest: +SKHOST
         """
         from pyspark.pandas import DataFrame, Series
 
@@ -789,14 +789,14 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
-            >>> df.val.plot.barh()  # doctest: +SKIP
+            >>> df.val.plot.barh()  # doctest: +SKHOST
 
         For DataFrame:
 
         .. plotly::
 
             >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
-            >>> df.plot.barh(x='lab', y='val')  # doctest: +SKIP
+            >>> df.plot.barh(x='lab', y='val')  # doctest: +SKHOST
 
         Plot a whole DataFrame to a horizontal bar plot
 
@@ -808,7 +808,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
             >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
-            >>> df.plot.barh()  # doctest: +SKIP
+            >>> df.plot.barh()  # doctest: +SKHOST
 
         Plot a column of the DataFrame to a horizontal bar plot
 
@@ -820,7 +820,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
             >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
-            >>> df.plot.barh(y='speed')  # doctest: +SKIP
+            >>> df.plot.barh(y='speed')  # doctest: +SKHOST
 
         Plot DataFrame versus the desired column
 
@@ -832,7 +832,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
             >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
-            >>> df.plot.barh(x='lifespan')  # doctest: +SKIP
+            >>> df.plot.barh(x='lifespan')  # doctest: +SKHOST
         """
         from pyspark.pandas import DataFrame, Series
 
@@ -893,7 +893,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
             >>> data = np.random.randn(25, 4)
             >>> df = ps.DataFrame(data, columns=list('ABCD'))
-            >>> df['A'].plot.box()  # doctest: +SKIP
+            >>> df['A'].plot.box()  # doctest: +SKHOST
 
         This is an unsupported function for DataFrame type
         """
@@ -939,7 +939,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 3, 2])
-            >>> s.plot.hist()  # doctest: +SKIP
+            >>> s.plot.hist()  # doctest: +SKHOST
 
         For DataFrame:
 
@@ -950,7 +950,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     columns=['one'])
             >>> df['two'] = df['one'] + np.random.randint(1, 7, 6000)
             >>> df = ps.from_pandas(df)
-            >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKIP
+            >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKHOST
         """
         return self(kind="hist", bins=bins, **kwds)
 
@@ -990,12 +990,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKHOST
 
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=3, ind=100)  # doctest: +SKHOST
 
         The `ind` parameter determines the evaluation points for the
         plot of the estimated KDF:
@@ -1003,7 +1003,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(ind=[1, 2, 3, 4, 5], bw_method=0.3)  # doctest: +SKIP
+            >>> s.plot.kde(ind=[1, 2, 3, 4, 5], bw_method=0.3)  # doctest: +SKHOST
 
         For DataFrame, it works in the same way as Series:
 
@@ -1013,7 +1013,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKHOST
 
         .. plotly::
 
@@ -1021,7 +1021,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=3, ind=100)  # doctest: +SKHOST
 
         .. plotly::
 
@@ -1029,7 +1029,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(ind=[1, 2, 3, 4, 5, 6], bw_method=0.3)  # doctest: +SKIP
+            >>> df.plot.kde(ind=[1, 2, 3, 4, 5, 6], bw_method=0.3)  # doctest: +SKHOST
         """
         return self(kind="kde", bw_method=bw_method, ind=ind, **kwargs)
 
@@ -1074,7 +1074,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
             ...                        freq='ME'))
-            >>> df.sales.plot.area()  # doctest: +SKIP
+            >>> df.sales.plot.area()  # doctest: +SKHOST
 
         For DataFrame
 
@@ -1086,7 +1086,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'visits': [20, 42, 28, 62, 81, 50],
             ... }, index=pd.date_range(start='2018/01/01', end='2018/07/01',
             ...                        freq='ME'))
-            >>> df.plot.area()  # doctest: +SKIP
+            >>> df.plot.area()  # doctest: +SKHOST
         """
         from pyspark.pandas import DataFrame, Series
 
@@ -1127,7 +1127,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.DataFrame({'mass': [0.330, 4.87, 5.97],
             ...                    'radius': [2439.7, 6051.8, 6378.1]},
             ...                   index=['Mercury', 'Venus', 'Earth'])
-            >>> df.mass.plot.pie()  # doctest: +SKIP
+            >>> df.mass.plot.pie()  # doctest: +SKHOST
 
 
         For DataFrame:
@@ -1137,7 +1137,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.DataFrame({'mass': [0.330, 4.87, 5.97],
             ...                    'radius': [2439.7, 6051.8, 6378.1]},
             ...                   index=['Mercury', 'Venus', 'Earth'])
-            >>> df.plot.pie(y='mass')  # doctest: +SKIP
+            >>> df.plot.pie(y='mass')  # doctest: +SKHOST
         """
         from pyspark.pandas import DataFrame, Series
 
@@ -1205,7 +1205,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
             ...                    [6.4, 3.2, 1], [5.9, 3.0, 2]],
             ...                   columns=['length', 'width', 'species'])
-            >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
+            >>> df.plot.scatter(x='length', y='width')  # doctest: +SKHOST
 
         And now with dark scheme:
 
@@ -1215,7 +1215,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...                    [6.4, 3.2, 1], [5.9, 3.0, 2]],
             ...                   columns=['length', 'width', 'species'])
             >>> fig = df.plot.scatter(x='length', y='width')
-            >>> fig.update_layout(template="plotly_dark")  # doctest: +SKIP
+            >>> fig.update_layout(template="plotly_dark")  # doctest: +SKHOST
         """
         return self(kind="scatter", x=x, y=y, **kwds)
 

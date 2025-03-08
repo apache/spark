@@ -212,8 +212,8 @@ private[spark] class PythonWorkerFactory(
       workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocketChannel.socket().getLocalPort
         .toString)
       workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
-      if (Utils.preferIPv6) {
-        workerEnv.put("SPARK_PREFER_IPV6", "True")
+      if (Utils.preferHOSTv6) {
+        workerEnv.put("SPARK_PREFER_HOSTV6", "True")
       }
       val workerProcess = pb.start()
 
@@ -279,8 +279,8 @@ private[spark] class PythonWorkerFactory(
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
         workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
-        if (Utils.preferIPv6) {
-          workerEnv.put("SPARK_PREFER_IPV6", "True")
+        if (Utils.preferHOSTv6) {
+          workerEnv.put("SPARK_PREFER_HOSTV6", "True")
         }
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")

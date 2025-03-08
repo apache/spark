@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 
 private[ui] class EnvironmentPage(
     parent: MasterWebUI,
-    conf: SparkConf) extends WebUIPage("Environment") {
+    conf: SparkConf) extends WebUHOSTage("Environment") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val details = SparkEnv.environmentDetails(conf, SparkHadoopUtil.get.newConfiguration(conf),

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZHOST, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -308,7 +308,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
     throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3235")
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZHOST)
 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && names.forall(_.resolved)

@@ -25,7 +25,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUHOSTage}
 import org.apache.spark.util.Utils
 
 /**
@@ -72,7 +72,7 @@ private[ui] class RecordRateUIData(val data: Seq[(Long, Double)]) {
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class StreamingPage(parent: StreamingTab)
-  extends WebUIPage("") with Logging {
+  extends WebUHOSTage("") with Logging {
 
   import StreamingPage._
 

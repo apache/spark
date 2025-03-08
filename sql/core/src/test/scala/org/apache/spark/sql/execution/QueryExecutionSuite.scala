@@ -292,7 +292,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       spark,
       showTables,
       new QueryPlanningTracker(Some(mockCallback)),
-      CommandExecutionMode.SKIP)
+      CommandExecutionMode.SKHOST)
     showTablesQe.assertAnalyzed()
     mockCallback.assertAnalyzed()
     showTablesQe.assertOptimized()

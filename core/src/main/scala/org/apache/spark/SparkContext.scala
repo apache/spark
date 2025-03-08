@@ -431,7 +431,7 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
     SparkContext.supplementJavaModuleOptions(_conf)
-    SparkContext.supplementJavaIPv6Options(_conf)
+    SparkContext.supplementJavaHOSTv6Options(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -835,7 +835,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String): Unit = {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRHOSTTION, value)
   }
 
   /**
@@ -864,7 +864,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def setJobGroup(groupId: String,
       description: String, interruptOnCancel: Boolean = false): Unit = {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRHOSTTION, description)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
     // Note: Specifying interruptOnCancel in setJobGroup (rather than cancelJobGroup) avoids
     // changing several public APIs and allows Spark cancellations outside of the cancelJobGroup
@@ -875,7 +875,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Clear the current thread's job group ID and its description. */
   def clearJobGroup(): Unit = {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRHOSTTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
   }
@@ -3131,7 +3131,7 @@ object SparkContext extends Logging {
     }
   }
 
-  private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
+  private[spark] val SPARK_JOB_DESCRHOSTTION = "spark.job.description"
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
   private[spark] val SPARK_JOB_TAGS = "spark.job.tags"
@@ -3284,7 +3284,7 @@ object SparkContext extends Logging {
     // others its checked in ResourceProfile.
     def checkResourcesPerTask(executorCores: Int): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
-      if (!sc.conf.get(SKIP_VALIDATE_CORES_TESTING)) {
+      if (!sc.conf.get(SKHOST_VALIDATE_CORES_TESTING)) {
         validateTaskCpusLargeEnough(sc.conf, executorCores, taskCores)
       }
       val defaultProf = sc.resourceProfileManager.defaultResourceProfile
@@ -3428,11 +3428,11 @@ object SparkContext extends Logging {
     supplement(EXECUTOR_JAVA_OPTIONS)
   }
 
-  private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
+  private def supplementJavaHOSTv6Options(conf: SparkConf): Unit = {
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       val v = conf.get(key) match {
-        case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"
-        case None => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
+        case Some(opts) => s"-Djava.net.preferHOSTv6Addresses=${Utils.preferHOSTv6} $opts"
+        case None => s"-Djava.net.preferHOSTv6Addresses=${Utils.preferHOSTv6}"
       }
       conf.set(key.key, v)
     }

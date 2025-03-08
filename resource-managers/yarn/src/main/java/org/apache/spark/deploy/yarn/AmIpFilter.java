@@ -62,7 +62,7 @@ public class AmIpFilter implements Filter {
   private static final String RM_HA_URLS = "RM_HA_URLS";
   // WebAppProxyServlet is defined in WebAppProxyServlet in the original Hadoop code
   public static final String PROXY_USER_COOKIE_NAME = "proxy-user";
-  // update the proxy IP list about every 5 min
+  // update the proxy HOST list about every 5 min
   private static long updateInterval = TimeUnit.MINUTES.toMillis(5);
 
   private String[] proxyHosts;

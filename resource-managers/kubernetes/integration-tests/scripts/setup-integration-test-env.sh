@@ -79,8 +79,8 @@ rm -rf "$UNPACKED_SPARK_TGZ"
 if [[ $SPARK_TGZ == "N/A" && $IMAGE_TAG == "N/A" ]];
 then
   # If there is no spark image tag to test with and no src dir, build from current
-  SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-  SPARK_INPUT_DIR="$(cd "$SCRIPT_DIR/"../../../../  >/dev/null 2>&1 && pwd )"
+  SCRHOSTT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+  SPARK_INPUT_DIR="$(cd "$SCRHOSTT_DIR/"../../../../  >/dev/null 2>&1 && pwd )"
   DOCKER_FILE_BASE_PATH="$SPARK_INPUT_DIR/resource-managers/kubernetes/docker/src/main/dockerfiles/spark"
 elif [[ $IMAGE_TAG == "N/A" ]];
 then

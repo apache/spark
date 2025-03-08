@@ -177,7 +177,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     // There can be a lag between reader read EOF and the process termination.
     // If the script fails to startup, this kind of error may be missed.
     // So explicitly waiting for the process termination.
-    val timeout = conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_EXIT_TIMEOUT)
+    val timeout = conf.getConf(SQLConf.SCRHOSTT_TRANSFORMATION_EXIT_TIMEOUT)
     val exitRes = proc.waitFor(timeout, TimeUnit.SECONDS)
     if (!exitRes) {
       log.warn(s"Transformation script process exits timeout in $timeout seconds")

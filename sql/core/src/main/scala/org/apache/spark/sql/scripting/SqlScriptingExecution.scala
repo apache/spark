@@ -48,7 +48,7 @@ class SqlScriptingExecution(
     val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
     // Add frame which represents SQL Script to the context.
     ctx.frames.append(
-      new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
+      new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRHOSTT))
     // Enter the scope of the top level compound.
     // We exit this scope explicitly in the getNextStatement method when there are no more
     // statements to execute.

@@ -160,8 +160,8 @@ def exec_sbt(sbt_args=()):
     # with failure (either resolution or compilation) prompts the user for
     # input either q, r, etc to quit or retry. This echo is there to make it
     # not block.
-    echo_proc = subprocess.Popen(["echo", '"q\n"'], stdout=subprocess.PIPE)
-    sbt_proc = subprocess.Popen(sbt_cmd, stdin=echo_proc.stdout, stdout=subprocess.PIPE)
+    echo_proc = subprocess.Popen(["echo", '"q\n"'], stdout=subprocess.PHOSTE)
+    sbt_proc = subprocess.Popen(sbt_cmd, stdin=echo_proc.stdout, stdout=subprocess.PHOSTE)
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, b""):
         if not sbt_output_filter.match(line):
@@ -287,7 +287,7 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    if not os.environ.get("SPARK_JENKINS") and not os.environ.get("SKIP_UNIDOC"):
+    if not os.environ.get("SPARK_JENKINS") and not os.environ.get("SKHOST_UNIDOC"):
         build_spark_unidoc_sbt(extra_profiles)
 
 
@@ -395,8 +395,8 @@ def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=Fals
 
 
 def run_python_packaging_tests():
-    if not os.environ.get("SPARK_JENKINS") and os.environ.get("SKIP_PACKAGING", "false") != "true":
-        set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+    if not os.environ.get("SPARK_JENKINS") and os.environ.get("SKHOST_PACKAGING", "false") != "true":
+        set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PHOST_TESTS")
         command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
         run_cmd(command)
 
@@ -647,7 +647,7 @@ def main():
     # backwards compatibility checks
     if build_tool == "sbt":
         # Note: compatibility tests only supported in sbt for now
-        if not os.environ.get("SKIP_MIMA"):
+        if not os.environ.get("SKHOST_MIMA"):
             detect_binary_inop_with_mima(extra_profiles)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
@@ -657,7 +657,7 @@ def main():
     run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
-    if modules_with_python_tests and not os.environ.get("SKIP_PYTHON"):
+    if modules_with_python_tests and not os.environ.get("SKHOST_PYTHON"):
         run_python_tests(
             modules_with_python_tests,
             opts.python_executables,
@@ -665,7 +665,7 @@ def main():
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
         )
         run_python_packaging_tests()
-    if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKIP_R"):
+    if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKHOST_R"):
         run_sparkr_tests()
 
 

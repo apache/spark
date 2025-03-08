@@ -294,7 +294,7 @@ class SymmetricHashJoinStateManager(
        * Find the next value satisfying the condition, updating `currentKey` and `numValues` if
        * needed. Returns null when no value can be found.
        * Note that we will skip nulls explicitly if config setting for the same is
-       * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
+       * set to true via STATE_STORE_SKHOST_NULLS_FOR_STREAM_STREAM_JOINS.
        */
       private def findNextValueForIndex(): ValueAndMatchPair = {
         // Loop across all values for the current key, and then all other keys, until we find a
@@ -728,7 +728,7 @@ class SymmetricHashJoinStateManager(
      * Get all values and indices for the provided key.
      * Should not return null.
      * Note that we will skip nulls explicitly if config setting for the same is
-     * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
+     * set to true via STATE_STORE_SKHOST_NULLS_FOR_STREAM_STREAM_JOINS.
      */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
       new NextIterator[KeyWithIndexAndValue] {

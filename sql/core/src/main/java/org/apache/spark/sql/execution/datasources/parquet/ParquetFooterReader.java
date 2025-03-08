@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.PartitionedFile;
  */
 public class ParquetFooterReader {
 
-  public static final boolean SKIP_ROW_GROUPS = true;
+  public static final boolean SKHOST_ROW_GROUPS = true;
   public static final boolean WITH_ROW_GROUPS = false;
 
   /**
@@ -56,7 +56,7 @@ public class ParquetFooterReader {
     long fileStart = file.start();
     ParquetMetadataConverter.MetadataFilter filter;
     if (skipRowGroup) {
-      filter = ParquetMetadataConverter.SKIP_ROW_GROUPS;
+      filter = ParquetMetadataConverter.SKHOST_ROW_GROUPS;
     } else {
       filter = HadoopReadOptions.builder(configuration, file.toPath())
           .withRange(fileStart, fileStart + file.length())

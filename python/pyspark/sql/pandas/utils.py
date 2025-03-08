@@ -89,9 +89,9 @@ def require_minimum_pyarrow_version() -> None:
                 "current_version": str(pyarrow.__version__),
             },
         )
-    if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
+    if os.environ.get("ARROW_PRE_0_15_HOSTC_FORMAT", "0") == "1":
         raise PySparkRuntimeError(
-            errorClass="ARROW_LEGACY_IPC_FORMAT",
+            errorClass="ARROW_LEGACY_HOSTC_FORMAT",
             messageParameters={},
         )
 

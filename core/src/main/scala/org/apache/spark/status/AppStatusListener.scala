@@ -435,7 +435,7 @@ private[spark] class AppStatusListener(
     val lastStageInfo = event.stageInfos.sortBy(_.stageId).lastOption
     val jobName = lastStageInfo.map(_.name).getOrElse("")
     val description = Option(event.properties)
-      .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)) }
+      .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRHOSTTION)) }
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
     val jobTags = Option(event.properties)
@@ -502,7 +502,7 @@ private[spark] class AppStatusListener(
         if (job.stageIds.contains(e.getKey()._1)) {
           val stage = e.getValue()
           if (v1.StageStatus.PENDING.equals(stage.status)) {
-            stage.status = v1.StageStatus.SKIPPED
+            stage.status = v1.StageStatus.SKHOSTPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks
 
@@ -543,8 +543,8 @@ private[spark] class AppStatusListener(
         source.COMPLETED_TASKS.inc(job.completedTasks)
         source.FAILED_TASKS.inc(job.failedTasks)
         source.KILLED_TASKS.inc(job.killedTasks)
-        source.SKIPPED_TASKS.inc(job.skippedTasks)
-        source.SKIPPED_STAGES.inc(job.skippedStages.size)
+        source.SKHOSTPED_TASKS.inc(job.skippedTasks)
+        source.SKHOSTPED_STAGES.inc(job.skippedStages.size)
       }
       update(job, now, last = true)
       if (job.status == JobExecutionStatus.SUCCEEDED) {
@@ -569,7 +569,7 @@ private[spark] class AppStatusListener(
     stage.jobIds = stage.jobs.map(_.jobId).toSet
 
     stage.description = Option(event.properties).flatMap { p =>
-      Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+      Option(p.getProperty(SparkContext.SPARK_JOB_DESCRHOSTTION))
     }
 
     stage.jobs.foreach { job =>
@@ -827,14 +827,14 @@ private[spark] class AppStatusListener(
       stage.status = event.stageInfo.failureReason match {
         case Some(_) => v1.StageStatus.FAILED
         case _ if event.stageInfo.submissionTime.isDefined => v1.StageStatus.COMPLETE
-        case _ => v1.StageStatus.SKIPPED
+        case _ => v1.StageStatus.SKHOSTPED
       }
 
       stage.jobs.foreach { job =>
         stage.status match {
           case v1.StageStatus.COMPLETE =>
             job.completedStages += event.stageInfo.stageId
-          case v1.StageStatus.SKIPPED =>
+          case v1.StageStatus.SKHOSTPED =>
             job.skippedStages += event.stageInfo.stageId
             job.skippedTasks += event.stageInfo.numTasks
           case _ =>

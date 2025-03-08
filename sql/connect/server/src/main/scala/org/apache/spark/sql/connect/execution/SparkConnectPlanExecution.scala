@@ -63,7 +63,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val shuffleCleanupMode =
       if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
         RemoveShuffleFiles
-      } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED)) {
+      } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKHOST_MIGRATION_ENABLED)) {
         SkipMigration
       } else {
         DoNotCleanup

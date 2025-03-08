@@ -114,7 +114,7 @@ public class HiveAuthFactory {
         authTypeStr = AuthTypes.NONE.getAuthName();
       }
       if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
-        String principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL);
+        String principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCHOSTAL);
         String keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
         if (needUgiLogin(UserGroupInformation.getCurrentUser(),
           SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
@@ -208,7 +208,7 @@ public class HiveAuthFactory {
 
   // Perform kerberos login using the hadoop shim API if the configuration is available
   public static void loginFromKeytab(HiveConf hiveConf) throws IOException {
-    String principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL);
+    String principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCHOSTAL);
     String keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
     if (principal.isEmpty() || keyTabFile.isEmpty()) {
       throw new IOException("HiveServer2 Kerberos principal or keytab is not correctly configured");
@@ -220,7 +220,7 @@ public class HiveAuthFactory {
   // Perform SPNEGO login using the hadoop shim API if the configuration is available
   public static UserGroupInformation loginFromSpnegoKeytabAndReturnUGI(HiveConf hiveConf)
     throws IOException {
-    String principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL);
+    String principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCHOSTAL);
     String keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB);
     if (principal.isEmpty() || keyTabFile.isEmpty()) {
       throw new IOException("HiveServer2 SPNEGO principal or keytab is not correctly configured");

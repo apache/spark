@@ -257,11 +257,11 @@ class StringIndexer @Since("1.4.0") (
 
 @Since("1.6.0")
 object StringIndexer extends DefaultParamsReadable[StringIndexer] {
-  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val SKHOST_INVALID: String = "skip"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
-    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+    Array(SKHOST_INVALID, ERROR_INVALID, KEEP_INVALID)
   private[feature] val frequencyDesc: String = "frequencyDesc"
   private[feature] val frequencyAsc: String = "frequencyAsc"
   private[feature] val alphabetDesc: String = "alphabetDesc"
@@ -352,7 +352,7 @@ class StringIndexerModel (
       val inputColName = inputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
       // We have this additional lookup at `labelToIndex` when `handleInvalid` is set to
-      // `StringIndexer.SKIP_INVALID`. Another idea is to do this lookup natively by SQL
+      // `StringIndexer.SKHOST_INVALID`. Another idea is to do this lookup natively by SQL
       // expression, however, lookup for a key in a map is not efficient in SparkSQL now.
       // See `ElementAt` and `GetMapValue` expressions. If SQL's map lookup is improved,
       // we can consider to change this.
@@ -397,8 +397,8 @@ class StringIndexerModel (
     val (inputColNames, outputColNames) = getInOutCols()
     val outputColumns = new Array[Column](outputColNames.length)
 
-    // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
-    val filteredDataset = if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
+    // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKHOST_INVALID`.
+    val filteredDataset = if (getHandleInvalid == StringIndexer.SKHOST_INVALID) {
       filterInvalidData(dataset, inputColNames.toImmutableArraySeq)
     } else {
       dataset

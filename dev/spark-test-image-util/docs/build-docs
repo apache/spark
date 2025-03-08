@@ -29,7 +29,7 @@ IMG_TAG=$(date +%s)
 IMG_NAME="${REPOSITORY}:${IMG_TAG}"
 IMG_URL="$REPO_OWNER/$IMG_NAME"
 DOCKER_MOUNT_SPARK_HOME="/__w/spark/spark"
-BUILD_DOCS_SCRIPT_PATH="${DOCKER_MOUNT_SPARK_HOME}/dev/spark-test-image-util/docs/run-in-container"
+BUILD_DOCS_SCRHOSTT_PATH="${DOCKER_MOUNT_SPARK_HOME}/dev/spark-test-image-util/docs/run-in-container"
 
 FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/../../..; pwd)"
@@ -47,9 +47,9 @@ docker buildx build \
 docker run \
   --mount type=bind,source="${SPARK_HOME}",target="${DOCKER_MOUNT_SPARK_HOME}" \
   --interactive --tty "${IMG_URL}" \
-  /bin/bash -c "sh ${BUILD_DOCS_SCRIPT_PATH}"
+  /bin/bash -c "sh ${BUILD_DOCS_SCRHOSTT_PATH}"
 
-if [[ "$SKIP_RDOC" != "1" ]]; then
+if [[ "$SKHOST_RDOC" != "1" ]]; then
   # 4.Build docs on host: `r doc`.
   #
   # Why does `r` document need to be compiled outside the container?
@@ -58,10 +58,10 @@ if [[ "$SKIP_RDOC" != "1" ]]; then
   # and when writing to subsequent files, will throw an error as:
   # `! [EACCES] Failed to copy '/usr/local/lib/R/site-library/pkgdown/BS5/assets/katex-auto.js'
   # to '/__w/spark/spark/R/pkg/docs/katex-auto.js': permission denied`
-  export SKIP_ERRORDOC=1
-  export SKIP_SCALADOC=1
-  export SKIP_PYTHONDOC=1
-  export SKIP_SQLDOC=1
+  export SKHOST_ERRORDOC=1
+  export SKHOST_SCALADOC=1
+  export SKHOST_PYTHONDOC=1
+  export SKHOST_SQLDOC=1
   cd docs
   bundle exec jekyll build
 fi

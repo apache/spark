@@ -244,7 +244,7 @@ class StateStoreInvalidVariableTypeChange(stateVarName: String, oldType: String,
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+    errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTHOSTLE_COLUMN_FAMILIES",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)

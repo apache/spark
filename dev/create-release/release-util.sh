@@ -138,13 +138,13 @@ function get_release_info {
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"
-  SKIP_TAG=0
+  SKHOST_TAG=0
   if check_for_tag "$RELEASE_TAG"; then
     read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " ANSWER
     if [ "$ANSWER" != "y" ]; then
       error "Exiting."
     fi
-    SKIP_TAG=1
+    SKHOST_TAG=1
   fi
 
 
@@ -153,7 +153,7 @@ function get_release_info {
   GIT_REF="$RELEASE_TAG"
   if is_dry_run; then
     echo "This is a dry run. Please confirm the ref that will be built for testing."
-    if [[ $SKIP_TAG = 0 ]]; then
+    if [[ $SKHOST_TAG = 0 ]]; then
       GIT_REF="$GIT_BRANCH"
     fi
     GIT_REF=$(read_config "Ref" "$GIT_REF")

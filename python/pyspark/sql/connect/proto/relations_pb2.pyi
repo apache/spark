@@ -53,7 +53,7 @@ if sys.version_info >= (3, 10):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class Relation(google.protobuf.message.Message):
     """The main [[Relation]] type. Fundamentally, a relation is a typed container
@@ -62,7 +62,7 @@ class Relation(google.protobuf.message.Message):
     When adding new relation types, they have to be registered here.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     COMMON_FIELD_NUMBER: builtins.int
     READ_FIELD_NUMBER: builtins.int
@@ -638,14 +638,14 @@ global___Relation = Relation
 class MlRelation(google.protobuf.message.Message):
     """Relation to represent ML world"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Transform(google.protobuf.message.Message):
         """Relation to represent transform(input) of the operator
         which could be a cached model or a new transformer
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         OBJ_REF_FIELD_NUMBER: builtins.int
         TRANSFORMER_FIELD_NUMBER: builtins.int
@@ -743,15 +743,15 @@ class Fetch(google.protobuf.message.Message):
     Relation: model.summary.roc which returns a DataFrame (Relation)
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Method(google.protobuf.message.Message):
         """Represents a method with inclusion of method name and its arguments"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class Args(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             PARAM_FIELD_NUMBER: builtins.int
             INPUT_FIELD_NUMBER: builtins.int
@@ -830,7 +830,7 @@ global___Fetch = Fetch
 class Unknown(google.protobuf.message.Message):
     """Used for testing purposes only."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -841,7 +841,7 @@ global___Unknown = Unknown
 class RelationCommon(google.protobuf.message.Message):
     """Common metadata of all relations."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SOURCE_INFO_FIELD_NUMBER: builtins.int
     PLAN_ID_FIELD_NUMBER: builtins.int
@@ -888,10 +888,10 @@ global___RelationCommon = RelationCommon
 class SQL(google.protobuf.message.Message):
     """Relation that uses a SQL query to generate the output."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ArgsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -912,7 +912,7 @@ class SQL(google.protobuf.message.Message):
         ) -> None: ...
 
     class NamedArgumentsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -1020,7 +1020,7 @@ class WithRelations(google.protobuf.message.Message):
     This relation can be used to implement CTEs, describe DAGs, or to reduce tree depth.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ROOT_FIELD_NUMBER: builtins.int
     REFERENCES_FIELD_NUMBER: builtins.int
@@ -1054,13 +1054,13 @@ class Read(google.protobuf.message.Message):
     inputs.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class NamedTable(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class OptionsEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             KEY_FIELD_NUMBER: builtins.int
             VALUE_FIELD_NUMBER: builtins.int
@@ -1099,10 +1099,10 @@ class Read(google.protobuf.message.Message):
         ) -> None: ...
 
     class DataSource(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class OptionsEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             KEY_FIELD_NUMBER: builtins.int
             VALUE_FIELD_NUMBER: builtins.int
@@ -1252,7 +1252,7 @@ class Project(google.protobuf.message.Message):
     The projected expression can be an arbitrary expression.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     EXPRESSIONS_FIELD_NUMBER: builtins.int
@@ -1291,7 +1291,7 @@ class Filter(google.protobuf.message.Message):
     the output result.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     CONDITION_FIELD_NUMBER: builtins.int
@@ -1322,7 +1322,7 @@ class Join(google.protobuf.message.Message):
     `left` and `right` must be present.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _JoinType:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -1332,7 +1332,7 @@ class Join(google.protobuf.message.Message):
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Join._JoinType.ValueType],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         JOIN_TYPE_UNSPECIFIED: Join._JoinType.ValueType  # 0
         JOIN_TYPE_INNER: Join._JoinType.ValueType  # 1
         JOIN_TYPE_FULL_OUTER: Join._JoinType.ValueType  # 2
@@ -1353,7 +1353,7 @@ class Join(google.protobuf.message.Message):
     JOIN_TYPE_CROSS: Join.JoinType.ValueType  # 7
 
     class JoinDataType(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         IS_LEFT_STRUCT_FIELD_NUMBER: builtins.int
         IS_RIGHT_STRUCT_FIELD_NUMBER: builtins.int
@@ -1460,7 +1460,7 @@ global___Join = Join
 class SetOperation(google.protobuf.message.Message):
     """Relation of type [[SetOperation]]"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _SetOpType:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -1472,7 +1472,7 @@ class SetOperation(google.protobuf.message.Message):
         ],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         SET_OP_TYPE_UNSPECIFIED: SetOperation._SetOpType.ValueType  # 0
         SET_OP_TYPE_INTERSECT: SetOperation._SetOpType.ValueType  # 1
         SET_OP_TYPE_UNION: SetOperation._SetOpType.ValueType  # 2
@@ -1587,7 +1587,7 @@ global___SetOperation = SetOperation
 class Limit(google.protobuf.message.Message):
     """Relation of type [[Limit]] that is used to `limit` rows from the input relation."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     LIMIT_FIELD_NUMBER: builtins.int
@@ -1616,7 +1616,7 @@ class Offset(google.protobuf.message.Message):
     the input relation.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     OFFSET_FIELD_NUMBER: builtins.int
@@ -1643,7 +1643,7 @@ global___Offset = Offset
 class Tail(google.protobuf.message.Message):
     """Relation of type [[Tail]] that is used to fetch `limit` rows from the last of the input relation."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     LIMIT_FIELD_NUMBER: builtins.int
@@ -1670,7 +1670,7 @@ global___Tail = Tail
 class Aggregate(google.protobuf.message.Message):
     """Relation of type [[Aggregate]]."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _GroupType:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -1680,7 +1680,7 @@ class Aggregate(google.protobuf.message.Message):
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Aggregate._GroupType.ValueType],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         GROUP_TYPE_UNSPECIFIED: Aggregate._GroupType.ValueType  # 0
         GROUP_TYPE_GROUPBY: Aggregate._GroupType.ValueType  # 1
         GROUP_TYPE_ROLLUP: Aggregate._GroupType.ValueType  # 2
@@ -1697,7 +1697,7 @@ class Aggregate(google.protobuf.message.Message):
     GROUP_TYPE_GROUPING_SETS: Aggregate.GroupType.ValueType  # 5
 
     class Pivot(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         COL_FIELD_NUMBER: builtins.int
         VALUES_FIELD_NUMBER: builtins.int
@@ -1732,7 +1732,7 @@ class Aggregate(google.protobuf.message.Message):
         ) -> None: ...
 
     class GroupingSets(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         GROUPING_SET_FIELD_NUMBER: builtins.int
         @property
@@ -1831,7 +1831,7 @@ global___Aggregate = Aggregate
 class Sort(google.protobuf.message.Message):
     """Relation of type [[Sort]]."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     ORDER_FIELD_NUMBER: builtins.int
@@ -1886,7 +1886,7 @@ global___Sort = Sort
 class Drop(google.protobuf.message.Message):
     """Drop specified columns."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLUMNS_FIELD_NUMBER: builtins.int
@@ -1931,7 +1931,7 @@ class Deduplicate(google.protobuf.message.Message):
     the subset of columns or all the columns.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLUMN_NAMES_FIELD_NUMBER: builtins.int
@@ -2010,12 +2010,12 @@ global___Deduplicate = Deduplicate
 class LocalRelation(google.protobuf.message.Message):
     """A relation that does not need to be qualified by name."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     DATA_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     data: builtins.bytes
-    """(Optional) Local collection data serialized into Arrow IPC streaming format which contains
+    """(Optional) Local collection data serialized into Arrow HOSTC streaming format which contains
     the schema of the data.
     """
     schema: builtins.str
@@ -2057,7 +2057,7 @@ global___LocalRelation = LocalRelation
 class CachedLocalRelation(google.protobuf.message.Message):
     """A local relation that has been cached already."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     HASH_FIELD_NUMBER: builtins.int
     hash: builtins.str
@@ -2074,7 +2074,7 @@ global___CachedLocalRelation = CachedLocalRelation
 class CachedRemoteRelation(google.protobuf.message.Message):
     """Represents a remote relation that has been cached on server."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     RELATION_ID_FIELD_NUMBER: builtins.int
     relation_id: builtins.str
@@ -2093,7 +2093,7 @@ global___CachedRemoteRelation = CachedRemoteRelation
 class Sample(google.protobuf.message.Message):
     """Relation of type [[Sample]] that samples a fraction of the dataset."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     LOWER_BOUND_FIELD_NUMBER: builtins.int
@@ -2180,7 +2180,7 @@ global___Sample = Sample
 class Range(google.protobuf.message.Message):
     """Relation of type [[Range]] that generates a sequence of integers."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     START_FIELD_NUMBER: builtins.int
     END_FIELD_NUMBER: builtins.int
@@ -2248,7 +2248,7 @@ global___Range = Range
 class SubqueryAlias(google.protobuf.message.Message):
     """Relation alias."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     ALIAS_FIELD_NUMBER: builtins.int
@@ -2285,7 +2285,7 @@ global___SubqueryAlias = SubqueryAlias
 class Repartition(google.protobuf.message.Message):
     """Relation repartition."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     NUM_PARTITIONS_FIELD_NUMBER: builtins.int
@@ -2334,7 +2334,7 @@ class ShowString(google.protobuf.message.Message):
     It will invoke 'Dataset.showString' to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     NUM_ROWS_FIELD_NUMBER: builtins.int
@@ -2383,7 +2383,7 @@ class HtmlString(google.protobuf.message.Message):
     It will invoke 'Dataset.htmlString' to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     NUM_ROWS_FIELD_NUMBER: builtins.int
@@ -2422,7 +2422,7 @@ class StatSummary(google.protobuf.message.Message):
     to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     STATISTICS_FIELD_NUMBER: builtins.int
@@ -2469,7 +2469,7 @@ class StatDescribe(google.protobuf.message.Message):
     string columns.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
@@ -2502,7 +2502,7 @@ class StatCrosstab(google.protobuf.message.Message):
     to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COL1_FIELD_NUMBER: builtins.int
@@ -2542,7 +2542,7 @@ class StatCov(google.protobuf.message.Message):
     It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COL1_FIELD_NUMBER: builtins.int
@@ -2577,7 +2577,7 @@ class StatCorr(google.protobuf.message.Message):
     'StatFunctions.pearsonCorrelation') to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COL1_FIELD_NUMBER: builtins.int
@@ -2636,7 +2636,7 @@ class StatApproxQuantile(google.protobuf.message.Message):
     to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
@@ -2698,7 +2698,7 @@ class StatFreqItems(google.protobuf.message.Message):
     to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
@@ -2747,10 +2747,10 @@ class StatSampleBy(google.protobuf.message.Message):
     to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Fraction(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         STRATUM_FIELD_NUMBER: builtins.int
         FRACTION_FIELD_NUMBER: builtins.int
@@ -2845,7 +2845,7 @@ class NAFill(google.protobuf.message.Message):
        replaces each specified column with corresponding value.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
@@ -2896,7 +2896,7 @@ class NADrop(google.protobuf.message.Message):
     It will invoke 'Dataset.na.drop' (same as 'DataFrameNaFunctions.drop') to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
@@ -2965,10 +2965,10 @@ class NAReplace(google.protobuf.message.Message):
     to compute the results.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Replacement(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         OLD_VALUE_FIELD_NUMBER: builtins.int
         NEW_VALUE_FIELD_NUMBER: builtins.int
@@ -3046,7 +3046,7 @@ global___NAReplace = NAReplace
 class ToDF(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     COLUMN_NAMES_FIELD_NUMBER: builtins.int
@@ -3081,10 +3081,10 @@ global___ToDF = ToDF
 class WithColumnsRenamed(google.protobuf.message.Message):
     """Rename columns on the input relation by a map with name to name mapping."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class RenameColumnsMapEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -3101,7 +3101,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
         ) -> None: ...
 
     class Rename(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         COL_NAME_FIELD_NUMBER: builtins.int
         NEW_COL_NAME_FIELD_NUMBER: builtins.int
@@ -3167,7 +3167,7 @@ global___WithColumnsRenamed = WithColumnsRenamed
 class WithColumns(google.protobuf.message.Message):
     """Adding columns or replacing the existing columns that have the same names."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     ALIASES_FIELD_NUMBER: builtins.int
@@ -3209,7 +3209,7 @@ class WithColumns(google.protobuf.message.Message):
 global___WithColumns = WithColumns
 
 class WithWatermark(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     EVENT_TIME_FIELD_NUMBER: builtins.int
@@ -3243,7 +3243,7 @@ global___WithWatermark = WithWatermark
 class Hint(google.protobuf.message.Message):
     """Specify a hint over a relation. Hint should have a name and optional parameters."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
@@ -3288,10 +3288,10 @@ global___Hint = Hint
 class Unpivot(google.protobuf.message.Message):
     """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Values(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         VALUES_FIELD_NUMBER: builtins.int
         @property
@@ -3377,7 +3377,7 @@ class Transpose(google.protobuf.message.Message):
     become the new columns of the DataFrame.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     INDEX_COLUMNS_FIELD_NUMBER: builtins.int
@@ -3413,7 +3413,7 @@ class Transpose(google.protobuf.message.Message):
 global___Transpose = Transpose
 
 class UnresolvedTableValuedFunction(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
     ARGUMENTS_FIELD_NUMBER: builtins.int
@@ -3443,7 +3443,7 @@ class UnresolvedTableValuedFunction(google.protobuf.message.Message):
 global___UnresolvedTableValuedFunction = UnresolvedTableValuedFunction
 
 class ToSchema(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -3472,7 +3472,7 @@ class ToSchema(google.protobuf.message.Message):
 global___ToSchema = ToSchema
 
 class RepartitionByExpression(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     PARTITION_EXPRS_FIELD_NUMBER: builtins.int
@@ -3530,7 +3530,7 @@ class RepartitionByExpression(google.protobuf.message.Message):
 global___RepartitionByExpression = RepartitionByExpression
 
 class MapPartitions(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
@@ -3601,7 +3601,7 @@ class MapPartitions(google.protobuf.message.Message):
 global___MapPartitions = MapPartitions
 
 class GroupMap(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
@@ -3785,7 +3785,7 @@ global___GroupMap = GroupMap
 class TransformWithStateInfo(google.protobuf.message.Message):
     """Additional input parameters used for TransformWithState operator."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TIME_MODE_FIELD_NUMBER: builtins.int
     EVENT_TIME_COLUMN_NAME_FIELD_NUMBER: builtins.int
@@ -3849,7 +3849,7 @@ class TransformWithStateInfo(google.protobuf.message.Message):
 global___TransformWithStateInfo = TransformWithStateInfo
 
 class CoGroupMap(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     INPUT_GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
@@ -3948,7 +3948,7 @@ class CoGroupMap(google.protobuf.message.Message):
 global___CoGroupMap = CoGroupMap
 
 class ApplyInPandasWithState(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
@@ -4019,7 +4019,7 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
 global___ApplyInPandasWithState = ApplyInPandasWithState
 
 class CommonInlineUserDefinedTableFunction(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     FUNCTION_NAME_FIELD_NUMBER: builtins.int
     DETERMINISTIC_FIELD_NUMBER: builtins.int
@@ -4075,7 +4075,7 @@ class CommonInlineUserDefinedTableFunction(google.protobuf.message.Message):
 global___CommonInlineUserDefinedTableFunction = CommonInlineUserDefinedTableFunction
 
 class PythonUDTF(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     RETURN_TYPE_FIELD_NUMBER: builtins.int
     EVAL_TYPE_FIELD_NUMBER: builtins.int
@@ -4126,7 +4126,7 @@ class PythonUDTF(google.protobuf.message.Message):
 global___PythonUDTF = PythonUDTF
 
 class CommonInlineUserDefinedDataSource(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
     PYTHON_DATA_SOURCE_FIELD_NUMBER: builtins.int
@@ -4164,7 +4164,7 @@ class CommonInlineUserDefinedDataSource(google.protobuf.message.Message):
 global___CommonInlineUserDefinedDataSource = CommonInlineUserDefinedDataSource
 
 class PythonDataSource(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
@@ -4188,7 +4188,7 @@ global___PythonDataSource = PythonDataSource
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
@@ -4226,7 +4226,7 @@ class CollectMetrics(google.protobuf.message.Message):
 global___CollectMetrics = CollectMetrics
 
 class Parse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _ParseFormat:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -4236,7 +4236,7 @@ class Parse(google.protobuf.message.Message):
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Parse._ParseFormat.ValueType],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         PARSE_FORMAT_UNSPECIFIED: Parse._ParseFormat.ValueType  # 0
         PARSE_FORMAT_CSV: Parse._ParseFormat.ValueType  # 1
         PARSE_FORMAT_JSON: Parse._ParseFormat.ValueType  # 2
@@ -4247,7 +4247,7 @@ class Parse(google.protobuf.message.Message):
     PARSE_FORMAT_JSON: Parse.ParseFormat.ValueType  # 2
 
     class OptionsEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -4319,7 +4319,7 @@ class AsOfJoin(google.protobuf.message.Message):
     `left` and `right` must be present.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int
@@ -4433,7 +4433,7 @@ class LateralJoin(google.protobuf.message.Message):
     `left` and `right` must be present.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int

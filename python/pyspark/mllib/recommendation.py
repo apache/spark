@@ -379,7 +379,7 @@ def _test() -> None:
     sc = SparkContext("local[4]", "PythonTest")
     globs["sc"] = sc
     globs["sqlContext"] = SQLContext(sc)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

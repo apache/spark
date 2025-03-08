@@ -53,7 +53,7 @@ private[spark] abstract class WebUI(
 
   protected val tabs = ArrayBuffer[WebUITab]()
   protected val handlers = ArrayBuffer[ServletContextHandler]()
-  protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
+  protected val pageToHandlers = new HashMap[WebUHOSTage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None
   protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
     conf.get(DRIVER_HOST_ADDRESS))
@@ -80,12 +80,12 @@ private[spark] abstract class WebUI(
   }
 
   /** Detaches a page from this UI, along with all of its attached handlers. */
-  def detachPage(page: WebUIPage): Unit = {
+  def detachPage(page: WebUHOSTage): Unit = {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
 
   /** Attaches a page to this UI. */
-  def attachPage(page: WebUIPage): Unit = {
+  def attachPage(page: WebUHOSTage): Unit = {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
       (request: HttpServletRequest) => page.render(request), conf, basePath)
@@ -141,8 +141,8 @@ private[spark] abstract class WebUI(
   def initialize(): Unit
 
   def initServer(): ServerInfo = {
-    val hostName = Option(conf.getenv("SPARK_LOCAL_IP"))
-        .getOrElse(if (Utils.preferIPv6) "[::]" else "0.0.0.0")
+    val hostName = Option(conf.getenv("SPARK_LOCAL_HOST"))
+        .getOrElse(if (Utils.preferHOSTv6) "[::]" else "0.0.0.0")
     val server = startJettyServer(hostName, port, sslOptions, conf, name, poolSize)
     server
   }
@@ -154,8 +154,8 @@ private[spark] abstract class WebUI(
       val server = initServer()
       handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
-      val hostName = Option(conf.getenv("SPARK_LOCAL_IP"))
-          .getOrElse(if (Utils.preferIPv6) "[::]" else "0.0.0.0")
+      val hostName = Option(conf.getenv("SPARK_LOCAL_HOST"))
+          .getOrElse(if (Utils.preferHOSTv6) "[::]" else "0.0.0.0")
       logInfo(log"Bound ${MDC(CLASS_NAME, className)} to ${MDC(HOST, hostName)}," +
         log" and started at ${MDC(WEB_URL, webUrl)}")
     } catch {
@@ -191,11 +191,11 @@ private[spark] abstract class WebUI(
  * The prefix is appended to the parent address to form a full path, and must not contain slashes.
  */
 private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
-  val pages = ArrayBuffer[WebUIPage]()
+  val pages = ArrayBuffer[WebUHOSTage]()
   val name = prefix.capitalize
 
   /** Attach a page to this tab. This prepends the page's prefix with the tab's own prefix. */
-  def attachPage(page: WebUIPage): Unit = {
+  def attachPage(page: WebUHOSTage): Unit = {
     page.prefix = (prefix + "/" + page.prefix).stripSuffix("/")
     pages += page
   }
@@ -212,12 +212,12 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
 /**
  * A page that represents the leaf node in the UI hierarchy.
  *
- * The direct parent of a WebUIPage is not specified as it can be either a WebUI or a WebUITab.
+ * The direct parent of a WebUHOSTage is not specified as it can be either a WebUI or a WebUITab.
  * If the parent is a WebUI, the prefix is appended to the parent's address to form a full path.
  * Else, if the parent is a WebUITab, the prefix is appended to the super prefix of the parent
  * to form a relative path. The prefix must not contain slashes.
  */
-private[spark] abstract class WebUIPage(var prefix: String) {
+private[spark] abstract class WebUHOSTage(var prefix: String) {
   def render(request: HttpServletRequest): Seq[Node]
   def renderJson(request: HttpServletRequest): JValue = JNothing
 }

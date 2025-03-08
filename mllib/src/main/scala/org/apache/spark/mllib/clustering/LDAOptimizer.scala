@@ -252,7 +252,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
  * distribution adaptively.
  *
  * Original Online LDA paper:
- *   Hoffman, Blei and Bach, "Online Learning for Latent Dirichlet Allocation." NIPS, 2010.
+ *   Hoffman, Blei and Bach, "Online Learning for Latent Dirichlet Allocation." NHOSTS, 2010.
  */
 @Since("1.4.0")
 final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
@@ -603,7 +603,7 @@ private[spark] object OnlineLDAOptimizer {
    * for a document. `termCounts` must contain at least one non-zero entry, otherwise Breeze will
    * throw a BLAS error.
    *
-   * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
+   * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NHOSTS 2001)
    * avoids explicit computation of variational parameter `phi`.
    * @see <a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566">here</a>
    *

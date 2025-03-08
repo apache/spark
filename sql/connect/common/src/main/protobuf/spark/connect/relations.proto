@@ -483,7 +483,7 @@ message Deduplicate {
 
 // A relation that does not need to be qualified by name.
 message LocalRelation {
-  // (Optional) Local collection data serialized into Arrow IPC streaming format which contains
+  // (Optional) Local collection data serialized into Arrow HOSTC streaming format which contains
   // the schema of the data.
   optional bytes data = 1;
 

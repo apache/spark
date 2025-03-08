@@ -22,11 +22,11 @@ import scala.xml.{Node, Text}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{SparkUITab, UIUtils, WebUHOSTage}
 
 private[spark] class TaskThreadDumpPage(
     parent: SparkUITab,
-    sc: Option[SparkContext]) extends WebUIPage("taskThreadDump") {
+    sc: Option[SparkContext]) extends WebUHOSTage("taskThreadDump") {
 
   private def executorThreadDumpUrl(
       request: HttpServletRequest,
@@ -72,7 +72,7 @@ private[spark] class TaskThreadDumpPage(
       <div class="row">
         <div class="col-12">
           <p>Updated at {UIUtils.formatDate(time)}</p>
-          <table class={UIUtils.TABLE_CLASS_NOT_STRIPED + " accordion-group"}>
+          <table class={UIUtils.TABLE_CLASS_NOT_STRHOSTED + " accordion-group"}>
             <thead>
               <th>Thread ID</th>
               <th>Thread Name</th>

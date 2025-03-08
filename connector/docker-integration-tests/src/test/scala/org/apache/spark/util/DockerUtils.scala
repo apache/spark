@@ -32,7 +32,7 @@ private[spark] object DockerUtils {
         Try(Seq("/bin/bash", "-c", s"docker-machine ip $name 2>/dev/null").!!.trim).toOption
       }
     }
-    sys.env.get("DOCKER_IP")
+    sys.env.get("DOCKER_HOST")
       .orElse(findFromDockerMachine())
       .orElse(Try(Seq("/bin/bash", "-c", "boot2docker ip 2>/dev/null").!!.trim).toOption)
       .getOrElse {

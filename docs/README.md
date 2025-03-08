@@ -66,7 +66,7 @@ $ sudo Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='
 $ sudo Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
 ```
 
-Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 7.1.2, which is updated if the version is mismatched.
+Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRHOSTTION` is 7.1.2, which is updated if the version is mismatched.
 
 ## Generating the Documentation HTML
 
@@ -79,14 +79,14 @@ you have checked out or downloaded.
 In this directory you will find text files formatted using Markdown, with an ".md" suffix. You can
 read those text files directly if you want. Start with `index.md`.
 
-Execute `SKIP_API=1 bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
+Execute `SKHOST_API=1 bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
 Jekyll will create a directory called `_site` containing `index.html` as well as the rest of the
 compiled files.
 
 ```sh
 $ cd docs
 # Skip generating API docs (which takes a while)
-$ SKIP_API=1 bundle exec jekyll build
+$ SKHOST_API=1 bundle exec jekyll build
 ```
 
 You can also generate the default Jekyll build with API Docs as follows:
@@ -120,11 +120,11 @@ using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) an
 using [MkDocs](https://www.mkdocs.org/).
 
 To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
-* `SKIP_API=1`: Skip building all the API docs.
-* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs.
-* `SKIP_PYTHONDOC=1`: Skip the Python API docs.
-* `SKIP_RDOC=1`: Skip the R API docs.
-* `SKIP_SQLDOC=1`: Skip the SQL API docs.
+* `SKHOST_API=1`: Skip building all the API docs.
+* `SKHOST_SCALADOC=1`: Skip the Scala and Java API docs.
+* `SKHOST_PYTHONDOC=1`: Skip the Python API docs.
+* `SKHOST_RDOC=1`: Skip the R API docs.
+* `SKHOST_SQLDOC=1`: Skip the SQL API docs.
 
 ## Build docs with docker image (Optional)
 

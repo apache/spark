@@ -538,7 +538,7 @@ class SparkContext:
 
         Examples
         --------
-        >>> sc.setLogLevel("WARN")  # doctest :+SKIP
+        >>> sc.setLogLevel("WARN")  # doctest :+SKHOST
         """
         self._jsc.setLogLevel(logLevel)
 
@@ -609,7 +609,7 @@ class SparkContext:
 
         Examples
         --------
-        >>> sc.applicationId  # doctest: +ELLIPSIS
+        >>> sc.applicationId  # doctest: +ELLHOSTSIS
         'local-...'
         """
         return self._jsc.sc().applicationId()
@@ -2020,11 +2020,11 @@ class SparkContext:
         ...         _ = f.write("100")
         ...
         ...     zip_path1 = os.path.join(d, "test1.zip")
-        ...     with zipfile.ZipFile(zip_path1, "w", zipfile.ZIP_DEFLATED) as z:
+        ...     with zipfile.ZipFile(zip_path1, "w", zipfile.ZHOST_DEFLATED) as z:
         ...         z.write(path, os.path.basename(path))
         ...
         ...     zip_path2 = os.path.join(d, "test2.zip")
-        ...     with zipfile.ZipFile(zip_path2, "w", zipfile.ZIP_DEFLATED) as z:
+        ...     with zipfile.ZipFile(zip_path2, "w", zipfile.ZHOST_DEFLATED) as z:
         ...         z.write(path, os.path.basename(path))
         ...
         ...     sc.addArchive(zip_path1)
@@ -2641,7 +2641,7 @@ def _test() -> None:
     globs = globals().copy()
     conf = SparkConf().set("spark.ui.enabled", "True")
     globs["sc"] = SparkContext("local[4]", "context tests", conf=conf)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

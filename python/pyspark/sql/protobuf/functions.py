@@ -287,7 +287,7 @@ def to_protobuf(
 
 
 def _read_descriptor_set_file(filePath: str) -> bytes:
-    # TODO(SPARK-43847): Throw structured errors like "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" etc.
+    # TODO(SPARK-43847): Throw structured errors like "PROTOBUF_DESCRHOSTTOR_FILE_NOT_FOUND" etc.
     with open(filePath, "rb") as f:
         return f.read()
 
@@ -325,7 +325,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.protobuf.functions,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

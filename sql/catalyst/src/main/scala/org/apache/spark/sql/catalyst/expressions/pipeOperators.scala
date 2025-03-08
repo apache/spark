@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PIPE_EXPRESSION, PIPE_OPERATOR, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PHOSTE_EXPRESSION, PHOSTE_OPERATOR, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.DataType
  */
 case class PipeExpression(child: Expression, isAggregate: Boolean, clause: String)
   extends UnaryExpression with Unevaluable {
-  final override val nodePatterns = Seq(PIPE_EXPRESSION)
+  final override val nodePatterns = Seq(PHOSTE_EXPRESSION)
   final override lazy val resolved = false
   override def withNewChildInternal(newChild: Expression): Expression =
     PipeExpression(newChild, isAggregate, clause)
@@ -48,7 +48,7 @@ case class PipeExpression(child: Expression, isAggregate: Boolean, clause: Strin
  * operators above and below the boundary.
  */
 case class PipeOperator(child: LogicalPlan) extends UnaryNode {
-  final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
+  final override val nodePatterns: Seq[TreePattern] = Seq(PHOSTE_OPERATOR)
   override def output: Seq[Attribute] = child.output
   override def withNewChildInternal(newChild: LogicalPlan): PipeOperator = copy(child = newChild)
 }
@@ -56,7 +56,7 @@ case class PipeOperator(child: LogicalPlan) extends UnaryNode {
 /** This rule removes all PipeOperator nodes from a logical plan at the end of analysis. */
 object EliminatePipeOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(PIPE_OPERATOR), ruleId) {
+    _.containsPattern(PHOSTE_OPERATOR), ruleId) {
     case PipeOperator(child) => child
   }
 }
@@ -67,7 +67,7 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
  */
 object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(PIPE_EXPRESSION), ruleId) {
+    _.containsPattern(PHOSTE_EXPRESSION), ruleId) {
     case node: LogicalPlan =>
       node.resolveExpressions {
         case p: PipeExpression if p.child.resolved =>

@@ -372,7 +372,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-32667: SCRIPT TRANSFORM pad null value to fill column" +
+  test("SPARK-32667: SCRHOSTT TRANSFORM pad null value to fill column" +
     " when without schema less (no-serde)") {
     val df = Seq(
       (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),

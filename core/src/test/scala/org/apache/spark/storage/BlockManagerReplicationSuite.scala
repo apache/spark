@@ -302,7 +302,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val newConf = conf.clone()
     newConf.set(SHUFFLE_SERVICE_ENABLED, true)
     newConf.set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
-    newConf.set(Tests.TEST_SKIP_ESS_REGISTER, true)
+    newConf.set(Tests.TEST_SKHOST_ESS_REGISTER, true)
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     val shuffleClient = Some(new ExternalBlockStoreClient(
         new TransportConf("shuffle", MapConfigProvider.EMPTY),

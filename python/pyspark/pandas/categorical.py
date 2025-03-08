@@ -39,7 +39,7 @@ class CategoricalAccessor:
     Examples
     --------
     >>> s = ps.Series(list("abbccc"), dtype="category")
-    >>> s  # doctest: +SKIP
+    >>> s  # doctest: +SKHOST
     0    a
     1    b
     2    b
@@ -79,7 +79,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -118,7 +118,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -141,7 +141,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -205,7 +205,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -215,7 +215,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
 
-        >>> s.cat.add_categories('x')  # doctest: +SKIP
+        >>> s.cat.add_categories('x')  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -276,7 +276,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -286,7 +286,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
 
-        >>> s.cat.as_ordered()  # doctest: +SKIP
+        >>> s.cat.as_ordered()  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -310,7 +310,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category").cat.as_ordered()
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -320,7 +320,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a' < 'b' < 'c']
 
-        >>> s.cat.as_unordered()  # doctest: +SKIP
+        >>> s.cat.as_unordered()  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -365,7 +365,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -375,7 +375,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
 
-        >>> s.cat.remove_categories('b')  # doctest: +SKIP
+        >>> s.cat.remove_categories('b')  # doctest: +SKHOST
         0      a
         1    NaN
         2    NaN
@@ -435,7 +435,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(pd.Categorical(list("abbccc"), categories=['a', 'b', 'c', 'd']))
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -445,7 +445,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (4, object): ['a', 'b', 'c', 'd']
 
-        >>> s.cat.remove_unused_categories()  # doctest: +SKIP
+        >>> s.cat.remove_unused_categories()  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -511,7 +511,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(["a", "a", "b"], dtype="category")
-        >>> s.cat.rename_categories([0, 1])  # doctest: +SKIP
+        >>> s.cat.rename_categories([0, 1])  # doctest: +SKHOST
         0    0
         1    0
         2    1
@@ -521,7 +521,7 @@ class CategoricalAccessor:
         For dict-like ``new_categories``, extra keys are ignored and
         categories not in the dictionary are passed through
 
-        >>> s.cat.rename_categories({'a': 'A', 'c': 'C'})  # doctest: +SKIP
+        >>> s.cat.rename_categories({'a': 'A', 'c': 'C'})  # doctest: +SKHOST
         0    A
         1    A
         2    b
@@ -530,7 +530,7 @@ class CategoricalAccessor:
 
         You may also provide a callable to create the new categories
 
-        >>> s.cat.rename_categories(lambda x: x.upper())  # doctest: +SKIP
+        >>> s.cat.rename_categories(lambda x: x.upper())  # doctest: +SKHOST
         0    A
         1    A
         2    B
@@ -603,7 +603,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -613,7 +613,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
 
-        >>> s.cat.reorder_categories(['c', 'b', 'a'], ordered=True)  # doctest: +SKIP
+        >>> s.cat.reorder_categories(['c', 'b', 'a'], ordered=True)  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -697,7 +697,7 @@ class CategoricalAccessor:
         Examples
         --------
         >>> s = ps.Series(list("abbccc"), dtype="category")
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         0    a
         1    b
         2    b
@@ -707,7 +707,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
 
-        >>> s.cat.set_categories(['b', 'c'])  # doctest: +SKIP
+        >>> s.cat.set_categories(['b', 'c'])  # doctest: +SKHOST
         0    NaN
         1      b
         2      b
@@ -717,7 +717,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (2, object): ['b', 'c']
 
-        >>> s.cat.set_categories([1, 2, 3], rename=True)  # doctest: +SKIP
+        >>> s.cat.set_categories([1, 2, 3], rename=True)  # doctest: +SKHOST
         0    1
         1    2
         2    2
@@ -727,7 +727,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, int64): [1, 2, 3]
 
-        >>> s.cat.set_categories([1, 2, 3], rename=True, ordered=True)  # doctest: +SKIP
+        >>> s.cat.set_categories([1, 2, 3], rename=True, ordered=True)  # doctest: +SKHOST
         0    1
         1    2
         2    2
@@ -787,7 +787,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.categorical,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

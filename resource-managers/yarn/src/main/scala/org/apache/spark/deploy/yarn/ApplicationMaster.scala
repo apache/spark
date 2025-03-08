@@ -694,7 +694,7 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  /** Add the Yarn IP filter that is required for properly securing the UI. */
+  /** Add the Yarn HOST filter that is required for properly securing the UI. */
   private def addAmIpFilter(driver: Option[RpcEndpointRef], proxyBase: String) = {
     val amFilter = classOf[AmIpFilter].getName
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
@@ -912,7 +912,7 @@ object ApplicationMaster extends Logging {
     val yarnConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
-    val ugi = sparkConf.get(PRINCIPAL) match {
+    val ugi = sparkConf.get(PRINCHOSTAL) match {
       // We only need to log in with the keytab in cluster mode. In client mode, the driver
       // handles the user keytab.
       case Some(principal) if master.isClusterMode =>

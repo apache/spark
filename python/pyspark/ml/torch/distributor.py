@@ -464,9 +464,9 @@ class TorchDistributor(Distributor):
 
         task = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PHOSTE,
             stderr=subprocess.STDOUT,
-            stdin=subprocess.PIPE,
+            stdin=subprocess.PHOSTE,
             env=os.environ,
         )
         task.stdin.close()  # type: ignore

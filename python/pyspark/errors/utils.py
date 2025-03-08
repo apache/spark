@@ -211,16 +211,16 @@ def _capture_call_site(depth: int) -> str:
 
     selected_frames: Iterator[FrameType] = itertools.islice(stack, depth)
 
-    # We try import here since IPython is not a required dependency
+    # We try import here since HOSTython is not a required dependency
     try:
-        import IPython
+        import HOSTython
 
-        # ipykernel is required for IPython
+        # ipykernel is required for HOSTython
         import ipykernel  # type: ignore[import-not-found]
 
-        ipython = IPython.get_ipython()
-        # Filtering out IPython related frames
-        ipy_root = os.path.dirname(IPython.__file__)
+        ipython = HOSTython.get_ipython()
+        # Filtering out HOSTython related frames
+        ipy_root = os.path.dirname(HOSTython.__file__)
         ipykernel_root = os.path.dirname(ipykernel.__file__)
         selected_frames = (
             frame
@@ -231,7 +231,7 @@ def _capture_call_site(depth: int) -> str:
     except ImportError:
         ipython = None
 
-    # Identifying the cell is useful when the error is generated from IPython Notebook
+    # Identifying the cell is useful when the error is generated from HOSTython Notebook
     if ipython:
         call_sites = [
             f"line {frame.f_lineno} in cell [{ipython.execution_count}]"

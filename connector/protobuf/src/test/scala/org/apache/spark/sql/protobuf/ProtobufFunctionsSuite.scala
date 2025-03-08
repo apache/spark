@@ -1058,7 +1058,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       ex,
-      condition = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      condition = "PROTOBUF_DESCRHOSTTOR_FILE_NOT_FOUND",
       parameters = Map("filePath" -> "/non/existent/path.desc")
     )
     assert(ex.getCause != null)

@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 
 /** Page for Spark UI that contains information pertaining to a single Spark Connect session */
 private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
-    extends WebUIPage("session")
+    extends WebUHOSTage("session")
     with Logging {
 
   val store = parent.store

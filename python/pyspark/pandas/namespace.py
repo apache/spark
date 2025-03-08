@@ -318,11 +318,11 @@ def read_csv(
 
     Examples
     --------
-    >>> ps.read_csv('data.csv')  # doctest: +SKIP
+    >>> ps.read_csv('data.csv')  # doctest: +SKHOST
 
     Load multiple CSV files as a single DataFrame:
 
-    >>> ps.read_csv(['data-01.csv', 'data-02.csv'])  # doctest: +SKIP
+    >>> ps.read_csv(['data-01.csv', 'data-02.csv'])  # doctest: +SKHOST
     """
     # For latin-1 encoding is same as iso-8859-1, that's why its mapped to iso-8859-1.
     encoding_mapping = {"latin-1": "iso-8859-1"}
@@ -588,14 +588,14 @@ def read_delta(
 
     Examples
     --------
-    >>> ps.range(1).to_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
-    >>> ps.read_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
+    >>> ps.range(1).to_delta('%s/read_delta/foo' % path)  # doctest: +SKHOST
+    >>> ps.read_delta('%s/read_delta/foo' % path)  # doctest: +SKHOST
        id
     0   0
 
     >>> ps.range(10, 15, num_partitions=1).to_delta('%s/read_delta/foo' % path,
-    ...                                             mode='overwrite')  # doctest: +SKIP
-    >>> ps.read_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
+    ...                                             mode='overwrite')  # doctest: +SKHOST
+    >>> ps.read_delta('%s/read_delta/foo' % path)  # doctest: +SKHOST
        id
     0  10
     1  11
@@ -603,15 +603,15 @@ def read_delta(
     3  13
     4  14
 
-    >>> ps.read_delta('%s/read_delta/foo' % path, version=0)  # doctest: +SKIP
+    >>> ps.read_delta('%s/read_delta/foo' % path, version=0)  # doctest: +SKHOST
        id
     0   0
 
     You can preserve the index in the roundtrip as below.
 
     >>> ps.range(10, 15, num_partitions=1).to_delta(
-    ...     '%s/read_delta/bar' % path, index_col="index")  # doctest: +SKIP
-    >>> ps.read_delta('%s/read_delta/bar' % path, index_col="index")  # doctest: +SKIP
+    ...     '%s/read_delta/bar' % path, index_col="index")  # doctest: +SKHOST
+    >>> ps.read_delta('%s/read_delta/bar' % path, index_col="index")  # doctest: +SKHOST
            id
     index
     0      10
@@ -1076,14 +1076,14 @@ def read_excel(
     --------
     The file can be read using the file name as string or an open file object:
 
-    >>> ps.read_excel('tmp.xlsx', index_col=0)  # doctest: +SKIP
+    >>> ps.read_excel('tmp.xlsx', index_col=0)  # doctest: +SKHOST
            Name  Value
     0   string1      1
     1   string2      2
     2  #Comment      3
 
     >>> ps.read_excel(open('tmp.xlsx', 'rb'),
-    ...               sheet_name='Sheet3')  # doctest: +SKIP
+    ...               sheet_name='Sheet3')  # doctest: +SKHOST
        Unnamed: 0      Name  Value
     0           0   string1      1
     1           1   string2      2
@@ -1091,7 +1091,7 @@ def read_excel(
 
     Index and header can be specified via the `index_col` and `header` arguments
 
-    >>> ps.read_excel('tmp.xlsx', index_col=None, header=None)  # doctest: +SKIP
+    >>> ps.read_excel('tmp.xlsx', index_col=None, header=None)  # doctest: +SKHOST
          0         1      2
     0  NaN      Name  Value
     1  0.0   string1      1
@@ -1101,7 +1101,7 @@ def read_excel(
     Column types are inferred but can be explicitly specified
 
     >>> ps.read_excel('tmp.xlsx', index_col=0,
-    ...               dtype={'Name': str, 'Value': float})  # doctest: +SKIP
+    ...               dtype={'Name': str, 'Value': float})  # doctest: +SKHOST
            Name  Value
     0   string1    1.0
     1   string2    2.0
@@ -1112,7 +1112,7 @@ def read_excel(
     as strings or lists of strings!
 
     >>> ps.read_excel('tmp.xlsx', index_col=0,
-    ...               na_values=['string1', 'string2'])  # doctest: +SKIP
+    ...               na_values=['string1', 'string2'])  # doctest: +SKHOST
            Name  Value
     0      None      1
     1      None      2
@@ -1120,7 +1120,7 @@ def read_excel(
 
     Comment lines in the excel input file can be skipped using the `comment` kwarg
 
-    >>> ps.read_excel('tmp.xlsx', index_col=0, comment='#')  # doctest: +SKIP
+    >>> ps.read_excel('tmp.xlsx', index_col=0, comment='#')  # doctest: +SKHOST
           Name  Value
     0  string1    1.0
     1  string2    2.0
@@ -1408,7 +1408,7 @@ def read_sql_table(
 
     Examples
     --------
-    >>> ps.read_sql_table('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
+    >>> ps.read_sql_table('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKHOST
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
@@ -1470,7 +1470,7 @@ def read_sql_query(
 
     Examples
     --------
-    >>> ps.read_sql_query('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
+    >>> ps.read_sql_query('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKHOST
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
@@ -1536,8 +1536,8 @@ def read_sql(
 
     Examples
     --------
-    >>> ps.read_sql('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
-    >>> ps.read_sql('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
+    >>> ps.read_sql('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKHOST
+    >>> ps.read_sql('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKHOST
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
@@ -1631,7 +1631,7 @@ def to_datetime(
     Passing errors='coerce' will force an out-of-bounds date to NaT,
     in addition to forcing non-dates (or non-parseable dates) to NaT.
 
-    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')  # doctest: +SKIP
+    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')  # doctest: +SKHOST
     datetime.datetime(1300, 1, 1, 0, 0)
     >>> ps.to_datetime('13000101', format='%Y%m%d', errors='coerce')
     NaT
@@ -1651,12 +1651,12 @@ def to_datetime(
     >>> import timeit
     >>> timeit.timeit(
     ...    lambda: repr(ps.to_datetime(s, infer_datetime_format=True)),
-    ...    number = 1)  # doctest: +SKIP
+    ...    number = 1)  # doctest: +SKHOST
     0.35832712500000063
 
     >>> timeit.timeit(
     ...    lambda: repr(ps.to_datetime(s, infer_datetime_format=False)),
-    ...    number = 1)  # doctest: +SKIP
+    ...    number = 1)  # doctest: +SKHOST
     0.8895321660000004
 
     Using a unix epoch time
@@ -1799,21 +1799,21 @@ def date_range(
 
     Specify `start` and `end`, with the default daily frequency.
 
-    >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +SKHOST
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `start` and `periods`, the number of periods (days).
 
-    >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +SKHOST
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `end` and `periods`, the number of periods (days).
 
-    >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +SKIP
+    >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +SKHOST
     DatetimeIndex(['2017-12-25', '2017-12-26', '2017-12-27', '2017-12-28',
                    '2017-12-29', '2017-12-30', '2017-12-31', '2018-01-01'],
                   dtype='datetime64[ns]', freq=None)
@@ -1823,7 +1823,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='2018-04-24', end='2018-04-27', periods=3
-    ... )  # doctest: +SKIP
+    ... )  # doctest: +SKHOST
     DatetimeIndex(['2018-04-24 00:00:00', '2018-04-25 12:00:00',
                    '2018-04-27 00:00:00'],
                   dtype='datetime64[ns]', freq=None)
@@ -1832,14 +1832,14 @@ def date_range(
 
     Changed the `freq` (frequency) to ``'M'`` (month end frequency).
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='ME')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='ME')  # doctest: +SKHOST
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
                   dtype='datetime64[ns]', freq=None)
 
     Multiples are allowed
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKHOST
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -1848,7 +1848,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='1/1/2018', periods=5, freq=pd.offsets.MonthEnd(3)
-    ... )  # doctest: +SKIP
+    ... )  # doctest: +SKHOST
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -1953,18 +1953,18 @@ def to_timedelta(
 
     >>> ps.to_timedelta('1 days 06:05:01.00003')
     Timedelta('1 days 06:05:01.000030')
-    >>> ps.to_timedelta('15.5us')  # doctest: +SKIP
+    >>> ps.to_timedelta('15.5us')  # doctest: +SKHOST
     Timedelta('0 days 00:00:00.000015500')
 
     Parsing a list or array of strings:
 
-    >>> ps.to_timedelta(['1 days 06:05:01.00003', '15.5us', 'nan'])  # doctest: +SKIP
+    >>> ps.to_timedelta(['1 days 06:05:01.00003', '15.5us', 'nan'])  # doctest: +SKHOST
     TimedeltaIndex(['1 days 06:05:01.000030', '0 days 00:00:00.000015500', NaT],
                    dtype='timedelta64[ns]', freq=None)
 
     Converting numbers by specifying the `unit` keyword argument:
 
-    >>> ps.to_timedelta(np.arange(5), unit='s')  # doctest: +SKIP
+    >>> ps.to_timedelta(np.arange(5), unit='s')  # doctest: +SKHOST
     TimedeltaIndex(['0 days 00:00:00', '0 days 00:00:01', '0 days 00:00:02',
                     '0 days 00:00:03', '0 days 00:00:04'],
                    dtype='timedelta64[ns]', freq=None)
@@ -2976,7 +2976,7 @@ def merge(
     the default suffixes, _x and _y, appended.
 
     >>> merged = ps.merge(df1, df2, left_on='lkey', right_on='rkey')
-    >>> merged.sort_values(by=['lkey', 'value_x', 'rkey', 'value_y'])  # doctest: +ELLIPSIS
+    >>> merged.sort_values(by=['lkey', 'value_x', 'rkey', 'value_y'])  # doctest: +ELLHOSTSIS
       lkey  value_x rkey  value_y
     ...bar        2  bar        6
     ...baz        3  baz        7
@@ -3643,7 +3643,7 @@ def broadcast(obj: DataFrame) -> DataFrame:
     ...                     'value': [5, 6, 7, 8]},
     ...                    columns=['rkey', 'value']).set_index('rkey')
     >>> merged = df1.merge(ps.broadcast(df2), left_index=True, right_index=True)
-    >>> merged.spark.explain()  # doctest: +ELLIPSIS
+    >>> merged.spark.explain()  # doctest: +ELLHOSTSIS
     == Physical Plan ==
     ...
     ...BroadcastHashJoin...
@@ -3868,7 +3868,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.namespace,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
 
     shutil.rmtree(path, ignore_errors=True)

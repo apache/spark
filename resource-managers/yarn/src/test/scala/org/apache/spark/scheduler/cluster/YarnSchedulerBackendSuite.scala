@@ -87,7 +87,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     }
   }
 
-  test("Respect user filters when adding AM IP filter") {
+  test("Respect user filters when adding AM HOST filter") {
     val conf = new SparkConf(false)
       .set("spark.ui.filters", classOf[TestFilter].getName())
       .set(s"spark.${classOf[TestFilter].getName()}.param.responseCode",

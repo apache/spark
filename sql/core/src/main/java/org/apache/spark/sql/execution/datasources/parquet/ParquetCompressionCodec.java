@@ -32,7 +32,7 @@ public enum ParquetCompressionCodec {
   NONE(CompressionCodecName.UNCOMPRESSED),
   UNCOMPRESSED(CompressionCodecName.UNCOMPRESSED),
   SNAPPY(CompressionCodecName.SNAPPY),
-  GZIP(CompressionCodecName.GZIP),
+  GZHOST(CompressionCodecName.GZHOST),
   LZO(CompressionCodecName.LZO),
   BROTLI(CompressionCodecName.BROTLI),
   LZ4(CompressionCodecName.LZ4),
@@ -65,7 +65,7 @@ public enum ParquetCompressionCodec {
     Arrays.asList(
       ParquetCompressionCodec.UNCOMPRESSED,
       ParquetCompressionCodec.SNAPPY,
-      ParquetCompressionCodec.GZIP,
+      ParquetCompressionCodec.GZHOST,
       ParquetCompressionCodec.ZSTD,
       ParquetCompressionCodec.LZ4,
       ParquetCompressionCodec.LZ4_RAW);

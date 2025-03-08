@@ -74,7 +74,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
     val sparkConf = new SparkConf(false)
       .set(KEYTAB, keytab.getAbsolutePath())
-      .set(PRINCIPAL, "alice")
+      .set(PRINCHOSTAL, "alice")
     val step = createStep(sparkConf)
 
     val pod = step.configurePod(SparkPod.initialPod())
@@ -90,7 +90,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
   test("do nothing if container-local keytab used") {
     val sparkConf = new SparkConf(false)
       .set(KEYTAB, "local:/my.keytab")
-      .set(PRINCIPAL, "alice")
+      .set(PRINCHOSTAL, "alice")
     val step = createStep(sparkConf)
 
     val initial = SparkPod.initialPod()

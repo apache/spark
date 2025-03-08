@@ -193,7 +193,7 @@ class StreamingContextSuite
 
     addInputStream(ssc).foreachRDD { rdd =>
       jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
-      jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+      jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRHOSTTION)
       jobInterruptFound = sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
       customPropFound = sc.getLocalProperty("customPropKey")
       allFound = true
@@ -216,7 +216,7 @@ class StreamingContextSuite
 
     // Verify current thread's thread-local properties have not changed
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "non-streaming")
-    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) === "non-streaming")
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRHOSTTION) === "non-streaming")
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL) === "true")
     assert(sc.getLocalProperty("customPropKey") === "value2")
   }

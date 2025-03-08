@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 
 /** Page for Spark Web UI that shows statistics of jobs running in the thrift server */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
-  extends WebUIPage("session") with Logging {
+  extends WebUHOSTage("session") with Logging {
   val store = parent.store
   private val startTime = parent.startTime
 
@@ -45,7 +45,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         <br/> ++
         <h4>
         User {sessionStat.userName},
-        IP {sessionStat.ip},
+        HOST {sessionStat.ip},
         Session created at {formatDate(sessionStat.startTimestamp)},
         Total run {sessionStat.totalExecution} SQL
         </h4> ++
