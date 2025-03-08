@@ -1290,3 +1290,20 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  maven-macos-test:
+    name: "Run Maven Test on macOS"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/maven_test.yml
+    with:
+      java: 21
+      os: macos-15
+      envs: >-
+        {
+          "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES",
+          "TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "256",
+          "TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "256",
+          "TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "48",
+          "TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "48"
+        }      
