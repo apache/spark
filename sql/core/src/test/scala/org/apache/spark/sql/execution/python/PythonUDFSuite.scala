@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.functions.{array, col, count, transform}
+import org.apache.spark.sql.functions.{array, col, count, countDistinct, transform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -137,6 +137,36 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       val df = newTable.as("t1").join(
         newTable.as("t2"), col("t1.new_column") === col("t2.new_column"))
       checkAnswer(df, Row(0, 1, 1, 0, 1, 1))
+    }
+  }
+
+  test("SPARK-48311: Nested pythonUDF in groupBy and aggregate") {
+    assume(shouldTestPythonUDFs)
+    withTempView("testCacheTable") {
+      // Define data
+      val data = Seq(Some("1")).toDF("col3")
+      data.createOrReplaceTempView("testCacheTable")
+      val df = spark.sql("SELECT DISTINCT col3 FROM testCacheTable")
+      // Define groupBy columns
+      val groupByCols = Seq("col4", "col5", "col3")
+
+      val pythonTestUDF1 = TestPythonUDF(name = "pyUDF1")
+      val pythonTestUDF2 = TestPythonUDF(name = "pyUDF2")
+      // Apply transformations
+      val df1 = df
+        .withColumn("col4", pythonTestUDF1(df("col3")))
+      val resultPython = df1.withColumn("col5", pythonTestUDF2(df1("col4")))
+        .groupBy(groupByCols.head, groupByCols.tail: _*).agg(countDistinct("col5").alias("col6"))
+
+      val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
+      val scalaTestUDF1 = TestScalaUDF(name = "scalaUDF1")
+      // Apply transformations
+      val df2 = df
+        .withColumn("col4", scalaTestUDF(df("col3")))
+      val resultScala = df2.withColumn("col5", scalaTestUDF1(df2("col4")))
+        .groupBy(groupByCols.head, groupByCols.tail: _*).agg(countDistinct("col5").alias("col6"))
+
+      checkAnswer(resultScala, resultPython)
     }
   }
 }
