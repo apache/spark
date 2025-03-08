@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalTime
 
 class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
@@ -67,7 +68,9 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     val (formatter, parser) =
       (TimeFormatter(pattern, isParsing = false), TimeFormatter(pattern, isParsing = true))
     data.foreach { micros =>
-      assert(parser.parse(formatter.format(micros)) === micros, s"micros = $micros")
+      val str = formatter.format(micros)
+      assert(parser.parse(str) === micros, s"micros = $micros")
+      assert(formatter.format(microsToLocalTime(micros)) === str)
     }
   }
 
@@ -82,5 +85,29 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       assert(formatter.format(micros) === tsStr)
       assert(formatter.format(microsToLocalTime(micros)) === tsStr)
     }
+  }
+
+  test("missing am/pm field") {
+    Seq("HH", "hh", "KK", "kk").foreach { hour =>
+      val formatter = TimeFormatter(Some(s"$hour:mm:ss"), isParsing = true)
+      val micros = formatter.parse("11:30:01")
+      assert(micros === localtime(11, 30, 1))
+    }
+  }
+
+  test("missing hour field") {
+    val f1 = TimeFormatter(format = Some("mm:ss a"), isParsing = true)
+    val t1 = f1.parse("30:01 PM")
+    assert(t1 === localtime(12, 30, 1))
+    val t2 = f1.parse("30:01 AM")
+    assert(t2 === localtime(0, 30, 1))
+    val f2 = TimeFormatter(format = Some("mm:ss"), isParsing = true)
+    val t3 = f2.parse("30:01")
+    assert(t3 === localtime(0, 30, 1))
+    val f3 = TimeFormatter(format = Some("a"), isParsing = true)
+    val t4 = f3.parse("PM")
+    assert(t4 === localtime(12))
+    val t5 = f3.parse("AM")
+    assert(t5 === localtime())
   }
 }
