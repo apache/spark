@@ -850,7 +850,7 @@ class StreamSuite extends StreamTest {
 
     spark.sparkContext.addSparkListener(new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        jobDescription = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+        jobDescription = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRHOSTTION)
       }
     })
 

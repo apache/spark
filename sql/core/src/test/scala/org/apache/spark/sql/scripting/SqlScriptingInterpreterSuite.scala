@@ -37,7 +37,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 
   // Tests setup
   override protected def sparkConf: SparkConf = {
-    super.sparkConf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+    super.sparkConf.set(SQLConf.SQL_SCRHOSTTING_ENABLED.key, "true")
   }
 
   // Helpers
@@ -51,7 +51,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val context = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
     context.frames.append(new SqlScriptingExecutionFrame(
-      executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
+      executionPlan, SqlScriptingFrameType.SQL_SCRHOSTT))
     executionPlan.enterScope()
 
     val handle =

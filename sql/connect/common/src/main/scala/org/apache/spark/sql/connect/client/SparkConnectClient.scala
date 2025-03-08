@@ -521,7 +521,7 @@ object SparkConnectClient {
       retryPolicy(List(policy))
     }
 
-    private object URIParams {
+    private object URHOSTarams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
       val PARAM_TOKEN = "token"
@@ -597,7 +597,7 @@ object SparkConnectClient {
 
     def options: Map[String, String] = _configuration.metadata
 
-    private def parseURIParams(uri: URI): Unit = {
+    private def parseURHOSTarams(uri: URI): Unit = {
       val params = uri.getPath.split(';').drop(1).filter(_ != "")
       params.foreach { kv =>
         val (key, value) = {
@@ -610,13 +610,13 @@ object SparkConnectClient {
           (arr(0), arr(1))
         }
         key match {
-          case URIParams.PARAM_USER_ID => userId(value)
-          case URIParams.PARAM_USER_AGENT => userAgent(value)
-          case URIParams.PARAM_TOKEN => token(value)
-          case URIParams.PARAM_USE_SSL =>
+          case URHOSTarams.PARAM_USER_ID => userId(value)
+          case URHOSTarams.PARAM_USER_AGENT => userAgent(value)
+          case URHOSTarams.PARAM_TOKEN => token(value)
+          case URHOSTarams.PARAM_USE_SSL =>
             if (java.lang.Boolean.valueOf(value)) enableSsl() else disableSsl()
-          case URIParams.PARAM_SESSION_ID => sessionId(value)
-          case URIParams.PARAM_GRPC_MAX_MESSAGE_SIZE => grpcMaxMessageSize(value.toInt)
+          case URHOSTarams.PARAM_SESSION_ID => sessionId(value)
+          case URHOSTarams.PARAM_GRPC_MAX_MESSAGE_SIZE => grpcMaxMessageSize(value.toInt)
           case _ => option(key, value)
         }
       }
@@ -652,7 +652,7 @@ object SparkConnectClient {
     def connectionString(connectionString: String): Builder = {
       val uri = new URI(connectionString)
       verifyURI(uri)
-      parseURIParams(uri)
+      parseURHOSTarams(uri)
       host(uri.getHost)
       val inputPort = uri.getPort
       if (inputPort != -1) {

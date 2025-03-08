@@ -152,8 +152,8 @@ class PySparkPlotAccessor:
         >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
         >>> columns = ["category", "int_val", "float_val"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.line(x="category", y="int_val")  # doctest: +SKIP
-        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        >>> df.plot.line(x="category", y="int_val")  # doctest: +SKHOST
+        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKHOST
         """
         return self(kind="line", x=x, y=y, **kwargs)
 
@@ -185,8 +185,8 @@ class PySparkPlotAccessor:
         >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
         >>> columns = ["category", "int_val", "float_val"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.bar(x="category", y="int_val")  # doctest: +SKIP
-        >>> df.plot.bar(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        >>> df.plot.bar(x="category", y="int_val")  # doctest: +SKHOST
+        >>> df.plot.bar(x="category", y=["int_val", "float_val"])  # doctest: +SKHOST
         """
         return self(kind="bar", x=x, y=y, **kwargs)
 
@@ -227,10 +227,10 @@ class PySparkPlotAccessor:
         >>> data = [("A", 10, 1.5), ("B", 30, 2.5), ("C", 20, 3.5)]
         >>> columns = ["category", "int_val", "float_val"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.barh(x="int_val", y="category")  # doctest: +SKIP
+        >>> df.plot.barh(x="int_val", y="category")  # doctest: +SKHOST
         >>> df.plot.barh(
         ...     x=["int_val", "float_val"], y="category"
-        ... )  # doctest: +SKIP
+        ... )  # doctest: +SKHOST
         """
         return self(kind="barh", x=x, y=y, **kwargs)
 
@@ -263,7 +263,7 @@ class PySparkPlotAccessor:
         >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
         >>> columns = ['length', 'width', 'species']
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
+        >>> df.plot.scatter(x='length', y='width')  # doctest: +SKHOST
         """
         return self(kind="scatter", x=x, y=y, **kwargs)
 
@@ -297,7 +297,7 @@ class PySparkPlotAccessor:
         ... ]
         >>> columns = ["sales", "signups", "visits", "date"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKIP
+        >>> df.plot.area(x='date', y=['sales', 'signups', 'visits'])  # doctest: +SKHOST
         """
         return self(kind="area", x=x, y=y, **kwargs)
 
@@ -332,8 +332,8 @@ class PySparkPlotAccessor:
         ... ]
         >>> columns = ["sales", "signups", "visits", "date"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
-        >>> df.plot.pie(x='date', subplots=True)  # doctest: +SKIP
+        >>> df.plot.pie(x='date', y='sales')  # doctest: +SKHOST
+        >>> df.plot.pie(x='date', subplots=True)  # doctest: +SKHOST
         """
         return self(kind="pie", x=x, y=y, **kwargs)
 
@@ -377,9 +377,9 @@ class PySparkPlotAccessor:
         ... ]
         >>> columns = ["student", "math_score", "english_score"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.box()  # doctest: +SKIP
-        >>> df.plot.box(column="math_score")  # doctest: +SKIP
-        >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
+        >>> df.plot.box()  # doctest: +SKHOST
+        >>> df.plot.box(column="math_score")  # doctest: +SKHOST
+        >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKHOST
         """
         return self(kind="box", column=column, **kwargs)
 
@@ -422,9 +422,9 @@ class PySparkPlotAccessor:
         >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
         >>> columns = ["length", "width", "species"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
-        >>> df.plot.kde(column=["length", "width"], bw_method=0.3, ind=100)  # doctest: +SKIP
-        >>> df.plot.kde(column="length", bw_method=0.3, ind=100)  # doctest: +SKIP
+        >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKHOST
+        >>> df.plot.kde(column=["length", "width"], bw_method=0.3, ind=100)  # doctest: +SKHOST
+        >>> df.plot.kde(column="length", bw_method=0.3, ind=100)  # doctest: +SKHOST
         """
         return self(kind="kde", column=column, bw_method=bw_method, ind=ind, **kwargs)
 
@@ -457,9 +457,9 @@ class PySparkPlotAccessor:
         >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
         >>> columns = ["length", "width", "species"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.hist(bins=4)  # doctest: +SKIP
-        >>> df.plot.hist(column=["length", "width"])  # doctest: +SKIP
-        >>> df.plot.hist(column="length", bins=4)  # doctest: +SKIP
+        >>> df.plot.hist(bins=4)  # doctest: +SKHOST
+        >>> df.plot.hist(column=["length", "width"])  # doctest: +SKHOST
+        >>> df.plot.hist(column="length", bins=4)  # doctest: +SKHOST
         """
         return self(kind="hist", column=column, bins=bins, **kwargs)
 

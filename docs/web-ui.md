@@ -460,7 +460,7 @@ The first section of the page displays general information about the JDBC/ODBC s
 </p>
 
 The second section contains information about active and finished sessions.
-* **User** and **IP** of the connection.
+* **User** and **HOST** of the connection.
 * **Session id** link to access to session info.
 * **Start time**, **finish time** and **duration** of the session.
 * **Total execute** is the number of operations submitted in this session.

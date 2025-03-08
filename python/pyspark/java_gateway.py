@@ -23,7 +23,7 @@ import shutil
 import platform
 import tempfile
 import time
-from subprocess import Popen, PIPE
+from subprocess import Popen, PHOSTE
 
 from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
@@ -88,7 +88,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
             # Launch the Java gateway.
             popen_kwargs = {} if popen_kwargs is None else popen_kwargs
             # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
-            popen_kwargs["stdin"] = PIPE
+            popen_kwargs["stdin"] = PHOSTE
             # We always set the necessary environment variables.
             popen_kwargs["env"] = env
             if not on_windows:

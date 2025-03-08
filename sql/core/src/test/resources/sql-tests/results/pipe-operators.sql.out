@@ -587,7 +587,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "errorClass" : "PHOSTE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "SELECT",
@@ -611,7 +611,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "errorClass" : "PHOSTE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "SELECT",
@@ -758,7 +758,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "errorClass" : "PHOSTE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "EXTEND",
@@ -1459,7 +1459,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE",
+  "errorClass" : "NOT_ALLOWED_IN_PHOSTE_OPERATOR_WHERE.WINDOW_CLAUSE",
   "sqlState" : "42601",
   "queryContext" : [ {
     "objectType" : "",
@@ -2789,7 +2789,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+  "errorClass" : "MULTHOSTLE_QUERY_RESULT_CLAUSES_WITH_PHOSTE_OPERATORS",
   "sqlState" : "42000",
   "messageParameters" : {
     "clause1" : "ORDER BY",
@@ -3060,7 +3060,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "errorClass" : "PHOSTE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "expr" : "a#x"
@@ -3083,7 +3083,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "errorClass" : "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUP BY ALL"
@@ -3107,7 +3107,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "errorClass" : "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUP BY ROLLUP"
@@ -3131,7 +3131,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "errorClass" : "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUP BY CUBE"
@@ -3155,7 +3155,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "errorClass" : "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUPING SETS"
@@ -3180,7 +3180,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "errorClass" : "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUPING"
@@ -3205,7 +3205,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "errorClass" : "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "GROUPING_ID"
@@ -3245,7 +3245,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "errorClass" : "PHOSTE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "expr" : "a#x"
@@ -3268,7 +3268,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "errorClass" : "PHOSTE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
     "clause" : "SELECT",
@@ -3355,7 +3355,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "errorClass" : "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "case" : "window functions; please update the query to move the window functions to a subsequent |> SELECT operator instead"

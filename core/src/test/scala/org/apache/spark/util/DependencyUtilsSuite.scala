@@ -58,8 +58,8 @@ class DependencyUtilsSuite extends SparkFunSuite {
       "expected 'org:module,org:module,..', found org.apache"))
   }
 
-  test("SPARK-39501: Resolve maven dependenicy in IPv6") {
-    assume(Utils.preferIPv6)
+  test("SPARK-39501: Resolve maven dependenicy in HOSTv6") {
+    assume(Utils.preferHOSTv6)
     DependencyUtils.resolveMavenDependencies(
       URI.create("ivy://org.apache.logging.log4j:log4j-api:2.17.2"))
   }

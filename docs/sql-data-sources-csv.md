@@ -260,7 +260,7 @@ Data source options of CSV can be set via:
       <li><code>STOP_AT_CLOSING_QUOTE</code>: If unescaped quotes are found in the input, accumulate the quote character and proceed parsing the value as a quoted value, until a closing quote is found.</li>
       <li><code>BACK_TO_DELIMITER</code>: If unescaped quotes are found in the input, consider the value as an unquoted value. This will make the parser accumulate all characters of the current parsed value until the delimiter is found. If no delimiter is found in the value, the parser will continue accumulating characters from the input until a delimiter or line ending is found.</li>
       <li><code>STOP_AT_DELIMITER</code>: If unescaped quotes are found in the input, consider the value as an unquoted value. This will make the parser accumulate all characters until the delimiter or a line ending is found in the input.</li>
-      <li><code>SKIP_VALUE</code>: If unescaped quotes are found in the input, the content parsed for the given value will be skipped and the value set in nullValue will be produced instead.</li>
+      <li><code>SKHOST_VALUE</code>: If unescaped quotes are found in the input, the content parsed for the given value will be skipped and the value set in nullValue will be produced instead.</li>
       <li><code>RAISE_ERROR</code>: If unescaped quotes are found in the input, a TextParsingException will be thrown.</li>
     </ul>
     </td>

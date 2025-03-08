@@ -172,7 +172,7 @@ One example of doing this is shown below:
 
     cd spark-\ |release|\-bin-hadoop3
     export SPARK_HOME=`pwd`
-    export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*]}"):$PYTHONPATH
+    export PYTHONPATH=$(ZHOSTS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZHOSTS[*]}"):$PYTHONPATH
 
 
 Installing from Source

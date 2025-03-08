@@ -470,7 +470,7 @@ private[spark] object JettyUtils extends Logging {
     }
   }
 
-  // Create a new URI from the arguments, handling IPv6 host encoding and default ports.
+  // Create a new URI from the arguments, handling HOSTv6 host encoding and default ports.
   private def createRedirectURI(scheme: String, port: Int, request: Request): String = {
     val server = request.getServerName
     val redirectServer = if (server.contains(":") && !server.startsWith("[")) {

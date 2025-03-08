@@ -281,9 +281,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
             case e: ShuffleExchangeExec => e
           }.isDefined)
 
-          val groupByIPlusJ = df.groupBy($"i" + $"j").agg(count("*"))
-          checkAnswer(groupByIPlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
-          assert(collectFirst(groupByIPlusJ.queryExecution.executedPlan) {
+          val groupByHOSTlusJ = df.groupBy($"i" + $"j").agg(count("*"))
+          checkAnswer(groupByHOSTlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+          assert(collectFirst(groupByHOSTlusJ.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isDefined)
         }

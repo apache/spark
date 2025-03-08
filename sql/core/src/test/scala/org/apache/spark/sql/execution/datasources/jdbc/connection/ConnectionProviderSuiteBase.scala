@@ -39,7 +39,7 @@ abstract class ConnectionProviderSuiteBase extends SparkFunSuite with BeforeAndA
     JDBCOptions.JDBC_URL -> url,
     JDBCOptions.JDBC_TABLE_NAME -> "table",
     JDBCOptions.JDBC_KEYTAB -> "/path/to/keytab",
-    JDBCOptions.JDBC_PRINCIPAL -> "principal"
+    JDBCOptions.JDBC_PRINCHOSTAL -> "principal"
   ))
 
   protected override def afterEach(): Unit = {

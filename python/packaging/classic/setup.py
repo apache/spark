@@ -101,13 +101,13 @@ elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
     sys.exit(-1)
 
 EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
-SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
-USER_SCRIPTS_PATH = os.path.join(SPARK_HOME, "sbin")
+SCRHOSTTS_PATH = os.path.join(SPARK_HOME, "bin")
+USER_SCRHOSTTS_PATH = os.path.join(SPARK_HOME, "sbin")
 DATA_PATH = os.path.join(SPARK_HOME, "data")
 LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 
-SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
-USER_SCRIPTS_TARGET = os.path.join(TEMP_PATH, "sbin")
+SCRHOSTTS_TARGET = os.path.join(TEMP_PATH, "bin")
+USER_SCRHOSTTS_TARGET = os.path.join(TEMP_PATH, "sbin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 DATA_TARGET = os.path.join(TEMP_PATH, "data")
@@ -216,16 +216,16 @@ try:
         # are up above the python root.
         if _supports_symlinks():
             os.symlink(JARS_PATH, JARS_TARGET)
-            os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
-            os.symlink(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
+            os.symlink(SCRHOSTTS_PATH, SCRHOSTTS_TARGET)
+            os.symlink(USER_SCRHOSTTS_PATH, USER_SCRHOSTTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
             os.symlink(DATA_PATH, DATA_TARGET)
             os.symlink(LICENSES_PATH, LICENSES_TARGET)
         else:
             # For windows fall back to the slower copytree
             copytree(JARS_PATH, JARS_TARGET)
-            copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
-            copytree(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
+            copytree(SCRHOSTTS_PATH, SCRHOSTTS_TARGET)
+            copytree(USER_SCRHOSTTS_PATH, USER_SCRHOSTTS_TARGET)
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
             copytree(DATA_PATH, DATA_TARGET)
             copytree(LICENSES_PATH, LICENSES_TARGET)
@@ -237,13 +237,13 @@ try:
                 file=sys.stderr,
             )
 
-    if not os.path.isdir(SCRIPTS_TARGET):
+    if not os.path.isdir(SCRHOSTTS_TARGET):
         print(incorrect_invocation_message, file=sys.stderr)
         sys.exit(-1)
 
     # Scripts directive requires a list of each script path and does not take wild cards.
-    script_names = os.listdir(SCRIPTS_TARGET)
-    scripts = list(map(lambda script: os.path.join(SCRIPTS_TARGET, script), script_names))
+    script_names = os.listdir(SCRHOSTTS_TARGET)
+    scripts = list(map(lambda script: os.path.join(SCRHOSTTS_TARGET, script), script_names))
     # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")

@@ -274,9 +274,9 @@ if [[ "$1" == "package" ]]; then
     BUILD_PACKAGE=$3
     SCALA_VERSION=$4
 
-    PIP_FLAG=""
+    PHOST_FLAG=""
     if [[ $BUILD_PACKAGE == *"withpip"* ]]; then
-      PIP_FLAG="--pip"
+      PHOST_FLAG="--pip"
     fi
     R_FLAG=""
     if [[ $BUILD_PACKAGE == *"withr"* ]]; then
@@ -305,7 +305,7 @@ if [[ "$1" == "package" ]]; then
 
     echo "Creating distribution"
     ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz \
-      $PIP_FLAG $R_FLAG $SPARK_CONNECT_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
+      $PHOST_FLAG $R_FLAG $SPARK_CONNECT_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
     if [[ -n $R_FLAG ]]; then
@@ -319,7 +319,7 @@ if [[ "$1" == "package" ]]; then
       shasum -a 512 $R_DIST_NAME > $R_DIST_NAME.sha512
     fi
 
-    if [[ -n $PIP_FLAG ]]; then
+    if [[ -n $PHOST_FLAG ]]; then
       echo "Copying and signing python distribution"
       PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
       cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .

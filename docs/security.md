@@ -1052,7 +1052,7 @@ achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing Co
     --conf spark.app.name=spark-hdfs \
     --conf spark.kubernetes.container.image=spark:latest \
     --conf spark.kerberos.keytab=<KEYTAB_FILE> \
-    --conf spark.kerberos.principal=<PRINCIPAL> \
+    --conf spark.kerberos.principal=<PRINCHOSTAL> \
     --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
     local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
     <HDFS_FILE_LOCATION>

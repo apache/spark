@@ -171,11 +171,11 @@ class VectorIndexer @Since("1.4.0") (
 
 @Since("1.6.0")
 object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
-  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val SKHOST_INVALID: String = "skip"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
-    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+    Array(SKHOST_INVALID, ERROR_INVALID, KEEP_INVALID)
 
   @Since("1.6.0")
   override def load(path: String): VectorIndexer = super.load(path)
@@ -381,7 +381,7 @@ class VectorIndexerModel private[ml] (
                       s"or skip invalid value, try setting VectorIndexer.handleInvalid.")
                   case VectorIndexer.KEEP_INVALID =>
                     tmpv.values(featureIndex) = categoryMap.size
-                  case VectorIndexer.SKIP_INVALID =>
+                  case VectorIndexer.SKHOST_INVALID =>
                     hasInvalid = true
                 }
             }
@@ -411,7 +411,7 @@ class VectorIndexerModel private[ml] (
                         s"or skip invalid value, try setting VectorIndexer.handleInvalid.")
                     case VectorIndexer.KEEP_INVALID =>
                       tmpv.values(k) = localVectorMap(featureIndex).size
-                    case VectorIndexer.SKIP_INVALID =>
+                    case VectorIndexer.SKHOST_INVALID =>
                       hasInvalid = true
                   }
               }
@@ -440,7 +440,7 @@ class VectorIndexerModel private[ml] (
     val transformUDF = udf { vector: Vector => transformFunc(vector) }
     val newCol = transformUDF(dataset($(inputCol)))
     val ds = dataset.withColumn($(outputCol), newCol, newField.metadata)
-    if (getHandleInvalid == VectorIndexer.SKIP_INVALID) {
+    if (getHandleInvalid == VectorIndexer.SKHOST_INVALID) {
       ds.na.drop(Array($(outputCol)))
     } else {
       ds

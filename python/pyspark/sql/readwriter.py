@@ -1226,7 +1226,7 @@ class DataFrameWriter(OptionUtils):
         >>> with tempfile.TemporaryDirectory(prefix="mode1") as d:
         ...     spark.createDataFrame(
         ...         [{"age": 80, "name": "Xinrong Meng"}]
-        ...     ).write.mode("error").format("parquet").save(d) # doctest: +SKIP
+        ...     ).write.mode("error").format("parquet").save(d) # doctest: +SKHOST
         Traceback (most recent call last):
             ...
         ...AnalysisException: ...
@@ -2534,7 +2534,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )
     spark.stop()
     if failure_count:

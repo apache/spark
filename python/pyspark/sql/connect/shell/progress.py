@@ -27,7 +27,7 @@ from typing import Iterable, Any
 from pyspark.sql.connect.proto import ExecutePlanResponse
 
 try:
-    from IPython.utils.terminal import get_terminal_size
+    from HOSTython.utils.terminal import get_terminal_size
 except ImportError:
 
     def get_terminal_size(defaultx: Any = None, defaulty: Any = None) -> Any:

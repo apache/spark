@@ -40,7 +40,7 @@ fi
 
 if [ -d "$SPARK_JARS_DIR" ]; then
   # Build a zip file containing the source package with vignettes
-  SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/R" CMD build "$FWDIR/pkg"
+  SPARK_HOME="${SPARK_HOME}" "$R_SCRHOSTT_PATH/R" CMD build "$FWDIR/pkg"
 
   find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
 else
@@ -49,7 +49,7 @@ else
 fi
 
 # Run check as-cran.
-VERSION=`grep Version "$FWDIR/pkg/DESCRIPTION" | awk '{print $NF}'`
+VERSION=`grep Version "$FWDIR/pkg/DESCRHOSTTION" | awk '{print $NF}'`
 
 CRAN_CHECK_OPTIONS="--as-cran"
 
@@ -71,10 +71,10 @@ export _R_CHECK_FORCE_SUGGESTS_=FALSE
 
 if [ -n "$NO_TESTS" ] && [ -n "$NO_MANUAL" ]
 then
-  "$R_SCRIPT_PATH/R" CMD check $CRAN_CHECK_OPTIONS "SparkR_$VERSION.tar.gz"
+  "$R_SCRHOSTT_PATH/R" CMD check $CRAN_CHECK_OPTIONS "SparkR_$VERSION.tar.gz"
 else
   # This will run tests and/or build vignettes, and require SPARK_HOME
-  SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/R" CMD check $CRAN_CHECK_OPTIONS "SparkR_$VERSION.tar.gz"
+  SPARK_HOME="${SPARK_HOME}" "$R_SCRHOSTT_PATH/R" CMD check $CRAN_CHECK_OPTIONS "SparkR_$VERSION.tar.gz"
 fi
 
 popd > /dev/null

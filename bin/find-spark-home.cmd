@@ -18,7 +18,7 @@ rem limitations under the License.
 rem
 
 rem Path to Python script finding SPARK_HOME
-set FIND_SPARK_HOME_PYTHON_SCRIPT=%~dp0find_spark_home.py
+set FIND_SPARK_HOME_PYTHON_SCRHOSTT=%~dp0find_spark_home.py
 
 rem Default to standard python3 interpreter unless told otherwise
 set PYTHON_RUNNER=python3
@@ -46,7 +46,7 @@ PYSPARK_DRIVER_PYTHON or PYSPARK_PYTHON environment variable to detect SPARK_HOM
 
 rem Only attempt to find SPARK_HOME if it is not set.
 if "x%SPARK_HOME%"=="x" (
-  if not exist "%FIND_SPARK_HOME_PYTHON_SCRIPT%" (
+  if not exist "%FIND_SPARK_HOME_PYTHON_SCRHOSTT%" (
     rem If we are not in the same directory as find_spark_home.py we are not pip installed so we don't
     rem need to search the different Python directories for a Spark installation.
     rem Note only that, if the user has pip installed PySpark but is directly calling pyspark-shell or
@@ -55,6 +55,6 @@ if "x%SPARK_HOME%"=="x" (
     set SPARK_HOME=%~dp0..
   ) else (
     rem We are pip installed, use the Python script to resolve a reasonable SPARK_HOME
-    for /f "delims=" %%i in ('%PYTHON_RUNNER% "%FIND_SPARK_HOME_PYTHON_SCRIPT%"') do set SPARK_HOME=%%i
+    for /f "delims=" %%i in ('%PYTHON_RUNNER% "%FIND_SPARK_HOME_PYTHON_SCRHOSTT%"') do set SPARK_HOME=%%i
   )
 )

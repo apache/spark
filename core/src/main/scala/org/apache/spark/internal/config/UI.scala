@@ -234,9 +234,9 @@ private[spark] object UI {
 
   val MASTER_UI_DECOMMISSION_ALLOW_MODE = ConfigBuilder("spark.master.ui.decommission.allow.mode")
     .doc("Specifies the behavior of the Master Web UI's /workers/kill endpoint. Possible choices" +
-      " are: `LOCAL` means allow this endpoint from IP's that are local to the machine running" +
+      " are: `LOCAL` means allow this endpoint from HOST's that are local to the machine running" +
       " the Master, `DENY` means to completely disable this endpoint, `ALLOW` means to allow" +
-      " calling this endpoint from any IP.")
+      " calling this endpoint from any HOST.")
     .internal()
     .version("3.1.0")
     .stringConf

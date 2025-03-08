@@ -218,7 +218,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(sparkProperties.get("spark.yarn.keytab"))
       .orNull
     principal = Option(principal)
-      .orElse(sparkProperties.get(config.PRINCIPAL.key))
+      .orElse(sparkProperties.get(config.PRINCHOSTAL.key))
       .orElse(sparkProperties.get("spark.yarn.principal"))
       .orNull
     dynamicAllocationEnabled =
@@ -448,7 +448,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case PROXY_USER =>
         proxyUser = value
 
-      case PRINCIPAL =>
+      case PRINCHOSTAL =>
         principal = value
 
       case KEYTAB =>
@@ -592,7 +592,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |                              If dynamic allocation is enabled, the initial number of
         |                              executors will be at least NUM.
-        |  --principal PRINCIPAL       Principal to be used to login to KDC.
+        |  --principal PRINCHOSTAL       Principal to be used to login to KDC.
         |  --keytab KEYTAB             The full path to the file that contains the keytab for the
         |                              principal specified above.
         |

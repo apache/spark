@@ -193,7 +193,7 @@ class VectorAssemblerSuite
     assert(intercept[NoSuchElementException](getVectorLengthsFromFirstRow(df.filter("id1 > 6"),
       Seq("y"))).getMessage.contains("VectorSizeHint"))
 
-    assert(getLengths(df.sort("id2"), Seq("y"), SKIP_INVALID).exists(_ == "y" -> 2))
+    assert(getLengths(df.sort("id2"), Seq("y"), SKHOST_INVALID).exists(_ == "y" -> 2))
     assert(intercept[NullPointerException](getLengths(df.sort("id2"), Seq("y"), ERROR_INVALID))
       .getMessage.contains("VectorSizeHint"))
     assert(intercept[RuntimeException](getLengths(df.sort("id2"), Seq("y"), KEEP_INVALID))

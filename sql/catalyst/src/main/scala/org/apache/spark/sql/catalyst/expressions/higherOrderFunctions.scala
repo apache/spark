@@ -1068,7 +1068,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
           TypeUtils.checkForOrderingExpr(leftKeyType, prettyName)
         } else {
           DataTypeMismatch(
-            errorSubClass = "MAP_ZIP_WITH_DIFF_TYPES",
+            errorSubClass = "MAP_ZHOST_WITH_DIFF_TYPES",
             messageParameters = Map(
               "functionName" -> toSQLId(prettyName),
               "leftType" -> toSQLType(leftKeyType),

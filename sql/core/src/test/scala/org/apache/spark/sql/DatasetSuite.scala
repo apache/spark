@@ -1442,7 +1442,7 @@ class DatasetSuite extends QueryTest
 
     withDatabase("test_db") {
       withTempView("tempView") {
-        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTHOSTLE_NAME_PARTS.key -> "false") {
           spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
           val e = intercept[AnalysisException](
             dataset.createTempView("test_db.tempView"))
@@ -1451,7 +1451,7 @@ class DatasetSuite extends QueryTest
             parameters = Map("actualName" -> "test_db.tempView"))
         }
 
-        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTHOSTLE_NAME_PARTS.key -> "true") {
             dataset.createTempView("test_db.tempView")
             assert(spark.catalog.tableExists("tempView"))
         }

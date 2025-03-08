@@ -58,12 +58,12 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.ANSI_ENABLED.key, "true")
-      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+      .set(SQLConf.SQL_SCRHOSTTING_ENABLED.key, "true")
   }
 
   // Tests
   test("SQL Scripting not enabled") {
-    withSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.SQL_SCRHOSTTING_ENABLED.key -> "false") {
       val sqlScriptText =
         """
           |BEGIN
@@ -73,8 +73,8 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SqlScriptingException] {
           spark.sql(sqlScriptText).asInstanceOf[CompoundBody]
         },
-        condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING",
-        parameters = Map("sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
+        condition = "UNSUPPORTED_FEATURE.SQL_SCRHOSTTING",
+        parameters = Map("sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRHOSTTING_ENABLED.key)))
     }
   }
 
@@ -209,7 +209,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SqlScriptingException] {
         spark.sql(sqlScriptText, args).asInstanceOf[CompoundBody]
       },
-      condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS",
+      condition = "UNSUPPORTED_FEATURE.SQL_SCRHOSTTING_WITH_POSITIONAL_PARAMETERS",
       parameters = Map.empty)
   }
 

@@ -145,7 +145,7 @@ private[spark] object HadoopFSUtils extends Logging {
     // in case of large #defaultParallelism.
     val numParallelism = Math.min(paths.size, parallelismMax)
 
-    val previousJobDescription = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+    val previousJobDescription = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRHOSTTION)
     try {
       val description = paths.size match {
         case 0 =>

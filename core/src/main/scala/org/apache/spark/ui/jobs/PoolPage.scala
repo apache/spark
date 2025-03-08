@@ -22,10 +22,10 @@ import scala.xml.Node
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.PoolData
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 
 /** Page showing specific pool details */
-private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
+private[ui] class PoolPage(parent: StagesTab) extends WebUHOSTage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val poolName = Option(request.getParameter("poolname")).map { poolname =>

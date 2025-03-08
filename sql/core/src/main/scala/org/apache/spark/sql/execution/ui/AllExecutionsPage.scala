@@ -29,10 +29,10 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils, WebUIPage}
+import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils, WebUHOSTage}
 import org.apache.spark.util.Utils
 
-private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {
+private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUHOSTage("") with Logging {
 
   private val sqlStore = parent.sqlStore
   private val groupSubExecutionEnabled = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)

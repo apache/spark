@@ -314,7 +314,7 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt()
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
-          Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
+          Map(CUSTOM_METRIC_ZHOST_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
         StateStoreMetrics(
           rocksDBMetrics.numUncommittedKeys,
@@ -825,7 +825,7 @@ object RocksDBStateStoreProvider {
     "rocksdbBytesCopied", "RocksDB: file manager - bytes copied")
   val CUSTOM_METRIC_FILES_REUSED = StateStoreCustomSumMetric(
     "rocksdbFilesReused", "RocksDB: file manager - files reused")
-  val CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED = StateStoreCustomSizeMetric(
+  val CUSTOM_METRIC_ZHOST_FILE_BYTES_UNCOMPRESSED = StateStoreCustomSizeMetric(
     "rocksdbZipFileBytesUncompressed", "RocksDB: file manager - uncompressed zip file bytes")
 
   val CUSTOM_METRIC_BLOCK_CACHE_MISS = StateStoreCustomSumMetric(
@@ -881,7 +881,7 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
     CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
     CUSTOM_METRIC_BYTES_COPIED, CUSTOM_METRIC_FILES_COPIED, CUSTOM_METRIC_FILES_REUSED,
-    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
+    CUSTOM_METRIC_ZHOST_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
     CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,
     CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
     CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,

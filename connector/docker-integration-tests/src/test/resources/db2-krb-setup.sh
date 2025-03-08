@@ -17,7 +17,7 @@
 #
 
 USERPROFILE=/database/config/db2inst1/sqllib/userprofile
-echo "export DB2_KRB5_PRINCIPAL=db2/__IP_ADDRESS_REPLACE_ME__@EXAMPLE.COM" >> $USERPROFILE
+echo "export DB2_KRB5_PRINCHOSTAL=db2/__HOST_ADDRESS_REPLACE_ME__@EXAMPLE.COM" >> $USERPROFILE
 echo "export KRB5_KTNAME=/var/custom/db2.keytab" >> $USERPROFILE
 # This trick is needed because DB2 forwards environment variables automatically only if it's starting with DB2.
 su - db2inst1 -c "db2set DB2ENVLIST=KRB5_KTNAME"

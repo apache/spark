@@ -19,8 +19,8 @@ package org.apache.spark.util.kvstore;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
+import java.util.zip.GZHOSTInputStream;
+import java.util.zip.GZHOSTOutputStream;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,7 +54,7 @@ public class KVStoreSerializer {
       return str.getBytes(UTF_8);
     } else {
       ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-      try (GZIPOutputStream out = new GZIPOutputStream(bytes)) {
+      try (GZHOSTOutputStream out = new GZHOSTOutputStream(bytes)) {
         mapper.writeValue(out, o);
       }
       return bytes.toByteArray();
@@ -66,7 +66,7 @@ public class KVStoreSerializer {
     if (klass.equals(String.class)) {
       return (T) new String(data, UTF_8);
     } else {
-      try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(data))) {
+      try (GZHOSTInputStream in = new GZHOSTInputStream(new ByteArrayInputStream(data))) {
         return mapper.readValue(in, klass);
       }
     }

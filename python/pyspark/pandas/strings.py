@@ -1200,7 +1200,7 @@ class StringMethods:
 
         The following expression throws an exception:
 
-        >>> s.str.index('a', start=2) # doctest: +SKIP
+        >>> s.str.index('a', start=2) # doctest: +SKHOST
         """
 
         def pandas_index(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
@@ -1699,7 +1699,7 @@ class StringMethods:
 
         The following expression throws an exception:
 
-        >>> s.str.rindex('a', start=2) # doctest: +SKIP
+        >>> s.str.rindex('a', start=2) # doctest: +SKHOST
         """
 
         def pandas_rindex(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
@@ -1947,7 +1947,7 @@ class StringMethods:
 
         In the default setting, the string is split by whitespace.
 
-        >>> s.str.split()  # doctest: +SKIP
+        >>> s.str.split()  # doctest: +SKHOST
         0                   [this, is, a, regular, sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
@@ -1955,7 +1955,7 @@ class StringMethods:
 
         Without the n parameter, the outputs of rsplit and split are identical.
 
-        >>> s.str.rsplit()  # doctest: +SKIP
+        >>> s.str.rsplit()  # doctest: +SKHOST
         0                   [this, is, a, regular, sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
@@ -1964,13 +1964,13 @@ class StringMethods:
         The n parameter can be used to limit the number of splits on the
         delimiter. The outputs of split and rsplit are different.
 
-        >>> s.str.split(n=2)  # doctest: +SKIP
+        >>> s.str.split(n=2)  # doctest: +SKHOST
         0                     [this, is, a regular sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
         dtype: object
 
-        >>> s.str.rsplit(n=2)  # doctest: +SKIP
+        >>> s.str.rsplit(n=2)  # doctest: +SKHOST
         0                     [this is a, regular, sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
@@ -1978,7 +1978,7 @@ class StringMethods:
 
         The pat parameter can be used to split by other characters.
 
-        >>> s.str.split(pat = "/")  # doctest: +SKIP
+        >>> s.str.split(pat = "/")  # doctest: +SKHOST
         0                         [this is a regular sentence]
         1    [https:, , docs.python.org, 3, tutorial, index...
         2                                                 None
@@ -1988,7 +1988,7 @@ class StringMethods:
         separate columns. If NaN is present, it is propagated throughout
         the columns during the split.
 
-        >>> s.str.split(n=4, expand=True)  # doctest: +SKIP
+        >>> s.str.split(n=4, expand=True)  # doctest: +SKHOST
                                                        0     1     2        3         4
         0                                           this    is     a  regular  sentence
         1  https://docs.python.org/3/tutorial/index.html  None  None     None      None
@@ -1997,7 +1997,7 @@ class StringMethods:
         For slightly more complex use cases like splitting the html document name
         from a url, a combination of parameter settings can be used.
 
-        >>> s.str.rsplit("/", n=1, expand=True)  # doctest: +SKIP
+        >>> s.str.rsplit("/", n=1, expand=True)  # doctest: +SKHOST
                                             0           1
         0          this is a regular sentence        None
         1  https://docs.python.org/3/tutorial  index.html
@@ -2007,7 +2007,7 @@ class StringMethods:
         expressions.
 
         >>> s = ps.Series(["1+1=2"])
-        >>> s.str.split(r"\\+|=", n=2, expand=True)  # doctest: +SKIP
+        >>> s.str.split(r"\\+|=", n=2, expand=True)  # doctest: +SKHOST
            0  1  2
         0  1  1  2
         """
@@ -2102,7 +2102,7 @@ class StringMethods:
 
         In the default setting, the string is split by whitespace.
 
-        >>> s.str.split()  # doctest: +SKIP
+        >>> s.str.split()  # doctest: +SKHOST
         0                   [this, is, a, regular, sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
@@ -2110,7 +2110,7 @@ class StringMethods:
 
         Without the n parameter, the outputs of rsplit and split are identical.
 
-        >>> s.str.rsplit()  # doctest: +SKIP
+        >>> s.str.rsplit()  # doctest: +SKHOST
         0                   [this, is, a, regular, sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
@@ -2119,13 +2119,13 @@ class StringMethods:
         The n parameter can be used to limit the number of splits on the
         delimiter. The outputs of split and rsplit are different.
 
-        >>> s.str.split(n=2)  # doctest: +SKIP
+        >>> s.str.split(n=2)  # doctest: +SKHOST
         0                     [this, is, a regular sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
         dtype: object
 
-        >>> s.str.rsplit(n=2)  # doctest: +SKIP
+        >>> s.str.rsplit(n=2)  # doctest: +SKHOST
         0                     [this is a, regular, sentence]
         1    [https://docs.python.org/3/tutorial/index.html]
         2                                               None
@@ -2135,7 +2135,7 @@ class StringMethods:
         separate columns. If NaN is present, it is propagated throughout
         the columns during the split.
 
-        >>> s.str.split(n=4, expand=True)  # doctest: +SKIP
+        >>> s.str.split(n=4, expand=True)  # doctest: +SKHOST
                                                        0     1     2        3         4
         0                                           this    is     a  regular  sentence
         1  https://docs.python.org/3/tutorial/index.html  None  None     None      None
@@ -2144,7 +2144,7 @@ class StringMethods:
         For slightly more complex use cases like splitting the html document name
         from a url, a combination of parameter settings can be used.
 
-        >>> s.str.rsplit("/", n=1, expand=True)  # doctest: +SKIP
+        >>> s.str.rsplit("/", n=1, expand=True)  # doctest: +SKHOST
                                             0           1
         0          this is a regular sentence        None
         1  https://docs.python.org/3/tutorial  index.html
@@ -2154,7 +2154,7 @@ class StringMethods:
         expressions.
 
         >>> s = ps.Series(["1+1=2"])
-        >>> s.str.split(r"\\+|=", n=2, expand=True)  # doctest: +SKIP
+        >>> s.str.split(r"\\+|=", n=2, expand=True)  # doctest: +SKHOST
            0  1  2
         0  1  1  2
         """
@@ -2314,7 +2314,7 @@ class StringMethods:
         added to the left of it (:func:`str.zfill` would have moved it to the
         left). 1000 remains unchanged as it is longer than width.
 
-        >>> s.str.zfill(3)  # doctest: +SKIP
+        >>> s.str.zfill(3)  # doctest: +SKHOST
         0     -01
         1     001
         2    1000
@@ -2354,7 +2354,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.strings,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

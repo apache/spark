@@ -73,7 +73,7 @@ class ArrowSerializer[T](
    * The size of the current batch.
    *
    * The size computed consist of the size of the schema and the size of the arrow buffers. The
-   * actual batch will be larger than that because of alignment, written IPC tokens, and the
+   * actual batch will be larger than that because of alignment, written HOSTC tokens, and the
    * written record batch metadata. The size of the record batch metadata is proportional to the
    * complexity of the schema.
    */
@@ -92,7 +92,7 @@ class ArrowSerializer[T](
   }
 
   /**
-   * Write the schema and the current batch in Arrow IPC stream format to the [[OutputStream]].
+   * Write the schema and the current batch in Arrow HOSTC stream format to the [[OutputStream]].
    */
   def writeIpcStream(output: OutputStream): Unit = {
     val channel = newChannel(output)
@@ -137,7 +137,7 @@ object ArrowSerializer {
 
   /**
    * Create an [[Iterator]] that converts the input [[Iterator]] of type `T` into an [[Iterator]]
-   * of Arrow IPC Streams.
+   * of Arrow HOSTC Streams.
    */
   def serialize[T](
       input: Iterator[T],

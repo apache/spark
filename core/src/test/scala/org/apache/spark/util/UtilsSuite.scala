@@ -26,7 +26,7 @@ import java.nio.file.{Files => JFiles}
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import java.util.zip.GZIPOutputStream
+import java.util.zip.GZHOSTOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.{Random, Try}
@@ -340,7 +340,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   def writeLogFile(path: String, content: Array[Byte]): Unit = {
     val outputStream = if (path.endsWith(".gz")) {
-      new GZIPOutputStream(new FileOutputStream(path))
+      new GZHOSTOutputStream(new FileOutputStream(path))
     } else {
       new FileOutputStream(path)
     }
@@ -1427,48 +1427,48 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.buildLocationMetadata(paths, 18) == "(5 paths)[path0, path1, ...]")
   }
 
-  test("checkHost supports both IPV4 and IPV6") {
-    // IPV4 ips
+  test("checkHost supports both HOSTV4 and HOSTV6") {
+    // HOSTV4 ips
     Utils.checkHost("0.0.0.0")
     var e: AssertionError = intercept[AssertionError] {
       Utils.checkHost("0.0.0.0:0")
     }
-    assert(e.getMessage.contains("Expected hostname or IP but got 0.0.0.0:0"))
+    assert(e.getMessage.contains("Expected hostname or HOST but got 0.0.0.0:0"))
     e = intercept[AssertionError] {
       Utils.checkHost("0.0.0.0:")
     }
-    assert(e.getMessage.contains("Expected hostname or IP but got 0.0.0.0:"))
-    // IPV6 ips
+    assert(e.getMessage.contains("Expected hostname or HOST but got 0.0.0.0:"))
+    // HOSTV6 ips
     Utils.checkHost("[::1]")
     e = intercept[AssertionError] {
       Utils.checkHost("[::1]:0")
     }
-    assert(e.getMessage.contains("Expected hostname or IPv6 IP enclosed in [] but got [::1]:0"))
+    assert(e.getMessage.contains("Expected hostname or HOSTv6 HOST enclosed in [] but got [::1]:0"))
     e = intercept[AssertionError] {
       Utils.checkHost("[::1]:")
     }
-    assert(e.getMessage.contains("Expected hostname or IPv6 IP enclosed in [] but got [::1]:"))
+    assert(e.getMessage.contains("Expected hostname or HOSTv6 HOST enclosed in [] but got [::1]:"))
     // hostname
     Utils.checkHost("localhost")
     e = intercept[AssertionError] {
       Utils.checkHost("localhost:0")
     }
-    assert(e.getMessage.contains("Expected hostname or IP but got localhost:0"))
+    assert(e.getMessage.contains("Expected hostname or HOST but got localhost:0"))
     e = intercept[AssertionError] {
       Utils.checkHost("localhost:")
     }
-    assert(e.getMessage.contains("Expected hostname or IP but got localhost:"))
+    assert(e.getMessage.contains("Expected hostname or HOST but got localhost:"))
   }
 
-  test("checkHostPort support IPV6 and IPV4") {
-    // IPV4 ips
+  test("checkHostPort support HOSTV6 and HOSTV4") {
+    // HOSTV4 ips
     Utils.checkHostPort("0.0.0.0:0")
     var e: AssertionError = intercept[AssertionError] {
       Utils.checkHostPort("0.0.0.0")
     }
     assert(e.getMessage.contains("Expected host and port but got 0.0.0.0"))
 
-    // IPV6 ips
+    // HOSTV6 ips
     Utils.checkHostPort("[::1]:0")
     e = intercept[AssertionError] {
       Utils.checkHostPort("[::1]")
@@ -1483,8 +1483,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(e.getMessage.contains("Expected host and port but got localhost"))
   }
 
-  test("parseHostPort support IPV6 and IPV4") {
-    // IPV4 ips
+  test("parseHostPort support HOSTV6 and HOSTV4") {
+    // HOSTV4 ips
     var hostnamePort = Utils.parseHostPort("0.0.0.0:80")
     assert(hostnamePort._1.equals("0.0.0.0"))
     assert(hostnamePort._2 === 80)
@@ -1497,7 +1497,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(hostnamePort._1.equals("0.0.0.0"))
     assert(hostnamePort._2 === 0)
 
-    // IPV6 ips
+    // HOSTV6 ips
     hostnamePort = Utils.parseHostPort("[::1]:80")
     assert(hostnamePort._1.equals("[::1]"))
     assert(hostnamePort._2 === 80)

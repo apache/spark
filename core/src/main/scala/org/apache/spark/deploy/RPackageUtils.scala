@@ -57,7 +57,7 @@ private[deploy] object RPackageUtils extends Logging {
       |META-INF/MANIFEST.MF
       |R/
       |R/pkg/
-      |R/pkg/DESCRIPTION
+      |R/pkg/DESCRHOSTTION
       |R/pkg/NAMESPACE
       |R/pkg/R/
       |R/pkg/R/myRcode.R
@@ -242,9 +242,9 @@ private[deploy] object RPackageUtils extends Logging {
     val zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile, false))
     try {
       filesToBundle.foreach { file =>
-        // Get the relative paths for proper naming in the ZIP file. Note that
+        // Get the relative paths for proper naming in the ZHOST file. Note that
         // we convert dir to URI to force / and then remove trailing / that show up for
-        // directories because the separator should always be / for according to ZIP
+        // directories because the separator should always be / for according to ZHOST
         // specification and therefore `relPath` here should be, for example,
         // "/packageTest/def.R" or "/test.R".
         val relPath = file.toURI.toString.replaceFirst(dir.toURI.toString.stripSuffix("/"), "")

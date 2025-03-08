@@ -1843,7 +1843,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> g.apply(plus_min).sort_index()  # doctest: +SKIP
+        >>> g.apply(plus_min).sort_index()  # doctest: +SKHOST
             A  B   C
         0  aa  2   8
         1  aa  3  10
@@ -1865,7 +1865,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[int, [float, float]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKHOST
             c0   c1
         0  1.0  1.0
         1  1.0  1.0
@@ -1873,7 +1873,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[("index", int), [("f1", float), ("f2", float)]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKHOST
                 f1   f2
         index
         0      1.0  1.0
@@ -1884,7 +1884,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_max(x) -> ps.Series[int]:
         ...     return x + x.max()
-        >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKIP
+        >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKHOST
         0    6
         1    3
         2    4
@@ -1892,7 +1892,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> df.B.groupby(df.A).apply(plus_min).sort_index()  # doctest: +SKIP
+        >>> df.B.groupby(df.A).apply(plus_min).sort_index()  # doctest: +SKHOST
         0    2
         1    3
         2    6
@@ -1902,7 +1902,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_length(x) -> int:
         ...     return len(x)
-        >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKIP
+        >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKHOST
         0    1
         1    2
         Name: B, dtype: int64
@@ -1911,7 +1911,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def calculation(x, y, z) -> int:
         ...     return len(x) + y * z
-        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKIP
+        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKHOST
         0    51
         1    52
         Name: B, dtype: int64
@@ -2811,7 +2811,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                   ["g", "g3"],
         ...                   ["h", "h0"],
         ...                   ["h", "h1"]], columns=["A", "B"])
-        >>> df.groupby("A").head(-1) # doctest: +SKIP
+        >>> df.groupby("A").head(-1) # doctest: +SKHOST
            A   B
         0  g  g0
         1  g  g1
@@ -2879,7 +2879,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                   ["g", "g3"],
         ...                   ["h", "h0"],
         ...                   ["h", "h1"]], columns=["A", "B"])
-        >>> df.groupby("A").tail(-1) # doctest: +SKIP
+        >>> df.groupby("A").tail(-1) # doctest: +SKHOST
            A   B
         3  g  g3
         2  g  g2
@@ -2921,7 +2921,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         7  3  4
         8  3  4
 
-        >>> df.groupby('a').shift().sort_index()  # doctest: +SKIP
+        >>> df.groupby('a').shift().sort_index()  # doctest: +SKHOST
              b
         0  NaN
         1  1.0
@@ -2933,7 +2933,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         7  3.0
         8  4.0
 
-        >>> df.groupby('a').shift(periods=-1, fill_value=0).sort_index()  # doctest: +SKIP
+        >>> df.groupby('a').shift(periods=-1, fill_value=0).sort_index()  # doctest: +SKHOST
            b
         0  2
         1  2
@@ -3179,7 +3179,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         4   ham       5      x
         5   ham       5      y
 
-        >>> df.groupby('id').nunique().sort_index() # doctest: +SKIP
+        >>> df.groupby('id').nunique().sort_index() # doctest: +SKHOST
               value1  value2
         id
         egg        1       1
@@ -4506,7 +4506,7 @@ class SeriesGroupBy(GroupBy[Series]):
         >>> df = ps.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
 
-        >>> df.groupby(['a'])['b'].unique().sort_index()  # doctest: +SKIP
+        >>> df.groupby(['a'])['b'].unique().sort_index()  # doctest: +SKHOST
         a
         1    [1, 2]
         2    [2, 3]
@@ -4609,7 +4609,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.groupby,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

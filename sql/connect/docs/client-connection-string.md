@@ -39,7 +39,7 @@ sc://host:port/;param1=value;param2=value
     <td>
       The hostname of the endpoint for Spark Connect. Since the endpoint
       has to be a fully GRPC compatible endpoint a particular path cannot
-      be specified. The hostname must be fully qualified or can be an IP
+      be specified. The hostname must be fully qualified or can be an HOST
       address as well.
     </td>
     <td>

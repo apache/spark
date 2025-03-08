@@ -700,7 +700,7 @@ class DataFrame:
 
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> df.explain()  # doctest: +SKIP
+        >>> df.explain()  # doctest: +SKHOST
         == Physical Plan ==
         *(1) Scan ExistingRDD[age...,name...]
 
@@ -718,7 +718,7 @@ class DataFrame:
 
         Example 3: Print out the plans with two sections: a physical plan outline and node details.
 
-        >>> df.explain(mode="formatted")  # doctest: +SKIP
+        >>> df.explain(mode="formatted")  # doctest: +SKHOST
         == Physical Plan ==
         * Scan ExistingRDD (...)
         (1) Scan ExistingRDD [codegen id : ...]
@@ -1017,7 +1017,7 @@ class DataFrame:
         --------
         >>> df = spark.createDataFrame([
         ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> df.checkpoint(False)  # doctest: +SKIP
+        >>> df.checkpoint(False)  # doctest: +SKHOST
         DataFrame[age: bigint, name: string]
         """
         ...
@@ -1157,7 +1157,7 @@ class DataFrame:
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-        >>> df.join(df2, "name").explain()  # doctest: +SKIP
+        >>> df.join(df2, "name").explain()  # doctest: +SKHOST
         == Physical Plan ==
         ...
         ... +- SortMergeJoin ...
@@ -2039,11 +2039,11 @@ class DataFrame:
         Examples
         --------
         >>> df = spark.range(10)
-        >>> df.sample(0.5, 3).count() # doctest: +SKIP
+        >>> df.sample(0.5, 3).count() # doctest: +SKHOST
         7
-        >>> df.sample(fraction=0.5, seed=3).count() # doctest: +SKIP
+        >>> df.sample(fraction=0.5, seed=3).count() # doctest: +SKHOST
         7
-        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count() # doctest: +SKIP
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count() # doctest: +SKHOST
         1
         >>> df.sample(1.0).count()
         10
@@ -2548,7 +2548,7 @@ class DataFrame:
         they will appear with `NULL` in the `name` column of `df`, and vice versa for `df2`.
 
         >>> joined = df.join(df2, df.name == df2.name, "outer").sort(sf.desc(df.name))
-        >>> joined.show() # doctest: +SKIP
+        >>> joined.show() # doctest: +SKHOST
         +-----+----+----+------+
         | name| age|name|height|
         +-----+----+----+------+
@@ -2559,7 +2559,7 @@ class DataFrame:
 
         To unambiguously select output columns, specify the dataframe along with the column name:
 
-        >>> joined.select(df.name, df2.height).show() # doctest: +SKIP
+        >>> joined.select(df.name, df2.height).show() # doctest: +SKHOST
         +-----+------+
         | name|height|
         +-----+------+
@@ -2570,7 +2570,7 @@ class DataFrame:
 
         However, in self-joins, direct column references can cause ambiguity:
 
-        >>> df.join(df, df.name == df.name, "outer").select(df.name).show() # doctest: +SKIP
+        >>> df.join(df, df.name == df.name, "outer").select(df.name).show() # doctest: +SKHOST
         Traceback (most recent call last):
         ...
         pyspark.errors.exceptions.captured.AnalysisException: Column name#0 are ambiguous...
@@ -4910,11 +4910,11 @@ class DataFrame:
 
          Deduplicate the same rows.
 
-         >>> df.dropDuplicatesWithinWatermark() # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark() # doctest: +SKHOST
 
          Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKHOST
         """
         ...
 
@@ -5519,7 +5519,7 @@ class DataFrame:
         Examples
         --------
         >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
-        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKIP
+        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKHOST
         +------------+------------+
         |c1_freqItems|c2_freqItems|
         +------------+------------+
@@ -6096,9 +6096,9 @@ class DataFrame:
 
         Examples
         --------
-        >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKIP
+        >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKHOST
         1855039936
-        >>> spark.range(10).selectExpr("id as col1").semanticHash()  # doctest: +SKIP
+        >>> spark.range(10).selectExpr("id as col1").semanticHash()  # doctest: +SKHOST
         1855039936
         """
         ...
@@ -6207,8 +6207,8 @@ class DataFrame:
         --------
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> df.writeTo("catalog.db.table").append()  # doctest: +SKIP
-        >>> df.writeTo(                              # doctest: +SKIP
+        >>> df.writeTo("catalog.db.table").append()  # doctest: +SKHOST
+        >>> df.writeTo(                              # doctest: +SKHOST
         ...     "catalog.db.table"
         ... ).partitionedBy("col").createOrReplace()
         """
@@ -6241,7 +6241,7 @@ class DataFrame:
         >>> from pyspark.sql.functions import expr
         >>> source = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["id", "name"])
-        >>> (source.mergeInto("target", "id")  # doctest: +SKIP
+        >>> (source.mergeInto("target", "id")  # doctest: +SKHOST
         ...     .whenMatched().update({ "name": source.name })
         ...     .whenNotMatched().insertAll()
         ...     .whenNotMatchedBySource().delete()
@@ -6289,7 +6289,7 @@ class DataFrame:
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
 
-        >>> df.pandas_api()  # doctest: +SKIP
+        >>> df.pandas_api()  # doctest: +SKHOST
            age   name
         0   14    Tom
         1   23  Alice
@@ -6297,7 +6297,7 @@ class DataFrame:
 
         We can specify the index columns.
 
-        >>> df.pandas_api(index_col="age")  # doctest: +SKIP
+        >>> df.pandas_api(index_col="age")  # doctest: +SKHOST
               name
         age
         14     Tom
@@ -6360,7 +6360,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
         ...
-        >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKHOST
         +---+---+
         | id|age|
         +---+---+
@@ -6373,7 +6373,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf.groupby("id").mean().reset_index()
         ...
-        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKIP
+        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKHOST
         +---+----+
         | id| age|
         +---+----+
@@ -6389,7 +6389,7 @@ class DataFrame:
         ...         yield pdf
         ...
         >>> df.mapInPandas(
-        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKIP
+        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKHOST
         +---+---+----------+
         | id|age|double_age|
         +---+---+----------+
@@ -6401,7 +6401,7 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKHOST
         +---+---+
         | id|age|
         +---+---+
@@ -6457,13 +6457,13 @@ class DataFrame:
 
         Examples
         --------
-        >>> import pyarrow  # doctest: +SKIP
+        >>> import pyarrow  # doctest: +SKHOST
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
         ...     for batch in iterator:
         ...         pdf = batch.to_pandas()
         ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
-        >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKHOST
         +---+---+
         | id|age|
         +---+---+
@@ -6474,7 +6474,7 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKHOST
         +---+---+
         | id|age|
         +---+---+
@@ -6506,7 +6506,7 @@ class DataFrame:
 
         Examples
         --------
-        >>> df.toArrow()  # doctest: +SKIP
+        >>> df.toArrow()  # doctest: +SKHOST
         pyarrow.Table
         age: int64
         name: string
@@ -6536,7 +6536,7 @@ class DataFrame:
 
         Examples
         --------
-        >>> df.toPandas()  # doctest: +SKIP
+        >>> df.toPandas()  # doctest: +SKHOST
            age   name
         0    2  Alice
         1    5    Bob
@@ -6850,8 +6850,8 @@ class DataFrame:
         >>> df = spark.createDataFrame(data, columns)
         >>> type(df.plot)
         <class 'pyspark.sql.plot.core.PySparkPlotAccessor'>
-        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKIP
-        >>> df.plot(kind="line", x="category", y=["int_val", "float_val"])  # doctest: +SKIP
+        >>> df.plot.line(x="category", y=["int_val", "float_val"])  # doctest: +SKHOST
+        >>> df.plot(kind="line", x="category", y=["int_val", "float_val"])  # doctest: +SKHOST
         """
         ...
 

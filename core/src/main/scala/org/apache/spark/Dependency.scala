@@ -215,7 +215,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
       log"The number of shuffle blocks " +
         log"(${MDC(NUM_PARTITIONS, numPartitions.toLong * partitioner.numPartitions.toLong)})" +
         log" for shuffleId ${MDC(SHUFFLE_ID, shuffleId)} " +
-        log"for ${MDC(RDD_DESCRIPTION, _rdd)} " +
+        log"for ${MDC(RDD_DESCRHOSTTION, _rdd)} " +
         log"with ${MDC(NUM_PARTITIONS2, numPartitions)} partitions" +
         log" is possibly too large, which could cause the driver to crash with an out-of-memory" +
         log" error. Consider decreasing the number of partitions in this shuffle stage."

@@ -33,7 +33,7 @@ SPARK_HOME="$(cd "`dirname "$0"`/.."; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 MAKE_TGZ=false
-MAKE_PIP=false
+MAKE_PHOST=false
 MAKE_R=false
 MAKE_SPARK_CONNECT=false
 NAME=none
@@ -59,7 +59,7 @@ while (( "$#" )); do
       MAKE_TGZ=true
       ;;
     --pip)
-      MAKE_PIP=true
+      MAKE_PHOST=true
       ;;
     --r)
       MAKE_R=true
@@ -248,7 +248,7 @@ fi
 cp -r "$SPARK_HOME/data" "$DISTDIR"
 
 # Make pip package
-if [ "$MAKE_PIP" == "true" ]; then
+if [ "$MAKE_PHOST" == "true" ]; then
   echo "Building python distribution package"
   pushd "$SPARK_HOME/python" > /dev/null
   # Delete the egg info file if it exists, this can cache older setup files.
@@ -264,7 +264,7 @@ fi
 # Make R package - this is used for both CRAN release and packing R layout into distribution
 if [ "$MAKE_R" == "true" ]; then
   echo "Building R source package"
-  R_PACKAGE_VERSION=`grep Version "$SPARK_HOME/R/pkg/DESCRIPTION" | awk '{print $NF}'`
+  R_PACKAGE_VERSION=`grep Version "$SPARK_HOME/R/pkg/DESCRHOSTTION" | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
   # Build source package and run full checks
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
@@ -291,7 +291,7 @@ cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 
 # Remove the python distribution from dist/ if we built it
-if [ "$MAKE_PIP" == "true" ]; then
+if [ "$MAKE_PHOST" == "true" ]; then
   rm -f "$DISTDIR"/python/dist/pyspark-*.tar.gz
 fi
 

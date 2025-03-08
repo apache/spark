@@ -160,7 +160,7 @@ object WatermarkTracker {
     // saved in the checkpoint (e.g., old checkpoints), then the default `min` policy is enforced
     // through defaults specified in OffsetSeqMetadata.setSessionConf().
     val policyName = conf.get(
-      SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key,
+      SQLConf.STREAMING_MULTHOSTLE_WATERMARK_POLICY.key,
       MultipleWatermarkPolicy.DEFAULT_POLICY_NAME)
     new WatermarkTracker(MultipleWatermarkPolicy(policyName), initialPlan)
   }

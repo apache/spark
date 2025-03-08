@@ -4,7 +4,7 @@ page_url            	string
 referrer_url        	string              	                    
 friends             	array<bigint>       	                    
 properties          	map<string,string>  	                    
-ip                  	string              	IP Address of the User
+ip                  	string              	HOST Address of the User
 ds                  	string              	                    
 country             	string              	                    
 	 	 

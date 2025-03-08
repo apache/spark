@@ -316,7 +316,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       s"external shuffle service (enabled=$shuffleServiceEnabled)") {
       val conf = new SparkConf()
         .set(config.SHUFFLE_SERVICE_ENABLED, shuffleServiceEnabled)
-        .set(config.Tests.TEST_SKIP_ESS_REGISTER, true)
+        .set(config.Tests.TEST_SKHOST_ESS_REGISTER, true)
       val bm = makeBlockManager(1000, "executor", testConf = Some(conf))
       val blockManagerId = bm.blockManagerId
       val shuffleServiceId = bm.shuffleServerId

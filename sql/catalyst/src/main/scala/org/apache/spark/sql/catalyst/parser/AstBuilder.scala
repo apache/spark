@@ -133,7 +133,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCompoundOrSingleStatement(
       ctx: CompoundOrSingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
-      if (!conf.getConf(SQLConf.SQL_SCRIPTING_ENABLED)) {
+      if (!conf.getConf(SQLConf.SQL_SCRHOSTTING_ENABLED)) {
         throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
       }
       visit(s).asInstanceOf[CompoundBody]
@@ -2818,13 +2818,13 @@ class AstBuilder extends DataTypeAstBuilder
         Add(left, right)
       case SqlBaseParser.MINUS =>
         Subtract(left, right)
-      case SqlBaseParser.CONCAT_PIPE =>
+      case SqlBaseParser.CONCAT_PHOSTE =>
         Concat(left :: right :: Nil)
       case SqlBaseParser.AMPERSAND =>
         BitwiseAnd(left, right)
       case SqlBaseParser.HAT =>
         BitwiseXor(left, right)
-      case SqlBaseParser.PIPE =>
+      case SqlBaseParser.PHOSTE =>
         BitwiseOr(left, right)
     }
   }
@@ -6130,7 +6130,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitOperatorPipeRightSide(
       ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
-    if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
+    if (!SQLConf.get.getConf(SQLConf.OPERATOR_PHOSTE_SYNTAX_ENABLED)) {
       operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
     }
     Option(ctx.selectClause).map { c =>

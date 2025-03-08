@@ -35,9 +35,9 @@ import org.apache.hadoop.io.compress.SnappyCodec;
 public enum HadoopCompressionCodec {
   NONE(null),
   UNCOMPRESSED(null),
-  BZIP2(new BZip2Codec()),
+  BZHOST2(new BZip2Codec()),
   DEFLATE(new DeflateCodec()),
-  GZIP(new GzipCodec()),
+  GZHOST(new GzipCodec()),
   LZ4(new Lz4Codec()),
   SNAPPY(new SnappyCodec());
 

@@ -162,7 +162,7 @@ private[spark] object CryptoStreamUtils extends Logging {
   private class CryptoParams(key: Array[Byte], sparkConf: SparkConf) {
 
     val keySpec = new SecretKeySpec(key, "AES")
-    val transformation = sparkConf.get(IO_CRYPTO_CIPHER_TRANSFORMATION)
+    val transformation = sparkConf.get(IO_CRYPTO_CHOSTHER_TRANSFORMATION)
     val conf = toCryptoConf(sparkConf)
 
   }

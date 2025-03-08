@@ -399,7 +399,7 @@ unsupportedHiveNativeCommands
     | kw1=REVOKE kw2=ROLE?
     | kw1=SHOW kw2=GRANT
     | kw1=SHOW kw2=ROLE kw3=GRANT?
-    | kw1=SHOW kw2=PRINCIPALS
+    | kw1=SHOW kw2=PRINCHOSTALS
     | kw1=SHOW kw2=ROLES
     | kw1=SHOW kw2=CURRENT kw3=ROLES
     | kw1=EXPORT kw2=TABLE
@@ -662,7 +662,7 @@ queryTerm
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
-    | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
+    | left=queryTerm OPERATOR_PHOSTE operatorPipeRightSide                                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -1129,11 +1129,11 @@ valueExpression
     : primaryExpression                                                                      #valueExpressionDefault
     | operator=(MINUS | PLUS | TILDE) valueExpression                                        #arithmeticUnary
     | left=valueExpression operator=(ASTERISK | SLASH | PERCENT | DIV) right=valueExpression #arithmeticBinary
-    | left=valueExpression operator=(PLUS | MINUS | CONCAT_PIPE) right=valueExpression       #arithmeticBinary
+    | left=valueExpression operator=(PLUS | MINUS | CONCAT_PHOSTE) right=valueExpression       #arithmeticBinary
     | left=valueExpression shiftOperator right=valueExpression                               #shiftExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
-    | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
+    | left=valueExpression operator=PHOSTE right=valueExpression                               #arithmeticBinary
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
     ;
 
@@ -1212,7 +1212,7 @@ comparisonOperator
     ;
 
 arithmeticOperator
-    : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PIPE | CONCAT_PIPE | HAT
+    : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PHOSTE | CONCAT_PHOSTE | HAT
     ;
 
 predicateOperator
@@ -1779,7 +1779,7 @@ ansiNonReserved
     | PLACING
     | POSITION
     | PRECEDING
-    | PRINCIPALS
+    | PRINCHOSTALS
     | PROPERTIES
     | PURGE
     | QUARTER
@@ -2159,7 +2159,7 @@ nonReserved
     | POSITION
     | PRECEDING
     | PRIMARY
-    | PRINCIPALS
+    | PRINCHOSTALS
     | PROPERTIES
     | PURGE
     | QUARTER

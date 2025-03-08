@@ -70,17 +70,17 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
+PHOST_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
 # Test both regular user and edit/dev install modes.
-PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
-	      "pip install $PIP_OPTIONS -e python/packaging/classic")
+PHOST_COMMANDS=("pip install $PHOST_OPTIONS $PYSPARK_DIST"
+	      "pip install $PHOST_OPTIONS -e python/packaging/classic")
 
 # Jenkins has PySpark installed under user sitepackages shared for some reasons.
 # In this test, explicitly exclude user sitepackages to prevent side effects
 export PYTHONNOUSERSITE=1
 
 for python in "${PYTHON_EXECS[@]}"; do
-  for install_command in "${PIP_COMMANDS[@]}"; do
+  for install_command in "${PHOST_COMMANDS[@]}"; do
     echo "Testing pip installation with python $python"
     # Create a temp directory for us to work in and save its name to a file for cleanup
     echo "Using $VIRTUALENV_BASE for virtualenv"

@@ -37,7 +37,7 @@ import org.apache.spark.{FakeSchedulerBackend => _, _}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests.{SKIP_VALIDATE_CORES_TESTING, TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED}
+import org.apache.spark.internal.config.Tests.{SKHOST_VALIDATE_CORES_TESTING, TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED}
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceUtils._
@@ -993,7 +993,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
     sc.conf.set(config.SPECULATION_ENABLED, true)
 
@@ -1258,7 +1258,7 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
@@ -1315,7 +1315,7 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(5)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.6)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     val clock = new ManualClock()
@@ -1608,7 +1608,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.1)
     sc.conf.set(config.SPECULATION_ENABLED, true)
 
@@ -1636,7 +1636,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
 
     sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
     sc.conf.set(config.SPECULATION_ENABLED, true)
@@ -1757,7 +1757,7 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
@@ -1896,7 +1896,7 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
     val clock = new ManualClock()
@@ -1960,7 +1960,7 @@ class TaskSetManagerSuite
   test("SPARK-26755 Ensure that a speculative task obeys original locality preferences") {
     sc = new SparkContext("local", "test")
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
     // Launch a new set of tasks with locality preferences
@@ -2013,7 +2013,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
     conf.set(config.SPECULATION_ENABLED, true)
     conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
-    conf.set(config.SPECULATION_MULTIPLIER.key, "1.5")
+    conf.set(config.SPECULATION_MULTHOSTLIER.key, "1.5")
     // Set the number of slots per executor
     conf.set(config.EXECUTOR_CORES.key, numExecutorCores.toString)
     conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
@@ -2099,7 +2099,7 @@ class TaskSetManagerSuite
     sched.backend = mock(classOf[SchedulerBackend])
     val taskSet = FakeTask.createTaskSet(4)
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 1.5)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 1.5)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
     sc.conf.set(config.EXECUTOR_DECOMMISSION_KILL_INTERVAL.key, "5s")
     val manager = sched.createTaskSetManager(taskSet, MAX_TASK_FAILURES)
@@ -2133,7 +2133,7 @@ class TaskSetManagerSuite
     }
 
     // checkSpeculatableTasks checks that the task runtime is greater than the threshold for
-    // speculating. Since we use a SPECULATION_MULTIPLIER of 1.5, So tasks need to be running for
+    // speculating. Since we use a SPECULATION_MULTHOSTLIER of 1.5, So tasks need to be running for
     // > 15s for speculation
     assert(!manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.toSet === Set())
@@ -2173,7 +2173,7 @@ class TaskSetManagerSuite
 
     clock.advance(5*1000) // time = 16s
     // At t=16s, TASK 2 has been running for 16s. It is more than the
-    // SPECULATION_MULTIPLIER * medianRuntime = 1.5 * 10 = 15s. So now TASK 2 will
+    // SPECULATION_MULTHOSTLIER * medianRuntime = 1.5 * 10 = 15s. So now TASK 2 will
     // be selected for speculation. Here we are verifying that regular speculation configs
     // should still take effect even when a EXECUTOR_DECOMMISSION_KILL_INTERVAL is provided and
     // corresponding executor is decommissioned
@@ -2225,7 +2225,7 @@ class TaskSetManagerSuite
     val numCoresPerTask = 2
     val conf = new SparkConf()
     // skip throwing exception when cores per task > cores per executor to emulate standalone mode
-    conf.set(SKIP_VALIDATE_CORES_TESTING, true)
+    conf.set(SKHOST_VALIDATE_CORES_TESTING, true)
     conf.set(config.SPECULATION_ENABLED, true)
     conf.set(config.SPECULATION_QUANTILE.key, "1.0")
     // Skip setting cores per executor to emulate standalone default mode
@@ -2414,7 +2414,7 @@ class TaskSetManagerSuite
     // set the speculation multiplier to be 0, so speculative tasks are launched based on
     // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
-      .set(config.SPECULATION_MULTIPLIER, 0.0)
+      .set(config.SPECULATION_MULTHOSTLIER, 0.0)
       .set(config.SPECULATION_QUANTILE, 0.75)
       .set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
@@ -2480,17 +2480,17 @@ class TaskSetManagerSuite
     }
   }
 
-  test("SPARK-32170: test SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER for " +
+  test("SPARK-32170: test SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTHOSTLIER for " +
     "speculating inefficient tasks") {
     // set the speculation multiplier to be 0, so speculative tasks are launched based on
     // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
-      .set(config.SPECULATION_MULTIPLIER, 0.0)
+      .set(config.SPECULATION_MULTHOSTLIER, 0.0)
       .set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
     Seq(0.5, 0.8).foreach(processMultiplier => {
-      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER, processMultiplier)
+      sc.conf.set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTHOSTLIER, processMultiplier)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
@@ -2537,9 +2537,9 @@ class TaskSetManagerSuite
     // set the speculation multiplier to be 0, so speculative tasks are launched based on
     // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
-      .set(config.SPECULATION_MULTIPLIER, 0.0)
+      .set(config.SPECULATION_MULTHOSTLIER, 0.0)
       .set(config.SPECULATION_ENABLED, true)
-      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER, 0.5)
+      .set(config.SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTHOSTLIER, 0.5)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()
     Seq(1.0, 2.0).foreach(factor => {
@@ -2589,7 +2589,7 @@ class TaskSetManagerSuite
   test("SPARK-37580: Reset numFailures when one of task attempts succeeds") {
     sc = new SparkContext("local", "test")
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_MULTHOSTLIER, 0.0)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.6)
     sc.conf.set(config.SPECULATION_ENABLED, true)
 

@@ -18,7 +18,7 @@
 package org.apache.spark.util.logging
 
 import java.io._
-import java.util.zip.GZIPOutputStream
+import java.util.zip.GZHOSTOutputStream
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
@@ -85,12 +85,12 @@ private[spark] class RollingFileAppender(
   // Roll the log file and compress if enableCompression is true.
   private def rotateFile(activeFile: File, rolloverFile: File): Unit = {
     if (enableCompression) {
-      val gzFile = new File(rolloverFile.getAbsolutePath + RollingFileAppender.GZIP_LOG_SUFFIX)
-      var gzOutputStream: GZIPOutputStream = null
+      val gzFile = new File(rolloverFile.getAbsolutePath + RollingFileAppender.GZHOST_LOG_SUFFIX)
+      var gzOutputStream: GZHOSTOutputStream = null
       var inputStream: InputStream = null
       try {
         inputStream = new FileInputStream(activeFile)
-        gzOutputStream = new GZIPOutputStream(new FileOutputStream(gzFile))
+        gzOutputStream = new GZHOSTOutputStream(new FileOutputStream(gzFile))
         IOUtils.copy(inputStream, gzOutputStream)
         inputStream.close()
         gzOutputStream.close()
@@ -106,7 +106,7 @@ private[spark] class RollingFileAppender(
 
   // Check if the rollover file already exists.
   private def rolloverFileExist(file: File): Boolean = {
-    file.exists || new File(file.getAbsolutePath + RollingFileAppender.GZIP_LOG_SUFFIX).exists
+    file.exists || new File(file.getAbsolutePath + RollingFileAppender.GZHOST_LOG_SUFFIX).exists
   }
 
   /** Move the active log file to a new rollover file */
@@ -172,7 +172,7 @@ private[spark] class RollingFileAppender(
 private[spark] object RollingFileAppender {
   val DEFAULT_BUFFER_SIZE = 8192
 
-  val GZIP_LOG_SUFFIX = ".gz"
+  val GZHOST_LOG_SUFFIX = ".gz"
 
   /**
    * Get the sorted list of rolled over files. This assumes that the all the rolled
@@ -189,7 +189,7 @@ private[spark] object RollingFileAppender {
       val file = new File(directory, activeFileName).getAbsoluteFile
       if (file.exists) Some(file) else None
     }
-    (rolledOverFiles.sortBy(_.getName.stripSuffix(GZIP_LOG_SUFFIX)) ++ activeFile)
+    (rolledOverFiles.sortBy(_.getName.stripSuffix(GZHOST_LOG_SUFFIX)) ++ activeFile)
       .toImmutableArraySeq
   }
 }

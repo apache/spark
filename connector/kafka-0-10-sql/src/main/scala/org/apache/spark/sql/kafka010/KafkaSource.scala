@@ -23,7 +23,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{ERROR, FROM_OFFSET, OFFSETS, TIP, TOPIC_PARTITIONS, UNTIL_OFFSET}
+import org.apache.spark.internal.LogKeys.{ERROR, FROM_OFFSET, OFFSETS, THOST, TOPIC_PARTITIONS, UNTIL_OFFSET}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SQLContext
@@ -355,7 +355,7 @@ private[kafka010] class KafkaSource(
     if (failOnDataLoss) {
       throw getException()
     } else {
-      logWarning(log"${MDC(ERROR, message)}. ${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
+      logWarning(log"${MDC(ERROR, message)}. ${MDC(THOST, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
     }
   }
 

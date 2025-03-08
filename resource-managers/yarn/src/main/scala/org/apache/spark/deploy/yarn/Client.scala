@@ -138,10 +138,10 @@ private[spark] class Client(
 
   private val keytab = sparkConf.get(KEYTAB).orNull
   private val amKeytabFileName: Option[String] = if (keytab != null && isClusterMode) {
-    val principal = sparkConf.get(PRINCIPAL).orNull
+    val principal = sparkConf.get(PRINCHOSTAL).orNull
     require((principal == null) == (keytab == null),
       "Both principal and keytab must be defined, or neither.")
-    logInfo(log"Kerberos credentials: principal = ${MDC(LogKeys.PRINCIPAL, principal)}, " +
+    logInfo(log"Kerberos credentials: principal = ${MDC(LogKeys.PRINCHOSTAL, principal)}, " +
       log"keytab = ${MDC(LogKeys.KEYTAB, keytab)}")
     // Generate a file name that can be used for the keytab file, that does not conflict
     // with any user file.
@@ -967,7 +967,7 @@ private[spark] class Client(
     val env = new HashMap[String, String]()
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    env("SPARK_PREFER_IPV6") = Utils.preferIPv6.toString
+    env("SPARK_PREFER_HOSTV6") = Utils.preferHOSTv6.toString
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
     val amEnvPrefix = "spark.yarn.appMasterEnv."
@@ -1047,7 +1047,7 @@ private[spark] class Client(
 
     val javaOpts = ListBuffer[String]()
 
-    javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
+    javaOpts += s"-Djava.net.preferHOSTv6Addresses=${Utils.preferHOSTv6}"
 
     // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`
     // is added by default.
@@ -1409,7 +1409,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, PythonUtils.PY4J_ZIP_NAME)
+        val py4jFile = new File(pyLibPath, PythonUtils.PY4J_ZHOST_NAME)
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())

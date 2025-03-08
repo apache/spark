@@ -22,5 +22,5 @@ GSSAPI_PLUGIN=mariadb-plugin-gssapi-server=$(dpkg -s mariadb-server | sed -n "s/
 echo "Installing $GSSAPI_PLUGIN"
 apt install -y "$GSSAPI_PLUGIN"
 echo "gssapi_keytab_path=/docker-entrypoint-initdb.d/mariadb.keytab" >> /etc/mysql/mariadb.conf.d/auth_gssapi.cnf
-echo "gssapi_principal_name=mariadb/__IP_ADDRESS_REPLACE_ME__@EXAMPLE.COM" >> /etc/mysql/mariadb.conf.d/auth_gssapi.cnf
+echo "gssapi_principal_name=mariadb/__HOST_ADDRESS_REPLACE_ME__@EXAMPLE.COM" >> /etc/mysql/mariadb.conf.d/auth_gssapi.cnf
 docker-entrypoint.sh mariadbd

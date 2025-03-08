@@ -120,7 +120,7 @@ class InternalMapWithStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: Clas
   /** Override the default checkpoint duration */
   override def initialize(time: Time): Unit = {
     if (checkpointDuration == null) {
-      checkpointDuration = slideDuration * DEFAULT_CHECKPOINT_DURATION_MULTIPLIER
+      checkpointDuration = slideDuration * DEFAULT_CHECKPOINT_DURATION_MULTHOSTLIER
     }
     super.initialize(time)
   }
@@ -163,5 +163,5 @@ class InternalMapWithStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: Clas
 }
 
 private[streaming] object InternalMapWithStateDStream {
-  private val DEFAULT_CHECKPOINT_DURATION_MULTIPLIER = 10
+  private val DEFAULT_CHECKPOINT_DURATION_MULTHOSTLIER = 10
 }

@@ -38,7 +38,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
-import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZHOST
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.ExternalRDD
@@ -3824,7 +3824,7 @@ abstract class JsonSuite
         // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
         // partitions.
         .write.partitionBy("p")
-        .option("compression", GZIP.lowerCaseName()).json(path.getCanonicalPath)
+        .option("compression", GZHOST.lowerCaseName()).json(path.getCanonicalPath)
 
       val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {

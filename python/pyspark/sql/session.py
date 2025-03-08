@@ -204,7 +204,7 @@ class SparkSession(SparkConversionMixin):
     ...         .appName("Word Count")
     ...         .config("spark.some.config.option", "some-value")
     ...         .getOrCreate()
-    ... )  # doctest: +SKIP
+    ... )  # doctest: +SKHOST
     """
 
     class Builder:
@@ -379,7 +379,7 @@ class SparkSession(SparkConversionMixin):
 
             Examples
             --------
-            >>> SparkSession.builder.remote("sc://localhost")  # doctest: +SKIP
+            >>> SparkSession.builder.remote("sc://localhost")  # doctest: +SKHOST
             <pyspark.sql.session.SparkSession.Builder...
             """
             return self.config("spark.remote", url)
@@ -874,7 +874,7 @@ class SparkSession(SparkConversionMixin):
         Create a temp view, show the list, and drop it.
 
         >>> spark.range(1).createTempView("test_view")
-        >>> spark.catalog.listTables()  # doctest: +SKIP
+        >>> spark.catalog.listTables()  # doctest: +SKHOST
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
         >>> _ = spark.catalog.dropTempView("test_view")
         """
@@ -1490,15 +1490,15 @@ class SparkSession(SparkConversionMixin):
 
         Create a DataFrame from a pandas DataFrame.
 
-        >>> spark.createDataFrame(df.toPandas()).show()  # doctest: +SKIP
+        >>> spark.createDataFrame(df.toPandas()).show()  # doctest: +SKHOST
         +-----+---+
         | name|age|
         +-----+---+
         |Alice|  1|
         +-----+---+
 
-        >>> pdf = pandas.DataFrame([[1, 2]])  # doctest: +SKIP
-        >>> spark.createDataFrame(pdf).show()  # doctest: +SKIP
+        >>> pdf = pandas.DataFrame([[1, 2]])  # doctest: +SKHOST
+        >>> spark.createDataFrame(pdf).show()  # doctest: +SKHOST
         +---+---+
         |  0|  1|
         +---+---+
@@ -1507,15 +1507,15 @@ class SparkSession(SparkConversionMixin):
 
         Create a DataFrame from a PyArrow Table.
 
-        >>> spark.createDataFrame(df.toArrow()).show()  # doctest: +SKIP
+        >>> spark.createDataFrame(df.toArrow()).show()  # doctest: +SKHOST
         +-----+---+
         | name|age|
         +-----+---+
         |Alice|  1|
         +-----+---+
 
-        >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
-        >>> spark.createDataFrame(table).show()  # doctest: +SKIP
+        >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKHOST
+        >>> spark.createDataFrame(table).show()  # doctest: +SKHOST
         +---+---+
         |  0|  1|
         +---+---+
@@ -2016,7 +2016,7 @@ class SparkSession(SparkConversionMixin):
 
         Examples
         --------
-        >>> spark.stop()  # doctest: +SKIP
+        >>> spark.stop()  # doctest: +SKHOST
         """
         from pyspark.sql.context import SQLContext
 
@@ -2039,7 +2039,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> with SparkSession.builder.master("local").getOrCreate() as session:
-        ...     session.range(5).show()  # doctest: +SKIP
+        ...     session.range(5).show()  # doctest: +SKHOST
         +---+
         | id|
         +---+
@@ -2068,7 +2068,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> with SparkSession.builder.master("local").getOrCreate() as session:
-        ...     session.range(5).show()  # doctest: +SKIP
+        ...     session.range(5).show()  # doctest: +SKHOST
         +---+
         | id|
         +---+
@@ -2137,7 +2137,7 @@ class SparkSession(SparkConversionMixin):
 
         if sum([file, pyfile, archive]) > 1:
             raise PySparkValueError(
-                errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                errorClass="INVALID_MULTHOSTLE_ARGUMENT_CONDITIONS",
                 messageParameters={
                     "arg_names": "'pyfile', 'archive' and/or 'file'",
                     "condition": "True together",
@@ -2188,7 +2188,7 @@ class SparkSession(SparkConversionMixin):
         >>> def progress_handler(stages, inflight_tasks, done):
         ...     print(f"{len(stages)} Stages known, Done: {done}")
         >>> spark.registerProgressHandler(progress_handler)
-        >>> res = spark.range(10).repartition(1).collect()  # doctest: +SKIP
+        >>> res = spark.range(10).repartition(1).collect()  # doctest: +SKHOST
         3 Stages known, Done: False
         3 Stages known, Done: True
         >>> spark.clearProgressHandlers()
@@ -2443,7 +2443,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.session,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     globs["spark"].stop()
     if failure_count:
