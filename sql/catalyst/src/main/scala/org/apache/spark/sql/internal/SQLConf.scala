@@ -4450,15 +4450,16 @@ object SQLConf {
     .createWithDefault(false)
 
   val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
-    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
-      "'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
+    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'off', " +
+      "'simple', 'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(mode => Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
-      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'simple', 'extended', " +
-      "'codegen', 'cost' and 'formatted'.")
-    .createWithDefault("formatted")
+    .checkValue(
+      mode => Set("OFF", "SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
+      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'off', 'simple', " +
+      "'extended', 'codegen', 'cost' and 'formatted'.")
+    .createWithDefault("off")
 
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
     .doc("The max length of a file that can be read by the binary file data source. " +
