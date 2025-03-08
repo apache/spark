@@ -34,7 +34,7 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
     with DateTimeFormatterHelper {
 
   @transient
-  private lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
+  protected lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
 
   override def parse(s: String): Long = {
     val localTime = toLocalTime(formatter.parse(s))
@@ -50,17 +50,33 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
   }
 }
 
+/**
+ * The formatter parses/formats times according to the pattern `HH:mm:ss.[..fff..]` where
+ * `[..fff..]` is a fraction of second up to microsecond resolution. The formatter does not output
+ * trailing zeros in the fraction. For example, the time `15:00:01.123400` is formatted as the
+ * string `15:00:01.1234`.
+ */
+class FractionTimeFormatter
+    extends Iso8601TimeFormatter(
+      TimeFormatter.defaultPattern,
+      TimeFormatter.defaultLocale,
+      isParsing = false) {
+
+  @transient
+  override protected lazy val formatter = DateTimeFormatterHelper.fractionTimeFormatter
+}
+
 object TimeFormatter {
 
   val defaultLocale: Locale = Locale.US
 
-  def defaultPattern(): String = "HH:mm:ss.SSSSSS"
+  val defaultPattern: String = "HH:mm:ss"
 
   def apply(
       format: Option[String],
       locale: Locale = defaultLocale,
       isParsing: Boolean): TimeFormatter = {
-    new Iso8601TimeFormatter(format.getOrElse(defaultPattern()), locale, isParsing)
+    new Iso8601TimeFormatter(format.getOrElse(defaultPattern), locale, isParsing)
   }
 
   def apply(isParsing: Boolean): TimeFormatter = apply(format = None, isParsing = isParsing)

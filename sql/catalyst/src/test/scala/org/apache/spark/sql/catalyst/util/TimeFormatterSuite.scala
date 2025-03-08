@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalTime
 
 class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
 
@@ -62,9 +63,24 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("round trip with the default pattern: format -> parse") {
     val data = Seq.tabulate(10) { _ => Random.between(0, 24 * 60 * 60 * 1000000L) }
-    val (formatter, parser) = (TimeFormatter(isParsing = false), TimeFormatter(isParsing = true))
+    val pattern = Some("HH:mm:ss.SSSSSS")
+    val (formatter, parser) =
+      (TimeFormatter(pattern, isParsing = false), TimeFormatter(pattern, isParsing = true))
     data.foreach { micros =>
       assert(parser.parse(formatter.format(micros)) === micros, s"micros = $micros")
+    }
+  }
+
+  test("format fraction of second") {
+    val formatter = new FractionTimeFormatter()
+    Seq(
+      0 -> "00:00:00",
+      1 -> "00:00:00.000001",
+      1000 -> "00:00:00.001",
+      900000 -> "00:00:00.9",
+      1000000 -> "00:00:01").foreach { case (micros, tsStr) =>
+      assert(formatter.format(micros) === tsStr)
+      assert(formatter.format(microsToLocalTime(micros)) === tsStr)
     }
   }
 }
