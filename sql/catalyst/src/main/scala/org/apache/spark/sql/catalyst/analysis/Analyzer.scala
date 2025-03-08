@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -451,6 +451,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
+    Batch("ReassignAliasNamesWithCollations", Once,
+      ReassignAliasNamesWithCollations),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
     Batch("HandleSpecialCommand", Once,
@@ -4078,6 +4080,34 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
           UnresolvedAttribute(t.nameParts)
         } else {
           t.child
+        }
+    }
+  }
+}
+
+object ReassignAliasNamesWithCollations extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveExpressionsWithPruning(_.containsPattern(ALIAS)) {
+      case a: Alias if
+          a.resolved &&
+          a.metadata.contains(AUTO_GENERATED_ALIAS) &&
+          hasNonDefaultCollationInTheSubtree(a.child) =>
+        val newName = toPrettySQL(a.child)
+        if (newName != a.name) {
+          a.withName(newName)
+        } else {
+          a
+        }
+    }
+  }
+
+  private def hasNonDefaultCollationInTheSubtree(rootExpression: Expression) = {
+    rootExpression.exists {
+      case expression =>
+        val dataType = try { Some(expression.dataType) } catch { case ex: Throwable => None }
+        dataType match {
+          case Some(stringType: StringType) => !stringType.isUTF8BinaryCollation
+          case _ => false
         }
     }
   }
