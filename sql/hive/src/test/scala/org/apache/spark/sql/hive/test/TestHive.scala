@@ -47,45 +47,36 @@ import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTe
 import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, WAREHOUSE_PATH}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
-private object TesSparkConf {
-  def conf: SparkConf = {
-    val sparkConf = new SparkConf()
-      .set("spark.sql.test", "")
-      .set(SQLConf.CODEGEN_FALLBACK.key, "false")
-      .set(SQLConf.CODEGEN_FACTORY_MODE.key, CodegenObjectFactoryMode.CODEGEN_ONLY.toString)
-      .set(HiveUtils.HIVE_METASTORE_BARRIER_PREFIXES.key,
-        "org.apache.spark.sql.hive.execution.PairSerDe")
-      .set(WAREHOUSE_PATH.key, TestHiveContext.makeWarehouseDir().toURI.getPath)
-      // SPARK-8910
-      .set(UI_ENABLED, false)
-      .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
-      // Hive changed the default of hive.metastore.disallow.incompatible.col.type.changes
-      // from false to true. For details, see the JIRA HIVE-12320 and HIVE-17764.
-      .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
-      // Disable ConvertToLocalRelation for better test coverage. Test cases built on
-      // LocalRelation will exercise the optimization rules better by disabling it as
-      // this rule may potentially block testing of other optimization rules such as
-      // ConstantPropagation etc.
-      .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
-    // SPARK-51365: Due to the fact that the GitHub-hosted Runner on the `macOS + AppleSilicon chip`
-    // combination has only half the memory resources of Runners with other specifications,
-    // it is necessary to limit the number of threads in this case to avoid the issue of
-    // memory resources being exhausted by frequent thread creation during testing.
-    if (sys.env.contains("GITHUB_ACTIONS") && Utils.isMacOnAppleSilicon) {
-      sparkConf.set(SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, 48)
-      sparkConf.set(RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, 48)
-    }
-    sparkConf
-  }
-}
-
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
   extends TestHiveContext(
     new SparkContext(
       System.getProperty("spark.sql.test.master", "local[1]"),
       "TestSQLContext",
-      TesSparkConf.conf)) {
+      new SparkConf()
+        .set("spark.sql.test", "")
+        .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+        .set(SQLConf.CODEGEN_FACTORY_MODE.key, CodegenObjectFactoryMode.CODEGEN_ONLY.toString)
+        .set(HiveUtils.HIVE_METASTORE_BARRIER_PREFIXES.key,
+          "org.apache.spark.sql.hive.execution.PairSerDe")
+        .set(WAREHOUSE_PATH.key, TestHiveContext.makeWarehouseDir().toURI.getPath)
+        // SPARK-8910
+        .set(UI_ENABLED, false)
+        .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
+        // Hive changed the default of hive.metastore.disallow.incompatible.col.type.changes
+        // from false to true. For details, see the JIRA HIVE-12320 and HIVE-17764.
+        .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
+        // Disable ConvertToLocalRelation for better test coverage. Test cases built on
+        // LocalRelation will exercise the optimization rules better by disabling it as
+        // this rule may potentially block testing of other optimization rules such as
+        // ConstantPropagation etc.
+        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
+        .set(SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
+          sys.env.getOrElse("TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
+            SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
+        .set(RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
+          sys.env.getOrElse("TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
+            RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt))) {
   override def conf: SQLConf = sparkSession.sessionState.conf
 }
 
