@@ -21,7 +21,9 @@ import java.text.ParseException
 import java.time.{DateTimeException, LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
 import java.util.Locale
+
 import org.apache.commons.text.StringEscapeUtils
+
 import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
@@ -2580,21 +2582,21 @@ case class MakeTime(
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-  
+
   def this(hours: Expression, minutes: Expression, seconds: Expression) =
     this(hours, minutes, seconds, SQLConf.get.ansiEnabled)
-  
+
   override def first: Expression = hours
   override def second: Expression = minutes
   override def third: Expression = seconds
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, NumericType)
   override def dataType: DataType = TimeType(TimeType.MAX_PRECISION)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
-  
+
   override protected def nullSafeEval(hours: Any, minutes: Any, seconds: Any): Any = {
     val wholeSecs = seconds.asInstanceOf[Int]
     val nanoSecs = ((seconds.asInstanceOf[Double] - wholeSecs) * 1_000_000_000).asInstanceOf[Int]
-    
+
     try {
       val lt = LocalTime.of(
         hours.asInstanceOf[Int],
