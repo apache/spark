@@ -35,7 +35,7 @@ import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
-import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.execution.analysis.{DetectAmbiguousSelfJoin, EarlyCollapseProject}
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
@@ -120,6 +120,9 @@ class HiveSessionStateBuilder(
         HiveAnalysis +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
+
+    override val postAnalysisEarlyOptimizationRules: Seq[Rule[LogicalPlan]] =
+      EarlyCollapseProject +: Nil
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
