@@ -468,7 +468,9 @@ private[hive] class HiveClientImpl(
     // Note: Hive separates partition columns and the schema, but for us the
     // partition columns are part of the schema
     val (cols, partCols) = try {
-      (h.getCols.asScala.map(fromHiveColumn), h.getPartCols.asScala.map(fromHiveColumn))
+      (h.getCols.asScala.map(fromHiveColumn),
+        h.getPartCols.asScala.filter(_.getType != INCOMPATIBLE_PARTITION_TYPE_PLACEHOLDER)
+          .map(fromHiveColumn))
     } catch {
       case ex: SparkException =>
         throw QueryExecutionErrors.convertHiveTableToCatalogTableError(
@@ -1093,6 +1095,13 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl extends Logging {
+  // We can not pass raw catalogString of Hive incompatible types to Hive metastore.
+  // For regular columns, we have already empty the schema and read/write using table properties.
+  // For partition columns, we need to set them to the hive table and also avoid verification
+  // failures from HMS. We use the TYPE_PLACEHOLDER below to bypass the verification.
+  // See org.apache.hadoop.hive.metastore.MetaStoreUtils#validateColumnType for more details.
+
+  lazy val INCOMPATIBLE_PARTITION_TYPE_PLACEHOLDER = "<derived from deserializer>"
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
@@ -1167,10 +1176,17 @@ private[hive] object HiveClientImpl extends Logging {
       hiveTable.setProperty("EXTERNAL", "TRUE")
     }
     // Note: In Hive the schema and partition columns must be disjoint sets
-    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
-      table.partitionColumnNames.contains(c.getName)
+    val (partSchema, schema) = table.schema.partition { c =>
+      table.partitionColumnNames.contains(c.name)
     }
-    hiveTable.setFields(schema.asJava)
+
+    val partCols = partSchema.map {
+      case c if !HiveExternalCatalog.isHiveCompatibleDataType(c.dataType) =>
+        new FieldSchema(c.name, INCOMPATIBLE_PARTITION_TYPE_PLACEHOLDER, c.getComment().orNull)
+      case c => toHiveColumn(c)
+    }
+
+    hiveTable.setFields(schema.map(toHiveColumn).asJava)
     hiveTable.setPartCols(partCols.asJava)
     Option(table.owner).filter(_.nonEmpty).orElse(userName).foreach(hiveTable.setOwner)
     hiveTable.setCreateTime(MILLISECONDS.toSeconds(table.createTime).toInt)
