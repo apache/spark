@@ -399,6 +399,10 @@ message ExecutePlanResponse {
     // ML command response
     MlCommandResult ml_command_result = 20;
 
+    // Acknowledgement sent by the server immediately upon registration of an ExecutePlan or
+    // ReattachExecute request.
+    Acknowledgement acknowledgement = 21;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
@@ -476,6 +480,15 @@ message ExecutePlanResponse {
       int64 input_bytes_read = 4;
       bool done = 5;
     }
+  }
+
+  message Acknowledgement {
+    // Server acknowledgement sent immediately upon registering an ExecutePlan or ReattachExecute
+    // request.
+    // This acknowledgement allows a client to disconnect right after registration, without waiting
+    // for the full processing of the request.
+    // It is especially useful when the server supports reattachment or otherwise, early termination
+    // of the request.
   }
 }
 

@@ -158,7 +158,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
       .setWriteStreamOperationStart(sinkBuilder.build())
       .build()
 
-    val resp = ds.sparkSession.execute(startCmd).head
+    val resp = ds.sparkSession.execute(startCmd).find(_.hasWriteStreamOperationStartResult).get
     if (resp.getWriteStreamOperationStartResult.hasQueryStartedEventJson) {
       val event = QueryStartedEvent.fromJson(
         resp.getWriteStreamOperationStartResult.getQueryStartedEventJson)
