@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.DateTimeException
+
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalTime
@@ -44,6 +46,16 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("time strings do not match to the pattern") {
+    def assertError(str: String, expectedMsg: String): Unit = {
+      val e = intercept[DateTimeException](TimeFormatter().parse(str))
+      assert(e.getMessage.contains(expectedMsg))
+    }
+
+    assertError("11.12.13", "Text '11.12.13' could not be parsed")
+    assertError("25:00:00", "Text '25:00:00' could not be parsed: Invalid value")
+  }
+
   test("time formatting") {
     Seq(
       (12 * 3600 * 1000000L, "HH") -> "12",
@@ -59,6 +71,30 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     ).foreach { case ((micros, pattern), expectedStr) =>
       val formatter = TimeFormatter(format = pattern)
       assert(formatter.format(micros) === expectedStr)
+    }
+  }
+
+  test("micros are out of supported range") {
+    def assertError(micros: Long, expectedMsg: String): Unit = {
+      val e = intercept[DateTimeException](TimeFormatter().format(micros))
+      assert(e.getMessage.contains(expectedMsg))
+    }
+
+    assertError(-1, "Invalid value for NanoOfDay (valid values 0 - 86399999999999): -1000")
+    assertError(25L * 3600 * 1000 * 1000,
+      "Invalid value for NanoOfDay (valid values 0 - 86399999999999): 90000000000000")
+  }
+
+  test("invalid pattern") {
+    Seq("hHH:mmm:s", "kkk", "GGGGGG").foreach { invalidPattern =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          TimeFormatter(invalidPattern)
+        },
+        condition = "_LEGACY_ERROR_TEMP_2130",
+        parameters = Map(
+          "pattern" -> s"'$invalidPattern'",
+          "docroot" -> SPARK_DOC_ROOT))
     }
   }
 

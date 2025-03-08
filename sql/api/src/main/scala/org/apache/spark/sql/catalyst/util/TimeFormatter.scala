@@ -26,9 +26,15 @@ sealed trait TimeFormatter extends Serializable {
   def parse(s: String): Long // returns microseconds since midnight
 
   def format(localTime: LocalTime): String
+  // Converts microseconds since the midnight to time string
   def format(micros: Long): String
+
+  def validatePatternString(): Unit
 }
 
+/**
+ * The ISO time formatter is capable of formatting and parsing the ISO-8601 extended time format.
+ */
 class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
     extends TimeFormatter
     with DateTimeFormatterHelper {
@@ -47,6 +53,13 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
 
   override def format(micros: Long): String = {
     format(microsToLocalTime(micros))
+  }
+
+  override def validatePatternString(): Unit = {
+    try {
+      formatter
+    } catch checkInvalidPattern(pattern)
+    ()
   }
 }
 
@@ -76,6 +89,8 @@ object TimeFormatter {
       format: String = defaultPattern,
       locale: Locale = defaultLocale,
       isParsing: Boolean = false): TimeFormatter = {
-    new Iso8601TimeFormatter(format, locale, isParsing)
+    val formatter = new Iso8601TimeFormatter(format, locale, isParsing)
+    formatter.validatePatternString()
+    formatter
   }
 }
