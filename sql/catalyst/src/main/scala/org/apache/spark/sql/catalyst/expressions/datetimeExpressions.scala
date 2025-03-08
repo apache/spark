@@ -2574,7 +2574,7 @@ case class MakeTime(
   
   override protected def nullSafeEval(hours: Any, minutes: Any, seconds: Any): Any = {
     val wholeSecs = seconds.asInstanceOf[Int]
-    val nanoSecs = ((seconds.asInstanceOf[Double] - wholeSecs) * 1e9).asInstanceOf[Int]
+    val nanoSecs = ((seconds.asInstanceOf[Double] - wholeSecs) * 1_000_000_000).asInstanceOf[Int]
     
     try {
       val lt = LocalTime.of(
@@ -2586,25 +2586,31 @@ case class MakeTime(
       localTimeToMicros(lt)
     } catch {
       case e: java.time.DateTimeException =>
-        // TODO is this the right error?
         if (failOnError) throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e) else null
     }
   }
 
-  override def prettyName: String = "make_time"
-  
-  // TODO null safe eval using localTimeToMicros
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val failOnErrorBranch = if (failOnError) {
+      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
+    } else {
+      s"${ev.isNull} = true;"
+    }
+    nullSafeCodeGen(ctx, ev, (hour, min, sec) => {
+      s"""
+      try {
+        int wholeSecs = (int) $sec;
+        int nanoSecs = (int) (($sec - wholeSecs) * 1_000_000_000);
+        ${ev.value} =
+            $dtu.localTimeToMicros(java.time.LocalTime.of($hour, $min, wholeSecs, nanoSecs));
+      } catch (java.time.DateTimeException e) {
+        $failOnErrorBranch
+      }"""
+    })
+  }
 
-  /**
-   * Returns Java source code that can be compiled to evaluate this expression.
-   * The default behavior is to call the eval method of the expression. Concrete expression
-   * implementations should override this to do actual code generation.
-   *
-   * @param ctx a [[CodegenContext]]
-   * @param ev  an [[ExprCode]] with unique terms.
-   * @return an [[ExprCode]] containing the Java source code to generate the given expression
-   */
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ???
+  override def prettyName: String = "make_time"
 
   override protected def withNewChildrenInternal(
     newFirst: Expression, newSecond: Expression, newThird: Expression): MakeTime =
