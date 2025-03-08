@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.util.Utils
 
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
