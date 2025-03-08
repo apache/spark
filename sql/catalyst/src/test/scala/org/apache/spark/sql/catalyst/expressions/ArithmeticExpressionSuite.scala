@@ -118,21 +118,21 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Long.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "long overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        UnaryMinus(Literal(Long.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "long overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
+      )
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Int.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "integer overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        UnaryMinus(Literal(Int.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "integer overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
+      )
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Short.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "short overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        UnaryMinus(Literal(Short.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "short overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
+      )
       checkErrorInExpression[SparkArithmeticException](
-        UnaryMinus(Literal(Byte.MinValue)), "ARITHMETIC_OVERFLOW",
-        Map("message" -> "byte overflow", "alternative" -> "",
-          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+        UnaryMinus(Literal(Byte.MinValue)), "ARITHMETIC_OVERFLOW.WITHOUT_TRY_SUGGESTION",
+        Map("message" -> "byte overflow", "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
+      )
       checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
       checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
       checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)
@@ -429,7 +429,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("IntegralDivide: throw exception on overflow under ANSI mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkExceptionInExpression[ArithmeticException](
-        IntegralDivide(Literal(Long.MinValue), Literal(-1L)), "Overflow in integral divide.")
+        IntegralDivide(Literal(Long.MinValue), Literal(-1L)),
+        "[ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION] Overflow in integral divide." +
+          " Use `try_divide` to tolerate overflow and return NULL instead. SQLSTATE: 22003")
     }
   }
 
