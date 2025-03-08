@@ -61,6 +61,9 @@ private[spark] object BlockManagerMessages {
    */
   case object TriggerHeapHistogram extends ToBlockManagerMasterStorageEndpoint
 
+  // Test only
+  case object GetShuffleServicePort extends ToBlockManagerMasterStorageEndpoint
+
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from storage endpoints to the master.
   //////////////////////////////////////////////////////////////////////////////////
