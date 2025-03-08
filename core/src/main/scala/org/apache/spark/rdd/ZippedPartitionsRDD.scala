@@ -151,3 +151,22 @@ private[spark] class ZippedPartitionsRDD4
     f = null
   }
 }
+
+private[spark] class ZippedPartitionsRDDN[V: ClassTag](
+    sc: SparkContext,
+    var f: Seq[Iterator[Any]] => Iterator[V],
+    var children: Seq[RDD[_]],
+    preservesPartitioning: Boolean = false)
+  extends ZippedPartitionsBaseRDD[V](sc, children, preservesPartitioning) {
+
+  override def compute(s: Partition, context: TaskContext): Iterator[V] = {
+    val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
+    f(rdds.zip(partitions).map { case (rdd, partition) => rdd.iterator(partition, context) })
+  }
+
+  override def clearDependencies(): Unit = {
+    super.clearDependencies()
+    children = null
+    f = null
+  }
+}

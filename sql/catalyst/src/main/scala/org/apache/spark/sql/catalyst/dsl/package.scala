@@ -429,14 +429,10 @@ package object dsl {
         ): LogicalPlan = {
         CoGroup.apply[Key, Left, Right, Result](
           func,
-          leftGroup,
-          rightGroup,
-          leftAttr,
-          rightAttr,
-          leftOrder,
-          rightOrder,
-          logicalPlan,
-          otherPlan)
+          Seq(leftGroup, rightGroup),
+          Seq(leftAttr, rightAttr),
+          Seq(leftOrder, rightOrder),
+          Seq(logicalPlan, otherPlan))
       }
 
       def orderBy(sortExprs: SortOrder*): LogicalPlan = Sort(sortExprs, true, logicalPlan)
