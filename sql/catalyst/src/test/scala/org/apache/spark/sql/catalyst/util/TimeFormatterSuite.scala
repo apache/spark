@@ -39,7 +39,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       ("23:59:59.000000", "HH:mm:ss.SSSSSS") -> (23 * 3600 + 59 * 60 + 59) * 1000000L,
       ("23:59:59.999999", "HH:mm:ss.SSSSSS") -> ((23 * 3600 + 59 * 60 + 59) * 1000000L + 999999)
     ).foreach { case ((inputStr, pattern), expectedMicros) =>
-      val formatter = TimeFormatter(format = Some(pattern), isParsing = true)
+      val formatter = TimeFormatter(format = pattern, isParsing = true)
       assert(formatter.parse(inputStr) === expectedMicros)
     }
   }
@@ -57,16 +57,16 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       ((23 * 3600 + 59 * 60 + 59) * 1000000L, "HH:mm:ss.SSSSSS") -> "23:59:59.000000",
       ((23 * 3600 + 59 * 60 + 59) * 1000000L + 999999, "HH:mm:ss.SSSSSS") -> "23:59:59.999999"
     ).foreach { case ((micros, pattern), expectedStr) =>
-      val formatter = TimeFormatter(format = Some(pattern), isParsing = false)
+      val formatter = TimeFormatter(format = pattern)
       assert(formatter.format(micros) === expectedStr)
     }
   }
 
   test("round trip with the default pattern: format -> parse") {
     val data = Seq.tabulate(10) { _ => Random.between(0, 24 * 60 * 60 * 1000000L) }
-    val pattern = Some("HH:mm:ss.SSSSSS")
+    val pattern = "HH:mm:ss.SSSSSS"
     val (formatter, parser) =
-      (TimeFormatter(pattern, isParsing = false), TimeFormatter(pattern, isParsing = true))
+      (TimeFormatter(pattern), TimeFormatter(pattern, isParsing = true))
     data.foreach { micros =>
       val str = formatter.format(micros)
       assert(parser.parse(str) === micros, s"micros = $micros")
@@ -89,22 +89,22 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("missing am/pm field") {
     Seq("HH", "hh", "KK", "kk").foreach { hour =>
-      val formatter = TimeFormatter(Some(s"$hour:mm:ss"), isParsing = true)
+      val formatter = TimeFormatter(format = s"$hour:mm:ss", isParsing = true)
       val micros = formatter.parse("11:30:01")
       assert(micros === localtime(11, 30, 1))
     }
   }
 
   test("missing hour field") {
-    val f1 = TimeFormatter(format = Some("mm:ss a"), isParsing = true)
+    val f1 = TimeFormatter(format = "mm:ss a", isParsing = true)
     val t1 = f1.parse("30:01 PM")
     assert(t1 === localtime(12, 30, 1))
     val t2 = f1.parse("30:01 AM")
     assert(t2 === localtime(0, 30, 1))
-    val f2 = TimeFormatter(format = Some("mm:ss"), isParsing = true)
+    val f2 = TimeFormatter(format = "mm:ss", isParsing = true)
     val t3 = f2.parse("30:01")
     assert(t3 === localtime(0, 30, 1))
-    val f3 = TimeFormatter(format = Some("a"), isParsing = true)
+    val f3 = TimeFormatter(format = "a", isParsing = true)
     val t4 = f3.parse("PM")
     assert(t4 === localtime(12))
     val t5 = f3.parse("AM")

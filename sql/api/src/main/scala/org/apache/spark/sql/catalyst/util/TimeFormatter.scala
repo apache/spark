@@ -73,13 +73,9 @@ object TimeFormatter {
   val defaultPattern: String = "HH:mm:ss"
 
   def apply(
-      format: Option[String],
+      format: String = defaultPattern,
       locale: Locale = defaultLocale,
-      isParsing: Boolean): TimeFormatter = {
-    new Iso8601TimeFormatter(format.getOrElse(defaultPattern), locale, isParsing)
+      isParsing: Boolean = false): TimeFormatter = {
+    new Iso8601TimeFormatter(format, locale, isParsing)
   }
-
-  def apply(isParsing: Boolean): TimeFormatter = apply(format = None, isParsing = isParsing)
-
-  def apply(): TimeFormatter = apply(isParsing = false)
 }
