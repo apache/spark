@@ -72,10 +72,10 @@ object TestHive
         // ConstantPropagation etc.
         .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
         .set(SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
-          sys.env.getOrElse("TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
+          sys.env.getOrElse("SPARK_TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
             SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
         .set(RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
-          sys.env.getOrElse("TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
+          sys.env.getOrElse("SPARK_TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
             RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt))) {
   override def conf: SQLConf = sparkSession.sessionState.conf
 }
