@@ -1132,20 +1132,20 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(stringToTime(UTF8String.fromString(str)) === expected)
     }
 
-    checkStringToTime("00:00", Some(localtime()))
-    checkStringToTime("00:00:00", Some(localtime()))
-    checkStringToTime("00:00:00.1", Some(localtime(micros = 100000)))
-    checkStringToTime("00:00:59.01", Some(localtime(sec = 59, micros = 10000)))
-    checkStringToTime("00:59:00.001", Some(localtime(minute = 59, micros = 1000)))
-    checkStringToTime("23:00:00.0001", Some(localtime(hour = 23, micros = 100)))
-    checkStringToTime("23:59:00.00001", Some(localtime(hour = 23, minute = 59, micros = 10)))
+    checkStringToTime("00:00", Some(localTime()))
+    checkStringToTime("00:00:00", Some(localTime()))
+    checkStringToTime("00:00:00.1", Some(localTime(micros = 100000)))
+    checkStringToTime("00:00:59.01", Some(localTime(sec = 59, micros = 10000)))
+    checkStringToTime("00:59:00.001", Some(localTime(minute = 59, micros = 1000)))
+    checkStringToTime("23:00:00.0001", Some(localTime(hour = 23, micros = 100)))
+    checkStringToTime("23:59:00.00001", Some(localTime(hour = 23, minute = 59, micros = 10)))
     checkStringToTime("23:59:59.000001",
-      Some(localtime(hour = 23, minute = 59, sec = 59, micros = 1)))
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 1)))
     checkStringToTime("23:59:59.999999",
-      Some(localtime(hour = 23, minute = 59, sec = 59, micros = 999999)))
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999)))
 
-    checkStringToTime("1:2:3.0", Some(localtime(hour = 1, minute = 2, sec = 3)))
-    checkStringToTime("T1:02:3.04", Some(localtime(hour = 1, minute = 2, sec = 3, micros = 40000)))
+    checkStringToTime("1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime("T1:02:3.04", Some(localTime(hour = 1, minute = 2, sec = 3, micros = 40000)))
 
     // Negative tests
     Seq("2025-03-09 00:00:00", "00", "00:01:02 UTC").foreach { invalidTime =>
