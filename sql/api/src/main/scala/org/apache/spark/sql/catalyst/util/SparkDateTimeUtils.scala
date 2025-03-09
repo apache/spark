@@ -30,7 +30,7 @@ import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
-import org.apache.spark.sql.types.{DateType, TimestampType}
+import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkClassUtils
 
@@ -657,6 +657,35 @@ trait SparkDateTimeUtils {
       Some(localDateTimeToMicros(localDateTime))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  /**
+   * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
+   * number of microseconds since the midnight. The result will be independent of time zones.
+   *
+   * The return type is [[Option]] in order to distinguish between 0L and null. Please refer to
+   * `parseTimestampString` for the allowed formats.
+   */
+  def stringToTime(s: UTF8String): Option[Long] = {
+    try {
+      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
+      // If the input string can't be parsed as a time, or it contains not only
+      // the time part or has time zone information, return None.
+      if (segments.isEmpty || !justTime || zoneIdOpt.isDefined) {
+        return None
+      }
+      val nanoseconds = MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      Some(localTimeToMicros(localTime))
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long = {
+    stringToTime(s).getOrElse {
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(), context)
     }
   }
 
