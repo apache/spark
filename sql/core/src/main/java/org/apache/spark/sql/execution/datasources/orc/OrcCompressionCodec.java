@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.orc;
 
-import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.Locale;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.apache.orc.CompressionKind;
 
@@ -47,11 +45,21 @@ public enum OrcCompressionCodec {
     return this.compressionKind;
   }
 
-  public static final Map<String, String> codecNameMap =
-    Arrays.stream(OrcCompressionCodec.values()).collect(
-      Collectors.toMap(codec -> codec.name(), codec -> codec.name().toLowerCase(Locale.ROOT)));
+  public static final EnumMap<OrcCompressionCodec, String> codecNameMap =
+    new EnumMap<>(OrcCompressionCodec.class);
+
+  static {
+    codecNameMap.put(NONE, NONE.name().toLowerCase(Locale.ROOT));
+    codecNameMap.put(UNCOMPRESSED, UNCOMPRESSED.name().toLowerCase(Locale.ROOT));
+    codecNameMap.put(ZLIB, ZLIB.name().toLowerCase(Locale.ROOT));
+    codecNameMap.put(SNAPPY, SNAPPY.name().toLowerCase(Locale.ROOT));
+    codecNameMap.put(LZO, LZO.name().toLowerCase(Locale.ROOT));
+    codecNameMap.put(LZ4, LZ4.name().toLowerCase(Locale.ROOT));
+    codecNameMap.put(ZSTD, ZSTD.name().toLowerCase(Locale.ROOT));
+    codecNameMap.put(BROTLI, BROTLI.name().toLowerCase(Locale.ROOT));
+  }
 
   public String lowerCaseName() {
-    return codecNameMap.get(this.name());
+    return codecNameMap.get(this);
   }
 }
