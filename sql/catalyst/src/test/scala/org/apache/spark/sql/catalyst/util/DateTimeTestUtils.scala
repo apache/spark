@@ -114,7 +114,7 @@ object DateTimeTestUtils {
   }
 
   // Returns microseconds since midnight
-  def localtime(
+  def localTime(
       hour: Byte = 0,
       minute: Byte = 0,
       sec: Byte = 0,

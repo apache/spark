@@ -127,23 +127,23 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     Seq("HH", "hh", "KK", "kk").foreach { hour =>
       val formatter = TimeFormatter(format = s"$hour:mm:ss", isParsing = true)
       val micros = formatter.parse("11:30:01")
-      assert(micros === localtime(11, 30, 1))
+      assert(micros === localTime(11, 30, 1))
     }
   }
 
   test("missing hour field") {
     val f1 = TimeFormatter(format = "mm:ss a", isParsing = true)
     val t1 = f1.parse("30:01 PM")
-    assert(t1 === localtime(12, 30, 1))
+    assert(t1 === localTime(12, 30, 1))
     val t2 = f1.parse("30:01 AM")
-    assert(t2 === localtime(0, 30, 1))
+    assert(t2 === localTime(0, 30, 1))
     val f2 = TimeFormatter(format = "mm:ss", isParsing = true)
     val t3 = f2.parse("30:01")
-    assert(t3 === localtime(0, 30, 1))
+    assert(t3 === localTime(0, 30, 1))
     val f3 = TimeFormatter(format = "a", isParsing = true)
     val t4 = f3.parse("PM")
-    assert(t4 === localtime(12))
+    assert(t4 === localTime(12))
     val t5 = f3.parse("AM")
-    assert(t5 === localtime())
+    assert(t5 === localTime())
   }
 }
