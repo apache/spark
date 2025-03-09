@@ -18,8 +18,8 @@
 package org.apache.spark.sql.avro;
 
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.avro.file.DataFileConstants;
@@ -53,15 +53,19 @@ public enum AvroCompressionCodec {
     return this.supportCompressionLevel;
   }
 
-  private static final Map<String, String> codecNameMap =
-    Arrays.stream(AvroCompressionCodec.values()).collect(
-      Collectors.toMap(codec -> codec.name(), codec -> codec.name().toLowerCase(Locale.ROOT)));
-
-  public String lowerCaseName() {
-    return codecNameMap.get(this.name());
-  }
-
   public static AvroCompressionCodec fromString(String s) {
     return AvroCompressionCodec.valueOf(s.toUpperCase(Locale.ROOT));
+  }
+
+  private static final EnumMap<AvroCompressionCodec, String> codecNameMap =
+    Arrays.stream(AvroCompressionCodec.values()).collect(
+      Collectors.toMap(
+        codec -> codec,
+        codec -> codec.name().toLowerCase(Locale.ROOT),
+        (oldValue, newValue) -> oldValue,
+        () -> new EnumMap<>(AvroCompressionCodec.class)));
+
+  public String lowerCaseName() {
+    return codecNameMap.get(this);
   }
 }
