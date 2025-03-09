@@ -1203,7 +1203,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val input = Seq(java.time.LocalTime.parse(mockTimeStr)).toDF("currentTime")
     // Regular case
     val plusHour = udf((l: java.time.LocalTime) => l.plusHours(1))
-    val result = input.select(plusHour($"currentTime").cast(TimeType()).as("newTime"))
+    val result = input.select(plusHour($"currentTime").as("newTime"))
     checkAnswer(result, Row(java.time.LocalTime.parse("01:00:00.000000")) :: Nil)
     assert(result.schema === new StructType().add("newTime", TimeType()))
     // UDF produces `null`
@@ -1219,7 +1219,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(constResult, Row(java.time.LocalTime.parse(mockTimeStr)) :: Nil)
     assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
     // Error in the conversion of UDF result to the internal representation of time
-    val invalidFunc = udf((l: java.time.LocalTime) => "Zero".toLong)
+    val invalidFunc = udf((l: java.time.LocalTime) => l.plusHours("Zero").toLong)
     val e = intercept[SparkException] {
       input.select(invalidFunc($"currentTime")).collect()
     }
