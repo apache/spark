@@ -1867,11 +1867,6 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
-          <!--  Do not need Calcite because we disabled hive.cbo.enable -->
-          <exclusion>
-            <groupId>org.apache.calcite</groupId>
-            <artifactId>calcite-core</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-avatica</artifactId>
@@ -1970,6 +1965,10 @@
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-registry</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.jayway.jsonpath</groupId>
+            <artifactId>json-path</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2325,6 +2324,11 @@
         <groupId>org.apache.hive</groupId>
         <artifactId>hive-udf</artifactId>
         <version>${hive.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.calcite</groupId>
+        <artifactId>calcite-core</artifactId>
+        <version>1.38.0</version>
       </dependency>
 
       <dependency>
