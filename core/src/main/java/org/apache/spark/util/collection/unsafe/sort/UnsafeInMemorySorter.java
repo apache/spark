@@ -216,7 +216,7 @@ public final class UnsafeInMemorySorter {
     if (array != null) {
       if (newArray.size() < array.size()) {
         // checkstyle.off: RegexpSinglelineJava
-        throw new SparkOutOfMemoryError("_LEGACY_ERROR_TEMP_3301", new HashMap<>());
+        throw new SparkOutOfMemoryError("POINTER_ARRAY_OUT_OF_MEMORY", new HashMap<>());
         // checkstyle.on: RegexpSinglelineJava
       }
       Platform.copyMemory(
