@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
@@ -40,7 +41,8 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
     with DateTimeFormatterHelper {
 
   @transient
-  protected lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
+  protected lazy val formatter: DateTimeFormatter =
+    getOrCreateFormatter(pattern, locale, isParsing)
 
   override def parse(s: String): Long = {
     val localTime = toLocalTime(formatter.parse(s))
@@ -76,7 +78,8 @@ class FractionTimeFormatter
       isParsing = false) {
 
   @transient
-  override protected lazy val formatter = DateTimeFormatterHelper.fractionTimeFormatter
+  override protected lazy val formatter: DateTimeFormatter =
+    DateTimeFormatterHelper.fractionTimeFormatter
 }
 
 object TimeFormatter {
