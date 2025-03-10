@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
@@ -82,7 +82,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
-    atomicTypes.foreach(dt => checkNullCast(dt, StringType))
+    (atomicTypes ++ timeTypes).foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
@@ -1455,6 +1455,18 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         }
         checkEvaluation(cast(Literal.create(from, fromType), typ), paddedTo)
       }
+    }
+  }
+
+  test("cast time to string") {
+    Seq(
+      LocalTime.MIDNIGHT -> "00:00:00",
+      LocalTime.NOON -> "12:00:00",
+      LocalTime.of(23, 59, 59) -> "23:59:59",
+      LocalTime.of(23, 59, 59, 1000000) -> "23:59:59.001",
+      LocalTime.of(23, 59, 59, 999999000) -> "23:59:59.999999"
+    ).foreach { case (time, expectedStr) =>
+      checkEvaluation(Cast(Literal(time), StringType), expectedStr)
     }
   }
 }
