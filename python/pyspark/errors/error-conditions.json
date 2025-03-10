@@ -980,7 +980,7 @@
   },
   "UDTF_ARROW_TYPE_CAST_ERROR": {
     "message": [
-      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+      "Cannot convert the output value of the input '<data>' with type '<schema>' to the specified return type of the column: '<arrow_schema>'. Please check if the data types match and try again."
     ]
   },
   "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD": {

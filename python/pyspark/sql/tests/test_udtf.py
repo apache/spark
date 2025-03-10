@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
 import os
 import platform
 import shutil
@@ -350,10 +351,7 @@ class BaseUDTFTestsMixin:
             TestUDTF(lit(1)).show()
 
     def test_udtf_with_wrong_num_output(self):
-        err_msg = (
-            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the "
-            "result does not match the specified schema."
-        )
+        err_msg = "(UDTF_ARROW_TYPE_CAST_ERROR|UDTF_RETURN_SCHEMA_MISMATCH)"
 
         # Output less columns than specified return schema
         @udtf(returnType="a: int, b: int")
@@ -379,7 +377,9 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield 1,
 
-        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+        with self.assertRaisesRegex(
+            PythonException, "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CAST_ERROR)"
+        ):
             TestUDTF().collect()
 
     def test_udtf_with_non_empty_output_schema_and_empty_output(self):
@@ -388,7 +388,9 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield tuple()
 
-        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+        with self.assertRaisesRegex(
+            PythonException, "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CAST_ERROR)"
+        ):
             TestUDTF().collect()
 
     def test_udtf_init(self):
@@ -543,10 +545,7 @@ class BaseUDTFTestsMixin:
             TestUDTF(lit(1)).collect()
 
     def test_udtf_terminate_with_wrong_num_output(self):
-        err_msg = (
-            r"\[UDTF_RETURN_SCHEMA_MISMATCH\] The number of columns in the result "
-            "does not match the specified schema."
-        )
+        err_msg = "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CAST_ERROR)"
 
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
@@ -2903,15 +2902,16 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self, a: int):
                 yield a
 
-        # When arrow is enabled, it can handle non-tuple return value.
-        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
+        with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
+            TestUDTF(lit(1)).collect()
 
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 return [a]
 
-        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
+        with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
+            TestUDTF(lit(1)).collect()
 
     def test_numeric_output_type_casting(self):
         class TestUDTF:
@@ -2921,15 +2921,15 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
         for ret_type, expected in [
-            ("x: boolean", [Row(x=True)]),
+            ("x: boolean", err),
             ("x: tinyint", [Row(x=1)]),
             ("x: smallint", [Row(x=1)]),
             ("x: int", [Row(x=1)]),
             ("x: bigint", [Row(x=1)]),
             ("x: string", [Row(x="1")]),  # require arrow.cast
-            ("x: date", err),
+            ("x: date", [Row(x=datetime.date(1970, 1, 2))]),
             ("x: byte", [Row(x=1)]),
-            ("x: binary", [Row(x=bytearray(b"\x01"))]),
+            ("x: binary", err),
             ("x: float", [Row(x=1.0)]),
             ("x: double", [Row(x=1.0)]),
             ("x: decimal(10, 0)", err),
@@ -2948,21 +2948,21 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         err = "UDTF_ARROW_TYPE_CAST_ERROR"
 
         for ret_type, expected in [
-            ("x: boolean", [Row(x=True)]),
-            ("x: tinyint", [Row(x=1)]),
-            ("x: smallint", [Row(x=1)]),
-            ("x: int", [Row(x=1)]),
-            ("x: bigint", [Row(x=1)]),
+            ("x: boolean", err),
+            ("x: tinyint", err),
+            ("x: smallint", err),
+            ("x: int", err),
+            ("x: bigint", err),
             ("x: string", [Row(x="1")]),
             ("x: date", err),
             ("x: timestamp", err),
-            ("x: byte", [Row(x=1)]),
-            ("x: binary", [Row(x=bytearray(b"1"))]),
-            ("x: float", [Row(x=1.0)]),
-            ("x: double", [Row(x=1.0)]),
-            ("x: decimal(10, 0)", [Row(x=1)]),
-            ("x: array<string>", [Row(x=["1"])]),
-            ("x: array<int>", [Row(x=[1])]),
+            ("x: byte", err),
+            ("x: binary", err),
+            ("x: float", err),
+            ("x: double", err),
+            ("x: decimal(10, 0)", err),
+            ("x: array<string>", err),
+            ("x: array<int>", err),
             ("x: map<string,int>", err),
             ("x: struct<a:int>", err),
         ]:
@@ -2986,11 +2986,11 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: date", err),
             ("x: timestamp", err),
             ("x: byte", err),
-            ("x: binary", [Row(x=bytearray(b"hello"))]),
+            ("x: binary", err),
             ("x: float", err),
             ("x: double", err),
             ("x: decimal(10, 0)", err),
-            ("x: array<string>", [Row(x=["h", "e", "l", "l", "o"])]),
+            ("x: array<string>", err),
             ("x: array<int>", err),
             ("x: map<string,int>", err),
             ("x: struct<a:int>", err),
@@ -3011,7 +3011,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: smallint", err),
             ("x: int", err),
             ("x: bigint", err),
-            ("x: string", err),
+            ("x: string", [Row(x="[0, 1.1, 2]")]),
             ("x: date", err),
             ("x: timestamp", err),
             ("x: byte", err),
@@ -3020,7 +3020,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: double", err),
             ("x: decimal(10, 0)", err),
             ("x: array<string>", [Row(x=["0", "1.1", "2"])]),
-            ("x: array<boolean>", [Row(x=[False, True, True])]),
+            ("x: array<boolean>", err),
             ("x: array<int>", [Row(x=[0, 1, 2])]),
             ("x: array<float>", [Row(x=[0, 1.1, 2])]),
             ("x: array<array<int>>", err),
@@ -3044,7 +3044,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: smallint", err),
             ("x: int", err),
             ("x: bigint", err),
-            ("x: string", err),
+            ("x: string", [Row(x=str({"a": 0, "b": 1.1, "c": 2}))]),
             ("x: date", err),
             ("x: timestamp", err),
             ("x: byte", err),
@@ -3052,8 +3052,8 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: float", err),
             ("x: double", err),
             ("x: decimal(10, 0)", err),
-            ("x: array<string>", [Row(x=["a", "b", "c"])]),
-            ("x: map<string,string>", err),
+            ("x: array<string>", err),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
             ("x: map<string,boolean>", err),
             ("x: map<string,int>", [Row(x={"a": 0, "b": 1, "c": 2})]),
             ("x: map<string,float>", [Row(x={"a": 0, "b": 1.1, "c": 2})]),
@@ -3076,7 +3076,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: smallint", err),
             ("x: int", err),
             ("x: bigint", err),
-            ("x: string", err),
+            ("x: string", [Row(x="{'a': 0, 'b': 1.1, 'c': 2}")]),
             ("x: date", err),
             ("x: timestamp", err),
             ("x: byte", err),
@@ -3084,8 +3084,8 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: float", err),
             ("x: double", err),
             ("x: decimal(10, 0)", err),
-            ("x: array<string>", [Row(x=["a", "b", "c"])]),
-            ("x: map<string,string>", err),
+            ("x: array<string>", err),
+            ("x: map<string,string>", [Row(x={"a": "0", "b": "1.1", "c": "2"})]),
             ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
             ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=1, c=2))]),
             ("x: struct<a:float,b:float,c:float>", [Row(Row(a=0, b=1.1, c=2))]),
@@ -3107,7 +3107,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: smallint", err),
             ("x: int", err),
             ("x: bigint", err),
-            ("x: string", err),
+            ("x: string", [Row(x="Row(a=0, b=1.1, c=2)")]),
             ("x: date", err),
             ("x: timestamp", err),
             ("x: byte", err),
@@ -3115,7 +3115,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             ("x: float", err),
             ("x: double", err),
             ("x: decimal(10, 0)", err),
-            ("x: array<string>", [Row(x=["0", "1.1", "2"])]),
+            ("x: array<string>", err),
             ("x: map<string,string>", err),
             ("x: struct<a:string,b:string,c:string>", [Row(Row(a="0", b="1.1", c="2"))]),
             ("x: struct<a:int,b:int,c:int>", [Row(Row(a=0, b=1, c=2))]),
