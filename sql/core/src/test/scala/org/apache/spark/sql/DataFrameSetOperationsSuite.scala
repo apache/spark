@@ -1495,8 +1495,6 @@ class DataFrameSetOperationsSuite extends QueryTest
         union.collect()
         checkIfColumnar(union.queryExecution.executedPlan,
           _.isInstanceOf[InMemoryTableScanExec], supported)
-        checkIfColumnar(union.queryExecution.executedPlan,
-          _.isInstanceOf[InMemoryTableScanExec], supported)
         checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported)
         checkAnswer(union, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Row(6) :: Nil)
 
