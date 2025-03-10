@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.ArrayImplicits._
@@ -38,12 +38,6 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
 
   private val confDir = Option(conf.sparkConf.getenv(ENV_HADOOP_CONF_DIR))
   private val existingConfMap = conf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
-
-  KubernetesUtils.requireNandDefined(
-    confDir,
-    existingConfMap,
-    "Do not specify both the `HADOOP_CONF_DIR` in your ENV and the ConfigMap " +
-    "as the creation of an additional ConfigMap, when one is already specified is extraneous")
 
   private lazy val confFiles: Seq[File] = {
     val dir = new File(confDir.get)
@@ -60,7 +54,14 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
 
   override def configurePod(original: SparkPod): SparkPod = {
     original.transform { case pod if hasHadoopConf =>
-      val confVolume = if (confDir.isDefined) {
+      val confVolume = if (existingConfMap.isDefined) {
+        new VolumeBuilder()
+          .withName(HADOOP_CONF_VOLUME)
+          .withNewConfigMap()
+          .withName(existingConfMap.get)
+          .endConfigMap()
+          .build()
+      } else {
         val keyPaths = confFiles.map { file =>
           new KeyToPathBuilder()
             .withKey(file.getName())
@@ -70,16 +71,9 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
         new VolumeBuilder()
           .withName(HADOOP_CONF_VOLUME)
           .withNewConfigMap()
-            .withName(newConfigMapName)
-            .withItems(keyPaths.asJava)
-            .endConfigMap()
-          .build()
-      } else {
-        new VolumeBuilder()
-          .withName(HADOOP_CONF_VOLUME)
-          .withNewConfigMap()
-            .withName(existingConfMap.get)
-            .endConfigMap()
+          .withName(newConfigMapName)
+          .withItems(keyPaths.asJava)
+          .endConfigMap()
           .build()
       }
 
@@ -114,7 +108,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    if (confDir.isDefined) {
+    if (confDir.isDefined && existingConfMap.isEmpty) {
       val fileMap = confFiles.map { file =>
         (file.getName(), Files.asCharSource(file, StandardCharsets.UTF_8).read())
       }.toMap.asJava
