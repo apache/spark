@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -246,6 +246,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
       attr: Attribute, useNullAsDefault: Boolean): Option[NamedExpression] = {
     val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
     getDefaultValueExprOrNullLit(field, useNullAsDefault)
+  }
+
+  def generateSQL(defaultValue: DefaultValue): String = {
+    if (defaultValue.getSql != null) {
+      defaultValue.getSql
+    } else {
+      ExpressionConverter.toV1(defaultValue.getExpression) match {
+        case Some(e) if !e.isInstanceOf[NonSQLExpression] => e.sql
+        case _ => throw SparkException.internalError(s"Can't generate SQL for $defaultValue")
+      }
+    }
   }
 
   /**
