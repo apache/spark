@@ -177,6 +177,12 @@ object KafkaExceptions {
         "specifiedPartitions" -> specifiedPartitions.toString,
         "assignedPartitions" -> assignedPartitions.toString))
   }
+
+  def nullTopicInData(): KafkaIllegalStateException = {
+    new KafkaIllegalStateException(
+      errorClass = "KAFKA_NULL_TOPIC_IN_DATA",
+      messageParameters = Map.empty)
+  }
 }
 
 /**
