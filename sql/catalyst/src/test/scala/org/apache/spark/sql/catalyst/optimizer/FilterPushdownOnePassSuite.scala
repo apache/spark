@@ -148,10 +148,6 @@ class FilterPushdownOnePassSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       x.where($"b" > 0)
-        .select(($"a" + 1) as "a1", $"b")
-        .select(($"a1" + 1) as "a2", $"b")
-        .select(($"a2" + 1) as "a3", $"b")
-        .select(($"a3" + 1) as "a4", $"b")
         .select($"b").analyze
 
     comparePlans(optimized, correctAnswer)
