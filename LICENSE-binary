@@ -332,6 +332,7 @@ org.apache.hive:hive-cli
 org.apache.hive:hive-common
 org.apache.hive:hive-exec
 org.apache.hive:hive-jdbc
+org.apache.hive:hive-llap-common
 org.apache.hive:hive-metastore
 org.apache.hive:hive-serde
 org.apache.hive:hive-service-rpc
