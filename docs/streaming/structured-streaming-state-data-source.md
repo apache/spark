@@ -157,7 +157,7 @@ The following configurations are optional:
   <td>If specified, only this specific partition will be read. Note that partition ID starts with 0. This option must be used together with 'snapshotStartBatchId'.</td>
 </tr>
 <tr>
-  <td>readChangeFeed</td>
+  <td>readChangeLog</td>
   <td>boolean</td>
   <td>false</td>
   <td>If set to true, will read the change of state over microbatches. The output table schema will also differ. Details can be found in section <a href="#reading-state-changes-over-microbatches">"Reading state changes over microbatches"</a>. Option 'changeStartBatchId' must be specified with this option. Option 'batchId', 'joinSide', 'snapshotStartBatchId' and 'snapshotPartitionId' cannot be used together with this option.</td>
@@ -166,13 +166,13 @@ The following configurations are optional:
   <td>changeStartBatchId</td>
   <td>numeric value</td>
   <td></td>
-  <td>Represents the first batch to read in the read change feed mode. This option requires 'readChangeFeed' to be set to true.</td>
+  <td>Represents the first batch to read in the read change feed mode. This option requires 'readChangeLog' to be set to true.</td>
 </tr>
 <tr>
   <td>changeEndBatchId</td>
   <td>numeric value</td>
   <td>latest commited batchId</td>
-  <td>Represents the last batch to read in the read change feed mode. This option requires 'readChangeFeed' to be set to true.</td>
+  <td>Represents the last batch to read in the read change feed mode. This option requires 'readChangeLog' to be set to true.</td>
 </tr>
 </table>
 
@@ -187,7 +187,7 @@ To enable the functionality to read the internal state store instance directly, 
 
 ### Reading state changes over microbatches
 
-If we want to understand the change of state store over microbatches instead of the whole state store at a particular microbatch, 'readChangeFeed' is the option to use.
+If we want to understand the change of state store over microbatches instead of the whole state store at a particular microbatch, 'readChangeLog' is the option to use.
 For example, this is the code to read the change of state from batch 2 to the latest committed batch.
 
 <div class="codetabs">
@@ -198,7 +198,7 @@ For example, this is the code to read the change of state from batch 2 to the la
 df = spark \
 .read \
 .format("statestore") \
-.option("readChangeFeed", true) \
+.option("readChangeLog", true) \
 .option("changeStartBatchId", 2) \
 .load("<checkpointLocation>")
 
@@ -211,7 +211,7 @@ df = spark \
 val df = spark
 .read
 .format("statestore")
-.option("readChangeFeed", true)
+.option("readChangeLog", true)
 .option("changeStartBatchId", 2)
 .load("<checkpointLocation>")
 
@@ -224,7 +224,7 @@ val df = spark
 Dataset<Row> df = spark
 .read()
 .format("statestore")
-.option("readChangeFeed", true)
+.option("readChangeLog", true)
 .option("changeStartBatchId", 2)
 .load("<checkpointLocation>");
 
