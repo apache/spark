@@ -167,7 +167,9 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
       extraEnv: Map[String, String] = Map(),
-      outFile: Option[File] = None): SparkAppHandle.State = {
+      outFile: Option[File] = None,
+      testTimeOut: Int = 3, // minutes
+      timeOutIntervalCheck: Int = 1 /* seconds */): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map(
@@ -212,7 +214,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(30.minutes), interval(10.second)) {
+      eventually(timeout(testTimeOut.minutes), interval(timeOutIntervalCheck.second)) {
         assert(handle.getState().isFinal())
       }
     } finally {

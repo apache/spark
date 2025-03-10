@@ -17,33 +17,30 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
+import java.nio.charset.StandardCharsets
+
+import scala.concurrent.duration._
+
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.scalatest.concurrent.Eventually._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageSubmitted}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.apache.spark.tags.ExtendedYarnTest
 import org.apache.spark.{SparkContext, SparkException}
-import org.scalatest.concurrent.Eventually._
-
-import java.io.File
-import java.nio.charset.StandardCharsets
-import scala.concurrent.duration._
-
-
 
 @ExtendedYarnTest
 class Spark51016Suite extends BaseYarnClusterSuite {
-
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
-
-
-  test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
-    testBasicYarnApp(true,
+  test("bug SPARK-51016 and SPARK-51272: Indeterminate stage retry giving wrong results") {
+    testBasicYarnApp(
       Map(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2",
@@ -62,11 +59,15 @@ class Spark51016Suite extends BaseYarnClusterSuite {
       ))
   }
 
-  private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
+  private def testBasicYarnApp(conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
-    val finalState = runSpark(clientMode, mainClassName(Spark51016Suite.getClass),
-      appArgs = Seq(result.getAbsolutePath()),
-      extraConf = conf)
+    val finalState = runSpark(
+      clientMode = true,
+      mainClassName(Spark51016Suite.getClass),
+      appArgs = Seq(result.getAbsolutePath),
+      extraConf = conf,
+      testTimeOut = 30,
+      timeOutIntervalCheck = 30)
     checkResult(finalState, result)
   }
 }
@@ -76,6 +77,7 @@ private object Spark51016Suite extends Logging {
   object Counter {
     var counter = 0
     var retVal = 12
+
     def getHash(): Int = this.synchronized {
       counter += 1
       val x = retVal
@@ -87,7 +89,6 @@ private object Spark51016Suite extends Logging {
   }
 
   private def getOuterJoinDF(spark: SparkSession) = {
-
     import org.apache.spark.sql.functions.udf
     val myudf = udf(() => Counter.getHash()).asNondeterministic()
     spark.udf.register("myudf", myudf.asNondeterministic())
@@ -102,13 +103,11 @@ private object Spark51016Suite extends Logging {
     val outerjoin = leftOuter.hint("SHUFFLE_HASH").
       join(innerRight, col("pkLeft") === col("pkRight"), "left_outer")
     outerjoin
-
   }
 
   def createBaseTables(spark: SparkSession): Unit = {
     spark.sql("drop table if exists outer ")
     spark.sql("drop table if exists inner ")
-
     val data = Seq(
       (java.lang.Integer.valueOf(0), "aa"),
       (java.lang.Integer.valueOf(1), "aa"),
@@ -128,30 +127,15 @@ private object Spark51016Suite extends Logging {
       (java.lang.Integer.valueOf(1), "bb"))
     val outerDf = spark.createDataset(data)(
       Encoders.tuple(Encoders.INT, Encoders.STRING)).toDF("pkLeftt", "strleft")
-
     this.logInfo("saving outer table")
     outerDf.write.format("parquet").partitionBy("strleft").saveAsTable("outer")
-
     val innerDf = spark.createDataset(data1)(
       Encoders.tuple(Encoders.INT, Encoders.STRING)).toDF("pkRight", "strright")
     this.logInfo("saving inner table")
-
     innerDf.write.format("parquet").partitionBy("strright").saveAsTable("inner")
   }
 
   def main(args: Array[String]): Unit = {
-    if (args.length != 1) {
-      // scalastyle:off println
-      System.err.println(
-        s"""
-           |Invalid command line: ${args.mkString(" ")}
-           |
-           |Usage: Spark51016Suite [result file]
-        """.stripMargin)
-      // scalastyle:on println
-      System.exit(1)
-    }
-
     val spark = SparkSession
       .builder()
       .appName("Spark51016Suite")
@@ -164,10 +148,6 @@ private object Spark51016Suite extends Logging {
     try {
       createBaseTables(spark)
       val outerjoin: DataFrame = getOuterJoinDF(spark)
-
-   //   println("Initial data")
-      //  outerjoin.show(100)
-
       val correctRows = outerjoin.collect()
       JobListener.inKillMode = true
       for (i <- 0 until 100) {
@@ -175,15 +155,11 @@ private object Spark51016Suite extends Logging {
           eventually(timeout(3.minutes), interval(100.milliseconds)) {
             assert(sc.getExecutorIds().size == 2)
           }
-          println("before query exec")
           val rowsAfterRetry = getOuterJoinDF(spark).collect()
-
           if (correctRows.length != rowsAfterRetry.length) {
-            println(s"encounterted test failure incorrect query result. run  index = $i ")
+            logInfo(s"encounterted test failure incorrect query result. run  index = $i ")
           }
-
           assert(correctRows.length == rowsAfterRetry.length)
-
           val retriedResults = rowsAfterRetry.toBuffer
           correctRows.foreach(r => {
             val index = retriedResults.indexWhere(x =>
@@ -199,18 +175,17 @@ private object Spark51016Suite extends Logging {
                   ))
             assert(index >= 0)
             retriedResults.remove(index)
-          }
-          )
+          })
           assert(retriedResults.isEmpty)
-          println(s"found successful query exec on  iter index = $i")
+          logInfo(s"found successful query exec on  iter index = $i")
+          Thread.sleep(500)
         } catch {
           case se: SparkException if se.getMessage.contains("Please eliminate the" +
             " indeterminacy by checkpointing the RDD before repartition and try again") =>
-            println(s"correctly encountered exception on iter index = $i")
+            logInfo(s"correctly encountered exception on iter index = $i")
           // OK expected
         }
       }
-
       result = "success"
     } finally {
       Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
@@ -219,19 +194,19 @@ private object Spark51016Suite extends Logging {
   }
 }
 
-object PIDGetter {
-  def getExecutorIds(): Seq[Int] = {
+object PIDGetter extends Logging {
+  def getExecutorPIds: Seq[Int] = {
     import scala.sys.process._
     val output = Seq("ps", "-ef").#|(Seq("grep", "java")).#|(Seq("grep", "executor-id ")).lazyLines
-   // println(output.mkString("\n\n"))
-    if (output.nonEmpty && output.size > 3) {
-      val execPidsStr = Seq(output(0).trim, output(2).trim)
-      val pids = execPidsStr.map(str => str.split(" ")(1).toInt)
-      pids
+    logInfo(s"pids obtained = ${output.mkString("\n")} ")
+    if (output.nonEmpty && output.size == 4) {
+      val execPidsStr = output.map(_.trim).filter(_.endsWith("--resourceProfileId 0"))
+      logInfo(s"filtered Pid String obtained = ${execPidsStr.mkString("\n")} ")
+      val pids = execPidsStr.map(str => str.split(" ")(1).toInt).sorted
+      Seq(pids.head, pids(1))
     } else {
       Seq.empty
     }
-
   }
 
   def killExecutor(pid: Int): Unit = {
@@ -241,56 +216,33 @@ object PIDGetter {
   }
 
   def main(args: Array[String]): Unit = {
-    getExecutorIds()
+    getExecutorPIds
   }
 }
 
-private[spark] class JobListener extends SparkListener {
-  private var kill: Boolean = false
+private[spark] class JobListener extends SparkListener with Logging {
   private var count: Int = 0
+  @volatile
+  private var pidToKill: Option[Int] = None
+
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     if (JobListener.inKillMode) {
-      kill = true
+      val execids = PIDGetter.getExecutorPIds
+      assert(execids.size == 2)
+      pidToKill = Option(execids(count % 2))
+      logInfo("Pid to kill = " + pidToKill)
       count += 1
     }
   }
 
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
-    if (stageCompleted.stageInfo.shuffleDepId.nonEmpty  && kill
-      && stageCompleted.stageInfo.shuffleDepId.get % 2 == 0 ) {
-      kill = false
-      val killThread = new Thread(new Runnable() {
-        override def run(): Unit = {
-          val execids = PIDGetter.getExecutorIds()
-          if (execids.size == 2) {
-            val pidToKill = execids(count % 2)
-            PIDGetter.killExecutor(pidToKill)
-          }
-        }
-      })
-      killThread.start()
-      killThread.join()
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
+    if (stageSubmitted.stageInfo.shuffleDepId.isEmpty && pidToKill.nonEmpty) {
+      val pid = pidToKill.get
+      pidToKill = None
+      logInfo(s"killing executor for pid = $pid")
+      PIDGetter.killExecutor(pid)
     }
   }
-
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-  /*  if (stageSubmitted.stageInfo.attemptNumber() == 0 &&
-      stageSubmitted.stageInfo.shuffleDepId.nonEmpty && kill) {
-      kill = false
-      val killThread = new Thread(new Runnable() {
-        override def run(): Unit = {
-          val execids = PIDGetter.getExecutorIds()
-          if (execids.size == 2)  {
-            val pidToKill = execids(count % 2)
-            PIDGetter.killExecutor(pidToKill)
-          }
-        }
-      })
-      killThread.start()
-      killThread.join()
-    } */
-  }
-
 }
 
 object JobListener {
