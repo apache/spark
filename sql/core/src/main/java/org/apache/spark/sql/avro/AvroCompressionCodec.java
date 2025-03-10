@@ -31,7 +31,7 @@ public enum AvroCompressionCodec {
   UNCOMPRESSED(DataFileConstants.NULL_CODEC, false, -1),
   DEFLATE(DataFileConstants.DEFLATE_CODEC, true, CodecFactory.DEFAULT_DEFLATE_LEVEL),
   SNAPPY(DataFileConstants.SNAPPY_CODEC, false, -1),
-  BZIP2(DataFileConstants.BZIP2_CODEC, false, -1),
+  BZHOST2(DataFileConstants.BZHOST2_CODEC, false, -1),
   XZ(DataFileConstants.XZ_CODEC, true, CodecFactory.DEFAULT_XZ_LEVEL),
   ZSTANDARD(DataFileConstants.ZSTANDARD_CODEC, true, CodecFactory.DEFAULT_ZSTANDARD_LEVEL);
 

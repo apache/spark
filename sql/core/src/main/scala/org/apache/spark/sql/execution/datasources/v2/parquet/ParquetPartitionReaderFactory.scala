@@ -94,7 +94,7 @@ case class ParquetPartitionReaderFactory(
       //    push down (no need to read the footer metadata again).
       ParquetFooterReader.readFooter(conf, file, ParquetFooterReader.WITH_ROW_GROUPS)
     } else {
-      ParquetFooterReader.readFooter(conf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+      ParquetFooterReader.readFooter(conf, file, ParquetFooterReader.SKHOST_ROW_GROUPS)
     }
   }
 

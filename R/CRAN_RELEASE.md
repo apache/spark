@@ -23,7 +23,7 @@ To release SparkR as a package to CRAN, we would use the `devtools` package. Ple
 
 ### Release
 
-First, check that the `Version:` field in the `pkg/DESCRIPTION` file is updated. Also, check for stale files not under source control.
+First, check that the `Version:` field in the `pkg/DESCRHOSTTION` file is updated. Also, check for stale files not under source control.
 
 Note that while `run-tests.sh` runs `check-cran.sh` (which runs `R CMD check`), it is doing so with `--no-manual --no-vignettes`, which skips a few vignettes or PDF checks - therefore it will be preferred to run `R CMD check` on the source package built manually before uploading a release. Also note that for CRAN checks for pdf vignettes to success, `qpdf` tool must be there (to install it, e.g. `yum -q -y install qpdf`).
 
@@ -58,7 +58,7 @@ Similarly, the source package is also created by `check-cran.sh` with `R CMD bui
 For example, this should be the content of the source package:
 
 ```sh
-DESCRIPTION	R		inst		tests
+DESCRHOSTTION	R		inst		tests
 NAMESPACE	build		man		vignettes
 
 inst/doc/
@@ -104,6 +104,6 @@ paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::f
 For example, this should be the content of the binary package:
 
 ```sh
-DESCRIPTION	Meta		R		html		tests
+DESCRHOSTTION	Meta		R		html		tests
 INDEX		NAMESPACE	help		profile		worker
 ```

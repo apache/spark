@@ -72,11 +72,11 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
         0 -> StreamInputInfo(
           inputStreamId = 0,
           numRecords = 1000,
-          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "receiver1")),
+          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "receiver1")),
         1 -> StreamInputInfo(
           inputStreamId = 1,
           numRecords = 2000,
-          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "receiver2"))),
+          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "receiver2"))),
       submissionTime = 1001L,
       None,
       None,
@@ -107,11 +107,11 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
         0 -> StreamInputInfo(
           inputStreamId = 0,
           numRecords = 1000,
-          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "receiver1")),
+          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "receiver1")),
         1 -> StreamInputInfo(
           inputStreamId = 1,
           numRecords = 2000,
-          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "receiver2"))),
+          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "receiver2"))),
       submissionTime = 1001L,
       Some(1002L),
       None,
@@ -142,11 +142,11 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
         0 -> StreamInputInfo(
           inputStreamId = 0,
           numRecords = 1000,
-          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "receiver1")),
+          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "receiver1")),
         1 -> StreamInputInfo(
           inputStreamId = 1,
           numRecords = 2000,
-          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "receiver2"))),
+          metadata = Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "receiver2"))),
       submissionTime = 1001L,
       Some(1002L),
       Some(1010L),

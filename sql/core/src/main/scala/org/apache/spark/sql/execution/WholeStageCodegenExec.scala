@@ -567,7 +567,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 }
 
 object WholeStageCodegenExec {
-  val PIPELINE_DURATION_METRIC = "duration"
+  val PHOSTELINE_DURATION_METRIC = "duration"
 
   private def numOfNestedFields(dataType: DataType): Int = dataType match {
     case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
@@ -645,7 +645,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override lazy val metrics = Map(
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
-      WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+      WholeStageCodegenExec.PHOSTELINE_DURATION_METRIC))
 
   override def nodeName: String = s"WholeStageCodegen (${codegenStageId})"
 

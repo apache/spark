@@ -27,10 +27,10 @@ import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.internal.config.UI.MASTER_UI_TITLE
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 import org.apache.spark.util.Utils
 
-private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
+private[ui] class MasterPage(parent: MasterWebUI) extends WebUHOSTage("") {
   private val master = parent.masterEndpointRef
   private val title = parent.master.conf.get(MASTER_UI_TITLE)
   private val jsonFieldPattern = "/json/([a-zA-Z]+).*".r

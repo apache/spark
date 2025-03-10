@@ -70,7 +70,7 @@ abstract class DatabaseOnDocker {
   val privileged: Boolean = false
 
   /**
-   * Return a JDBC URL that connects to the database running at the given IP address and port.
+   * Return a JDBC URL that connects to the database running at the given HOST address and port.
    */
   def getJdbcUrl(ip: String, port: Int): String
 

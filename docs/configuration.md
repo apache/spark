@@ -27,7 +27,7 @@ Spark provides three locations to configure the system:
   a [SparkConf](api/scala/org/apache/spark/SparkConf.html) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
-  the IP address, through the `conf/spark-env.sh` script on each node.
+  the HOST address, through the `conf/spark-env.sh` script on each node.
 * [Logging](#configuring-logging) can be configured through `log4j2.properties`.
 
 # Spark Properties
@@ -2523,7 +2523,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.bindAddress</code></td>
   <td>(value of spark.driver.host)</td>
   <td>
-    Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
+    Hostname or HOST address where to bind listening sockets. This config overrides the SPARK_LOCAL_HOST
     environment variable (see below).
 
     <br />It also allows a different address from the local one to be advertised to executors or external systems.
@@ -2537,7 +2537,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.host</code></td>
   <td>(local hostname)</td>
   <td>
-    Hostname or IP address for the driver.
+    Hostname or HOST address for the driver.
     This is used for communicating with the executors and the standalone Master.
   </td>
   <td>0.7.0</td>
@@ -3815,8 +3815,8 @@ The following variables can be set in `spark-env.sh`:
     Property <code>spark.r.shell.command</code> take precedence if it is set</td>
   </tr>
   <tr>
-    <td><code>SPARK_LOCAL_IP</code></td>
-    <td>IP address of the machine to bind to.</td>
+    <td><code>SPARK_LOCAL_HOST</code></td>
+    <td>HOST address of the machine to bind to.</td>
   </tr>
   <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
@@ -3829,7 +3829,7 @@ In addition to the above, there are also options for setting up the Spark
 to use on each machine and maximum memory.
 
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
-compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
+compute `SPARK_LOCAL_HOST` by looking up the HOST of a specific network interface.
 
 Note: When running Spark on YARN in `cluster` mode, environment variables need to be set using the `spark.yarn.appMasterEnv.[EnvironmentVariableName]` property in your `conf/spark-defaults.conf` file.  Environment variables that are set in `spark-env.sh` will not be reflected in the YARN Application Master process in `cluster` mode.  See the [YARN-related Spark Properties](running-on-yarn.html#spark-properties) for more information.
 

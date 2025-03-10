@@ -177,7 +177,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         ex,
-        condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+        condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTHOSTLE_COLUMN_FAMILIES",
         parameters = Map(
           "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
         ),

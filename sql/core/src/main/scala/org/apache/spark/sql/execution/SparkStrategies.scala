@@ -739,7 +739,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         timeout, hasInitialState, stateGroupAttr, sda, sDeser, initialState, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val skipEmittingInitialStateKeys =
-          conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS)
+          conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKHOST_EMITTING_INITIAL_STATE_KEYS)
         val execPlan = FlatMapGroupsWithStateExec(
           func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
           None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
@@ -960,7 +960,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           isFlatMapGroupsWithState, timeout, hasInitialState, initialStateGroupAttrs,
           initialStateDataAttrs, initialStateDeserializer, initialState, child) =>
         val skipEmittingInitialStateKeys =
-          conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS)
+          conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKHOST_EMITTING_INITIAL_STATE_KEYS)
         FlatMapGroupsWithStateExec.generateSparkPlanForBatchQueries(
           f, keyDeserializer, valueDeserializer, initialStateDeserializer, grouping,
           initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,

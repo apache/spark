@@ -126,7 +126,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
-        >>> import pandas as pd  # doctest: +SKIP
+        >>> import pandas as pd  # doctest: +SKHOST
         >>> from pyspark.sql import functions as sf
         >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(
@@ -166,11 +166,11 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Same as above but uses pandas UDF.
 
-        >>> @pandas_udf('int')  # doctest: +SKIP
+        >>> @pandas_udf('int')  # doctest: +SKHOST
         ... def min_udf(v: pd.Series) -> int:
         ...     return v.min()
         ...
-        >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()  # doctest: +SKHOST
         +-----+------------+
         | name|min_udf(age)|
         +-----+------------+
@@ -480,8 +480,8 @@ class GroupedData(PandasGroupedOpsMixin):
         ...     Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
         ...     Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
         ...     Row(training="expert", sales=Row(course="Java", year=2013, earnings=30000)),
-        ... ])  # doctest: +SKIP
-        >>> df2.show()  # doctest: +SKIP
+        ... ])  # doctest: +SKHOST
+        >>> df2.show()  # doctest: +SKHOST
         +--------+--------------------+
         |training|               sales|
         +--------+--------------------+
@@ -514,7 +514,7 @@ class GroupedData(PandasGroupedOpsMixin):
         +----+-----+------+
         >>> df2.groupBy(
         ...     "sales.year").pivot("sales.course").sum("sales.earnings").sort("year").show()
-        ... # doctest: +SKIP
+        ... # doctest: +SKHOST
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+
@@ -541,7 +541,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )
     spark.stop()
     if failure_count:

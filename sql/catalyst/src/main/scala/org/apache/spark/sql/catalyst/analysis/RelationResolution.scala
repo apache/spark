@@ -97,7 +97,7 @@ class RelationResolution(override val catalogManager: CatalogManager)
       conf.sessionLocalTimeZone
     )
     if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
-      throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
+      throw new AnalysisException("MULTHOSTLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
     }
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
     resolveTempView(

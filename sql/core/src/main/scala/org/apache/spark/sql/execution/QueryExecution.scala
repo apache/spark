@@ -113,7 +113,7 @@ class QueryExecution(
     mode match {
       case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
       case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
-      case CommandExecutionMode.SKIP => analyzed
+      case CommandExecutionMode.SKHOST => analyzed
     }
   }
 
@@ -152,7 +152,7 @@ class QueryExecution(
     }
     p transformDown {
       case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
-        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
+        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKHOST)
       case c: Command =>
         val name = commandExecutionName(c)
         eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
@@ -484,10 +484,10 @@ class QueryExecution(
  * a query plan with leaf command nodes, because many commands return `GenericInternalRow`
  * and can't be put in a query plan directly, otherwise the query engine may cast
  * `GenericInternalRow` to `UnsafeRow` and fail. When running EXPLAIN, or commands inside other
- * command, we should use `SKIP` to not eagerly trigger the command execution.
+ * command, we should use `SKHOST` to not eagerly trigger the command execution.
  */
 object CommandExecutionMode extends Enumeration {
-  val SKIP, NON_ROOT, ALL = Value
+  val SKHOST, NON_ROOT, ALL = Value
 }
 
 /**

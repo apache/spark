@@ -12,7 +12,7 @@ OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Avro compression with different codec:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-BZIP2:                                           132833         133636        1136          0.0     1328332.0       1.0X
+BZHOST2:                                           132833         133636        1136          0.0     1328332.0       1.0X
 DEFLATE:                                           6522           6554          45          0.0       65216.8      20.4X
 UNCOMPRESSED:                                      5131           5150          27          0.0       51311.0      25.9X
 SNAPPY:                                            4709           4766          80          0.0       47091.8      28.2X

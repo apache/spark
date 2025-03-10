@@ -34,7 +34,7 @@ Condition : isnotnull(o_orderkey#1)
 Output [5]: [l_orderkey#3, l_shipdate#4, l_commitdate#5, l_receiptdate#6, l_shipmode#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
-PushedFilters: [IsNotNull(l_commitdate), IsNotNull(l_receiptdate), IsNotNull(l_shipdate), In(l_shipmode, [MAIL,SHIP]), GreaterThanOrEqual(l_receiptdate,1994-01-01), LessThan(l_receiptdate,1995-01-01), IsNotNull(l_orderkey)]
+PushedFilters: [IsNotNull(l_commitdate), IsNotNull(l_receiptdate), IsNotNull(l_shipdate), In(l_shipmode, [MAIL,SHHOST]), GreaterThanOrEqual(l_receiptdate,1994-01-01), LessThan(l_receiptdate,1995-01-01), IsNotNull(l_orderkey)]
 ReadSchema: struct<l_orderkey:bigint,l_shipdate:date,l_commitdate:date,l_receiptdate:date,l_shipmode:string>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -42,7 +42,7 @@ Input [5]: [l_orderkey#3, l_shipdate#4, l_commitdate#5, l_receiptdate#6, l_shipm
 
 (6) Filter [codegen id : 1]
 Input [5]: [l_orderkey#3, l_shipdate#4, l_commitdate#5, l_receiptdate#6, l_shipmode#7]
-Condition : ((((((((isnotnull(l_commitdate#5) AND isnotnull(l_receiptdate#6)) AND isnotnull(l_shipdate#4)) AND l_shipmode#7 IN (MAIL,SHIP)) AND (l_commitdate#5 < l_receiptdate#6)) AND (l_shipdate#4 < l_commitdate#5)) AND (l_receiptdate#6 >= 1994-01-01)) AND (l_receiptdate#6 < 1995-01-01)) AND isnotnull(l_orderkey#3))
+Condition : ((((((((isnotnull(l_commitdate#5) AND isnotnull(l_receiptdate#6)) AND isnotnull(l_shipdate#4)) AND l_shipmode#7 IN (MAIL,SHHOST)) AND (l_commitdate#5 < l_receiptdate#6)) AND (l_shipdate#4 < l_commitdate#5)) AND (l_receiptdate#6 >= 1994-01-01)) AND (l_receiptdate#6 < 1995-01-01)) AND isnotnull(l_orderkey#3))
 
 (7) Project [codegen id : 1]
 Output [2]: [l_orderkey#3, l_shipmode#7]

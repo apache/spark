@@ -317,7 +317,7 @@ circle        0.0     36.0
 triangle      0.0     18.0
 rectangle     0.0     36.0
 
->>> df.rfloordiv(10)  # doctest: +SKIP
+>>> df.rfloordiv(10)  # doctest: +SKHOST
            angles  degrees
 circle        inf      0.0
 triangle      3.0      0.0
@@ -712,7 +712,7 @@ class DataFrame(Frame, Generic[T]):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df  # doctest: +SKIP
+        >>> df  # doctest: +SKHOST
                max_speed  shield
         cobra          1       2
         viper          4       5
@@ -2156,8 +2156,8 @@ class DataFrame(Frame, Generic[T]):
         --------
         Copy the contents of a DataFrame to the clipboard.
 
-        >>> df = ps.DataFrame([[1, 2, 3], [4, 5, 6]], columns=['A', 'B', 'C'])  # doctest: +SKIP
-        >>> df.to_clipboard(sep=',')  # doctest: +SKIP
+        >>> df = ps.DataFrame([[1, 2, 3], [4, 5, 6]], columns=['A', 'B', 'C'])  # doctest: +SKHOST
+        >>> df.to_clipboard(sep=',')  # doctest: +SKHOST
         ... # Wrote the following to the system clipboard:
         ... # ,A,B,C
         ... # 0,1,2,3
@@ -2166,7 +2166,7 @@ class DataFrame(Frame, Generic[T]):
         We can omit the index by passing the keyword `index` and setting
         it to false.
 
-        >>> df.to_clipboard(sep=',', index=False)  # doctest: +SKIP
+        >>> df.to_clipboard(sep=',', index=False)  # doctest: +SKHOST
         ... # Wrote the following to the system clipboard:
         ... # A,B,C
         ... # 1,2,3
@@ -2174,8 +2174,8 @@ class DataFrame(Frame, Generic[T]):
 
         This function also works for Series:
 
-        >>> df = ps.Series([1, 2, 3, 4, 5, 6, 7], name='x')  # doctest: +SKIP
-        >>> df.to_clipboard(sep=',')  # doctest: +SKIP
+        >>> df = ps.Series([1, 2, 3, 4, 5, 6, 7], name='x')  # doctest: +SKHOST
+        >>> df.to_clipboard(sep=',')  # doctest: +SKHOST
         ... # Wrote the following to the system clipboard:
         ... # 0, 1
         ... # 1, 2
@@ -2285,7 +2285,7 @@ class DataFrame(Frame, Generic[T]):
         escape : bool, default True
             Convert the characters <, >, and & to HTML-safe sequences.
         notebook : {True, False}, default False
-            Whether the generated HTML is for IPython Notebook.
+            Whether the generated HTML is for HOSTython Notebook.
         border : int
             A ``border=border`` attribute is included in the opening
             `<table>` tag. By default ``pd.options.html.border``.
@@ -2496,11 +2496,11 @@ class DataFrame(Frame, Generic[T]):
         Name: col2, dtype: float64)]
 
         >>> df_dict = df.to_dict('split')
-        >>> sorted(df_dict.items())  # doctest: +ELLIPSIS
+        >>> sorted(df_dict.items())  # doctest: +ELLHOSTSIS
         [('columns', ['col1', 'col2']), ('data', [[1..., 0.75]]), ('index', ['row1', 'row2'])]
 
         >>> df_dict = df.to_dict('records')
-        >>> [sorted(values.items()) for values in df_dict]  # doctest: +ELLIPSIS
+        >>> [sorted(values.items()) for values in df_dict]  # doctest: +ELLHOSTSIS
         [[('col1', 1...), ('col2', 0.5)], [('col1', 2...), ('col2', 0.75)]]
 
         >>> df_dict = df.to_dict('index')
@@ -2510,13 +2510,13 @@ class DataFrame(Frame, Generic[T]):
         You can also specify the mapping type.
 
         >>> from collections import OrderedDict, defaultdict
-        >>> df.to_dict(into=OrderedDict)  # doctest: +ELLIPSIS
+        >>> df.to_dict(into=OrderedDict)  # doctest: +ELLHOSTSIS
         OrderedDict(...)
 
         If you want a `defaultdict`, you need to initialize it:
 
         >>> dd = defaultdict(list)
-        >>> df.to_dict('records', into=dd)  # doctest: +ELLIPSIS
+        >>> df.to_dict('records', into=dd)  # doctest: +ELLHOSTSIS
         [defaultdict(<class 'list'>, {'col..., 'col...}), \
 defaultdict(<class 'list'>, {'col..., 'col...})]
         """
@@ -2632,7 +2632,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                    'mask': ['red', 'purple'],
         ...                    'weapon': ['sai', 'bo staff']},
         ...                   columns=['name', 'mask', 'weapon'])
-        >>> print(df.to_latex(index=False))  # doctest: +SKIP
+        >>> print(df.to_latex(index=False))  # doctest: +SKHOST
         \begin{tabular}{lll}
         \toprule
               name &    mask &    weapon \\
@@ -2674,7 +2674,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame([[1, 2, 3], [4, 5, 6]])
-        >>> df.to_feather("file.feather")  # doctest: +SKIP
+        >>> df.to_feather("file.feather")  # doctest: +SKHOST
         """
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
@@ -2756,7 +2756,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> df = ps.DataFrame({'animal': ['falcon', 'parrot', 'falcon', 'parrot'],
         ...                    'speed': [350, 18, 361, 15]})
-        >>> df.to_stata('animals.dta')  # doctest: +SKIP
+        >>> df.to_stata('animals.dta')  # doctest: +SKHOST
         """
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
@@ -2989,7 +2989,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ...     return len(s)
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
-            >>> df.apply(length, axis=0)  # doctest: +SKIP
+            >>> df.apply(length, axis=0)  # doctest: +SKHOST
             0     83
             1     83
             2     83
@@ -3722,7 +3722,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2018-04-11 00:40:00  3
         2018-04-12 01:00:00  4
 
-        >>> psdf.between_time('0:15', '0:45')  # doctest: +SKIP
+        >>> psdf.between_time('0:15', '0:45')  # doctest: +SKHOST
                              A
         2018-04-10 00:20:00  2
         2018-04-11 00:40:00  3
@@ -3730,7 +3730,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         You get the times that are *not* between two times by setting
         ``start_time`` later than ``end_time``:
 
-        >>> psdf.between_time('0:45', '0:15')  # doctest: +SKIP
+        >>> psdf.between_time('0:45', '0:15')  # doctest: +SKHOST
                              A
         2018-04-09 00:00:00  1
         2018-04-12 01:00:00  4
@@ -4184,7 +4184,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> ps.range(1001).style  # doctest: +SKIP
+        >>> ps.range(1001).style  # doctest: +SKHOST
         <pandas.io.formats.style.Styler object at ...>
         """
         max_results = get_option("compute.max_rows")
@@ -5315,17 +5315,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Create a new Delta Lake table, partitioned by one column:
 
-        >>> df.to_delta('%s/to_delta/foo' % path, partition_cols='date')  # doctest: +SKIP
+        >>> df.to_delta('%s/to_delta/foo' % path, partition_cols='date')  # doctest: +SKHOST
 
         Partitioned by two columns:
 
         >>> df.to_delta('%s/to_delta/bar' % path,
-        ...             partition_cols=['date', 'country'])  # doctest: +SKIP
+        ...             partition_cols=['date', 'country'])  # doctest: +SKHOST
 
         Overwrite an existing table's partitions, using the 'replaceWhere' capability in Delta:
 
         >>> df.to_delta('%s/to_delta/bar' % path,
-        ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
+        ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKHOST
         """
         if index_col is None:
             log_advice(
@@ -5809,27 +5809,27 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         a  1  0.50
         b  2  0.75
 
-        >>> df.to_records() # doctest: +SKIP
+        >>> df.to_records() # doctest: +SKHOST
         rec.array([('a', 1, 0.5 ), ('b', 2, 0.75)],
                   dtype=[('index', 'O'), ('A', '<i8'), ('B', '<f8')])
 
         The index can be excluded from the record array:
 
-        >>> df.to_records(index=False) # doctest: +SKIP
+        >>> df.to_records(index=False) # doctest: +SKHOST
         rec.array([(1, 0.5 ), (2, 0.75)],
                   dtype=[('A', '<i8'), ('B', '<f8')])
 
         Specification of dtype for columns is new in pandas 0.24.0.
         Data types can be specified for the columns:
 
-        >>> df.to_records(column_dtypes={"A": "int32"}) # doctest: +SKIP
+        >>> df.to_records(column_dtypes={"A": "int32"}) # doctest: +SKHOST
         rec.array([('a', 1, 0.5 ), ('b', 2, 0.75)],
                   dtype=[('index', 'O'), ('A', '<i4'), ('B', '<f8')])
 
         Specification of dtype for index is new in pandas 0.24.0.
         Data types can also be specified for the index:
 
-        >>> df.to_records(index_dtypes="<S2") # doctest: +SKIP
+        >>> df.to_records(index_dtypes="<S2") # doctest: +SKHOST
         rec.array([(b'a', 1, 0.5 ), (b'b', 2, 0.75)],
                   dtype=[('index', 'S2'), ('A', '<i8'), ('B', '<f8')])
         """
@@ -7852,19 +7852,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> df = ps.DataFrame({'A': [2, 1, np.nan]}, index=['b', 'a', np.nan])
 
-        >>> df.sort_index()  # doctest: +SKIP
+        >>> df.sort_index()  # doctest: +SKHOST
                 A
         a     1.0
         b     2.0
         None  NaN
 
-        >>> df.sort_index(ascending=False)  # doctest: +SKIP
+        >>> df.sort_index(ascending=False)  # doctest: +SKHOST
                 A
         b     2.0
         a     1.0
         None  NaN
 
-        >>> df.sort_index(na_position='first')  # doctest: +SKIP
+        >>> df.sort_index(na_position='first')  # doctest: +SKHOST
                 A
         None  NaN
         a     1.0
@@ -7877,7 +7877,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  NaN
 
         >>> df.sort_index(inplace=True)
-        >>> df  # doctest: +SKIP
+        >>> df  # doctest: +SKHOST
                 A
         a     1.0
         b     2.0
@@ -7963,7 +7963,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> midx = pd.MultiIndex.from_arrays(
         ...     [['red', 'blue'], [1, 2], ['s', 'm']], names = ['color', 'number', 'size'])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([( 'red', 1, 's'),
                     ('blue', 2, 'm')],
                    names=['color', 'number', 'size'])
@@ -8580,7 +8580,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         the default suffixes, _x and _y, appended.
 
         >>> merged = df1.merge(df2, left_on='lkey', right_on='rkey')
-        >>> merged.sort_values(by=['lkey', 'value_x', 'rkey', 'value_y'])  # doctest: +ELLIPSIS
+        >>> merged.sort_values(by=['lkey', 'value_x', 'rkey', 'value_y'])  # doctest: +ELLHOSTSIS
           lkey  value_x rkey  value_y
         ...bar        2  bar        6
         ...baz        3  baz        7
@@ -9400,7 +9400,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                    'num_specimen_seen': [10, 2, 1, 8]},
         ...                   index=['falcon', 'dog', 'spider', 'fish'],
         ...                   columns=['num_legs', 'num_wings', 'num_specimen_seen'])
-        >>> df  # doctest: +SKIP
+        >>> df  # doctest: +SKHOST
                 num_legs  num_wings  num_specimen_seen
         falcon         2          2                 10
         dog            4          0                  2
@@ -9411,14 +9411,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Note that we use `random_state` to ensure the reproducibility of
         the examples.
 
-        >>> df.sample(frac=0.25, random_state=1)  # doctest: +SKIP
+        >>> df.sample(frac=0.25, random_state=1)  # doctest: +SKHOST
                 num_legs  num_wings  num_specimen_seen
         falcon         2          2                 10
         fish           0          0                  8
 
         A random 50% sample of the ``DataFrame``, while ignoring the index.
 
-        >>> df.sample(frac=0.5, random_state=1, ignore_index=True)  # doctest: +SKIP
+        >>> df.sample(frac=0.5, random_state=1, ignore_index=True)  # doctest: +SKHOST
            num_legs  num_wings  num_specimen_seen
         0         4          0                  2
         1         8          0                  1
@@ -9427,7 +9427,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Extract 25% random elements from the ``Series`` ``df['num_legs']`` with replacement
         so, the same items could appear more than once.
 
-        >>> df['num_legs'].sample(frac=0.4, replace=True, random_state=1)  # doctest: +SKIP
+        >>> df['num_legs'].sample(frac=0.4, replace=True, random_state=1)  # doctest: +SKHOST
         falcon    2
         spider    8
         spider    8
@@ -9435,7 +9435,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Specifying the exact number of items to return is not supported now.
 
-        >>> df.sample(n=5)  # doctest: +ELLIPSIS
+        >>> df.sample(n=5)  # doctest: +ELLHOSTSIS
         Traceback (most recent call last):
             ...
         NotImplementedError: Function sample currently does not support specifying ...
@@ -12222,7 +12222,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Prints information of all columns:
 
-        >>> df.info(verbose=True)  # doctest: +SKIP
+        >>> df.info(verbose=True)  # doctest: +SKHOST
         <class 'pyspark.pandas.frame.DataFrame'>
         Index: 5 entries, 0 to 4
         Data columns (total 3 columns):
@@ -12236,7 +12236,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Prints a summary of columns count and its dtypes but not per column
         information:
 
-        >>> df.info(verbose=False)  # doctest: +SKIP
+        >>> df.info(verbose=False)  # doctest: +SKHOST
         <class 'pyspark.pandas.frame.DataFrame'>
         Index: 5 entries, 0 to 4
         Columns: 3 entries, int_col to float_col
@@ -12253,7 +12253,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...           encoding="utf-8") as f:
         ...     _ = f.write(s)
         >>> with open('%s/info.txt' % path) as f:
-        ...     f.readlines()  # doctest: +SKIP
+        ...     f.readlines()  # doctest: +SKHOST
         ["<class 'pyspark.pandas.frame.DataFrame'>\\n",
         'Index: 5 entries, 0 to 4\\n',
         'Data columns (total 3 columns):\\n',
@@ -13010,7 +13010,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Viewing the last 5 lines
 
-        >>> df.tail()  # doctest: +SKIP
+        >>> df.tail()  # doctest: +SKHOST
            animal
         4  monkey
         5  parrot
@@ -13020,7 +13020,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Viewing the last `n` lines (three in this case)
 
-        >>> df.tail(3)  # doctest: +SKIP
+        >>> df.tail(3)  # doctest: +SKHOST
           animal
         6  shark
         7  whale
@@ -13028,7 +13028,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         For negative values of `n`
 
-        >>> df.tail(-3)  # doctest: +SKIP
+        >>> df.tail(-3)  # doctest: +SKHOST
            animal
         3    lion
         4  monkey
@@ -13798,7 +13798,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.frame,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
 
     shutil.rmtree(path, ignore_errors=True)

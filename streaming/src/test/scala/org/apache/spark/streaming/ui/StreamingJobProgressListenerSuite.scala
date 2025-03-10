@@ -55,7 +55,7 @@ class StreamingJobProgressListenerSuite
 
     val streamIdToInputInfo = Map(
       0 -> StreamInputInfo(0, 300L),
-      1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "test")))
+      1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "test")))
 
     // onStreamingStarted
     listener.onStreamingStarted(StreamingListenerStreamingStarted(100L))
@@ -109,7 +109,7 @@ class StreamingJobProgressListenerSuite
     batchUIData.get.totalDelay should be (batchInfoStarted.totalDelay)
     batchUIData.get.streamIdToInputInfo should be (Map(
       0 -> StreamInputInfo(0, 300L),
-      1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "test"))))
+      1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRHOSTTION -> "test"))))
     batchUIData.get.numRecords should be(600)
     batchUIData.get.outputOpIdSparkJobIdPairs should be
       Seq(OutputOpIdAndSparkJobId(0, 0),

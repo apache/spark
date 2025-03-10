@@ -1831,11 +1831,11 @@ abstract class RDD[T: ClassTag](
    * In case of a task failure, instead of only restarting the failed task, Spark will abort the
    * entire stage and re-launch all tasks for this stage.
    * The barrier execution mode feature is experimental and it only handles limited scenarios.
-   * Please read the linked SPIP and design docs to understand the limitations and future plans.
+   * Please read the linked SPHOST and design docs to understand the limitations and future plans.
    * @return an [[RDDBarrier]] instance that provides actions within a barrier stage
    * @see [[org.apache.spark.BarrierTaskContext]]
    * @see <a href="https://issues.apache.org/jira/browse/SPARK-24374">
-   *        SPIP: Barrier Execution Mode</a>
+   *        SPHOST: Barrier Execution Mode</a>
    * @see <a href="https://issues.apache.org/jira/browse/SPARK-24582">Design Doc</a>
    */
   @Experimental

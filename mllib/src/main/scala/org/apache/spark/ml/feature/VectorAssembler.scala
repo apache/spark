@@ -136,7 +136,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val lengths = featureAttributesMap.map(a => a.length)
     val metadata = new AttributeGroup($(outputCol), featureAttributes).toMetadata()
     val filteredDataset = $(handleInvalid) match {
-      case VectorAssembler.SKIP_INVALID => dataset.na.drop($(inputCols))
+      case VectorAssembler.SKHOST_INVALID => dataset.na.drop($(inputCols))
       case VectorAssembler.KEEP_INVALID | VectorAssembler.ERROR_INVALID => dataset
     }
     val keepInvalid = $(handleInvalid) == VectorAssembler.KEEP_INVALID
@@ -189,11 +189,11 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 @Since("1.6.0")
 object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
 
-  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val SKHOST_INVALID: String = "skip"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
-    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+    Array(SKHOST_INVALID, ERROR_INVALID, KEEP_INVALID)
 
   /**
    * Infers lengths of vector columns from the first row of the dataset
@@ -233,7 +233,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
     val firstSizes = (missingColumns.nonEmpty, handleInvalid) match {
       case (true, VectorAssembler.ERROR_INVALID) =>
         getVectorLengthsFromFirstRow(dataset, missingColumns)
-      case (true, VectorAssembler.SKIP_INVALID) =>
+      case (true, VectorAssembler.SKHOST_INVALID) =>
         getVectorLengthsFromFirstRow(dataset.na.drop(missingColumns), missingColumns)
       case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
         s"""Can not infer column lengths with handleInvalid = "keep". Consider using VectorSizeHint

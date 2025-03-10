@@ -55,7 +55,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sparkSession: Sp
 
     if (UserGroupInformation.isSecurityEnabled) {
       try {
-        val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
+        val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCHOSTAL)
         val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
         if (principal.isEmpty || keyTabFile.isEmpty) {
           throw QueryExecutionErrors.invalidKerberosConfigForHiveServer2Error()
@@ -77,7 +77,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sparkSession: Sp
       }
 
       // Try creating spnego UGI if it is configured.
-      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL).trim
+      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCHOSTAL).trim
       val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB).trim
       if (principal.nonEmpty && keyTabFile.nonEmpty) {
         try {

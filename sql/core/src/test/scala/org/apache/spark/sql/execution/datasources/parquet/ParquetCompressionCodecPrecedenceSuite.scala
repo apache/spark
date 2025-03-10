@@ -45,7 +45,7 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
       SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       val props = Map(
         "compression" -> ParquetCompressionCodec.UNCOMPRESSED.lowerCaseName(),
-        ParquetOutputFormat.COMPRESSION -> ParquetCompressionCodec.GZIP.lowerCaseName())
+        ParquetOutputFormat.COMPRESSION -> ParquetCompressionCodec.GZHOST.lowerCaseName())
       val option = new ParquetOptions(props, spark.sessionState.conf)
       assert(option.compressionCodecClassName == ParquetCompressionCodec.UNCOMPRESSED.name)
     }
@@ -54,9 +54,9 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
     withSQLConf(
       SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       val props =
-        Map(ParquetOutputFormat.COMPRESSION -> ParquetCompressionCodec.GZIP.lowerCaseName())
+        Map(ParquetOutputFormat.COMPRESSION -> ParquetCompressionCodec.GZHOST.lowerCaseName())
       val option = new ParquetOptions(props, spark.sessionState.conf)
-      assert(option.compressionCodecClassName == ParquetCompressionCodec.GZIP.name)
+      assert(option.compressionCodecClassName == ParquetCompressionCodec.GZHOST.name)
     }
 
     // When both "compression" and "parquet.compression" are not configured,

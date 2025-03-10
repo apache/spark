@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_HOST_FAMILIES, KUBERNETES_DRIVER_SERVICE_HOST_FAMILY_POLICY}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
 
@@ -32,22 +32,22 @@ private[spark] class DriverServiceFeatureStep(
 
   require(kubernetesConf.getOption(DRIVER_BIND_ADDRESS_KEY).isEmpty,
     s"$DRIVER_BIND_ADDRESS_KEY is not supported in Kubernetes mode, as the driver's bind " +
-      "address is managed and set to the driver pod's IP address.")
+      "address is managed and set to the driver pod's HOST address.")
   require(kubernetesConf.getOption(DRIVER_HOST_KEY).isEmpty,
     s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")
 
   private val resolvedServiceName = kubernetesConf.driverServiceName
   private val ipFamilyPolicy =
-    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY)
+    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_HOST_FAMILY_POLICY)
   private val ipFamilies =
-    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES).split(",").toList.asJava
+    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_HOST_FAMILIES).split(",").toList.asJava
 
   private val driverPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
   private val driverBlockManagerPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
-  private val  driverUIPort = kubernetesConf.get(config.UI.UI_PORT)
+  private val  driverUHOSTort = kubernetesConf.get(config.UI.UI_PORT)
 
   override def configurePod(pod: SparkPod): SparkPod = pod
 
@@ -67,7 +67,7 @@ private[spark] class DriverServiceFeatureStep(
         .addToLabels(kubernetesConf.serviceLabels.asJava)
         .endMetadata()
       .withNewSpec()
-        .withClusterIP("None")
+        .withClusterHOST("None")
         .withIpFamilyPolicy(ipFamilyPolicy)
         .withIpFamilies(ipFamilies)
         .withSelector(kubernetesConf.labels.asJava)
@@ -83,8 +83,8 @@ private[spark] class DriverServiceFeatureStep(
           .endPort()
         .addNewPort()
           .withName(UI_PORT_NAME)
-          .withPort(driverUIPort)
-          .withNewTargetPort(driverUIPort)
+          .withPort(driverUHOSTort)
+          .withNewTargetPort(driverUHOSTort)
           .endPort()
         .endSpec()
       .build()

@@ -996,7 +996,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         ||> SELECT cate, SUM(val) OVER w
         |   WINDOW w AS (PARTITION BY cate ORDER BY val)
         |""".stripMargin)
-    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.OPERATOR_PHOSTE_SYNTAX_ENABLED.key -> "false") {
       val sql = s"TABLE t |> SELECT 1 AS X"
       checkError(
         exception = parseException(sql),

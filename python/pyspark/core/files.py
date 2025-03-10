@@ -136,7 +136,7 @@ class SparkFiles:
         Examples
         --------
         >>> from pyspark.core.files import SparkFiles
-        >>> SparkFiles.getRootDirectory()  # doctest: +SKIP
+        >>> SparkFiles.getRootDirectory()  # doctest: +SKHOST
         '.../spark-a904728e-08d3-400c-a872-cfd82fd6dcd2/userFiles-648cf6d6-bb2c-4f53-82bd-e658aba0c5de'
         """
         if cls._is_running_on_worker:
@@ -155,7 +155,7 @@ def _test() -> None:
 
     globs = globals().copy()
     globs["sc"] = SparkContext("local[2]", "files tests")
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

@@ -19,8 +19,8 @@
 
 set -o pipefail
 
-SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
+SCRHOSTT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname $SCRHOSTT_DIR)"
 LINT_JS_REPORT_FILE_NAME="$SPARK_ROOT_DIR/dev/lint-js-report.log"
 LINT_TARGET_FILES=(
   "$SPARK_ROOT_DIR/core/src/main/resources/org/apache/spark/ui/static/"
@@ -39,7 +39,7 @@ if ! type "npx" > /dev/null; then
   exit 1
 fi
 
-cd $SCRIPT_DIR
+cd $SCRHOSTT_DIR
 
 if ! npm ls eslint > /dev/null; then
   npm ci eslint

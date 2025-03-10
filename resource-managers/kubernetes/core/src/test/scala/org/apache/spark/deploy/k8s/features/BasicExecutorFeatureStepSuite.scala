@@ -66,7 +66,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .withNodeName("some-node")
       .endSpec()
     .withNewStatus()
-      .withHostIP("192.168.99.100")
+      .withHostHOST("192.168.99.100")
       .endStatus()
     .build()
   private var baseConf: SparkConf = _
@@ -597,7 +597,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_SPARK_USER -> Utils.getCurrentUserName(),
       ENV_RESOURCE_PROFILE_ID -> "0",
       // These are populated by K8s on scheduling
-      ENV_EXECUTOR_POD_IP -> null,
+      ENV_EXECUTOR_POD_HOST -> null,
       ENV_EXECUTOR_POD_NAME -> null)
 
     val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))

@@ -94,7 +94,7 @@ private[sql] object PartitioningUtils {
               case other => other
             }
             v.asInstanceOf[T]
-          case _ if !SQLConf.get.getConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION) &&
+          case _ if !SQLConf.get.getConf(SQLConf.SKHOST_TYPE_VALIDATION_ON_ALTER_PARTITION) &&
               value != null && value != DEFAULT_PARTITION_NAME =>
             val v = value match {
               case Some(str: String) => Some(normalizePartitionStringValue(str, normalizedFiled))

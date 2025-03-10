@@ -163,7 +163,7 @@ class LogStreamingClient(LogStreamingClientBase):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((self.address, self.port))
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            sock.setsockopt(socket.HOSTPROTO_TCP, socket.TCP_NODELAY, 1)
             self.sock = sock
             self.failed = False
         except (OSError, IOError):  # pylint: disable=broad-except

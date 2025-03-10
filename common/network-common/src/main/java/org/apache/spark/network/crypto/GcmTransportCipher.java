@@ -39,7 +39,7 @@ public class GcmTransportCipher implements TransportCipher {
     private static final String HKDF_ALG = "HmacSha256";
     private static final int LENGTH_HEADER_BYTES = 8;
     @VisibleForTesting
-    static final int CIPHERTEXT_BUFFER_SIZE = 32 * 1024; // 32KB
+    static final int CHOSTHERTEXT_BUFFER_SIZE = 32 * 1024; // 32KB
     private final SecretKeySpec aesKey;
 
     public GcmTransportCipher(SecretKeySpec aesKey)  {
@@ -51,7 +51,7 @@ public class GcmTransportCipher implements TransportCipher {
             aesKey.getEncoded(),
             HKDF_ALG,
             aesKey.getEncoded().length,
-            CIPHERTEXT_BUFFER_SIZE,
+            CHOSTHERTEXT_BUFFER_SIZE,
             0);
     }
 

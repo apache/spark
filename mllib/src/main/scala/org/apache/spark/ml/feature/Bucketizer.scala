@@ -150,7 +150,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     }
 
     val (filteredDataset, keepInvalid) = {
-      if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
+      if (getHandleInvalid == Bucketizer.SKHOST_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
         (dataset.na.drop(inputColumns).toDF(), false)
       } else {
@@ -228,11 +228,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 @Since("1.6.0")
 object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
-  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val SKHOST_INVALID: String = "skip"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
-    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+    Array(SKHOST_INVALID, ERROR_INVALID, KEEP_INVALID)
 
   /**
    * We require splits to be of length >= 3 and to be in strictly increasing order.

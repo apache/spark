@@ -682,7 +682,7 @@ class Frame(object, metaclass=ABCMeta):
         ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
-        >>> df.sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+        >>> df.sort_values(by="date")  # doctest: +ELLHOSTSIS, +NORMALIZE_WHITESPACE
                            date country  code
         ... 2012-01-31 12:00:00      KR     1
         ... 2012-02-29 12:00:00      US     2
@@ -697,7 +697,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> df.cummax().to_csv(path=r'%s/to_csv/foo.csv' % path, num_files=1)
         >>> ps.read_csv(
         ...    path=r'%s/to_csv/foo.csv' % path
-        ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+        ... ).sort_values(by="date")  # doctest: +ELLHOSTSIS, +NORMALIZE_WHITESPACE
                            date country  code
         ... 2012-01-31 12:00:00      KR     1
         ... 2012-02-29 12:00:00      US     2
@@ -714,7 +714,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> df.date.to_csv(path=r'%s/to_csv/foo.csv' % path, num_files=1)
         >>> ps.read_csv(
         ...     path=r'%s/to_csv/foo.csv' % path
-        ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+        ... ).sort_values(by="date")  # doctest: +ELLHOSTSIS, +NORMALIZE_WHITESPACE
                            date
         ... 2012-01-31 12:00:00
         ... 2012-02-29 12:00:00
@@ -729,7 +729,7 @@ class Frame(object, metaclass=ABCMeta):
         ...     index_col=["index1", "index2"])
         >>> ps.read_csv(
         ...     path=r'%s/to_csv/bar.csv' % path, index_col=["index1", "index2"]
-        ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+        ... ).sort_values(by="date")  # doctest: +ELLHOSTSIS, +NORMALIZE_WHITESPACE
                                      date
         index1 index2
         ...    ...    2012-01-31 12:00:00
@@ -1062,18 +1062,18 @@ class Frame(object, metaclass=ABCMeta):
         >>> df1 = ps.DataFrame([['a', 'b'], ['c', 'd']],
         ...                    index=['row 1', 'row 2'],
         ...                    columns=['col 1', 'col 2'])
-        >>> df1.to_excel("output.xlsx")  # doctest: +SKIP
+        >>> df1.to_excel("output.xlsx")  # doctest: +SKHOST
 
         To specify the sheet name:
 
-        >>> df1.to_excel("output.xlsx")  # doctest: +SKIP
+        >>> df1.to_excel("output.xlsx")  # doctest: +SKHOST
         >>> df1.to_excel("output.xlsx",
-        ...              sheet_name='Sheet_name_1')  # doctest: +SKIP
+        ...              sheet_name='Sheet_name_1')  # doctest: +SKHOST
 
         If you wish to write to more than one sheet in the workbook, it is
         necessary to specify an ExcelWriter object:
 
-        >>> with pd.ExcelWriter('output.xlsx') as writer:  # doctest: +SKIP
+        >>> with pd.ExcelWriter('output.xlsx') as writer:  # doctest: +SKHOST
         ...      df1.to_excel(writer, sheet_name='Sheet_name_1')
         ...      df2.to_excel(writer, sheet_name='Sheet_name_2')
 
@@ -1081,7 +1081,7 @@ class Frame(object, metaclass=ABCMeta):
         you can pass the `engine` keyword (the default engine is
         automatically chosen depending on the file extension):
 
-        >>> df1.to_excel('output1.xlsx', engine='xlsxwriter')  # doctest: +SKIP
+        >>> df1.to_excel('output1.xlsx', engine='xlsxwriter')  # doctest: +SKHOST
         """
         log_advice(
             "`to_excel` loads all data into the driver's memory. "
@@ -1195,13 +1195,13 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]},
-        ...                   index=['a', 'b', 'c'])  # doctest: +SKIP
-        >>> df.to_hdf('data.h5', key='df', mode='w')  # doctest: +SKIP
+        ...                   index=['a', 'b', 'c'])  # doctest: +SKHOST
+        >>> df.to_hdf('data.h5', key='df', mode='w')  # doctest: +SKHOST
 
         We can add another object to the same file:
 
-        >>> s = ps.Series([1, 2, 3, 4])  # doctest: +SKIP
-        >>> s.to_hdf('data.h5', key='s')  # doctest: +SKIP
+        >>> s = ps.Series([1, 2, 3, 4])  # doctest: +SKHOST
+        >>> s.to_hdf('data.h5', key='s')  # doctest: +SKHOST
         """
         log_advice(
             "`to_hdf` loads all data into the driver's memory. "
@@ -1459,7 +1459,7 @@ class Frame(object, metaclass=ABCMeta):
 
         If there is no numeric type columns, returns empty Series.
 
-        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()  # doctest: +SKIP
+        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()  # doctest: +SKHOST
         Series([], dtype: float64)
 
         On a Series:
@@ -1469,12 +1469,12 @@ class Frame(object, metaclass=ABCMeta):
 
         By default, the product of an empty or all-NA Series is ``1``
 
-        >>> ps.Series([]).prod()  # doctest: +SKIP
+        >>> ps.Series([]).prod()  # doctest: +SKHOST
         1.0
 
         This can be controlled with the ``min_count`` parameter
 
-        >>> ps.Series([]).prod(min_count=1)  # doctest: +SKIP
+        >>> ps.Series([]).prod(min_count=1)  # doctest: +SKHOST
         nan
         """
         if axis is None and isinstance(self, ps.DataFrame):
@@ -2455,7 +2455,7 @@ class Frame(object, metaclass=ABCMeta):
         Parrot       25.0
 
         >>> df.groupby(['Animal'], as_index=False).mean().sort_values('Animal')
-        ... # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+        ... # doctest: +ELLHOSTSIS, +NORMALIZE_WHITESPACE
            Animal  Max Speed
         ...Falcon      375.0
         ...Parrot       25.0
@@ -2710,7 +2710,7 @@ class Frame(object, metaclass=ABCMeta):
         E  3.0  3.0  400.0
         R  NaN  NaN    NaN
 
-        >>> psdf.last_valid_index()  # doctest: +SKIP
+        >>> psdf.last_valid_index()  # doctest: +SKHOST
         'E'
 
         Support for MultiIndex columns
@@ -2724,7 +2724,7 @@ class Frame(object, metaclass=ABCMeta):
         E  3.0  3.0  400.0
         R  NaN  NaN    NaN
 
-        >>> psdf.last_valid_index()  # doctest: +SKIP
+        >>> psdf.last_valid_index()  # doctest: +SKHOST
         'E'
 
         Support for Series.
@@ -2738,7 +2738,7 @@ class Frame(object, metaclass=ABCMeta):
         500    NaN
         dtype: float64
 
-        >>> s.last_valid_index()  # doctest: +SKIP
+        >>> s.last_valid_index()  # doctest: +SKHOST
         300
 
         Support for MultiIndex
@@ -2760,7 +2760,7 @@ class Frame(object, metaclass=ABCMeta):
                 length      NaN
         dtype: float64
 
-        >>> s.last_valid_index()  # doctest: +SKIP
+        >>> s.last_valid_index()  # doctest: +SKHOST
         ('cow', 'weight')
         """
         data_spark_columns = self._internal.data_spark_columns
@@ -3279,7 +3279,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
         >>> psser = ps.Series(["elk", "pig", "dog", "quetzal"], name="animal")
-        >>> print(psser.to_markdown())  # doctest: +SKIP
+        >>> print(psser.to_markdown())  # doctest: +SKHOST
         |    | animal   |
         |---:|:---------|
         |  0 | elk      |
@@ -3290,7 +3290,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> psdf = ps.DataFrame(
         ...     data={"animal_1": ["elk", "pig"], "animal_2": ["dog", "quetzal"]}
         ... )
-        >>> print(psdf.to_markdown())  # doctest: +SKIP
+        >>> print(psdf.to_markdown())  # doctest: +SKHOST
         |    | animal_1   | animal_2   |
         |---:|:-----------|:-----------|
         |  0 | elk        | dog        |
@@ -3636,7 +3636,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.generic,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
 
     shutil.rmtree(path, ignore_errors=True)

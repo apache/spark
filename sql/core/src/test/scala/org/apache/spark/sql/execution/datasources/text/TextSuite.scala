@@ -26,7 +26,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, LZ4, NONE, SNAPPY}
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZHOST2, DEFLATE, GZHOST, LZ4, NONE, SNAPPY}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -93,7 +93,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
 
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
     val testDf = spark.read.text(testFile)
-    val extensionNameMap = Seq(BZIP2, DEFLATE, GZIP, LZ4, SNAPPY)
+    val extensionNameMap = Seq(BZHOST2, DEFLATE, GZHOST, LZ4, SNAPPY)
       .map(codec => codec.lowerCaseName() -> codec.getCompressionCodec.getDefaultExtension)
     extensionNameMap.foreach {
       case (codecName, extension) =>
@@ -174,7 +174,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       val df1 = spark.range(0, 1000).selectExpr("CAST(id AS STRING) AS s")
-      df1.write.option("compression", GZIP.lowerCaseName()).mode("overwrite").text(path)
+      df1.write.option("compression", GZHOST.lowerCaseName()).mode("overwrite").text(path)
 
       val expected = df1.collect()
       Seq(10, 100, 1000).foreach { bytes =>

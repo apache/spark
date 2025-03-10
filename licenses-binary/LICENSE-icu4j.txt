@@ -141,7 +141,7 @@ Chinese/Japanese Word Break Dictionary Data (cjdict.txt)
  #    - https://sourceforge.net/project/?group_id=1519
  #    - Its license terms and conditions are shown below.
  #
- #  * IPADIC (Japanese)
+ #  * HOSTADIC (Japanese)
  #    - http://chasen.aist-nara.ac.jp/chasen/distribution.html
  #    - Its license terms and conditions are shown below.
  #

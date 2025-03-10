@@ -49,17 +49,17 @@ if sys.version_info >= (3, 8):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class MlCommand(google.protobuf.message.Message):
     """Command for ML"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Fit(google.protobuf.message.Message):
         """Command for estimator.fit(dataset)"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         ESTIMATOR_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
@@ -115,7 +115,7 @@ class MlCommand(google.protobuf.message.Message):
         or summary evaluated by a model
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         OBJ_REF_FIELD_NUMBER: builtins.int
         @property
@@ -135,10 +135,10 @@ class MlCommand(google.protobuf.message.Message):
     class Write(google.protobuf.message.Message):
         """Command to write ML operator"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class OptionsEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             KEY_FIELD_NUMBER: builtins.int
             VALUE_FIELD_NUMBER: builtins.int
@@ -246,7 +246,7 @@ class MlCommand(google.protobuf.message.Message):
     class Read(google.protobuf.message.Message):
         """Command to load ML operator."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         OPERATOR_FIELD_NUMBER: builtins.int
         PATH_FIELD_NUMBER: builtins.int
@@ -271,7 +271,7 @@ class MlCommand(google.protobuf.message.Message):
     class Evaluate(google.protobuf.message.Message):
         """Command for evaluator.evaluate(dataset)"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         EVALUATOR_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
@@ -399,12 +399,12 @@ global___MlCommand = MlCommand
 class MlCommandResult(google.protobuf.message.Message):
     """The result of MlCommand"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class MlOperatorInfo(google.protobuf.message.Message):
         """Represents an operator info"""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         OBJ_REF_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int

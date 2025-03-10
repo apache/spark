@@ -49,29 +49,29 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   private static final List<String> MESSAGES = new ArrayList<>();
 
-  private static final List<String> TEST_SCRIPT = Arrays.asList(
+  private static final List<String> TEST_SCRHOSTT = Arrays.asList(
     "#!/bin/sh",
     "echo \"output\"",
     "echo \"error\" 1>&2",
     "while [ -n \"$1\" ]; do EC=$1; shift; done",
     "exit $EC");
 
-  private static File TEST_SCRIPT_PATH;
+  private static File TEST_SCRHOSTT_PATH;
 
   @AfterAll
   public static void cleanupClass() throws Exception {
-    if (TEST_SCRIPT_PATH != null) {
-      TEST_SCRIPT_PATH.delete();
-      TEST_SCRIPT_PATH = null;
+    if (TEST_SCRHOSTT_PATH != null) {
+      TEST_SCRHOSTT_PATH.delete();
+      TEST_SCRHOSTT_PATH = null;
     }
   }
 
   @BeforeAll
   public static void setupClass() throws Exception {
-    TEST_SCRIPT_PATH = File.createTempFile("output-redir-test", ".sh");
-    Files.setPosixFilePermissions(TEST_SCRIPT_PATH.toPath(),
+    TEST_SCRHOSTT_PATH = File.createTempFile("output-redir-test", ".sh");
+    Files.setPosixFilePermissions(TEST_SCRHOSTT_PATH.toPath(),
       EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE));
-    Files.write(TEST_SCRIPT_PATH.toPath(), TEST_SCRIPT);
+    Files.write(TEST_SCRHOSTT_PATH.toPath(), TEST_SCRHOSTT);
   }
 
   @BeforeEach
@@ -82,23 +82,23 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   @Test
   public void testRedirectsSimple() throws Exception {
     SparkLauncher launcher = new SparkLauncher();
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE);
+    launcher.redirectError(ProcessBuilder.Redirect.PHOSTE);
     assertNotNull(launcher.errorStream);
-    assertEquals(ProcessBuilder.Redirect.Type.PIPE, launcher.errorStream.type());
+    assertEquals(ProcessBuilder.Redirect.Type.PHOSTE, launcher.errorStream.type());
 
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE);
+    launcher.redirectOutput(ProcessBuilder.Redirect.PHOSTE);
     assertNotNull(launcher.outputStream);
-    assertEquals(ProcessBuilder.Redirect.Type.PIPE, launcher.outputStream.type());
+    assertEquals(ProcessBuilder.Redirect.Type.PHOSTE, launcher.outputStream.type());
   }
 
   @Test
   public void testRedirectLastWins() throws Exception {
     SparkLauncher launcher = new SparkLauncher();
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE)
+    launcher.redirectError(ProcessBuilder.Redirect.PHOSTE)
       .redirectError(ProcessBuilder.Redirect.INHERIT);
     assertEquals(ProcessBuilder.Redirect.Type.INHERIT, launcher.errorStream.type());
 
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE)
+    launcher.redirectOutput(ProcessBuilder.Redirect.PHOSTE)
       .redirectOutput(ProcessBuilder.Redirect.INHERIT);
     assertEquals(ProcessBuilder.Redirect.Type.INHERIT, launcher.outputStream.type());
   }
@@ -246,7 +246,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
     @Override
     String findSparkSubmit() {
-      return TEST_SCRIPT_PATH.getAbsolutePath();
+      return TEST_SCRHOSTT_PATH.getAbsolutePath();
     }
 
   }

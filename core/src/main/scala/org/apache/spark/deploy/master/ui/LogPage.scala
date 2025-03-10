@@ -23,9 +23,9 @@ import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.deploy.Utils.{getLog, DEFAULT_BYTES}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 
-private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with Logging {
+private[ui] class LogPage(parent: MasterWebUI) extends WebUHOSTage("logPage") with Logging {
   def render(request: HttpServletRequest): Seq[Node] = {
     val logDir = sys.env.getOrElse("SPARK_LOG_DIR", "logs/")
     val logType = request.getParameter("logType")

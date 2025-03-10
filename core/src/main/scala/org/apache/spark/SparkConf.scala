@@ -769,7 +769,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3")),
     KEYTAB.key -> Seq(
       AlternateConfig("spark.yarn.keytab", "3.0")),
-    PRINCIPAL.key -> Seq(
+    PRINCHOSTAL.key -> Seq(
       AlternateConfig("spark.yarn.principal", "3.0")),
     KERBEROS_RELOGIN_PERIOD.key -> Seq(
       AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0")),

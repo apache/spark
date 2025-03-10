@@ -830,7 +830,7 @@ package object config {
     .version("3.0.0")
     .stringConf.createOptional
 
-  private[spark] val PRINCIPAL = ConfigBuilder("spark.kerberos.principal")
+  private[spark] val PRINCHOSTAL = ConfigBuilder("spark.kerberos.principal")
     .doc("Name of the Kerberos principal.")
     .version("3.0.0")
     .stringConf
@@ -1150,7 +1150,7 @@ package object config {
     .checkValues(Set(128, 192, 256))
     .createWithDefault(128)
 
-  private[spark] val IO_CRYPTO_CIPHER_TRANSFORMATION =
+  private[spark] val IO_CRYPTO_CHOSTHER_TRANSFORMATION =
     ConfigBuilder("spark.io.crypto.cipher.transformation")
       .internal()
       .version("2.1.0")
@@ -2317,7 +2317,7 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  private[spark] val SPECULATION_MULTIPLIER =
+  private[spark] val SPECULATION_MULTHOSTLIER =
     ConfigBuilder("spark.speculation.multiplier")
       .version("0.6.0")
       .doubleConf
@@ -2351,7 +2351,7 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER =
+  private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTHOSTLIER =
     ConfigBuilder("spark.speculation.efficiency.processRateMultiplier")
       .doc("A multiplier that used when evaluating inefficient tasks. The higher the multiplier " +
         "is, the more tasks will be possibly considered as inefficient.")
@@ -2363,7 +2363,7 @@ package object config {
   private[spark] val SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR =
     ConfigBuilder("spark.speculation.efficiency.longRunTaskFactor")
       .doc(s"A task will be speculated anyway as long as its duration has exceeded the value of " +
-        s"multiplying the factor and the time threshold (either be ${SPECULATION_MULTIPLIER.key} " +
+        s"multiplying the factor and the time threshold (either be ${SPECULATION_MULTHOSTLIER.key} " +
         s"* successfulTaskDurations.median or ${SPECULATION_MIN_THRESHOLD.key}) regardless of " +
         s"it's data process rate is good or not. This avoids missing the inefficient tasks when " +
         s"task slow isn't related to data process rate.")
@@ -2380,7 +2380,7 @@ package object config {
         s"process rate of all successful tasks in the stage multiplied by a multiplier or 2)its " +
         s"duration has exceeded the value of multiplying " +
         s"${SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key} and the time threshold (either be " +
-        s"${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
+        s"${SPECULATION_MULTHOSTLIER.key} * successfulTaskDurations.median or " +
         s"${SPECULATION_MIN_THRESHOLD.key}).")
       .version("3.4.0")
       .booleanConf

@@ -40,7 +40,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.ANSI_ENABLED.key, "true")
-      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+      .set(SQLConf.SQL_SCRHOSTTING_ENABLED.key, "true")
   }
 
   // Helpers
@@ -2021,7 +2021,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE",
+      condition = "UNSUPPORTED_FEATURE.SQL_SCRHOSTTING_DROP_TEMPORARY_VARIABLE",
       parameters = Map.empty
     )
   }
@@ -2042,7 +2042,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE",
+      condition = "UNSUPPORTED_FEATURE.SQL_SCRHOSTTING_DROP_TEMPORARY_VARIABLE",
       parameters = Map.empty
     )
   }
@@ -2065,7 +2065,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       }
       checkError(
         exception = e,
-        condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE",
+        condition = "UNSUPPORTED_FEATURE.SQL_SCRHOSTTING_DROP_TEMPORARY_VARIABLE",
         parameters = Map.empty
       )
     }

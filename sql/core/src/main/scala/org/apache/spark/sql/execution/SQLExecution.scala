@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
-import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
+import org.apache.spark.SparkContext.{SPARK_JOB_DESCRHOSTTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -102,7 +102,7 @@ object SQLExecution extends Logging {
 
       val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
 
-      val desc = Option(sc.getLocalProperty(SPARK_JOB_DESCRIPTION))
+      val desc = Option(sc.getLocalProperty(SPARK_JOB_DESCRHOSTTION))
         .filter(_ => truncateLength > 0)
         .map { sqlStr =>
           val redactedStr = Utils

@@ -452,15 +452,15 @@ class SQLContext:
         >>> df3.collect()
         [Row(name='Alice', age=1)]
 
-        >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
+        >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKHOST
         [Row(name='Alice', age=1)]
-        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
+        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKHOST
         [Row(0=1, 1=2)]
 
-        >>> sqlContext.createDataFrame(df.toArrow()).collect()  # doctest: +SKIP
+        >>> sqlContext.createDataFrame(df.toArrow()).collect()  # doctest: +SKHOST
         [Row(name='Alice', age=1)]
-        >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
-        >>> sqlContext.createDataFrame(table).collect()  # doctest: +SKIP
+        >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKHOST
+        >>> sqlContext.createDataFrame(table).collect()  # doctest: +SKHOST
         [Row(0=1, 1=2)]
 
         >>> sqlContext.createDataFrame(rdd, "a: string, b: int").collect()
@@ -805,7 +805,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.context,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     globs["sc"].stop()
     if failure_count:

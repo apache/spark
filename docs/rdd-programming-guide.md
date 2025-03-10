@@ -226,15 +226,15 @@ $ ./bin/pyspark --master "local[4]" --py-files code.py
 For a complete list of options, run `pyspark --help`. Behind the scenes,
 `pyspark` invokes the more general [`spark-submit` script](submitting-applications.html).
 
-It is also possible to launch the PySpark shell in [IPython](http://ipython.org), the
-enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
-use IPython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running `bin/pyspark`:
+It is also possible to launch the PySpark shell in [HOSTython](http://ipython.org), the
+enhanced Python interpreter. PySpark works with HOSTython 1.0.0 and later. To
+use HOSTython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running `bin/pyspark`:
 
 {% highlight bash %}
 $ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 {% endhighlight %}
 
-To use the Jupyter notebook (previously known as the IPython notebook),
+To use the Jupyter notebook (previously known as the HOSTython notebook),
 
 {% highlight bash %}
 $ PYSPARK_DRIVER_PYTHON=jupyter PYSPARK_DRIVER_PYTHON_OPTS=notebook ./bin/pyspark

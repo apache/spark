@@ -86,7 +86,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx: QueryOrganizationContext,
       clauses: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+      errorClass = "UNSUPPORTED_FEATURE.CLAUSE_WITH_PHOSTE_OPERATORS",
       messageParameters = Map("clauses" -> clauses),
       ctx)
   }
@@ -96,7 +96,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       clause1: String,
       clause2: String): Throwable = {
     new ParseException(
-      errorClass = "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+      errorClass = "MULTHOSTLE_QUERY_RESULT_CLAUSES_WITH_PHOSTE_OPERATORS",
       messageParameters = Map("clause1" -> clause1, "clause2" -> clause2),
       ctx)
   }
@@ -109,13 +109,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       caseArgument: String,
       ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+      errorClass = "UNSUPPORTED_FEATURE.PHOSTE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
       messageParameters = Map("case" -> caseArgument),
       ctx)
   }
 
   def windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
+    new ParseException(errorClass = "NOT_ALLOWED_IN_PHOSTE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
@@ -744,9 +744,9 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       alterType: String = "ADD"): Throwable = {
     val errorClass =
       if (isCreate) {
-        "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
+        "CREATE_TABLE_COLUMN_DESCRHOSTTOR_DUPLICATE"
       } else {
-        "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
+        "ALTER_TABLE_COLUMN_DESCRHOSTTOR_DUPLICATE"
       }
     val alterTypeMap: Map[String, String] =
       if (isCreate) {

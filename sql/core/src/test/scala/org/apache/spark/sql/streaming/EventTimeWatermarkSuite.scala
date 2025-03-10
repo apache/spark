@@ -571,13 +571,13 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(input, (100L, 200L)),
       ExpectFailure[AnalysisException](assertFailure = exc => {
         assert(exc.getMessage.contains("Redefining watermark is disallowed."))
-        assert(exc.getMessage.contains(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
+        assert(exc.getMessage.contains(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE.key))
       })
     )
   }
 
   test("overriding watermark should not fail in compatibility mode") {
-    withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+    withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE.key -> "false") {
       val (input, df) = buildTestQueryForOverridingWatermark()
       testStream(df)(
         AddData(input, (100L, 200L)),
@@ -664,7 +664,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     "multiple event time columns in compatibility mode") {
     // for ease of verification, we change the session timezone to UTC
     withSQLConf(
-      SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false",
+      SQLConf.STATEFUL_OPERATOR_ALLOW_MULTHOSTLE.key -> "false",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val (input1, input2, dedup) = buildTestQueryForMultiEventTimeColumns()
       testStream(dedup)(
@@ -772,7 +772,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+    withSQLConf(SQLConf.STREAMING_MULTHOSTLE_WATERMARK_POLICY.key -> "max") {
       testStream(dfWithMultipleWatermarks(input1, input2))(
         MultiAddData(input1, 20)(input2, 30),
         CheckLastBatch(20, 30),
@@ -794,7 +794,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
-    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+    withSQLConf(SQLConf.STREAMING_MULTHOSTLE_WATERMARK_POLICY.key -> "min") {
       testStream(dfWithMultipleWatermarks(input1, input2))(
         MultiAddData(input1, 20)(input2, 30),
         CheckLastBatch(20, 30),
@@ -817,7 +817,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val input2 = MemoryStream[Int]
 
     val checkpointDir = Utils.createTempDir().getCanonicalFile
-    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+    withSQLConf(SQLConf.STREAMING_MULTHOSTLE_WATERMARK_POLICY.key -> "max") {
       testStream(dfWithMultipleWatermarks(input1, input2))(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         MultiAddData(input1, 20)(input2, 30),
@@ -826,7 +826,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       )
     }
 
-    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "min") {
+    withSQLConf(SQLConf.STREAMING_MULTHOSTLE_WATERMARK_POLICY.key -> "min") {
       testStream(dfWithMultipleWatermarks(input1, input2))(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         checkWatermark(input1, 15), // watermark recovered correctly
@@ -856,7 +856,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     input2.addData(30)
     input1.addData(10)
 
-    withSQLConf(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key -> "max") {
+    withSQLConf(SQLConf.STREAMING_MULTHOSTLE_WATERMARK_POLICY.key -> "max") {
       testStream(dfWithMultipleWatermarks(input1, input2))(
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         Execute { _.processAllAvailable() },
@@ -874,7 +874,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val invalidValues = Seq("", "random")
     invalidValues.foreach { value =>
       val e = intercept[IllegalArgumentException] {
-        spark.conf.set(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key, value)
+        spark.conf.set(SQLConf.STREAMING_MULTHOSTLE_WATERMARK_POLICY.key, value)
       }
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains("valid values are 'min' and 'max'"))
     }

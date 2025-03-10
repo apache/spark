@@ -199,7 +199,7 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     ...     e.__cause__ = None
     ...     exc_info = "".join(
     ...         traceback.format_exception(type(e), e, tb))
-    >>> print(exc_info)  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
+    >>> print(exc_info)  # doctest: +NORMALIZE_WHITESPACE, +ELLHOSTSIS
     Traceback (most recent call last):
       File ...
         ...
@@ -220,7 +220,7 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     ...     exc_info = "".join(
     ...         traceback.format_exception(
     ...             type(e), e, try_simplify_traceback(skip_doctest_traceback(tb))))
-    >>> print(exc_info)  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
+    >>> print(exc_info)  # doctest: +NORMALIZE_WHITESPACE, +ELLHOSTSIS
     pyspark.errors.exceptions.base.PySparkRuntimeError: ...
     >>> "pyspark/util.py" in exc_info
     False
@@ -365,16 +365,16 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     The example below mimics the behavior of JVM threads as close as possible:
 
-    >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
+    >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKHOST
 
     If you're using Spark Connect or if you want to inherit the tags properly,
     you should explicitly provide Spark session as follows:
 
-    >>> @inheritable_thread_target(session)  # doctest: +SKIP
+    >>> @inheritable_thread_target(session)  # doctest: +SKHOST
     ... def target_func():
     ...     pass  # your codes.
 
-    >>> Thread(target=inheritable_thread_target(session)(target_func)).start()  # doctest: +SKIP
+    >>> Thread(target=inheritable_thread_target(session)(target_func)).start()  # doctest: +SKHOST
     """
     from pyspark.sql import is_remote
 
@@ -734,7 +734,7 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
 def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) -> Tuple:
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
-    Handles IPV4 & IPV6, does some error handling.
+    Handles HOSTV4 & HOSTV6, does some error handling.
 
     Parameters
     ----------
@@ -748,9 +748,9 @@ def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) ->
     """
     sock = None
     errors = []
-    # Support for both IPv4 and IPv6.
+    # Support for both HOSTv4 and HOSTv6.
     addr = "127.0.0.1"
-    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+    if os.environ.get("SPARK_PREFER_HOSTV6", "false").lower() == "true":
         addr = "::1"
     for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
         af, socktype, proto, _, sa = res
@@ -820,7 +820,7 @@ def is_remote_only() -> bool:
     """
     global _is_remote_only
 
-    if "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ:
+    if "SPARK_SKHOST_CONNECT_COMPAT_TESTS" in os.environ:
         return True
 
     if _is_remote_only is not None:

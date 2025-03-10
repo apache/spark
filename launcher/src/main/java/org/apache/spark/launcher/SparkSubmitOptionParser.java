@@ -76,7 +76,7 @@ class SparkSubmitOptionParser {
   protected final String EXECUTOR_CORES = "--executor-cores";
   protected final String KEYTAB = "--keytab";
   protected final String NUM_EXECUTORS = "--num-executors";
-  protected final String PRINCIPAL = "--principal";
+  protected final String PRINCHOSTAL = "--principal";
   protected final String QUEUE = "--queue";
 
   /**
@@ -112,7 +112,7 @@ class SparkSubmitOptionParser {
     { NUM_EXECUTORS },
     { PACKAGES },
     { PACKAGES_EXCLUDE },
-    { PRINCIPAL },
+    { PRINCHOSTAL },
     { PROPERTIES_FILE },
     { PROXY_USER },
     { PY_FILES },

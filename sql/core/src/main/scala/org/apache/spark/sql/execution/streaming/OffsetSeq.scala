@@ -21,7 +21,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CONFIG, DEFAULT_VALUE, NEW_VALUE, OLD_VALUE, TIP}
+import org.apache.spark.internal.LogKeys.{CONFIG, DEFAULT_VALUE, NEW_VALUE, OLD_VALUE, THOST}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
@@ -98,7 +98,7 @@ object OffsetSeqMetadata extends Logging {
    * log in the checkpoint position.
    */
   private val relevantSQLConfs = Seq(
-    SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
+    SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTHOSTLE_WATERMARK_POLICY,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
     STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
     STATE_STORE_ROCKSDB_FORMAT_VERSION, STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
@@ -116,7 +116,7 @@ object OffsetSeqMetadata extends Logging {
    * with a specific default value for ensuring same behavior of the query as before.
    */
   private val relevantSQLConfDefaultValues = Map[String, String](
-    STREAMING_MULTIPLE_WATERMARK_POLICY.key -> MultipleWatermarkPolicy.DEFAULT_POLICY_NAME,
+    STREAMING_MULTHOSTLE_WATERMARK_POLICY.key -> MultipleWatermarkPolicy.DEFAULT_POLICY_NAME,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key ->
       FlatMapGroupsWithStateExecHelper.legacyVersion.toString,
     STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key ->
@@ -175,7 +175,7 @@ object OffsetSeqMetadata extends Logging {
                 " No value set in session conf."
               }
               logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log. " +
-                log"${MDC(TIP, valueStr)}")
+                log"${MDC(THOST, valueStr)}")
 
           }
       }

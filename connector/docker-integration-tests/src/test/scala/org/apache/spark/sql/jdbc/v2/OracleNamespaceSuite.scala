@@ -69,7 +69,7 @@ class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespa
 
   override def builtinNamespaces: Array[Array[String]] =
     Array(Array("ANONYMOUS"), Array("APEX_030200"), Array("APEX_PUBLIC_USER"), Array("APPQOSSYS"),
-      Array("BI"), Array("DIP"), Array("FLOWS_FILES"), Array("HR"), Array("OE"), Array("PM"),
+      Array("BI"), Array("DHOST"), Array("FLOWS_FILES"), Array("HR"), Array("OE"), Array("PM"),
       Array("SCOTT"), Array("SH"), Array("SPATIAL_CSW_ADMIN_USR"), Array("SPATIAL_WFS_ADMIN_USR"),
       Array("XS$NULL"))
 

@@ -57,7 +57,7 @@ class BigDataBenchmarkSuite extends HiveComparisonTest {
       "uservisits",
       s"""
         |CREATE EXTERNAL TABLE uservisits (
-        |  sourceIP STRING,
+        |  sourceHOST STRING,
         |  destURL STRING,
         |  visitDate STRING,
         |  adRevenue DOUBLE,
@@ -88,23 +88,23 @@ class BigDataBenchmarkSuite extends HiveComparisonTest {
 
     createQueryTest("query2",
       """
-        |SELECT SUBSTR(sourceIP, 1, 10), SUM(adRevenue) FROM uservisits
-        |GROUP BY SUBSTR(sourceIP, 1, 10)
+        |SELECT SUBSTR(sourceHOST, 1, 10), SUM(adRevenue) FROM uservisits
+        |GROUP BY SUBSTR(sourceHOST, 1, 10)
       """.stripMargin)
 
     createQueryTest("query3",
       """
-        |SELECT sourceIP,
+        |SELECT sourceHOST,
         |       sum(adRevenue) as totalRevenue,
         |       avg(pageRank) as pageRank
         |FROM
         |  rankings R JOIN
-        |  (SELECT sourceIP, destURL, adRevenue
+        |  (SELECT sourceHOST, destURL, adRevenue
         |   FROM uservisits UV
         |   WHERE UV.visitDate > "1980-01-01"
         |   AND UV.visitDate < "1980-04-01")
         |   NUV ON (R.pageURL = NUV.destURL)
-        |GROUP BY sourceIP
+        |GROUP BY sourceHOST
         |ORDER BY totalRevenue DESC
         |LIMIT 1
       """.stripMargin)

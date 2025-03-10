@@ -986,7 +986,7 @@ class SparkSession:
     ) -> None:
         if sum([file, pyfile, archive]) > 1:
             raise PySparkValueError(
-                errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+                errorClass="INVALID_MULTHOSTLE_ARGUMENT_CONDITIONS",
                 messageParameters={
                     "arg_names": "'pyfile', 'archive' and/or 'file'",
                     "condition": "True together",
@@ -1174,7 +1174,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.session,
         globs=globs,
-        optionflags=doctest.ELLIPSIS
+        optionflags=doctest.ELLHOSTSIS
         | doctest.NORMALIZE_WHITESPACE
         | doctest.IGNORE_EXCEPTION_DETAIL,
     )

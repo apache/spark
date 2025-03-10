@@ -130,7 +130,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
 
   test("createAdminClientProperties with keytab should set keytab dynamic jaas config") {
     sparkConf.set(KEYTAB, keytab)
-    sparkConf.set(PRINCIPAL, principal)
+    sparkConf.set(PRINCHOSTAL, principal)
     val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)

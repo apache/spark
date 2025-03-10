@@ -50,7 +50,7 @@ object ArrowDeserializers {
   import org.apache.spark.util.ArrayImplicits._
 
   /**
-   * Create an Iterator of `T`. This iterator takes an Iterator of Arrow IPC Streams, and
+   * Create an Iterator of `T`. This iterator takes an Iterator of Arrow HOSTC Streams, and
    * deserializes these streams into one or more instances of `T`
    */
   def deserializeFromArrow[T](

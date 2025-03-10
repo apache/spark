@@ -38,7 +38,7 @@ case class StreamInputInfo(
   require(numRecords >= 0, "numRecords must not be negative")
 
   def metadataDescription: Option[String] =
-    metadata.get(StreamInputInfo.METADATA_KEY_DESCRIPTION).map(_.toString)
+    metadata.get(StreamInputInfo.METADATA_KEY_DESCRHOSTTION).map(_.toString)
 }
 
 @DeveloperApi
@@ -47,7 +47,7 @@ object StreamInputInfo {
   /**
    * The key for description in `StreamInputInfo.metadata`.
    */
-  val METADATA_KEY_DESCRIPTION: String = "Description"
+  val METADATA_KEY_DESCRHOSTTION: String = "Description"
 }
 
 /**

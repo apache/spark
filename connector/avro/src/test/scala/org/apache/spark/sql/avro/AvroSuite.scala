@@ -747,7 +747,7 @@ abstract class AvroSuite
       val df = spark.read.format("avro").load(testAvro)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, UNCOMPRESSED.lowerCaseName())
       df.write.format("avro").save(uncompressDir)
-      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, BZIP2.lowerCaseName())
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, BZHOST2.lowerCaseName())
       df.write.format("avro").save(bzip2Dir)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, XZ.lowerCaseName())
       df.write.format("avro").save(xzDir)

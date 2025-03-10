@@ -242,7 +242,7 @@ private[spark] object History {
     .booleanConf
     .createWithDefault(false)
 
-  val KERBEROS_PRINCIPAL = ConfigBuilder("spark.history.kerberos.principal")
+  val KERBEROS_PRINCHOSTAL = ConfigBuilder("spark.history.kerberos.principal")
     .version("1.0.1")
     .doc(s"When ${KERBEROS_ENABLED.key}=true, specifies kerberos principal name for " +
       s" the History Server.")

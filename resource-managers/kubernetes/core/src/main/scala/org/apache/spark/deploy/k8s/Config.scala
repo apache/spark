@@ -25,7 +25,7 @@ import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, P
 
 private[spark] object Config extends Logging {
 
-  val DECOMMISSION_SCRIPT =
+  val DECOMMISSION_SCRHOSTT =
     ConfigBuilder("spark.kubernetes.decommission.script")
       .doc("The location of the script to use for graceful decommissioning")
       .version("3.2.0")
@@ -72,21 +72,21 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
-  val KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY =
+  val KUBERNETES_DRIVER_SERVICE_HOST_FAMILY_POLICY =
     ConfigBuilder("spark.kubernetes.driver.service.ipFamilyPolicy")
-      .doc("K8s IP Family Policy for Driver Service")
+      .doc("K8s HOST Family Policy for Driver Service")
       .version("3.4.0")
       .stringConf
       .checkValues(Set("SingleStack", "PreferDualStack", "RequireDualStack"))
       .createWithDefault("SingleStack")
 
-  val KUBERNETES_DRIVER_SERVICE_IP_FAMILIES =
+  val KUBERNETES_DRIVER_SERVICE_HOST_FAMILIES =
     ConfigBuilder("spark.kubernetes.driver.service.ipFamilies")
-      .doc("A list of IP families for K8s Driver Service")
+      .doc("A list of HOST families for K8s Driver Service")
       .version("3.4.0")
       .stringConf
-      .checkValues(Set("IPv4", "IPv6", "IPv4,IPv6", "IPv6,IPv4"))
-      .createWithDefault("IPv4")
+      .checkValues(Set("HOSTv4", "HOSTv6", "HOSTv4,HOSTv6", "HOSTv6,HOSTv4"))
+      .createWithDefault("HOSTv4")
 
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")

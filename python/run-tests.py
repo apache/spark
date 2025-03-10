@@ -55,7 +55,7 @@ def get_valid_filename(s):
     return re.sub(r'(?u)[^-\w.]', '', s)
 
 
-SKIPPED_TESTS = None
+SKHOSTPED_TESTS = None
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
@@ -63,7 +63,7 @@ LOGGER = logging.getLogger()
 # Find out where the assembly jars are located.
 # TODO: revisit for Scala 2.13
 SPARK_DIST_CLASSPATH = ""
-if "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ:
+if "SPARK_SKHOST_CONNECT_COMPAT_TESTS" not in os.environ:
     for scala in ["2.13"]:
         build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
         if os.path.isdir(build_dir):
@@ -102,8 +102,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     if "SPARK_CONNECT_TESTING_REMOTE" in os.environ:
         env.update({"SPARK_CONNECT_TESTING_REMOTE": os.environ["SPARK_CONNECT_TESTING_REMOTE"]})
-    if "SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ:
-        env.update({"SPARK_SKIP_JVM_REQUIRED_TESTS": os.environ["SPARK_SKIP_CONNECT_COMPAT_TESTS"]})
+    if "SPARK_SKHOST_CONNECT_COMPAT_TESTS" in os.environ:
+        env.update({"SPARK_SKHOST_JVM_REQUIRED_TESTS": os.environ["SPARK_SKHOST_CONNECT_COMPAT_TESTS"]})
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
     # recognized by the tempfile module to override the default system temp directory.
@@ -182,13 +182,13 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
             # 2 (or --verbose option is enabled).
             decoded_lines = map(lambda line: line.decode("utf-8", "replace"), iter(per_test_output))
             skipped_tests = list(filter(
-                lambda line: re.search(r'test_.* \(pyspark\..*\) ... (skip|SKIP)', line),
+                lambda line: re.search(r'test_.* \(pyspark\..*\) ... (skip|SKHOST)', line),
                 decoded_lines))
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
                 key = (pyspark_python, test_name)
-                assert SKIPPED_TESTS is not None
-                SKIPPED_TESTS[key] = skipped_tests
+                assert SKHOSTPED_TESTS is not None
+                SKHOSTPED_TESTS[key] = skipped_tests
             per_test_output.close()
         except BaseException:
             import traceback
@@ -369,7 +369,7 @@ def main():
     total_duration = time.time() - start_time
     LOGGER.info("Tests passed in %i seconds", total_duration)
 
-    for key, lines in sorted(SKIPPED_TESTS.items()):
+    for key, lines in sorted(SKHOSTPED_TESTS.items()):
         pyspark_python, test_name = key
         LOGGER.info("\nSkipped tests in %s with %s:" % (test_name, pyspark_python))
         for line in lines:
@@ -377,5 +377,5 @@ def main():
 
 
 if __name__ == "__main__":
-    SKIPPED_TESTS = Manager().dict()
+    SKHOSTPED_TESTS = Manager().dict()
     main()

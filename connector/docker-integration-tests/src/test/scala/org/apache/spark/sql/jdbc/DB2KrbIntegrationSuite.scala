@@ -49,7 +49,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
         JDBCOptions.JDBC_URL -> getJdbcUrl(dockerIp, externalPort),
         JDBCOptions.JDBC_TABLE_NAME -> "bar",
         JDBCOptions.JDBC_KEYTAB -> keytabFileName,
-        JDBCOptions.JDBC_PRINCIPAL -> principal
+        JDBCOptions.JDBC_PRINCHOSTAL -> principal
       ))
       new DB2ConnectionProvider().getAdditionalProperties(options)
     }

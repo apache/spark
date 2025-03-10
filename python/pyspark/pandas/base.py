@@ -584,7 +584,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> midx = ps.MultiIndex.from_tuples(
         ... [('x', 'a'), ('x', 'b'), ('y', 'c'), ('y', 'd'), ('z', 'e')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
                     ('y', 'c'),
@@ -596,7 +596,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> midx = ps.MultiIndex.from_tuples(
         ... [('z', 'a'), ('z', 'b'), ('y', 'c'), ('y', 'd'), ('x', 'e')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('z', 'a'),
                     ('z', 'b'),
                     ('y', 'c'),
@@ -660,7 +660,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> midx = ps.MultiIndex.from_tuples(
         ... [('x', 'a'), ('x', 'b'), ('y', 'c'), ('y', 'd'), ('z', 'e')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
                     ('y', 'c'),
@@ -672,7 +672,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> midx = ps.MultiIndex.from_tuples(
         ... [('z', 'e'), ('z', 'd'), ('y', 'c'), ('y', 'b'), ('x', 'a')])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('z', 'a'),
                     ('z', 'b'),
                     ('y', 'c'),
@@ -867,7 +867,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         5    False
         Name: animal, dtype: bool
 
-        >>> s.rename("a").to_frame().set_index("a").index.isin(['lama'])  # doctest: +SKIP
+        >>> s.rename("a").to_frame().set_index("a").index.isin(['lama'])  # doctest: +SKHOST
         Index([True, False, True, False, True, False], dtype='bool', name='a')
         """
         if not is_list_like(values):
@@ -910,7 +910,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2     True
         dtype: bool
 
-        >>> ser.rename("a").to_frame().set_index("a").index.isna()  # doctest: +SKIP
+        >>> ser.rename("a").to_frame().set_index("a").index.isna()  # doctest: +SKHOST
         Index([False, False, True], dtype='bool', name='a')
         """
         from pyspark.pandas.indexes import MultiIndex
@@ -952,7 +952,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2    False
         dtype: bool
 
-        >>> ser.rename("a").to_frame().set_index("a").index.notna()  # doctest: +SKIP
+        >>> ser.rename("a").to_frame().set_index("a").index.notna()  # doctest: +SKHOST
         Index([True, True, False], dtype='bool', name='a')
         """
         from pyspark.pandas.indexes import MultiIndex
@@ -1296,7 +1296,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         With `dropna` set to `False` we can also see NaN index values.
 
-        >>> idx.value_counts(dropna=False).sort_index()  # doctest: +SKIP
+        >>> idx.value_counts(dropna=False).sort_index()  # doctest: +SKHOST
         1.0    1
         2.0    1
         3.0    2
@@ -1311,7 +1311,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [1, 1, 1, 1, 1, 2, 1, 2, 2]])
         >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        >>> s.index  # doctest: +SKIP
+        >>> s.index  # doctest: +SKHOST
         MultiIndex([(  'lama', 'weight'),
                     (  'lama', 'weight'),
                     (  'lama', 'weight'),
@@ -1523,13 +1523,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         MultiIndex
 
         >>> psmidx = ps.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c")])
-        >>> psmidx  # doctest: +SKIP
+        >>> psmidx  # doctest: +SKHOST
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
                     ('x', 'c')],
                    )
 
-        >>> psmidx.take([0, 2])  # doctest: +SKIP
+        >>> psmidx.take([0, 2])  # doctest: +SKHOST
         MultiIndex([('x', 'a'),
                     ('x', 'c')],
                    )
@@ -1704,7 +1704,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

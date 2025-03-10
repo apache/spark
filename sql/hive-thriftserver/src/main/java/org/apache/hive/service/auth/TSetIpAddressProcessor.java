@@ -32,8 +32,8 @@ import org.apache.spark.internal.SparkLoggerFactory;
 /**
  * This class is responsible for setting the ipAddress for operations executed via HiveServer2.
  *
- * - IP address is only set for operations that calls listeners with hookContext
- * - IP address is only set if the underlying transport mechanism is socket
+ * - HOST address is only set for operations that calls listeners with hookContext
+ * - HOST address is only set if the underlying transport mechanism is socket
  *
  * @see org.apache.hadoop.hive.ql.hooks.ExecuteWithHookContext
  */
@@ -54,7 +54,7 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
       return;
     } finally {
       THREAD_LOCAL_USER_NAME.remove();
-      THREAD_LOCAL_IP_ADDRESS.remove();
+      THREAD_LOCAL_HOST_ADDRESS.remove();
     }
   }
 
@@ -72,7 +72,7 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
     if (tSocket == null) {
       LOGGER.warn("Unknown Transport, cannot determine ipAddress");
     } else {
-      THREAD_LOCAL_IP_ADDRESS.set(tSocket.getSocket().getInetAddress().getHostAddress());
+      THREAD_LOCAL_HOST_ADDRESS.set(tSocket.getSocket().getInetAddress().getHostAddress());
     }
   }
 
@@ -91,7 +91,7 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
     return null;
   }
 
-  private static final ThreadLocal<String> THREAD_LOCAL_IP_ADDRESS = new ThreadLocal<String>() {
+  private static final ThreadLocal<String> THREAD_LOCAL_HOST_ADDRESS = new ThreadLocal<String>() {
     @Override
     protected synchronized String initialValue() {
       return null;
@@ -106,7 +106,7 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
   };
 
   public static String getUserIpAddress() {
-    return THREAD_LOCAL_IP_ADDRESS.get();
+    return THREAD_LOCAL_HOST_ADDRESS.get();
   }
 
   public static String getUserName() {

@@ -513,7 +513,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[4]").appName("sql.udtf tests").getOrCreate()
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.udtf, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+        pyspark.sql.udtf, globs=globs, optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()
     if failure_count:

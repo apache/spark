@@ -97,7 +97,7 @@ for f in `find gen/proto/python -name "*.py*"`; do
     sed -e "s/from ${SOURCE_MODULE} import/from ${TARGET_MODULE} import/g" $f > $f.tmp
     mv $f.tmp $f
     # Now fix the module name in the serialized descriptor.
-    sed -e "s/DESCRIPTOR, '${SOURCE_MODULE}/DESCRIPTOR, '${TARGET_MODULE}/g" $f > $f.tmp
+    sed -e "s/DESCRHOSTTOR, '${SOURCE_MODULE}/DESCRHOSTTOR, '${TARGET_MODULE}/g" $f > $f.tmp
     mv $f.tmp $f
   elif [[ $f == *.pyi ]]; then
     sed -e "s/import ${SOURCE_MODULE}./import ${TARGET_MODULE}./g" -e "s/${SOURCE_MODULE}./${TARGET_MODULE}./g" -e '/ *@typing_extensions\.final/d' $f > $f.tmp

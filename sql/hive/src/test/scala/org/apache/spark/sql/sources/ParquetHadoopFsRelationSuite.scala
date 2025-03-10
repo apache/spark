@@ -205,7 +205,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         val path = s"${dir.getCanonicalPath}/table1"
         val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
         df.write
-          .option("compression", "GzIP")
+          .option("compression", "GzHOST")
           .parquet(path)
 
         val compressedFiles = new File(path).listFiles()
