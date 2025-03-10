@@ -49,10 +49,10 @@ from pyspark.serializers import (
     CPickleSerializer,
     BatchedSerializer,
 )
+from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
-    ArrowStreamPandasUDTFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
@@ -60,8 +60,9 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
     TransformWithStateInPandasSerializer,
     TransformWithStateInPandasInitStateSerializer,
+    ArrowStreamUDTFSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import to_arrow_type, from_arrow_schema
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -976,6 +977,8 @@ def use_large_var_types(runner_conf):
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type):
+    prefers_large_var_types = False
+
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         runner_conf = {}
         # Load conf used for arrow evaluation.
@@ -984,14 +987,9 @@ def read_udtf(pickleSer, infile, eval_type):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
+        prefers_large_var_types = use_large_var_types(runner_conf)
 
-        # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
-        timezone = runner_conf.get("spark.sql.session.timeZone", None)
-        safecheck = (
-            runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
-            == "true"
-        )
-        ser = ArrowStreamPandasUDTFSerializer(timezone, safecheck)
+        ser = ArrowStreamUDTFSerializer()
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
@@ -1301,7 +1299,7 @@ def read_udtf(pickleSer, infile, eval_type):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
         def wrap_arrow_udtf(f, return_type):
-            import pandas as pd
+            import pyarrow as pa
 
             arrow_return_type = to_arrow_type(
                 return_type, prefers_large_types=use_large_var_types(runner_conf)
@@ -1309,7 +1307,7 @@ def read_udtf(pickleSer, infile, eval_type):
             return_type_size = len(return_type)
 
             def verify_result(result):
-                if not isinstance(result, pd.DataFrame):
+                if not isinstance(result, pa.RecordBatch):
                     raise PySparkTypeError(
                         errorClass="INVALID_ARROW_UDTF_RETURN_TYPE",
                         messageParameters={
@@ -1335,8 +1333,12 @@ def read_udtf(pickleSer, infile, eval_type):
                         )
 
                 # Verify the type and the schema of the result.
-                verify_pandas_result(
-                    result, return_type, assign_cols_by_name=False, truncate_return_schema=False
+                verify_arrow_result(
+                    pa.Table.from_batches([result], schema=pa.schema(list(arrow_return_type))),
+                    assign_cols_by_name=False,
+                    expected_cols_and_types=[
+                        (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+                    ],
                 )
                 return result
 
@@ -1372,19 +1374,44 @@ def read_udtf(pickleSer, infile, eval_type):
                     else:
                         yield from res
 
-            def evaluate(*args: pd.Series):
+            def convert_to_arrow(data: Iterable):
+                data = list(check_return_value(data))
+                if len(data) == 0:
+                    return [
+                        pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
+                    ]
+                try:
+                    ret = LocalDataToArrowConversion.convert(
+                        data, return_type, prefers_large_var_types
+                    ).to_batches()
+                    if len(return_type.fields) == 0:
+                        return [pa.RecordBatch.from_struct_array(pa.array([{}] * len(data)))]
+                    return ret
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
+                        messageParameters={
+                            "data": str(data),
+                            "schema": return_type.simpleString(),
+                            "arrow_schema": str(arrow_return_type),
+                        },
+                    ) from e
+
+            def evaluate(*args: pa.ChunkedArray):
                 if len(args) == 0:
-                    res = func()
-                    yield verify_result(pd.DataFrame(check_return_value(res))), arrow_return_type
+                    for batch in convert_to_arrow(func()):
+                        yield verify_result(batch), arrow_return_type
+
                 else:
-                    # Create tuples from the input pandas Series, each tuple
-                    # represents a row across all Series.
-                    row_tuples = zip(*args)
-                    for row in row_tuples:
-                        res = func(*row)
-                        yield verify_result(
-                            pd.DataFrame(check_return_value(res))
-                        ), arrow_return_type
+                    list_args = list(args)
+                    names = [f"_{n}" for n in range(len(list_args))]
+                    t = pa.Table.from_arrays(list_args, names=names)
+                    schema = from_arrow_schema(t.schema, prefers_large_var_types)
+                    rows = ArrowTableToRowsConversion.convert(t, schema=schema)
+                    for row in rows:
+                        row = tuple(row)  # type: ignore[assignment]
+                        for batch in convert_to_arrow(func(*row)):
+                            yield verify_result(batch), arrow_return_type
 
             return evaluate
 
@@ -1404,7 +1431,7 @@ def read_udtf(pickleSer, infile, eval_type):
             try:
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
-                    # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
+                    # iterator is a tuple in the form of (pyarrow.RecordBatch, arrow_return_type).
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()
