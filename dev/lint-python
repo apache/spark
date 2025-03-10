@@ -316,8 +316,8 @@ function pyspark_custom_errors_check_test {
     fi
 }
 
-SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+SCRHOSTT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname "${SCRHOSTT_DIR}")"
 
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 

@@ -104,7 +104,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
     yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
 
-    // Support both IPv4 and IPv6
+    // Support both HOSTv4 and HOSTv6
     yarnConf.set("yarn.resourcemanager.hostname", Utils.localHostNameForURI())
 
     try {
@@ -172,7 +172,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map(
       "YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath(),
-      "SPARK_PREFER_IPV6" -> Utils.preferIPv6.toString) ++ extraEnv
+      "SPARK_PREFER_HOSTV6" -> Utils.preferHOSTv6.toString) ++ extraEnv
 
     val launcher = new SparkLauncher(env.asJava)
     if (klass.endsWith(".py")) {
@@ -186,7 +186,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       .setDeployMode(deployMode)
       .setConf(EXECUTOR_INSTANCES.key, "1")
       .setConf(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS,
-        s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}")
+        s"-Djava.net.preferHOSTv6Addresses=${Utils.preferHOSTv6}")
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 

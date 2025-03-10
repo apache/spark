@@ -45,11 +45,11 @@ class AuthEngine implements Closeable {
   public static final byte[] INPUT_IV_INFO = "inputIv".getBytes(UTF_8);
   public static final byte[] OUTPUT_IV_INFO = "outputIv".getBytes(UTF_8);
   private static final String MAC_ALGORITHM = "HMACSHA256";
-  private static final String LEGACY_CIPHER_ALGORITHM = "AES/CTR/NoPadding";
-  private static final String CIPHER_ALGORITHM = "AES/GCM/NoPadding";
+  private static final String LEGACY_CHOSTHER_ALGORITHM = "AES/CTR/NoPadding";
+  private static final String CHOSTHER_ALGORITHM = "AES/GCM/NoPadding";
   private static final int AES_GCM_KEY_SIZE_BYTES = 16;
-  private static final byte[] EMPTY_TRANSCRIPT = new byte[0];
-  private static final int UNSAFE_SKIP_HKDF_VERSION = 1;
+  private static final byte[] EMPTY_TRANSCRHOSTT = new byte[0];
+  private static final int UNSAFE_SKHOST_HKDF_VERSION = 1;
 
   private final String appId;
   private final byte[] preSharedSecret;
@@ -69,7 +69,7 @@ class AuthEngine implements Closeable {
     this.cryptoConf = conf.cryptoConf();
     // This is for backward compatibility with version 1.0 of this protocol,
     // which did not perform a final HKDF round.
-    this.unsafeSkipFinalHkdf = conf.authEngineVersion() == UNSAFE_SKIP_HKDF_VERSION;
+    this.unsafeSkipFinalHkdf = conf.authEngineVersion() == UNSAFE_SKHOST_HKDF_VERSION;
   }
 
   @VisibleForTesting
@@ -151,7 +151,7 @@ class AuthEngine implements Closeable {
     setClientPrivateKey(X25519.generatePrivateKey());
     return encryptEphemeralPublicKey(
         X25519.publicFromPrivate(clientPrivateKey),
-        EMPTY_TRANSCRIPT);
+        EMPTY_TRANSCRHOSTT);
   }
 
   /**
@@ -165,7 +165,7 @@ class AuthEngine implements Closeable {
     Preconditions.checkArgument(appId.equals(encryptedClientPublicKey.appId()));
     // Compute a shared secret given the client public key and the server private key
     byte[] clientPublicKey =
-        decryptEphemeralPublicKey(encryptedClientPublicKey, EMPTY_TRANSCRIPT);
+        decryptEphemeralPublicKey(encryptedClientPublicKey, EMPTY_TRANSCRHOSTT);
     // Generate an ephemeral X25519 private key.
     byte[] serverEphemeralPrivateKey = X25519.generatePrivateKey();
     // Encrypt the X25519 public key with a key derived from the preSharedSecret and transcript
@@ -229,18 +229,18 @@ class AuthEngine implements Closeable {
         OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
         AES_GCM_KEY_SIZE_BYTES);
     SecretKeySpec sessionKey = new SecretKeySpec(derivedKey, "AES");
-    if (LEGACY_CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+    if (LEGACY_CHOSTHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
       return new CtrTransportCipher(
           cryptoConf,
           sessionKey,
           isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
           isClient ? serverIv : clientIv);
-    } else if (CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+    } else if (CHOSTHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
       return new GcmTransportCipher(sessionKey);
     } else {
       throw new IllegalArgumentException(
               String.format("Unsupported cipher mode: %s. %s and %s are supported.",
-                      conf.cipherTransformation(), CIPHER_ALGORITHM, LEGACY_CIPHER_ALGORITHM));
+                      conf.cipherTransformation(), CHOSTHER_ALGORITHM, LEGACY_CHOSTHER_ALGORITHM));
     }
   }
 

@@ -51,7 +51,7 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setConf(UI_ENABLED.key, "false")
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
-        s"-Dtest.appender=console -Djava.net.preferIPv6Addresses=${Utils.preferIPv6}")
+        s"-Dtest.appender=console -Djava.net.preferHOSTv6Addresses=${Utils.preferHOSTv6}")
       .setMaster(master)
       .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(TestApp.getClass.getName().stripSuffix("$"))

@@ -328,7 +328,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         exception = intercept[SparkUnsupportedOperationException] {
           parseAndResolve(query)
         },
-        condition = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS",
+        condition = "UNSUPPORTED_FEATURE.MULTHOSTLE_BUCKET_TRANSFORMS",
         parameters = Map.empty)
     }
   }

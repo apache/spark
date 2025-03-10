@@ -1370,7 +1370,7 @@ def _test() -> None:
         np.set_printoptions(legacy="1.13")
     except TypeError:
         pass
-    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLHOSTSIS)
     if failure_count:
         sys.exit(-1)
 

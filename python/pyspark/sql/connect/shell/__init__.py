@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""Helpers for integration with the IPython Shell"""
+"""Helpers for integration with the HOSTython Shell"""
 
 import os
 

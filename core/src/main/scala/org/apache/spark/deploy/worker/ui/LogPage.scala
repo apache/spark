@@ -25,11 +25,11 @@ import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LOG_TYPE, PATH}
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.RollingFileAppender
 
-private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
+private[ui] class LogPage(parent: WorkerWebUI) extends WebUHOSTage("logPage") with Logging {
   private val worker = parent.worker
   private val workDir = new File(parent.workDir.toURI.normalize().getPath)
   private val supportedLogTypes = Set("stderr", "stdout", "out")

@@ -1431,6 +1431,6 @@ private[deploy] object Master extends Logging {
     val masterEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME,
       new Master(rpcEnv, rpcEnv.address, webUiPort, securityMgr, conf))
     val portsResponse = masterEndpoint.askSync[BoundPortsResponse](BoundPortsRequest)
-    (rpcEnv, portsResponse.webUIPort, portsResponse.restPort)
+    (rpcEnv, portsResponse.webUHOSTort, portsResponse.restPort)
   }
 }

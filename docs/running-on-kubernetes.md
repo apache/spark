@@ -204,25 +204,25 @@ When this property is set, it's highly recommended to make it unique across all 
 
 Use the exact prefix `spark.kubernetes.authenticate` for Kubernetes authentication parameters in client mode.
 
-## IPv4 and IPv6
+## HOSTv4 and HOSTv6
 
-Starting with 3.4.0, Spark supports additionally IPv6-only environment via
-[IPv4/IPv6 dual-stack network](https://kubernetes.io/docs/concepts/services-networking/dual-stack/)
-feature which enables the allocation of both IPv4 and IPv6 addresses to Pods and Services.
+Starting with 3.4.0, Spark supports additionally HOSTv6-only environment via
+[HOSTv4/HOSTv6 dual-stack network](https://kubernetes.io/docs/concepts/services-networking/dual-stack/)
+feature which enables the allocation of both HOSTv4 and HOSTv6 addresses to Pods and Services.
 According to the K8s cluster capability, `spark.kubernetes.driver.service.ipFamilyPolicy` and
 `spark.kubernetes.driver.service.ipFamilies` can be one of `SingleStack`, `PreferDualStack`,
-and `RequireDualStack` and one of `IPv4`, `IPv6`, `IPv4,IPv6`, and `IPv6,IPv4` respectively.
+and `RequireDualStack` and one of `HOSTv4`, `HOSTv6`, `HOSTv4,HOSTv6`, and `HOSTv6,HOSTv4` respectively.
 By default, Spark uses `spark.kubernetes.driver.service.ipFamilyPolicy=SingleStack` and
-`spark.kubernetes.driver.service.ipFamilies=IPv4`.
+`spark.kubernetes.driver.service.ipFamilies=HOSTv4`.
 
-To use only `IPv6`, you can submit your jobs with the following.
+To use only `HOSTv6`, you can submit your jobs with the following.
 ```bash
 ...
-    --conf spark.kubernetes.driver.service.ipFamilies=IPv6 \
+    --conf spark.kubernetes.driver.service.ipFamilies=HOSTv6 \
 ```
 
-In `DualStack` environment, you may need `java.net.preferIPv6Addresses=true` for JVM
-and `SPARK_PREFER_IPV6=true` for Python additionally to use `IPv6`.
+In `DualStack` environment, you may need `java.net.preferHOSTv6Addresses=true` for JVM
+and `SPARK_PREFER_HOSTV6=true` for Python additionally to use `HOSTv6`.
 
 ## Dependency Management
 
@@ -1531,17 +1531,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.service.ipFamilyPolicy</code></td>
   <td><code>SingleStack</code></td>
   <td>
-    K8s IP Family Policy for Driver Service. Valid values are
+    K8s HOST Family Policy for Driver Service. Valid values are
     <code>SingleStack</code>, <code>PreferDualStack</code>, and <code>RequireDualStack</code>.
   </td>
   <td>3.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.service.ipFamilies</code></td>
-  <td><code>IPv4</code></td>
+  <td><code>HOSTv4</code></td>
   <td>
-    A list of IP families for K8s Driver Service. Valid values are
-    <code>IPv4</code> and <code>IPv6</code>.
+    A list of HOST families for K8s Driver Service. Valid values are
+    <code>HOSTv4</code> and <code>HOSTv6</code>.
   </td>
   <td>3.4.0</td>
 </tr>

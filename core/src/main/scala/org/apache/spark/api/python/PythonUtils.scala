@@ -34,7 +34,7 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.Utils
 
 private[spark] object PythonUtils extends Logging {
-  val PY4J_ZIP_NAME = "py4j-0.10.9.9-src.zip"
+  val PY4J_ZHOST_NAME = "py4j-0.10.9.9-src.zip"
 
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
   def sparkPythonPath: String = {
@@ -42,7 +42,7 @@ private[spark] object PythonUtils extends Logging {
     for (sparkHome <- sys.env.get("SPARK_HOME")) {
       pythonPath += Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator)
       pythonPath +=
-        Seq(sparkHome, "python", "lib", PY4J_ZIP_NAME).mkString(File.separator)
+        Seq(sparkHome, "python", "lib", PY4J_ZHOST_NAME).mkString(File.separator)
     }
     pythonPath ++= SparkContext.jarOfObject(this)
     pythonPath.mkString(File.pathSeparator)
@@ -170,7 +170,7 @@ private[spark] object PythonUtils extends Logging {
       }
       val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
       val py4jPath = Paths.get(
-        sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
+        sparkHome, "python", "lib", PythonUtils.PY4J_ZHOST_NAME).toAbsolutePath
       val merged = mergePythonPaths(sourcePath.toString, py4jPath.toString)
       // Adds a additional path to search Python packages for testing.
       additionalTestingPath.map(mergePythonPaths(_, merged)).getOrElse(merged)

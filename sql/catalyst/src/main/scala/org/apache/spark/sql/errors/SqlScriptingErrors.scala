@@ -95,11 +95,11 @@ private[sql] object SqlScriptingErrors {
 
   def sqlScriptingNotEnabled(origin: Origin): Throwable = {
     new SqlScriptingException(
-      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING",
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRHOSTTING",
       cause = null,
       origin = origin,
       messageParameters = Map(
-        "sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
+        "sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRHOSTTING_ENABLED.key)))
   }
 
   def booleanStatementWithEmptyRow(
@@ -115,7 +115,7 @@ private[sql] object SqlScriptingErrors {
   def positionalParametersAreNotSupportedWithSqlScripting(): Throwable = {
     new SqlScriptingException(
       origin = null,
-      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS",
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRHOSTTING_WITH_POSITIONAL_PARAMETERS",
       cause = null,
       messageParameters = Map.empty)
   }

@@ -116,7 +116,7 @@ You can optionally configure the cluster further by setting environment variable
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>SPARK_MASTER_HOST</code></td>
-    <td>Bind the master to a specific hostname or IP address, for example a public one.</td>
+    <td>Bind the master to a specific hostname or HOST address, for example a public one.</td>
   </tr>
   <tr>
     <td><code>SPARK_MASTER_PORT</code></td>
@@ -220,9 +220,9 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td><code>LOCAL</code></td>
   <td>
     Specifies the behavior of the Master Web UI's /workers/kill endpoint. Possible choices
-    are: <code>LOCAL</code> means allow this endpoint from IP's that are local to the machine running
+    are: <code>LOCAL</code> means allow this endpoint from HOST's that are local to the machine running
     the Master, <code>DENY</code> means to completely disable this endpoint, <code>ALLOW</code> means to allow
-    calling this endpoint from any IP.
+    calling this endpoint from any HOST.
   </td>
   <td>3.1.0</td>
 </tr>
@@ -547,12 +547,12 @@ Note, the user does not need to specify a discovery script when submitting an ap
 
 # Connecting an Application to the Cluster
 
-To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
+To run an application on the Spark cluster, simply pass the `spark://HOST:PORT` URL of the master as to the [`SparkContext`
 constructor](rdd-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
-    ./bin/spark-shell --master spark://IP:PORT
+    ./bin/spark-shell --master spark://HOST:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
@@ -649,7 +649,7 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 The following is a <code>curl</code> CLI command example with the `pi.py` and REST API.
 
 ```bash
-$ curl -XPOST http://IP:PORT/v1/submissions/create \
+$ curl -XPOST http://HOST:PORT/v1/submissions/create \
 --header "Content-Type:application/json;charset=UTF-8" \
 --data '{
   "appResource": "",
@@ -686,7 +686,7 @@ When Spark master requires HTTP <code>Authorization</code> header via
 configurations, <code>curl</code> CLI command can provide the required header like the following.
 
 ```bash
-$ curl -XPOST http://IP:PORT/v1/submissions/create \
+$ curl -XPOST http://HOST:PORT/v1/submissions/create \
 --header "Authorization: Bearer USER-PROVIDED-WEB-TOEN-SIGNED-BY-THE-SAME-SHARED-KEY"
 ...
 ```
@@ -801,7 +801,7 @@ Possible gotcha: If you have multiple Masters in your cluster but fail to correc
 
 After you have a ZooKeeper cluster set up, enabling high availability is straightforward. Simply start multiple Master processes on different nodes with the same ZooKeeper configuration (ZooKeeper URL and directory). Masters can be added and removed at any time.
 
-In order to schedule new applications or add Workers to the cluster, they need to know the IP address of the current leader. This can be accomplished by simply passing in a list of Masters where you used to pass in a single one. For example, you might start your SparkContext pointing to ``spark://host1:port1,host2:port2``. This would cause your SparkContext to try registering with both Masters -- if ``host1`` goes down, this configuration would still be correct as we'd find the new leader, ``host2``.
+In order to schedule new applications or add Workers to the cluster, they need to know the HOST address of the current leader. This can be accomplished by simply passing in a list of Masters where you used to pass in a single one. For example, you might start your SparkContext pointing to ``spark://host1:port1,host2:port2``. This would cause your SparkContext to try registering with both Masters -- if ``host1`` goes down, this configuration would still be correct as we'd find the new leader, ``host2``.
 
 There's an important distinction to be made between "registering with a Master" and normal operation. When starting up, an application or Worker needs to be able to find and register with the current lead Master. Once it successfully registers, though, it is "in the system" (i.e., stored in ZooKeeper). If failover occurs, the new leader will contact all previously registered applications and Workers to inform them of the change in leadership, so they need not even have known of the existence of the new Master at startup.
 

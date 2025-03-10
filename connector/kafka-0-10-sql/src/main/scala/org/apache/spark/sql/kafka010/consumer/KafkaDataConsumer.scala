@@ -639,7 +639,7 @@ private[kafka010] class KafkaDataConsumer(
       groupId: String): MessageWithContext = {
     log"(GroupId: ${MDC(GROUP_ID, groupId)}, " +
       log"TopicPartition: ${MDC(TOPIC_PARTITION, topicPartition)}). " +
-      log"${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}"
+      log"${MDC(THOST, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}"
   }
 
   /**

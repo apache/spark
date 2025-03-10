@@ -1495,9 +1495,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       "SHOW ROLE GRANT",
       ExpectedContext(fragment = "SHOW ROLE GRANT USER my_principal", start = 0, stop = 32))
     assertUnsupportedFeature(
-      sql("SHOW PRINCIPALS my_role"),
-      "SHOW PRINCIPALS",
-      ExpectedContext(fragment = "SHOW PRINCIPALS my_role", start = 0, stop = 22))
+      sql("SHOW PRINCHOSTALS my_role"),
+      "SHOW PRINCHOSTALS",
+      ExpectedContext(fragment = "SHOW PRINCHOSTALS my_role", start = 0, stop = 22))
     assertUnsupportedFeature(
       sql("SET ROLE my_role"),
       "SET ROLE",

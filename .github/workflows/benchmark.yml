@@ -70,7 +70,7 @@ jobs:
     if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, '*')
     runs-on: ubuntu-latest
     env:
-      SPARK_LOCAL_IP: localhost
+      SPARK_LOCAL_HOST: localhost
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
@@ -134,7 +134,7 @@ jobs:
       SPARK_BENCHMARK_NUM_SPLITS: ${{ inputs.num-splits }}
       SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
       SPARK_GENERATE_BENCHMARK_FILES: 1
-      SPARK_LOCAL_IP: localhost
+      SPARK_LOCAL_HOST: localhost
       # To prevent spark.test.home not being set. See more detail in SPARK-36007.
       SPARK_HOME: ${{ github.workspace }}
       SPARK_TPCDS_DATA: ${{ github.workspace }}/tpcds-sf-1

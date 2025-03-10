@@ -36,7 +36,7 @@ import org.apache.spark.util.logging.RollingFileAppender
 private[ui] class DriverLogPage(
     parent: DriverLogTab,
     conf: SparkConf)
-  extends WebUIPage("") with Logging {
+  extends WebUHOSTage("") with Logging {
   require(conf.get(DRIVER_LOG_LOCAL_DIR).nonEmpty, s"Please specify ${DRIVER_LOG_LOCAL_DIR.key}.")
 
   private val supportedLogTypes = Set(DRIVER_LOG_FILE, "stderr", "stdout")

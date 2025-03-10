@@ -57,7 +57,7 @@ def years(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKHOST
     ...     partitioning.years("ts")
     ... ).createOrReplace()
 
@@ -93,7 +93,7 @@ def months(col: "ColumnOrName") -> Column:
     --------
     >>> df.writeTo("catalog.db.table").partitionedBy(
     ...     partitioning.months("ts")
-    ... ).createOrReplace()  # doctest: +SKIP
+    ... ).createOrReplace()  # doctest: +SKHOST
 
     Notes
     -----
@@ -125,7 +125,7 @@ def days(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKHOST
     ...     partitioning.days("ts")
     ... ).createOrReplace()
 
@@ -159,7 +159,7 @@ def hours(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(   # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(   # doctest: +SKHOST
     ...     partitioning.hours("ts")
     ... ).createOrReplace()
 
@@ -183,7 +183,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKHOST
     ...     partitioning.bucket(42, "ts")
     ... ).createOrReplace()
 
@@ -241,7 +241,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions.partitioning,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

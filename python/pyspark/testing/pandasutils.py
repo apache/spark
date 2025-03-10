@@ -569,13 +569,13 @@ def assert_produces_warning(
     >>> with assert_produces_warning():
     ...     warnings.warn(UserWarning())
     ...
-    >>> with assert_produces_warning(False): # doctest: +SKIP
+    >>> with assert_produces_warning(False): # doctest: +SKHOST
     ...     warnings.warn(RuntimeWarning())
     ...
     Traceback (most recent call last):
         ...
     AssertionError: Caused unexpected warning(s): ['RuntimeWarning'].
-    >>> with assert_produces_warning(UserWarning): # doctest: +SKIP
+    >>> with assert_produces_warning(UserWarning): # doctest: +SKHOST
     ...     warnings.warn(RuntimeWarning())
     Traceback (most recent call last):
         ...

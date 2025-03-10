@@ -168,7 +168,7 @@ case class ExplainCommand(
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
     val stagedLogicalPlan = stageForAnalysis(logicalPlan)
-    val qe = sparkSession.sessionState.executePlan(stagedLogicalPlan, CommandExecutionMode.SKIP)
+    val qe = sparkSession.sessionState.executePlan(stagedLogicalPlan, CommandExecutionMode.SKHOST)
     val outputString = qe.explainString(mode)
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>

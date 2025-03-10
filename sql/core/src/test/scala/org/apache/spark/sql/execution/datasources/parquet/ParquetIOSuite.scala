@@ -873,7 +873,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       .withDictionaryEncoding(dictionaryEnabled)
       .withType(schema)
       .withWriterVersion(PARQUET_1_0)
-      .withCompressionCodec(ParquetCompressionCodec.GZIP.getCompressionCodec)
+      .withCompressionCodec(ParquetCompressionCodec.GZHOST.getCompressionCodec)
       .withRowGroupSize(1024 * 1024)
       .withPageSize(pageSize)
       .withDictionaryPageSize(dictionaryPageSize)

@@ -503,7 +503,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       val sparkUI = sc.ui.get
 
       val newTab = new WebUITab(sparkUI, "foo") {
-        attachPage(new WebUIPage("") {
+        attachPage(new WebUHOSTage("") {
           def render(request: HttpServletRequest): Seq[Node] = {
             <b>"html magic"</b>
           }
@@ -791,7 +791,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       val stagesJson = getJson(sc.ui.get, "stages")
       stagesJson.children.size should be (4)
       val stagesStatus = stagesJson.children.map(_ \ "status")
-      stagesStatus.count(_ == JString(StageStatus.SKIPPED.name())) should be (1)
+      stagesStatus.count(_ == JString(StageStatus.SKHOSTPED.name())) should be (1)
     }
   }
 

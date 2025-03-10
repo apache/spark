@@ -164,7 +164,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[4]").appName("sql.conf tests").getOrCreate()
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.conf, globs=globs, optionflags=doctest.ELLIPSIS
+        pyspark.sql.conf, globs=globs, optionflags=doctest.ELLHOSTSIS
     )
     spark.stop()
     if failure_count:

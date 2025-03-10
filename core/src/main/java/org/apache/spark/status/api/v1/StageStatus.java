@@ -24,7 +24,7 @@ public enum StageStatus {
   COMPLETE,
   FAILED,
   PENDING,
-  SKIPPED;
+  SKHOSTPED;
 
   public static StageStatus fromString(String str) {
     return EnumUtil.parseIgnoreCase(StageStatus.class, str);

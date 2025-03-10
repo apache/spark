@@ -163,7 +163,7 @@ public class ThriftHttpServlet extends TServlet {
       }
 
       clientIpAddress = request.getRemoteAddr();
-      LOG.debug("Client IP Address: " + clientIpAddress);
+      LOG.debug("Client HOST Address: " + clientIpAddress);
       // Set the thread local ip address
       SessionManager.setIpAddress(clientIpAddress);
       // Generate new cookie and add it to the response

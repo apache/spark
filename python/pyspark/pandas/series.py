@@ -1638,7 +1638,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         OrderedDict(...)
 
         >>> dd = defaultdict(list)
-        >>> s.to_dict(dd)  # doctest: +ELLIPSIS
+        >>> s.to_dict(dd)  # doctest: +ELLHOSTSIS
         defaultdict(<class 'list'>, {...})
         """
         # Make sure locals() call is at the top of the function so we don't capture local variables.
@@ -3026,7 +3026,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         >>> s = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
 
-        >>> s.sort_index()  # doctest: +SKIP
+        >>> s.sort_index()  # doctest: +SKHOST
         a       1.0
         b       2.0
         None    NaN
@@ -3038,20 +3038,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    NaN
         dtype: float64
 
-        >>> s.sort_index(ascending=False)  # doctest: +SKIP
+        >>> s.sort_index(ascending=False)  # doctest: +SKHOST
         b       2.0
         a       1.0
         None    NaN
         dtype: float64
 
-        >>> s.sort_index(na_position='first')  # doctest: +SKIP
+        >>> s.sort_index(na_position='first')  # doctest: +SKHOST
         None    NaN
         a       1.0
         b       2.0
         dtype: float64
 
         >>> s.sort_index(inplace=True)
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         a       1.0
         b       2.0
         None    NaN
@@ -3068,7 +3068,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
            1    0
         Name: 0, dtype: int64
 
-        >>> s.sort_index(level=1)  # doctest: +SKIP
+        >>> s.sort_index(level=1)  # doctest: +SKHOST
         a  0    3
         b  0    1
         a  1    2
@@ -3117,7 +3117,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> midx = pd.MultiIndex.from_arrays([['a', 'b'], [1, 2]], names = ['word', 'number'])
-        >>> midx  # doctest: +SKIP
+        >>> midx  # doctest: +SKHOST
         MultiIndex([('a', 1),
                     ('b', 2)],
                    names=['word', 'number'])
@@ -3339,17 +3339,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> s = ps.Series([.2, .0, .6, .2, np.nan, .5, .6])
-        >>> s.autocorr()  # doctest: +ELLIPSIS
+        >>> s.autocorr()  # doctest: +ELLHOSTSIS
         -0.141219...
-        >>> s.autocorr(0)  # doctest: +ELLIPSIS
+        >>> s.autocorr(0)  # doctest: +ELLHOSTSIS
         1.0...
-        >>> s.autocorr(2)  # doctest: +ELLIPSIS
+        >>> s.autocorr(2)  # doctest: +ELLHOSTSIS
         0.970725...
-        >>> s.autocorr(-3)  # doctest: +ELLIPSIS
+        >>> s.autocorr(-3)  # doctest: +ELLHOSTSIS
         0.277350...
-        >>> s.autocorr(5)  # doctest: +ELLIPSIS
+        >>> s.autocorr(5)  # doctest: +ELLHOSTSIS
         -1.000000...
-        >>> s.autocorr(6)  # doctest: +ELLIPSIS
+        >>> s.autocorr(6)  # doctest: +ELLHOSTSIS
         nan
 
         If the Pearson correlation is not well defined, then 'NaN' is returned.
@@ -4841,7 +4841,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
         >>> psser = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
 
-        >>> psser.keys()  # doctest: +SKIP
+        >>> psser.keys()  # doctest: +SKHOST
         MultiIndex([(  'lama',  'speed'),
                     (  'lama', 'weight'),
                     (  'lama', 'length'),
@@ -5607,14 +5607,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             >>> pdf1 = pd.Series([1, 2, 3], index=[0, 1, 2])
             >>> pdf2 = pd.Series([1, 2, 3], index=[0, 1, 3])
-            >>> pdf1.dot(pdf2)  # doctest: +SKIP
+            >>> pdf1.dot(pdf2)  # doctest: +SKHOST
             ...
             ValueError: matrices are not aligned
 
             >>> psdf1 = ps.Series([1, 2, 3], index=[0, 1, 2])
             >>> psdf2 = ps.Series([1, 2, 3], index=[0, 1, 3])
             >>> with ps.option_context("compute.eager_check", False):
-            ...     psdf1.dot(psdf2)  # doctest: +SKIP
+            ...     psdf1.dot(psdf2)  # doctest: +SKHOST
             ...
             5
 
@@ -6141,7 +6141,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4    5
         dtype: int64
 
-        >>> psser.tail(3)  # doctest: +SKIP
+        >>> psser.tail(3)  # doctest: +SKHOST
         2    3
         3    4
         4    5
@@ -6176,7 +6176,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2       [3, 4]
         dtype: object
 
-        >>> psser.explode()  # doctest: +SKIP
+        >>> psser.explode()  # doctest: +SKHOST
         0    1.0
         0    2.0
         0    3.0
@@ -6405,14 +6405,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> s = ps.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0,
         ...                'Cinnamon Toast Crunch': 120.0, 'Cocoa Puff': 110.0})
-        >>> s  # doctest: +SKIP
+        >>> s  # doctest: +SKHOST
         Corn Flakes              100.0
         Almond Delight           110.0
         Cinnamon Toast Crunch    120.0
         Cocoa Puff               110.0
         dtype: float64
 
-        >>> s.argmin()  # doctest: +SKIP
+        >>> s.argmin()  # doctest: +SKHOST
         0
         """
         axis = validate_axis(axis, none_axis=0)
@@ -6461,12 +6461,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             >>> psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]))
             >>> psser2 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 4, 3, 6]))
-            >>> psser1.compare(psser2)  # doctest: +SKIP
+            >>> psser1.compare(psser2)  # doctest: +SKHOST
             ...
             ValueError: Can only compare identically-labeled Series objects
 
             >>> with ps.option_context("compute.eager_check", False):
-            ...     psser1.compare(psser2)  # doctest: +SKIP
+            ...     psser1.compare(psser2)  # doctest: +SKHOST
             ...
                self  other
             3   3.0    4.0
@@ -6820,7 +6820,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2018-04-12 01:00:00    4
         dtype: int64
 
-        >>> psser.between_time('0:15', '0:45')  # doctest: +SKIP
+        >>> psser.between_time('0:15', '0:45')  # doctest: +SKHOST
         2018-04-10 00:20:00    2
         2018-04-11 00:40:00    3
         dtype: int64
@@ -7347,7 +7347,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.series,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZHOST
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -92,14 +92,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
   private def saveAsCsvTable(df: DataFrameWriter[Row], dir: String): Unit = {
     df.mode("overwrite")
-      .option("compression", GZIP.lowerCaseName())
+      .option("compression", GZHOST.lowerCaseName())
       .option("header", true)
       .csv(dir)
     spark.read.option("header", true).csv(dir).createOrReplaceTempView("csvTable")
   }
 
   private def saveAsJsonTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", GZIP.lowerCaseName()).json(dir)
+    df.mode("overwrite").option("compression", GZHOST.lowerCaseName()).json(dir)
     spark.read.json(dir).createOrReplaceTempView("jsonTable")
   }
 

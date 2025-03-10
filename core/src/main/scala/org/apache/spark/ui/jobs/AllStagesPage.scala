@@ -24,10 +24,10 @@ import jakarta.servlet.http.HttpServletRequest
 import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.{AppSummary, PoolData}
 import org.apache.spark.status.api.v1.{StageData, StageStatus}
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
-private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
+private[ui] class AllStagesPage(parent: StagesTab) extends WebUHOSTage("") {
   private val sc = parent.sc
   private val subPath = "stages"
 
@@ -41,7 +41,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     val poolTable = new PoolTable(pools, parent)
 
     val allStatuses = Seq(StageStatus.ACTIVE, StageStatus.PENDING, StageStatus.COMPLETE,
-      StageStatus.SKIPPED, StageStatus.FAILED)
+      StageStatus.SKHOSTPED, StageStatus.FAILED)
 
     val allStages = parent.store.stageList(null)
     val appSummary = parent.store.appSummary()
@@ -107,7 +107,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     case StageStatus.COMPLETE => "completed"
     case StageStatus.FAILED => "failed"
     case StageStatus.PENDING => "pending"
-    case StageStatus.SKIPPED => "skipped"
+    case StageStatus.SKHOSTPED => "skipped"
   }
 
   private def stageTag(status: StageStatus): String = s"${statusName(status)}Stage"

@@ -31,7 +31,7 @@ import org.apache.spark.ui.UIUtils._
 import org.apache.spark.util.Utils
 
 /** Page for Spark Web UI that shows statistics of the thrift server */
-private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
+private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUHOSTage("") with Logging {
   private val store = parent.store
   private val startTime = parent.startTime
 
@@ -321,7 +321,7 @@ private[ui] class SessionStatsPagedTable(
     val sessionTableHeadersAndTooltips: Seq[(String, Boolean, Option[String])] =
       Seq(
         ("User", true, None),
-        ("IP", true, None),
+        ("HOST", true, None),
         ("Session ID", true, None),
         ("Start Time", true, None),
         ("Finish Time", true, None),
@@ -425,7 +425,7 @@ private[ui] class SessionStatsTableDataSource(
   private def ordering(sortColumn: String, desc: Boolean): Ordering[SessionInfo] = {
     val ordering: Ordering[SessionInfo] = sortColumn match {
       case "User" => Ordering.by(_.userName)
-      case "IP" => Ordering.by(_.ip)
+      case "HOST" => Ordering.by(_.ip)
       case "Session ID" => Ordering.by(_.sessionId)
       case "Start Time" => Ordering by (_.startTimestamp)
       case "Finish Time" => Ordering.by(_.finishTimestamp)

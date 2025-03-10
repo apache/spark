@@ -54,7 +54,7 @@ if sys.version_info >= (3, 10):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the
@@ -63,7 +63,7 @@ class Plan(google.protobuf.message.Message):
     commands on the server.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ROOT_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
@@ -100,7 +100,7 @@ class UserContext(google.protobuf.message.Message):
     queries in the backend.
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     USER_ID_FIELD_NUMBER: builtins.int
     USER_NAME_FIELD_NUMBER: builtins.int
@@ -137,10 +137,10 @@ global___UserContext = UserContext
 class AnalyzePlanRequest(google.protobuf.message.Message):
     """Request to perform plan analyze, optionally to explain the plan."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Schema(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
         @property
@@ -159,7 +159,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     class Explain(google.protobuf.message.Message):
         """Explains the input plan based on a configurable mode."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class _ExplainMode:
             ValueType = typing.NewType("ValueType", builtins.int)
@@ -171,7 +171,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             ],
             builtins.type,
         ):  # noqa: F821
-            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
             EXPLAIN_MODE_UNSPECIFIED: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 0
             EXPLAIN_MODE_SIMPLE: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 1
             """Generates only physical plan."""
@@ -231,7 +231,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> None: ...
 
     class TreeString(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
         LEVEL_FIELD_NUMBER: builtins.int
@@ -263,7 +263,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["level"] | None: ...
 
     class IsLocal(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
         @property
@@ -280,7 +280,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
     class IsStreaming(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
         @property
@@ -297,7 +297,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
     class InputFiles(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
         @property
@@ -314,14 +314,14 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
     class SparkVersion(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         def __init__(
             self,
         ) -> None: ...
 
     class DDLParse(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         DDL_STRING_FIELD_NUMBER: builtins.int
         ddl_string: builtins.str
@@ -338,7 +338,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     class SameSemantics(google.protobuf.message.Message):
         """Returns `true` when the logical query plans  are equal and therefore return same results."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         TARGET_PLAN_FIELD_NUMBER: builtins.int
         OTHER_PLAN_FIELD_NUMBER: builtins.int
@@ -368,7 +368,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> None: ...
 
     class SemanticHash(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
         @property
@@ -385,7 +385,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
     class Persist(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RELATION_FIELD_NUMBER: builtins.int
         STORAGE_LEVEL_FIELD_NUMBER: builtins.int
@@ -428,7 +428,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["storage_level"] | None: ...
 
     class Unpersist(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RELATION_FIELD_NUMBER: builtins.int
         BLOCKING_FIELD_NUMBER: builtins.int
@@ -460,7 +460,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["blocking"] | None: ...
 
     class GetStorageLevel(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RELATION_FIELD_NUMBER: builtins.int
         @property
@@ -479,7 +479,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> None: ...
 
     class JsonToDDL(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         JSON_STRING_FIELD_NUMBER: builtins.int
         json_string: builtins.str
@@ -717,10 +717,10 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     Next ID: 16
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Schema(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         SCHEMA_FIELD_NUMBER: builtins.int
         @property
@@ -738,7 +738,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class Explain(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         EXPLAIN_STRING_FIELD_NUMBER: builtins.int
         explain_string: builtins.str
@@ -752,7 +752,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class TreeString(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         TREE_STRING_FIELD_NUMBER: builtins.int
         tree_string: builtins.str
@@ -766,7 +766,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class IsLocal(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         IS_LOCAL_FIELD_NUMBER: builtins.int
         is_local: builtins.bool
@@ -780,7 +780,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class IsStreaming(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         IS_STREAMING_FIELD_NUMBER: builtins.int
         is_streaming: builtins.bool
@@ -794,7 +794,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class InputFiles(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         FILES_FIELD_NUMBER: builtins.int
         @property
@@ -810,7 +810,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["files", b"files"]) -> None: ...
 
     class SparkVersion(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         VERSION_FIELD_NUMBER: builtins.int
         version: builtins.str
@@ -824,7 +824,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class DDLParse(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PARSED_FIELD_NUMBER: builtins.int
         @property
@@ -842,7 +842,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class SameSemantics(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RESULT_FIELD_NUMBER: builtins.int
         result: builtins.bool
@@ -856,7 +856,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class SemanticHash(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RESULT_FIELD_NUMBER: builtins.int
         result: builtins.int
@@ -870,21 +870,21 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class Persist(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         def __init__(
             self,
         ) -> None: ...
 
     class Unpersist(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         def __init__(
             self,
         ) -> None: ...
 
     class GetStorageLevel(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         STORAGE_LEVEL_FIELD_NUMBER: builtins.int
         @property
@@ -903,7 +903,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class JsonToDDL(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         DDL_STRING_FIELD_NUMBER: builtins.int
         ddl_string: builtins.str
@@ -1086,10 +1086,10 @@ global___AnalyzePlanResponse = AnalyzePlanResponse
 class ExecutePlanRequest(google.protobuf.message.Message):
     """A request to be executed by the service."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class RequestOption(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         REATTACH_OPTIONS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
@@ -1275,14 +1275,14 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     Next ID: 17
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class SqlCommandResult(google.protobuf.message.Message):
         """A SQL command returns an opaque Relation that can be directly used as input for the next
         call.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RELATION_FIELD_NUMBER: builtins.int
         @property
@@ -1302,7 +1302,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     class ArrowBatch(google.protobuf.message.Message):
         """Batch results of metrics."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
@@ -1344,13 +1344,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["start_offset"] | None: ...
 
     class Metrics(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class MetricObject(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             class ExecutionMetricsEntry(google.protobuf.message.Message):
-                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+                DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
                 KEY_FIELD_NUMBER: builtins.int
                 VALUE_FIELD_NUMBER: builtins.int
@@ -1409,7 +1409,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             ) -> None: ...
 
         class MetricValue(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             NAME_FIELD_NUMBER: builtins.int
             VALUE_FIELD_NUMBER: builtins.int
@@ -1449,7 +1449,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class ObservedMetrics(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         NAME_FIELD_NUMBER: builtins.int
         VALUES_FIELD_NUMBER: builtins.int
@@ -1491,7 +1491,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         it means that there is more, and the client should use ReattachExecute RPC to continue.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         def __init__(
             self,
@@ -1500,10 +1500,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     class ExecutionProgress(google.protobuf.message.Message):
         """This message is used to communicate progress about the query progress during the execution."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class StageInfo(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             STAGE_ID_FIELD_NUMBER: builtins.int
             NUM_TASKS_FIELD_NUMBER: builtins.int
@@ -1808,7 +1808,7 @@ global___ExecutePlanResponse = ExecutePlanResponse
 class KeyValue(google.protobuf.message.Message):
     """The key-value pair for the config request and response."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     KEY_FIELD_NUMBER: builtins.int
     VALUE_FIELD_NUMBER: builtins.int
@@ -1840,10 +1840,10 @@ global___KeyValue = KeyValue
 class ConfigRequest(google.protobuf.message.Message):
     """Request to update or fetch the configurations."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class Operation(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         SET_FIELD_NUMBER: builtins.int
         GET_FIELD_NUMBER: builtins.int
@@ -1929,7 +1929,7 @@ class ConfigRequest(google.protobuf.message.Message):
         ): ...
 
     class Set(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PAIRS_FIELD_NUMBER: builtins.int
         SILENT_FIELD_NUMBER: builtins.int
@@ -1960,7 +1960,7 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["silent"] | None: ...
 
     class Get(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEYS_FIELD_NUMBER: builtins.int
         @property
@@ -1976,7 +1976,7 @@ class ConfigRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
     class GetWithDefault(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PAIRS_FIELD_NUMBER: builtins.int
         @property
@@ -1992,7 +1992,7 @@ class ConfigRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
 
     class GetOption(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEYS_FIELD_NUMBER: builtins.int
         @property
@@ -2008,7 +2008,7 @@ class ConfigRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
     class GetAll(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         PREFIX_FIELD_NUMBER: builtins.int
         prefix: builtins.str
@@ -2029,7 +2029,7 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["prefix"] | None: ...
 
     class Unset(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEYS_FIELD_NUMBER: builtins.int
         @property
@@ -2045,7 +2045,7 @@ class ConfigRequest(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
     class IsModifiable(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEYS_FIELD_NUMBER: builtins.int
         @property
@@ -2154,7 +2154,7 @@ class ConfigResponse(google.protobuf.message.Message):
     Next ID: 5
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -2209,12 +2209,12 @@ global___ConfigResponse = ConfigResponse
 class AddArtifactsRequest(google.protobuf.message.Message):
     """Request to transfer client-local artifacts."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ArtifactChunk(google.protobuf.message.Message):
         """A chunk of an Artifact."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         DATA_FIELD_NUMBER: builtins.int
         CRC_FIELD_NUMBER: builtins.int
@@ -2237,7 +2237,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         Generally, this message represents tiny artifacts such as REPL-generated class files.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         NAME_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
@@ -2268,7 +2268,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     class Batch(google.protobuf.message.Message):
         """A number of `SingleChunkArtifact` batched into a single RPC."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         ARTIFACTS_FIELD_NUMBER: builtins.int
         @property
@@ -2293,7 +2293,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         sequence of `ArtifactChunk`s.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         NAME_FIELD_NUMBER: builtins.int
         TOTAL_BYTES_FIELD_NUMBER: builtins.int
@@ -2462,12 +2462,12 @@ class AddArtifactsResponse(google.protobuf.message.Message):
     Next ID: 4
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ArtifactSummary(google.protobuf.message.Message):
         """Metadata of an artifact."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         NAME_FIELD_NUMBER: builtins.int
         IS_CRC_SUCCESSFUL_FIELD_NUMBER: builtins.int
@@ -2531,7 +2531,7 @@ global___AddArtifactsResponse = AddArtifactsResponse
 class ArtifactStatusesRequest(google.protobuf.message.Message):
     """Request to get current statuses of artifacts at the server side."""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -2633,10 +2633,10 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
     Next ID: 4
     """
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class StatusesEntry(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
@@ -2657,7 +2657,7 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     class ArtifactStatus(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         EXISTS_FIELD_NUMBER: builtins.int
         exists: builtins.bool
@@ -2712,7 +2712,7 @@ class ArtifactStatusesResponse(google.protobuf.message.Message):
 global___ArtifactStatusesResponse = ArtifactStatusesResponse
 
 class InterruptRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class _InterruptType:
         ValueType = typing.NewType("ValueType", builtins.int)
@@ -2724,7 +2724,7 @@ class InterruptRequest(google.protobuf.message.Message):
         ],
         builtins.type,
     ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
         INTERRUPT_TYPE_UNSPECIFIED: InterruptRequest._InterruptType.ValueType  # 0
         INTERRUPT_TYPE_ALL: InterruptRequest._InterruptType.ValueType  # 1
         """Interrupt all running executions within the session with the provided session_id."""
@@ -2855,7 +2855,7 @@ global___InterruptRequest = InterruptRequest
 class InterruptResponse(google.protobuf.message.Message):
     """Next ID: 4"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -2893,7 +2893,7 @@ class InterruptResponse(google.protobuf.message.Message):
 global___InterruptResponse = InterruptResponse
 
 class ReattachOptions(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     REATTACHABLE_FIELD_NUMBER: builtins.int
     reattachable: builtins.bool
@@ -2918,7 +2918,7 @@ class ReattachOptions(google.protobuf.message.Message):
 global___ReattachOptions = ReattachOptions
 
 class ReattachExecuteRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -3036,14 +3036,14 @@ class ReattachExecuteRequest(google.protobuf.message.Message):
 global___ReattachExecuteRequest = ReattachExecuteRequest
 
 class ReleaseExecuteRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class ReleaseAll(google.protobuf.message.Message):
         """Release and close operation completely.
         This will also interrupt the query if it is running execution, and wait for it to be torn down.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         def __init__(
             self,
@@ -3057,7 +3057,7 @@ class ReleaseExecuteRequest(google.protobuf.message.Message):
         Noop if response_id not found in cached responses.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         RESPONSE_ID_FIELD_NUMBER: builtins.int
         response_id: builtins.str
@@ -3188,7 +3188,7 @@ global___ReleaseExecuteRequest = ReleaseExecuteRequest
 class ReleaseExecuteResponse(google.protobuf.message.Message):
     """Next ID: 4"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -3237,7 +3237,7 @@ class ReleaseExecuteResponse(google.protobuf.message.Message):
 global___ReleaseExecuteResponse = ReleaseExecuteResponse
 
 class ReleaseSessionRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
@@ -3318,7 +3318,7 @@ global___ReleaseSessionRequest = ReleaseSessionRequest
 class ReleaseSessionResponse(google.protobuf.message.Message):
     """Next ID: 3"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -3344,7 +3344,7 @@ class ReleaseSessionResponse(google.protobuf.message.Message):
 global___ReleaseSessionResponse = ReleaseSessionResponse
 
 class FetchErrorDetailsRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -3434,10 +3434,10 @@ global___FetchErrorDetailsRequest = FetchErrorDetailsRequest
 class FetchErrorDetailsResponse(google.protobuf.message.Message):
     """Next ID: 5"""
 
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     class StackTraceElement(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         DECLARING_CLASS_FIELD_NUMBER: builtins.int
         METHOD_NAME_FIELD_NUMBER: builtins.int
@@ -3489,7 +3489,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         It helps users understand where the error occurs while executing queries.
         """
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class _ContextType:
             ValueType = typing.NewType("ValueType", builtins.int)
@@ -3501,7 +3501,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             ],
             builtins.type,
         ):  # noqa: F821
-            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
             SQL: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 0
             DATAFRAME: FetchErrorDetailsResponse.QueryContext._ContextType.ValueType  # 1
 
@@ -3577,10 +3577,10 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     class SparkThrowable(google.protobuf.message.Message):
         """SparkThrowable defines the schema for SparkThrowable exceptions."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         class MessageParametersEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+            DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
             KEY_FIELD_NUMBER: builtins.int
             VALUE_FIELD_NUMBER: builtins.int
@@ -3671,7 +3671,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""
 
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
         ERROR_TYPE_HIERARCHY_FIELD_NUMBER: builtins.int
         MESSAGE_FIELD_NUMBER: builtins.int
@@ -3806,7 +3806,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
 global___FetchErrorDetailsResponse = FetchErrorDetailsResponse
 
 class CheckpointCommandResult(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     RELATION_FIELD_NUMBER: builtins.int
     @property

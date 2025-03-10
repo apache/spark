@@ -124,7 +124,7 @@ jobs:
       INCLUDED_TAGS: ${{ matrix.included-tags }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
-      SPARK_LOCAL_IP: localhost
+      SPARK_LOCAL_HOST: localhost
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
       - name: Checkout Spark repository

@@ -45,7 +45,7 @@ if sys.version_info >= (3, 10):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class _HandleState:
     ValueType = typing.NewType("ValueType", builtins.int)
@@ -55,7 +55,7 @@ class _HandleStateEnumTypeWrapper(
     google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_HandleState.ValueType],
     builtins.type,
 ):  # noqa: F821
-    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.EnumDescriptor
     PRE_INIT: _HandleState.ValueType  # 0
     CREATED: _HandleState.ValueType  # 1
     INITIALIZED: _HandleState.ValueType  # 2
@@ -74,7 +74,7 @@ CLOSED: HandleState.ValueType  # 5
 global___HandleState = HandleState
 
 class StateRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VERSION_FIELD_NUMBER: builtins.int
     STATEFULPROCESSORCALL_FIELD_NUMBER: builtins.int
@@ -155,7 +155,7 @@ class StateRequest(google.protobuf.message.Message):
 global___StateRequest = StateRequest
 
 class StateResponse(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATUSCODE_FIELD_NUMBER: builtins.int
     ERRORMESSAGE_FIELD_NUMBER: builtins.int
@@ -180,7 +180,7 @@ class StateResponse(google.protobuf.message.Message):
 global___StateResponse = StateResponse
 
 class StateResponseWithLongTypeVal(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATUSCODE_FIELD_NUMBER: builtins.int
     ERRORMESSAGE_FIELD_NUMBER: builtins.int
@@ -205,7 +205,7 @@ class StateResponseWithLongTypeVal(google.protobuf.message.Message):
 global___StateResponseWithLongTypeVal = StateResponseWithLongTypeVal
 
 class StateResponseWithStringTypeVal(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATUSCODE_FIELD_NUMBER: builtins.int
     ERRORMESSAGE_FIELD_NUMBER: builtins.int
@@ -230,7 +230,7 @@ class StateResponseWithStringTypeVal(google.protobuf.message.Message):
 global___StateResponseWithStringTypeVal = StateResponseWithStringTypeVal
 
 class StatefulProcessorCall(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SETHANDLESTATE_FIELD_NUMBER: builtins.int
     GETVALUESTATE_FIELD_NUMBER: builtins.int
@@ -315,7 +315,7 @@ class StatefulProcessorCall(google.protobuf.message.Message):
 global___StatefulProcessorCall = StatefulProcessorCall
 
 class StateVariableRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUESTATECALL_FIELD_NUMBER: builtins.int
     LISTSTATECALL_FIELD_NUMBER: builtins.int
@@ -366,7 +366,7 @@ class StateVariableRequest(google.protobuf.message.Message):
 global___StateVariableRequest = StateVariableRequest
 
 class ImplicitGroupingKeyRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SETIMPLICITKEY_FIELD_NUMBER: builtins.int
     REMOVEIMPLICITKEY_FIELD_NUMBER: builtins.int
@@ -409,7 +409,7 @@ class ImplicitGroupingKeyRequest(google.protobuf.message.Message):
 global___ImplicitGroupingKeyRequest = ImplicitGroupingKeyRequest
 
 class TimerRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     TIMERVALUEREQUEST_FIELD_NUMBER: builtins.int
     EXPIRYTIMERREQUEST_FIELD_NUMBER: builtins.int
@@ -452,7 +452,7 @@ class TimerRequest(google.protobuf.message.Message):
 global___TimerRequest = TimerRequest
 
 class TimerValueRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     GETPROCESSINGTIMER_FIELD_NUMBER: builtins.int
     GETWATERMARK_FIELD_NUMBER: builtins.int
@@ -495,7 +495,7 @@ class TimerValueRequest(google.protobuf.message.Message):
 global___TimerValueRequest = TimerValueRequest
 
 class ExpiryTimerRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     EXPIRYTIMESTAMPMS_FIELD_NUMBER: builtins.int
     expiryTimestampMs: builtins.int
@@ -511,7 +511,7 @@ class ExpiryTimerRequest(google.protobuf.message.Message):
 global___ExpiryTimerRequest = ExpiryTimerRequest
 
 class GetProcessingTime(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -520,7 +520,7 @@ class GetProcessingTime(google.protobuf.message.Message):
 global___GetProcessingTime = GetProcessingTime
 
 class GetWatermark(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -529,7 +529,7 @@ class GetWatermark(google.protobuf.message.Message):
 global___GetWatermark = GetWatermark
 
 class UtilsRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     PARSESTRINGSCHEMA_FIELD_NUMBER: builtins.int
     @property
@@ -558,7 +558,7 @@ class UtilsRequest(google.protobuf.message.Message):
 global___UtilsRequest = UtilsRequest
 
 class ParseStringSchema(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     SCHEMA_FIELD_NUMBER: builtins.int
     schema: builtins.str
@@ -572,7 +572,7 @@ class ParseStringSchema(google.protobuf.message.Message):
 global___ParseStringSchema = ParseStringSchema
 
 class StateCallCommand(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATENAME_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -609,7 +609,7 @@ class StateCallCommand(google.protobuf.message.Message):
 global___StateCallCommand = StateCallCommand
 
 class TimerStateCallCommand(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     REGISTER_FIELD_NUMBER: builtins.int
     DELETE_FIELD_NUMBER: builtins.int
@@ -646,7 +646,7 @@ class TimerStateCallCommand(google.protobuf.message.Message):
 global___TimerStateCallCommand = TimerStateCallCommand
 
 class ValueStateCall(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATENAME_FIELD_NUMBER: builtins.int
     EXISTS_FIELD_NUMBER: builtins.int
@@ -710,7 +710,7 @@ class ValueStateCall(google.protobuf.message.Message):
 global___ValueStateCall = ValueStateCall
 
 class ListStateCall(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATENAME_FIELD_NUMBER: builtins.int
     EXISTS_FIELD_NUMBER: builtins.int
@@ -795,7 +795,7 @@ class ListStateCall(google.protobuf.message.Message):
 global___ListStateCall = ListStateCall
 
 class MapStateCall(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATENAME_FIELD_NUMBER: builtins.int
     EXISTS_FIELD_NUMBER: builtins.int
@@ -912,7 +912,7 @@ class MapStateCall(google.protobuf.message.Message):
 global___MapStateCall = MapStateCall
 
 class SetImplicitKey(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     KEY_FIELD_NUMBER: builtins.int
     key: builtins.bytes
@@ -926,7 +926,7 @@ class SetImplicitKey(google.protobuf.message.Message):
 global___SetImplicitKey = SetImplicitKey
 
 class RemoveImplicitKey(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -935,7 +935,7 @@ class RemoveImplicitKey(google.protobuf.message.Message):
 global___RemoveImplicitKey = RemoveImplicitKey
 
 class Exists(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -944,7 +944,7 @@ class Exists(google.protobuf.message.Message):
 global___Exists = Exists
 
 class Get(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -953,7 +953,7 @@ class Get(google.protobuf.message.Message):
 global___Get = Get
 
 class RegisterTimer(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     EXPIRYTIMESTAMPMS_FIELD_NUMBER: builtins.int
     expiryTimestampMs: builtins.int
@@ -969,7 +969,7 @@ class RegisterTimer(google.protobuf.message.Message):
 global___RegisterTimer = RegisterTimer
 
 class DeleteTimer(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     EXPIRYTIMESTAMPMS_FIELD_NUMBER: builtins.int
     expiryTimestampMs: builtins.int
@@ -985,7 +985,7 @@ class DeleteTimer(google.protobuf.message.Message):
 global___DeleteTimer = DeleteTimer
 
 class ListTimers(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ITERATORID_FIELD_NUMBER: builtins.int
     iteratorId: builtins.str
@@ -1001,7 +1001,7 @@ class ListTimers(google.protobuf.message.Message):
 global___ListTimers = ListTimers
 
 class ValueStateUpdate(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUE_FIELD_NUMBER: builtins.int
     value: builtins.bytes
@@ -1015,7 +1015,7 @@ class ValueStateUpdate(google.protobuf.message.Message):
 global___ValueStateUpdate = ValueStateUpdate
 
 class Clear(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -1024,7 +1024,7 @@ class Clear(google.protobuf.message.Message):
 global___Clear = Clear
 
 class ListStateGet(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ITERATORID_FIELD_NUMBER: builtins.int
     iteratorId: builtins.str
@@ -1040,7 +1040,7 @@ class ListStateGet(google.protobuf.message.Message):
 global___ListStateGet = ListStateGet
 
 class ListStatePut(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -1049,7 +1049,7 @@ class ListStatePut(google.protobuf.message.Message):
 global___ListStatePut = ListStatePut
 
 class AppendValue(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     VALUE_FIELD_NUMBER: builtins.int
     value: builtins.bytes
@@ -1063,7 +1063,7 @@ class AppendValue(google.protobuf.message.Message):
 global___AppendValue = AppendValue
 
 class AppendList(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
@@ -1072,7 +1072,7 @@ class AppendList(google.protobuf.message.Message):
 global___AppendList = AppendList
 
 class GetValue(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     USERKEY_FIELD_NUMBER: builtins.int
     userKey: builtins.bytes
@@ -1086,7 +1086,7 @@ class GetValue(google.protobuf.message.Message):
 global___GetValue = GetValue
 
 class ContainsKey(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     USERKEY_FIELD_NUMBER: builtins.int
     userKey: builtins.bytes
@@ -1100,7 +1100,7 @@ class ContainsKey(google.protobuf.message.Message):
 global___ContainsKey = ContainsKey
 
 class UpdateValue(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     USERKEY_FIELD_NUMBER: builtins.int
     VALUE_FIELD_NUMBER: builtins.int
@@ -1119,7 +1119,7 @@ class UpdateValue(google.protobuf.message.Message):
 global___UpdateValue = UpdateValue
 
 class Iterator(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ITERATORID_FIELD_NUMBER: builtins.int
     iteratorId: builtins.str
@@ -1135,7 +1135,7 @@ class Iterator(google.protobuf.message.Message):
 global___Iterator = Iterator
 
 class Keys(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ITERATORID_FIELD_NUMBER: builtins.int
     iteratorId: builtins.str
@@ -1151,7 +1151,7 @@ class Keys(google.protobuf.message.Message):
 global___Keys = Keys
 
 class Values(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     ITERATORID_FIELD_NUMBER: builtins.int
     iteratorId: builtins.str
@@ -1167,7 +1167,7 @@ class Values(google.protobuf.message.Message):
 global___Values = Values
 
 class RemoveKey(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     USERKEY_FIELD_NUMBER: builtins.int
     userKey: builtins.bytes
@@ -1181,7 +1181,7 @@ class RemoveKey(google.protobuf.message.Message):
 global___RemoveKey = RemoveKey
 
 class SetHandleState(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     STATE_FIELD_NUMBER: builtins.int
     state: global___HandleState.ValueType
@@ -1195,7 +1195,7 @@ class SetHandleState(google.protobuf.message.Message):
 global___SetHandleState = SetHandleState
 
 class TTLConfig(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     DURATIONMS_FIELD_NUMBER: builtins.int
     durationMs: builtins.int

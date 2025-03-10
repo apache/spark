@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CountDownLatch
-import java.util.zip.GZIPInputStream
+import java.util.zip.GZHOSTInputStream
 
 import scala.collection.mutable.HashSet
 import scala.reflect._
@@ -381,11 +381,11 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
     assert(generatedFiles.size > 1)
     if (isCompressed) {
       assert(
-        generatedFiles.exists(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)))
+        generatedFiles.exists(_.getName.endsWith(RollingFileAppender.GZHOST_LOG_SUFFIX)))
     }
     val allText = generatedFiles.map { file =>
-      if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
-        val inputStream = new GZIPInputStream(new FileInputStream(file))
+      if (file.getName.endsWith(RollingFileAppender.GZHOST_LOG_SUFFIX)) {
+        val inputStream = new GZHOSTInputStream(new FileInputStream(file))
         try {
           IOUtils.toString(inputStream, StandardCharsets.UTF_8)
         } finally {

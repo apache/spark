@@ -279,7 +279,7 @@ class InternalFrame:
     * `to_pandas_frame` represents pandas DataFrame derived by the metadata
 
     >>> internal = psdf._internal
-    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
+    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLHOSTSIS
     +-----------------+---+---+---+---+---+-----------------+
     |__index_level_0__|  A|  B|  C|  D|  E|__natural_order__|
     +-----------------+---+---+---+---+---+-----------------+
@@ -342,7 +342,7 @@ class InternalFrame:
     +---+---+---+---+---+
 
     >>> internal = psdf1._internal
-    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
+    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLHOSTSIS
     +-----------------+---+---+---+---+---+-----------------+
     |__index_level_0__|  A|  B|  C|  D|  E|__natural_order__|
     +-----------------+---+---+---+---+---+-----------------+
@@ -405,7 +405,7 @@ class InternalFrame:
     +-----------------+---+---+---+---+---+
 
     >>> internal = psdf2._internal
-    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
+    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLHOSTSIS
     +-----------------+---+---+---+---+---+-----------------+
     |__index_level_0__|  A|  B|  C|  D|  E|__natural_order__|
     +-----------------+---+---+---+---+---+-----------------+
@@ -467,7 +467,7 @@ class InternalFrame:
     4  17  18  19  20
 
     >>> internal = psdf3._internal
-    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
+    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLHOSTSIS
     +-----------------+------+------+------+------+-----------------+
     |__index_level_0__|(X, A)|(X, B)|(Y, C)|(Y, D)|__natural_order__|
     +-----------------+------+------+------+------+-----------------+
@@ -494,7 +494,7 @@ class InternalFrame:
     Name: B, dtype: int64
 
     >>> internal = psseries._internal
-    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
+    >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLHOSTSIS
     +-----------------+---+---+---+---+---+-----------------+
     |__index_level_0__|  A|  B|  C|  D|  E|__natural_order__|
     +-----------------+---+---+---+---+---+-----------------+
@@ -584,7 +584,7 @@ class InternalFrame:
 
         >>> internal = psdf._internal
 
-        >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
+        >>> internal.spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE +ELLHOSTSIS
         +-----------------+-----------------+------+------+------+...
         |__index_level_0__|__index_level_1__|(a, x)|(a, y)|(b, z)|...
         +-----------------+-----------------+------+------+------+...
@@ -593,7 +593,7 @@ class InternalFrame:
         |              zoo|              bar|     7|     8|     9|...
         +-----------------+-----------------+------+------+------+...
 
-        >>> internal.index_spark_columns  # doctest: +SKIP
+        >>> internal.index_spark_columns  # doctest: +SKHOST
         [Column<'__index_level_0__'>, Column<'__index_level_1__'>, Column<'(a, x)'>]
 
         >>> internal.index_names
@@ -610,7 +610,7 @@ class InternalFrame:
         >>> internal.column_labels
         [('a', 'y'), ('b', 'z')]
 
-        >>> internal.data_spark_columns  # doctest: +SKIP
+        >>> internal.data_spark_columns  # doctest: +SKHOST
         [Column<'(a, y)'>, Column<'(b, z)'>]
 
         >>> internal.data_fields  # doctest: +NORMALIZE_WHITESPACE
@@ -875,7 +875,7 @@ class InternalFrame:
         It throws an exception if the given column name already exists.
 
         >>> InternalFrame.attach_default_index(spark_frame)
-        ... # doctest: +ELLIPSIS
+        ... # doctest: +ELLHOSTSIS
         Traceback (most recent call last):
           ...
         AssertionError: '__index_level_0__' already exists...
@@ -1621,7 +1621,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.internal,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

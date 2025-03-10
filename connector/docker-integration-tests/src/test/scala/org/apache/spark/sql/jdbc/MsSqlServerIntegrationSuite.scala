@@ -128,9 +128,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         |    -122.348 47.658, -122.358 47.658, -122.358 47.653))',
         |'POLYGON((-20 -20, -20 20, 20 20, 20 -20, -20 -20), (10 0, 0 10, 0 -10, 10 0))',
         |'CURVEPOLYGON((-122.3 47, 122.3 47, 125.7 49, 121 38, -122.3 47))',
-        |'MULTIPOINT((2 3), (7 8 9.5))',
+        |'MULTHOSTOINT((2 3), (7 8 9.5))',
         |'MULTILINESTRING((0 2, 1 1), (1 0, 1 1))',
-        |'MULTIPOLYGON(((2 2, 2 -2, -2 -2, -2 2, 2 2)),((1 1, 3 1, 3 3, 1 3, 1 1)))',
+        |'MULTHOSTOLYGON(((2 2, 2 -2, -2 -2, -2 2, 2 2)),((1 1, 3 1, 3 3, 1 3, 1 1)))',
         |'GEOMETRYCOLLECTION(LINESTRING(1 1, 3 5),POLYGON((-1 -1, -1 -5, -5 -5, -5 -1, -1 -1)))')
       """.stripMargin).executeUpdate()
     conn.prepareStatement(

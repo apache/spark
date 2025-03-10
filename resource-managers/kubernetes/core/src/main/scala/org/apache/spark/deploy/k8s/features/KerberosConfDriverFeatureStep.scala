@@ -51,7 +51,7 @@ import org.apache.spark.util.Utils
 private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep with Logging {
 
-  private val principal = kubernetesConf.get(org.apache.spark.internal.config.PRINCIPAL)
+  private val principal = kubernetesConf.get(org.apache.spark.internal.config.PRINCHOSTAL)
   private val keytab = kubernetesConf.get(org.apache.spark.internal.config.KEYTAB)
   private val existingSecretName = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
   private val existingSecretItemKey = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)

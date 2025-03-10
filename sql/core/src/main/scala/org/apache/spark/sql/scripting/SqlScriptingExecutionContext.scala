@@ -83,7 +83,7 @@ class SqlScriptingExecutionContext {
 
 object SqlScriptingFrameType extends Enumeration {
   type SqlScriptingFrameType = Value
-  val SQL_SCRIPT, HANDLER = Value
+  val SQL_SCRHOSTT, HANDLER = Value
 }
 
 /**

@@ -661,7 +661,7 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = DRIVER_LIBRARY_PATH.key),
       OptionAssigner(args.principal, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = PRINCIPAL.key),
+        confKey = PRINCHOSTAL.key),
       OptionAssigner(args.keytab, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = KEYTAB.key),
       OptionAssigner(args.pyFiles, ALL_CLUSTER_MGRS, CLUSTER, confKey = SUBMIT_PYTHON_FILES.key),
@@ -927,7 +927,7 @@ private[spark] class SparkSubmit extends Logging {
   // mode, we must trick it into thinking we're YARN.
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
-    val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
+    val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCHOSTAL}"
     logInfo(log"Setting ${MDC(LogKeys.KEY, key)} to ${MDC(LogKeys.SHORT_USER_NAME, shortUserName)}")
     sparkConf.set(key, shortUserName)
   }
@@ -1092,8 +1092,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
 
   override def main(args: Array[String]): Unit = {
-    Option(System.getenv("SPARK_PREFER_IPV6"))
-      .foreach(System.setProperty("java.net.preferIPv6Addresses", _))
+    Option(System.getenv("SPARK_PREFER_HOSTV6"))
+      .foreach(System.setProperty("java.net.preferHOSTv6Addresses", _))
     val submit = new SparkSubmit() {
       self =>
 

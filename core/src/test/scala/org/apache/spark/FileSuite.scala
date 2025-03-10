@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util.zip.GZIPOutputStream
+import java.util.zip.GZHOSTOutputStream
 
 import scala.io.Source
 import scala.util.control.NonFatal
@@ -520,7 +520,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     try {
       // Create a corrupt gzip file
       val byteOutput = new ByteArrayOutputStream()
-      val gzip = new GZIPOutputStream(byteOutput)
+      val gzip = new GZHOSTOutputStream(byteOutput)
       try {
         gzip.write(Array[Byte](1, 2, 3, 4))
       } finally {

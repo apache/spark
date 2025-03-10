@@ -5,7 +5,7 @@ struct<c_customer_id:string,c_salutation:string,c_first_name:string,c_last_name:
 -- !query output
 AAAAAAAAABEBBAAA	Sir       	Carlton             	Miles                         	N	23	9	1957	MALI	NULL	Carlton.Miles@4DbIUoznbr.org                      	2452588	12916.86
 AAAAAAAAABKGBAAA	Miss      	Sharee              	Stevens                       	Y	15	8	1992	SLOVAKIA	NULL	Sharee.Stevens@Z.edu                              	2452492	2480.80
-AAAAAAAAAEIPAAAA	Mr.       	Chris               	Ryan                          	Y	23	4	1931	TURKMENISTAN	NULL	Chris.Ryan@QlH9G0fkAR5.org                        	2452443	3469.95
+AAAAAAAAAEHOSTAAAA	Mr.       	Chris               	Ryan                          	Y	23	4	1931	TURKMENISTAN	NULL	Chris.Ryan@QlH9G0fkAR5.org                        	2452443	3469.95
 AAAAAAAAAHNKAAAA	Sir       	Scott               	Garcia                        	N	19	10	1952	WALLIS AND FUTUNA	NULL	Scott.Garcia@3pd6mnJYbKxb.org                     	2452611	2944.24
 AAAAAAAAAJDABAAA	Sir       	Gerald              	Monroe                        	Y	19	5	1985	LIECHTENSTEIN	NULL	Gerald.Monroe@opYT.org                            	2452632	4030.41
 AAAAAAAAAJJBAAAA	Sir       	Jose                	Garcia                        	Y	11	6	1977	AMERICAN SAMOA	NULL	Jose.Garcia@n1VrEIOg4f.com                        	2452406	4131.05
@@ -27,7 +27,7 @@ AAAAAAAABNMIAAAA	Mrs.      	Judi                	Lopes                         	
 AAAAAAAABOGDAAAA	Ms.       	Laura               	Mcfadden                      	N	29	3	1964	GREECE	NULL	Laura.Mcfadden@Ks.com                             	2452364	3942.35
 AAAAAAAABPECAAAA	Mr.       	William             	Hoffman                       	N	21	4	1991	PERU	NULL	William.Hoffman@m8E1N4.com                        	2452321	4550.73
 AAAAAAAACGHDAAAA	Mr.       	Ricky               	Marshall                      	N	11	7	1979	NAMIBIA	NULL	Ricky.Marshall@tJKkX.edu                          	2452610	10400.46
-AAAAAAAACIKBAAAA	Ms.       	Virginia            	Lawson                        	N	26	11	1929	PHILIPPINES	NULL	Virginia.Lawson@bdtmjhsnqQZx.edu                  	2452490	2164.20
+AAAAAAAACIKBAAAA	Ms.       	Virginia            	Lawson                        	N	26	11	1929	PHILHOSTPINES	NULL	Virginia.Lawson@bdtmjhsnqQZx.edu                  	2452490	2164.20
 AAAAAAAACILFBAAA	NULL	Frederick           	NULL	N	23	11	1954	NULL	NULL	Frederick.Lambert@BNHNh23xF7qIUJ30.edu            	NULL	3849.92
 AAAAAAAACLNHBAAA	Dr.       	Gary                	Perez                         	N	21	4	1992	MACAO	NULL	Gary.Perez@5dGey4.com                             	2452300	9647.56
 AAAAAAAACOEAAAAA	Dr.       	David               	Saunders                      	Y	6	12	1991	HAITI	NULL	David.Saunders@APTXJyYNgVa.edu                    	2452482	8357.76
@@ -68,13 +68,13 @@ AAAAAAAAFKGEBAAA	Dr.       	Dorothy             	Hendricks                     	
 AAAAAAAAFKNEAAAA	Ms.       	Ruth                	Catron                        	Y	2	3	1983	SAINT LUCIA	NULL	Ruth.Catron@g4krLkSRUFX60t4P.edu                  	2452401	1873.40
 AAAAAAAAFKOHBAAA	Ms.       	Annie               	Stevens                       	N	12	2	1933	KENYA	NULL	Annie.Stevens@e3vFdRXUEQ.org                      	2452504	4229.82
 AAAAAAAAFMDEAAAA	Sir       	Dennis              	Mayfield                      	N	5	1	1933	SOMALIA	NULL	Dennis.Mayfield@9DPHTIUxRlxd.edu                  	2452535	2849.00
-AAAAAAAAFMIPAAAA	Dr.       	Michael             	Moran                         	N	1	2	1940	SAINT HELENA	NULL	Michael.Moran@3.edu                               	2452411	3869.60
+AAAAAAAAFMHOSTAAAA	Dr.       	Michael             	Moran                         	N	1	2	1940	SAINT HELENA	NULL	Michael.Moran@3.edu                               	2452411	3869.60
 AAAAAAAAFPKCBAAA	Dr.       	William             	Terry                         	Y	10	3	1991	GUATEMALA	NULL	William.Terry@jKyKRKfrxH.org                      	2452325	3550.05
 AAAAAAAAFPPGAAAA	Ms.       	Margie              	Lee                           	Y	22	10	1933	GUINEA	NULL	Margie.Lee@Tg2pE7.com                             	2452419	3288.60
 AAAAAAAAGBOAAAAA	Mr.       	Micheal             	NULL	NULL	NULL	NULL	1991	NULL	NULL	Micheal.Holland@4rhkIkNJy6fSU.edu                 	2452530	2676.00
 AAAAAAAAGIEDAAAA	Miss      	Adriana             	Maxfield                      	Y	6	1	1948	MONGOLIA	NULL	Adriana.Maxfield@Na4ize7RHB.com                   	2452415	4872.96
 AAAAAAAAGJJEAAAA	Miss      	NULL	Barnard                       	N	NULL	NULL	1987	NULL	NULL	NULL	NULL	1628.77
-AAAAAAAAGMJPAAAA	Miss      	Deena               	Ferguson                      	Y	8	9	1986	PHILIPPINES	NULL	Deena.Ferguson@19lazfjoSTXBorQ.edu                	2452301	5713.74
+AAAAAAAAGMJPAAAA	Miss      	Deena               	Ferguson                      	Y	8	9	1986	PHILHOSTPINES	NULL	Deena.Ferguson@19lazfjoSTXBorQ.edu                	2452301	5713.74
 AAAAAAAAHANIAAAA	Mr.       	Robert              	Rogers                        	Y	5	7	1990	SOUTH AFRICA	NULL	Robert.Rogers@m77qeFKJfIO3rugyC.org               	2452456	1638.00
 AAAAAAAAHCHKAAAA	Dr.       	Harry               	Bearden                       	Y	10	2	1957	CHINA	NULL	Harry.Bearden@kNxzQ3SYEmp.com                     	2452533	6455.11
 AAAAAAAAHHAKAAAA	Dr.       	Jeremy              	Richter                       	Y	8	8	1951	SOUTH AFRICA	NULL	Jeremy.Richter@hCAQGRgTCrU.edu                    	2452496	3764.21

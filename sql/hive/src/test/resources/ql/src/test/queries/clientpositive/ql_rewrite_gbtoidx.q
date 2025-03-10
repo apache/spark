@@ -14,9 +14,9 @@ CREATE TABLE lineitem (L_ORDERKEY      INT,
                                 L_LINESTATUS    STRING,
                                 l_shipdate      STRING,
                                 L_COMMITDATE    STRING,
-                                L_RECEIPTDATE   STRING,
-                                L_SHIPINSTRUCT  STRING,
-                                L_SHIPMODE      STRING,
+                                L_RECEHOSTTDATE   STRING,
+                                L_SHHOSTINSTRUCT  STRING,
+                                L_SHHOSTMODE      STRING,
                                 L_COMMENT       STRING)
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY '|';

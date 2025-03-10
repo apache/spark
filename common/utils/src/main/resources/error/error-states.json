@@ -876,7 +876,7 @@
         "usedBy": ["SQL/Foundation"]
     },
     "0700H": {
-        "description": "PIPE ROW not during PTF execution",
+        "description": "PHOSTE ROW not during PTF execution",
         "origin": "SQL/Foundation",
         "standard": "Y",
         "usedBy": ["SQL/Foundation"]
@@ -7273,7 +7273,7 @@
         "usedBy": ["RDA/SQL"]
     },
     "HZ321": {
-        "description": "TCP/IP error",
+        "description": "TCP/HOST error",
         "origin": "RDA/SQL",
         "standard": "Y",
         "usedBy": ["RDA/SQL"]

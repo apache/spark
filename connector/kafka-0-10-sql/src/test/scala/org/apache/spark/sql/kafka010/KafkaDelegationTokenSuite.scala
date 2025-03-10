@@ -25,7 +25,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_PLAINTEXT
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
+import org.apache.spark.internal.config.{KEYTAB, PRINCHOSTAL}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -40,7 +40,7 @@ class KafkaDelegationTokenSuite extends StreamTest with SharedSparkSession with 
     .set("spark.security.credentials.hadoopfs.enabled", "false")
     .set("spark.security.credentials.hbase.enabled", "false")
     .set(KEYTAB, testUtils.clientKeytab)
-    .set(PRINCIPAL, testUtils.clientPrincipal)
+    .set(PRINCHOSTAL, testUtils.clientPrincipal)
     .set("spark.kafka.clusters.cluster1.auth.bootstrap.servers", testUtils.brokerAddress)
     .set("spark.kafka.clusters.cluster1.security.protocol", SASL_PLAINTEXT.name)
 

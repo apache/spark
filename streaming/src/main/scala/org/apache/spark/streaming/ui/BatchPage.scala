@@ -25,11 +25,11 @@ import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.status.api.v1.{JobData, StageData}
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.ui.StreamingJobProgressListener.SparkJobId
-import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUHOSTage}
 
 private[ui] case class SparkJobIdWithUIData(sparkJobId: SparkJobId, jobData: Option[JobData])
 
-private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
+private[ui] class BatchPage(parent: StreamingTab) extends WebUHOSTage("batch") {
   private val streamingListener = parent.listener
   private val store = parent.parent.store
 
@@ -379,7 +379,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   }
 
   def generateInputMetadataTable(inputMetadatas: Seq[(Int, String)]): Seq[Node] = {
-    <table class={SparkUIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
+    <table class={SparkUIUtils.TABLE_CLASS_STRHOSTED_SORTABLE}>
       <thead>
         <tr>
           <th>Input</th>

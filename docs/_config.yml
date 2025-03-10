@@ -31,7 +31,7 @@ SPARK_GITHUB_URL: https://github.com/apache/spark
 #   2. update the value of `facetFilters.version` in `algoliaOptions` on the new release branch.
 # Otherwise, after release, the search results are always based on the latest documentation
 # (https://spark.apache.org/docs/latest/) even when visiting the documentation of previous releases.
-DOCSEARCH_SCRIPT: |
+DOCSEARCH_SCRHOSTT: |
   docsearch({
       apiKey: 'd62f962a82bc9abb53471cb7b89da35e',
       appId: 'RAI69RXRSK',

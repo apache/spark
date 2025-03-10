@@ -77,13 +77,13 @@ private[spark] object Tests {
   // to allow emulating standalone mode behavior while running in local mode. Standalone mode
   // by default doesn't specify a number of executor cores, it just uses all the ones available
   // on the host.
-  val SKIP_VALIDATE_CORES_TESTING =
+  val SKHOST_VALIDATE_CORES_TESTING =
     ConfigBuilder("spark.testing.skipValidateCores")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
-  val TEST_SKIP_ESS_REGISTER = ConfigBuilder("spark.testing.skipESSRegister")
+  val TEST_SKHOST_ESS_REGISTER = ConfigBuilder("spark.testing.skipESSRegister")
     .version("4.0.0")
     .doc("None of Spark testing modes (local, local-cluster) enables shuffle service. So it is " +
       s"hard to test ${SHUFFLE_SERVICE_ENABLED.key} when you only want to test this flag but " +

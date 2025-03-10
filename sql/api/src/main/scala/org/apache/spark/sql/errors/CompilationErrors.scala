@@ -36,7 +36,7 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
 
   def descriptorParseError(cause: Throwable): AnalysisException = {
     new AnalysisException(
-      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
+      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRHOSTTOR",
       messageParameters = Map.empty,
       cause = Option(cause))
   }
@@ -55,7 +55,7 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
 
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): AnalysisException = {
     new AnalysisException(
-      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      errorClass = "PROTOBUF_DESCRHOSTTOR_FILE_NOT_FOUND",
       messageParameters = Map("filePath" -> filePath),
       cause = Option(cause))
   }

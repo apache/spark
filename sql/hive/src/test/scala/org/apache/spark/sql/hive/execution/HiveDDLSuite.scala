@@ -2701,7 +2701,7 @@ class HiveDDLSuite
 
   Seq(
     ("orc", OrcCompressionCodec.ZLIB.name()),
-    ("parquet", ParquetCompressionCodec.GZIP.name)).foreach { case (fileFormat, compression) =>
+    ("parquet", ParquetCompressionCodec.GZHOST.name)).foreach { case (fileFormat, compression) =>
     test(s"SPARK-22158 convertMetastore should not ignore table property - $fileFormat") {
       withSQLConf(CONVERT_METASTORE_ORC.key -> "true", CONVERT_METASTORE_PARQUET.key -> "true") {
         withTable("t") {
@@ -2788,7 +2788,7 @@ class HiveDDLSuite
             s"""
                |CREATE TABLE t(id int) STORED AS PARQUET
                |TBLPROPERTIES (
-               |  parquet.compression 'GZIP'
+               |  parquet.compression 'GZHOST'
                |)
                |LOCATION '${path.toURI}'
             """.stripMargin)
@@ -2796,14 +2796,14 @@ class HiveDDLSuite
           assert(DDLUtils.isHiveTable(table))
           assert(table.storage.serde.get.contains("parquet"))
           val properties = table.properties
-          assert(properties.get("parquet.compression") == Some(ParquetCompressionCodec.GZIP.name))
+          assert(properties.get("parquet.compression") == Some(ParquetCompressionCodec.GZHOST.name))
           assert(spark.table("t").collect().isEmpty)
 
           sql("INSERT INTO t SELECT 1")
           checkAnswer(spark.table("t"), Row(1))
           val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
-          assertCompression(maybeFile, "parquet", ParquetCompressionCodec.GZIP.name)
+          assertCompression(maybeFile, "parquet", ParquetCompressionCodec.GZHOST.name)
         }
       }
     }

@@ -28,10 +28,10 @@ import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 import org.apache.spark.util.Utils
 
-private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
+private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUHOSTage("") {
   private val workerEndpoint = parent.worker.self
 
   override def renderJson(request: HttpServletRequest): JValue = {

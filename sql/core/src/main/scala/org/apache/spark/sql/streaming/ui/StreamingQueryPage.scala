@@ -27,11 +27,11 @@ import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.streaming.ui.UIUtils._
-import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils => SparkUIUtils, WebUHOSTage}
 import org.apache.spark.util.Utils
 
 private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
-    extends WebUIPage("") with Logging {
+    extends WebUHOSTage("") with Logging {
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val content = generateStreamingQueryTable(request)

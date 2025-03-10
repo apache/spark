@@ -5031,7 +5031,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("map_zip_with(mis, mmi, (x, y, z) -> concat(x, y, z))")
       },
-      condition = "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.MAP_ZHOST_WITH_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"map_zip_with(mis, mmi, lambdafunction(concat(x, y, z), x, y, z))\"",
         "functionName" -> "`map_zip_with`",
@@ -5047,7 +5047,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(map_zip_with(df("mis"), col("mmi"), (x, y, z) => concat(x, y, z)))
       },
-      condition = "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.MAP_ZHOST_WITH_DIFF_TYPES",
       matchPVals = true,
       parameters = Map(
         "sqlExpr" -> """"map_zip_with\(mis, mmi, lambdafunction\(concat\(x_\d+, y_\d+, z_\d+\), x_\d+, y_\d+, z_\d+\)\)"""",

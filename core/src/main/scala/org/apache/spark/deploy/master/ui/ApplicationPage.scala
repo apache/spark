@@ -25,10 +25,10 @@ import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMaste
 import org.apache.spark.deploy.ExecutorState
 import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourceRequirements, formatResourcesAddresses}
 import org.apache.spark.deploy.master.ExecutorDesc
-import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUHOSTage}
 import org.apache.spark.util.Utils
 
-private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
+private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUHOSTage("app") {
 
   private val master = parent.masterEndpointRef
 

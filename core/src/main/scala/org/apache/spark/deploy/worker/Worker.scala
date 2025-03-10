@@ -112,15 +112,15 @@ private[deploy] class Worker(
       log"(${MDC(MAX_ATTEMPTS, TOTAL_REGISTRATION_RETRIES)})"
       )
   }
-  private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
-  private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
+  private val FUZZ_MULTHOSTLIER_INTERVAL_LOWER_BOUND = 0.500
+  private val REGISTRATION_RETRY_FUZZ_MULTHOSTLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
-    randomNumberGenerator.nextDouble() + FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND
+    randomNumberGenerator.nextDouble() + FUZZ_MULTHOSTLIER_INTERVAL_LOWER_BOUND
   }
   private val INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS = (math.round(10 *
-    REGISTRATION_RETRY_FUZZ_MULTIPLIER))
+    REGISTRATION_RETRY_FUZZ_MULTHOSTLIER))
   private val PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS = (math.round(60
-    * REGISTRATION_RETRY_FUZZ_MULTIPLIER))
+    * REGISTRATION_RETRY_FUZZ_MULTHOSTLIER))
 
   private val CLEANUP_ENABLED = conf.get(WORKER_CLEANUP_ENABLED)
   // How often worker will clean up old app folders

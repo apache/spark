@@ -31,7 +31,7 @@ class SourceOptions(
 
   // A flag to disable saving a data source table's metadata in hive compatible way.
   val skipHiveMetadata: Boolean = parameters
-    .get(SKIP_HIVE_METADATA).map(_.toBoolean).getOrElse(DEFAULT_SKIP_HIVE_METADATA)
+    .get(SKHOST_HIVE_METADATA).map(_.toBoolean).getOrElse(DEFAULT_SKHOST_HIVE_METADATA)
 
   // A flag to always respect the Spark schema restored from the table properties
   val respectSparkSchema: Boolean = parameters
@@ -41,8 +41,8 @@ class SourceOptions(
 
 object SourceOptions {
 
-  val SKIP_HIVE_METADATA = "skipHiveMetadata"
-  val DEFAULT_SKIP_HIVE_METADATA = false
+  val SKHOST_HIVE_METADATA = "skipHiveMetadata"
+  val DEFAULT_SKHOST_HIVE_METADATA = false
 
   val RESPECT_SPARK_SCHEMA = "respectSparkSchema"
   val DEFAULT_RESPECT_SPARK_SCHEMA = false

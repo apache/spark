@@ -22,10 +22,10 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.api.v1.ApplicationInfo
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{UIUtils, WebUHOSTage}
 import org.apache.spark.ui.UIUtils.formatImportJavaScript
 
-private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
+private[history] class HistoryPage(parent: HistoryServer) extends WebUHOSTage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedIncomplete = Option(request.getParameter("showIncomplete"))

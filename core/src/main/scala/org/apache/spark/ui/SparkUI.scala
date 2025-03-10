@@ -48,7 +48,7 @@ private[spark] class SparkUI private (
     val basePath: String,
     val startTime: Long,
     val appSparkVersion: String)
-  extends WebUI(securityManager, securityManager.getSSLOptions("ui"), SparkUI.getUIPort(conf),
+  extends WebUI(securityManager, securityManager.getSSLOptions("ui"), SparkUI.getUHOSTort(conf),
     conf, basePath, "SparkUI")
   with Logging
   with UIRoot {
@@ -228,7 +228,7 @@ private[spark] object SparkUI {
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
   val DEFAULT_POOL_NAME = "default"
 
-  def getUIPort(conf: SparkConf): Int = {
+  def getUHOSTort(conf: SparkConf): Int = {
     conf.get(UI_PORT)
   }
 

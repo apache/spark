@@ -167,13 +167,13 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("SPARK-42769: All executor pods have SPARK_DRIVER_POD_IP env variable", k8sTestTag) {
+  test("SPARK-42769: All executor pods have SPARK_DRIVER_POD_HOST env variable", k8sTestTag) {
     runSparkPiAndVerifyCompletion(
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
         assert {
           executorPod.getSpec.getContainers.get(0).getEnv.asScala
-            .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+            .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_HOST")
         }
       })
   }

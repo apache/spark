@@ -46,7 +46,7 @@ class LocalSparkCluster private (
   private val masterRpcEnvs = ArrayBuffer[RpcEnv]()
   private val workerRpcEnvs = ArrayBuffer[RpcEnv]()
   // exposed for testing
-  var masterWebUIPort = -1
+  var masterWebUHOSTort = -1
   // for test only
   private val workerDirs = ArrayBuffer[String]()
 
@@ -61,7 +61,7 @@ class LocalSparkCluster private (
 
     /* Start the Master */
     val (rpcEnv, webUiPort, _) = Master.startRpcEnvAndEndpoint(localHostname, 0, 0, _conf)
-    masterWebUIPort = webUiPort
+    masterWebUHOSTort = webUiPort
     masterRpcEnvs += rpcEnv
     val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + rpcEnv.address.port
     val masters = Array(masterUrl)

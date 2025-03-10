@@ -105,7 +105,7 @@ class PandasOnSparkFrameMethods:
         2  c  2
 
         >>> df.pandas_on_spark.attach_id_column(id_type="distributed", column=0.0)
-        ... # doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
+        ... # doctest: +ELLHOSTSIS +NORMALIZE_WHITESPACE
            x  0.0
         0  a  ...
         1  b  ...
@@ -216,7 +216,7 @@ class PandasOnSparkFrameMethods:
             ...     return pd.DataFrame([len(pdf)])
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
-            >>> df.pandas_on_spark.apply_batch(length)  # doctest: +SKIP
+            >>> df.pandas_on_spark.apply_batch(length)  # doctest: +SKHOST
                 c0
             0   83
             1   83
@@ -450,7 +450,7 @@ class PandasOnSparkFrameMethods:
             ...     return pd.DataFrame([len(pdf)] * len(pdf))
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
-            >>> df.pandas_on_spark.transform_batch(length)  # doctest: +SKIP
+            >>> df.pandas_on_spark.transform_batch(length)  # doctest: +SKHOST
                 c0
             0   83
             1   83
@@ -789,7 +789,7 @@ class PandasOnSparkSeriesMethods:
             ...     return pd.Series([len(pser)] * len(pser))
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
-            >>> df.A.pandas_on_spark.transform_batch(length)  # doctest: +SKIP
+            >>> df.A.pandas_on_spark.transform_batch(length)  # doctest: +SKHOST
                 c0
             0   83
             1   83
@@ -977,7 +977,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.accessors,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

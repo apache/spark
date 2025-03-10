@@ -219,11 +219,11 @@ private[rest] class StandaloneSubmitRequestServlet(
     val updatedMasters = masters.map(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = Option(request.appArgs).getOrElse(Array[String]())
-    // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    // Filter SPARK_LOCAL_(HOST|HOSTNAME) environment variables from being set on the remote system.
     // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       Option(request.environmentVariables).getOrElse(Map.empty[String, String])
-        .filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
+        .filterNot(x => x._1.matches("SPARK_LOCAL_(HOST|HOSTNAME)"))
         .map(x => (x._1, replacePlaceHolder(x._2)))
 
     // Construct driver description

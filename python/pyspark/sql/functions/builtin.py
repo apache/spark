@@ -222,13 +222,13 @@ def lit(col: Any) -> Column:
     Example 5: Creating literal columns from Numpy scalar.
 
     >>> from pyspark.sql import functions as sf
-    >>> import numpy as np # doctest: +SKIP
+    >>> import numpy as np # doctest: +SKHOST
     >>> spark.range(1).select(
     ...     sf.lit(np.bool_(True)),
     ...     sf.lit(np.int64(123)),
     ...     sf.lit(np.float64(0.456)),
     ...     sf.lit(np.str_("xyz"))
-    ... ).show() # doctest: +SKIP
+    ... ).show() # doctest: +SKHOST
     +----+---+-----+---+
     |true|123|0.456|xyz|
     +----+---+-----+---+
@@ -238,13 +238,13 @@ def lit(col: Any) -> Column:
     Example 6: Creating literal columns from Numpy ndarray.
 
     >>> from pyspark.sql import functions as sf
-    >>> import numpy as np # doctest: +SKIP
+    >>> import numpy as np # doctest: +SKHOST
     >>> spark.range(1).select(
     ...     sf.lit(np.array([True, False], np.bool_)),
     ...     sf.lit(np.array([], np.int8)),
     ...     sf.lit(np.array([1.5, 0.1], np.float64)),
     ...     sf.lit(np.array(["a", "b", "c"], np.str_)),
-    ... ).show() # doctest: +SKIP
+    ... ).show() # doctest: +SKHOST
     +------------------+-------+-----------------+--------------------+
     |ARRAY(true, false)|ARRAY()|ARRAY(1.5D, 0.1D)|ARRAY('a', 'b', 'c')|
     +------------------+-------+-----------------+--------------------+
@@ -1110,7 +1110,7 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
-    >>> df.select(sf.mode("col", False)).show() # doctest: +SKIP
+    >>> df.select(sf.mode("col", False)).show() # doctest: +SKHOST
     +---------+
     |mode(col)|
     +---------+
@@ -7168,7 +7168,7 @@ def count_min_sketch(
     >>> from pyspark.sql import functions as sf
     >>> spark.range(100).select(
     ...     sf.hex(sf.count_min_sketch("id", sf.lit(1.5), 0.6))
-    ... ).show(truncate=False) # doctest: +SKIP
+    ... ).show(truncate=False) # doctest: +SKHOST
     +----------------------------------------------------------------------------------------------------------------------------------------+
     |hex(count_min_sketch(id, 1.5, 0.6, 2120704260))                                                                                         |
     +----------------------------------------------------------------------------------------------------------------------------------------+
@@ -7663,7 +7663,7 @@ def rand(seed: Optional[int] = None) -> Column:
     Example 1: Generate a random column without a seed
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 2, 1, 1).select("*", sf.rand()).show() # doctest: +SKIP
+    >>> spark.range(0, 2, 1, 1).select("*", sf.rand()).show() # doctest: +SKHOST
     +---+-------------------------+
     | id|rand(-158884697681280011)|
     +---+-------------------------+
@@ -7722,7 +7722,7 @@ def randn(seed: Optional[int] = None) -> Column:
     Example 1: Generate a random column without a seed
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 2, 1, 1).select("*", sf.randn()).show() # doctest: +SKIP
+    >>> spark.range(0, 2, 1, 1).select("*", sf.randn()).show() # doctest: +SKHOST
     +---+--------------------------+
     | id|randn(3968742514375399317)|
     +---+--------------------------+
@@ -9195,7 +9195,7 @@ def curdate() -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.curdate()).show() # doctest: +SKIP
+    >>> spark.range(1).select(sf.curdate()).show() # doctest: +SKHOST
     +--------------+
     |current_date()|
     +--------------+
@@ -9231,7 +9231,7 @@ def current_date() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.current_date()).show() # doctest: +SKIP
+    >>> spark.range(1).select(sf.current_date()).show() # doctest: +SKHOST
     +--------------+
     |current_date()|
     +--------------+
@@ -9310,7 +9310,7 @@ def current_timestamp() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.current_timestamp()).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(1).select(sf.current_timestamp()).show(truncate=False) # doctest: +SKHOST
     +-----------------------+
     |current_timestamp()    |
     +-----------------------+
@@ -9342,7 +9342,7 @@ def now() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.now()).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(1).select(sf.now()).show(truncate=False) # doctest: +SKHOST
     +--------------------------+
     |now()                     |
     +--------------------------+
@@ -9379,7 +9379,7 @@ def localtimestamp() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.localtimestamp()).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(1).select(sf.localtimestamp()).show(truncate=False) # doctest: +SKHOST
     +-----------------------+
     |localtimestamp()       |
     +-----------------------+
@@ -12143,7 +12143,7 @@ def unix_timestamp(
     Example 1: Returns the current timestamp in UNIX.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.unix_timestamp()).show() # doctest: +SKIP
+    >>> spark.range(1).select(sf.unix_timestamp()).show() # doctest: +SKHOST
     +----------+
     | unix_time|
     +----------+
@@ -13132,7 +13132,7 @@ def current_user() -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.current_user()).show() # doctest: +SKIP
+    >>> spark.range(1).select(sf.current_user()).show() # doctest: +SKHOST
     +--------------+
     |current_user()|
     +--------------+
@@ -13156,7 +13156,7 @@ def user() -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.user()).show() # doctest: +SKIP
+    >>> spark.range(1).select(sf.user()).show() # doctest: +SKHOST
     +--------------+
     |        user()|
     +--------------+
@@ -13180,7 +13180,7 @@ def session_user() -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.session_user()).show() # doctest: +SKIP
+    >>> spark.range(1).select(sf.session_user()).show() # doctest: +SKHOST
     +--------------+
     |session_user()|
     +--------------+
@@ -13484,7 +13484,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     --------
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0, 1)], ['a', 'b'])
-    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKIP
+    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKHOST
     +------------------------------------------------------+
     |assert_true((a < b), '(a#788L < b#789L)' is not true!)|
     +------------------------------------------------------+
@@ -13505,7 +13505,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     |  0|  1|                       NULL|
     +---+---+---------------------------+
 
-    >>> df.select('*', sf.assert_true(df.a > df.b, 'My error msg')).show() # doctest: +SKIP
+    >>> df.select('*', sf.assert_true(df.a > df.b, 'My error msg')).show() # doctest: +SKHOST
     ...
     java.lang.RuntimeException: My error msg
     ...
@@ -13548,7 +13548,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.raise_error("My error message")).show() # doctest: +SKIP
+    >>> spark.range(1).select(sf.raise_error("My error message")).show() # doctest: +SKHOST
     ...
     java.lang.RuntimeException: My error message
     ...
@@ -21773,7 +21773,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
+    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKHOST
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+
@@ -23590,7 +23590,7 @@ def years(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKHOST
     ...     years("ts")
     ... ).createOrReplace()
 
@@ -23636,7 +23636,7 @@ def months(col: "ColumnOrName") -> Column:
     --------
     >>> df.writeTo("catalog.db.table").partitionedBy(
     ...     months("ts")
-    ... ).createOrReplace()  # doctest: +SKIP
+    ... ).createOrReplace()  # doctest: +SKHOST
 
     Notes
     -----
@@ -23678,7 +23678,7 @@ def days(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKHOST
     ...     days("ts")
     ... ).createOrReplace()
 
@@ -23722,7 +23722,7 @@ def hours(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(   # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(   # doctest: +SKHOST
     ...     hours("ts")
     ... ).createOrReplace()
 
@@ -23780,7 +23780,7 @@ def convert_timezone(
     >>> df.select(
     ...     '*',
     ...     sf.convert_timezone(None, sf.lit('Asia/Hong_Kong'), 'ts')
-    ... ).show() # doctest: +SKIP
+    ... ).show() # doctest: +SKHOST
     +-------------------+--------------------------------------------------------+
     |                 ts|convert_timezone(current_timezone(), Asia/Hong_Kong, ts)|
     +-------------------+--------------------------------------------------------+
@@ -24891,7 +24891,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKHOST
     ...     bucket(42, "ts")
     ... ).createOrReplace()
 
@@ -25019,16 +25019,16 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     |    2.0|
     +-------+
     >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
-    ... # doctest: +SKIP
+    ... # doctest: +SKHOST
     >>> df.select(call_function("custom_avg", col("id"))).show()
-    ... # doctest: +SKIP
+    ... # doctest: +SKHOST
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
     |                               102.0|
     +------------------------------------+
     >>> df.select(call_function("spark_catalog.default.custom_avg", col("id"))).show()
-    ... # doctest: +SKIP
+    ... # doctest: +SKHOST
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
@@ -26101,7 +26101,7 @@ def version() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.version()).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(1).select(sf.version()).show(truncate=False) # doctest: +SKHOST
     +----------------------------------------------+
     |version()                                     |
     +----------------------------------------------+
@@ -26703,7 +26703,7 @@ def _test() -> None:
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions.builtin,
         globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+        optionflags=doctest.ELLHOSTSIS | doctest.NORMALIZE_WHITESPACE,
     )
     spark.stop()
     if failure_count:

@@ -650,7 +650,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[2]").appName("mllib.util tests").getOrCreate()
     globs["spark"] = spark
     globs["sc"] = spark.sparkContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLHOSTSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

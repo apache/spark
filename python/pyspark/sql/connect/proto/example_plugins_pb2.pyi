@@ -45,10 +45,10 @@ if sys.version_info >= (3, 8):
 else:
     import typing_extensions
 
-DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+DESCRHOSTTOR: google.protobuf.descriptor.FileDescriptor
 
 class ExamplePluginRelation(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     CUSTOM_FIELD_FIELD_NUMBER: builtins.int
@@ -72,7 +72,7 @@ class ExamplePluginRelation(google.protobuf.message.Message):
 global___ExamplePluginRelation = ExamplePluginRelation
 
 class ExamplePluginExpression(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     CHILD_FIELD_NUMBER: builtins.int
     CUSTOM_FIELD_FIELD_NUMBER: builtins.int
@@ -96,7 +96,7 @@ class ExamplePluginExpression(google.protobuf.message.Message):
 global___ExamplePluginExpression = ExamplePluginExpression
 
 class ExamplePluginCommand(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DESCRHOSTTOR: google.protobuf.descriptor.Descriptor
 
     CUSTOM_FIELD_FIELD_NUMBER: builtins.int
     custom_field: builtins.str
