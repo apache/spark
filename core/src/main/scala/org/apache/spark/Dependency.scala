@@ -29,6 +29,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
+import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -83,7 +84,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
-    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor)
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
+    val rowBasedChecksums: Array[RowBasedChecksum] = Array.empty)
   extends Dependency[Product2[K, V]] with Logging {
 
   if (mapSideCombine) {
