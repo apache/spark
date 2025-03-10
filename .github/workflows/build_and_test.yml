@@ -1289,4 +1289,4 @@ jobs:
       - run: |
           cd ui-test
           npm install --save-dev
-          node --experimental-vm-modules node_modules/.bin/jest     
+          node --experimental-vm-modules node_modules/.bin/jest
