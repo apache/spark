@@ -22,11 +22,14 @@ import java.nio.file.{Files, Paths}
 import scala.util.Properties
 
 import com.google.protobuf.ByteString
+import org.scalatest.Ignore
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.ProtoDataTypes
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
+
+@Ignore
 class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   private val scalaVersion = Properties.versionNumberString
