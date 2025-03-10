@@ -2418,6 +2418,17 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       )
     }
   }
+
+  test("SPARK-51418: Partitioned by Hive type incompatible columns") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(a timestamp_ntz, b INTEGER) USING parquet PARTITIONED BY (a)")
+      sql("INSERT INTO t1 PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1)")
+      checkAnswer(sql("SELECT * FROM t1"), sql("select 1, timestamp_ntz'2018-11-17 13:33:33'"))
+      sql("ALTER TABLE t1 ADD COLUMN (c string)")
+      checkAnswer(sql("SELECT * FROM t1"),
+        sql("select 1, null, timestamp_ntz'2018-11-17 13:33:33'"))
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
