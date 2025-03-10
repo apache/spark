@@ -50,6 +50,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     supportedFunctions.contains(funcName)
 
   class OracleSQLBuilder extends JDBCSQLBuilder {
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
