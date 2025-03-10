@@ -119,7 +119,7 @@ public class V2ExpressionSQLBuilder {
           "RADIANS", "SIGN", "WIDTH_BUCKET", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE",
           "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
           "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD" ->
-          visitSQLFunction(name, expressionsToStringArray(e.children()));
+          visitSQLFunction(name, e.children());
         case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
         case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
@@ -147,8 +147,7 @@ public class V2ExpressionSQLBuilder {
         expressionsToStringArray(avg.children()));
     } else if (expr instanceof GeneralAggregateFunc f) {
       if (f.orderingWithinGroups().length == 0) {
-        return visitAggregateFunction(f.name(), f.isDistinct(),
-          expressionsToStringArray(f.children()));
+        return visitAggregateFunction(f.name(), f.isDistinct(), f.children());
       } else {
         return visitInverseDistributionFunction(
           f.name(),
@@ -273,12 +272,20 @@ public class V2ExpressionSQLBuilder {
     return sb.toString();
   }
 
+  protected String visitSQLFunction(String funcName, Expression[] inputs) {
+    return visitSQLFunction(funcName, expressionsToStringArray(inputs));
+  }
+
   protected String visitSQLFunction(String funcName, String[] inputs) {
     return joinArrayToString(inputs, ", ", funcName + "(", ")");
   }
 
   protected String visitAggregateFunction(
-      String funcName, boolean isDistinct, String[] inputs) {
+      String funcName, boolean isDistinct, Expression[] inputs) {
+    return visitAggregateFunction(funcName, isDistinct, expressionsToStringArray(inputs));
+  }
+
+  protected String visitAggregateFunction(String funcName, boolean isDistinct, String[] inputs) {
     if (isDistinct) {
       return joinArrayToString(inputs, ", ", funcName + "(DISTINCT ", ")");
     } else {
