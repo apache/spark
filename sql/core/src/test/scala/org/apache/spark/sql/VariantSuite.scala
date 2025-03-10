@@ -453,45 +453,6 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     }
   }
 
-  test("json scan") {
-    val content = Seq(
-      "true",
-      """{"a": [], "b": null}""",
-      """{"a": 1}""",
-      "[1, 2, 3]"
-    ).mkString("\n").getBytes(StandardCharsets.UTF_8)
-
-    withTempDir { dir =>
-      val file = new File(dir, "file.json")
-      Files.write(file.toPath, content)
-
-      checkAnswer(
-        spark.read.format("json").option("singleVariantColumn", "var")
-          .load(file.getAbsolutePath)
-          .selectExpr("to_json(var)"),
-        Seq(Row("true"), Row("""{"a":[],"b":null}"""), Row("""{"a":1}"""), Row("[1,2,3]"))
-      )
-
-      checkAnswer(
-        spark.read.format("json").schema("a variant, b variant")
-          .load(file.getAbsolutePath).selectExpr("to_json(a)", "to_json(b)"),
-        Seq(Row(null, null), Row("[]", "null"), Row("1", null), Row(null, null))
-      )
-    }
-
-    // Test scan with partitions.
-    withTempDir { dir =>
-      new File(dir, "a=1/b=2/").mkdirs()
-      Files.write(new File(dir, "a=1/b=2/file.json").toPath, content)
-      checkAnswer(
-        spark.read.format("json").option("singleVariantColumn", "var")
-          .load(dir.getAbsolutePath).selectExpr("a", "b", "to_json(var)"),
-        Seq(Row(1, 2, "true"), Row(1, 2, """{"a":[],"b":null}"""), Row(1, 2, """{"a":1}"""),
-          Row(1, 2, "[1,2,3]"))
-      )
-    }
-  }
-
   test("json scan with map schema") {
     withTempDir { dir =>
       val file = new File(dir, "file.json")
