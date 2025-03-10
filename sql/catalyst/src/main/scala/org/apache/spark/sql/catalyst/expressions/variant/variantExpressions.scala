@@ -55,6 +55,8 @@ import org.apache.spark.unsafe.types._
 case class ParseJson(child: Expression, failOnError: Boolean = true)
   extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
 
+  override protected[spark] def expectedCost = 200
+
   override lazy val replacement: Expression = StaticInvoke(
     VariantExpressionEvalUtils.getClass,
     VariantType,
