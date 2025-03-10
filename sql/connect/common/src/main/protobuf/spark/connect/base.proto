@@ -261,6 +261,10 @@ message AnalyzePlanResponse {
 
   message SparkVersion {
     string version = 1;
+    // Java runtime version of the Spark Connect Service
+    string java_version = 2;
+    // Scala runtime version of the Spark Connect Service
+    string scala_version = 3;
   }
 
   message DDLParse {
