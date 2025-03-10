@@ -94,7 +94,6 @@ function onSearchStringChange() {
       let i = 0;
       while(!found && i < children.length) {
         if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
-          console.log(children.eq(i).text());
           found = true;
         } else {
           i++;
