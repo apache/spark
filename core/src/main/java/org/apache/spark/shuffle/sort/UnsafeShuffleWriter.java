@@ -60,6 +60,7 @@ import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.checksum.RowBasedChecksum;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
@@ -104,6 +105,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private SerializationStream serOutputStream;
 
   /**
+   * RowBasedChecksum calculator for each partition. RowBasedChecksum is independent
+   * of the input row order, which is used to detect whether different task attempts
+   * of the same partition produce different output data or not.
+   */
+  private final RowBasedChecksum[] rowBasedChecksums;
+
+  /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
    * and then call stop() with success = false if they get an exception, we want to make sure
    * we don't try deleting files, etc twice.
@@ -142,6 +150,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE());
     this.mergeBufferSizeInBytes =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_FILE_MERGE_BUFFER_SIZE()) * 1024;
+    this.rowBasedChecksums = dep.rowBasedChecksums();
     open();
   }
 
@@ -161,6 +170,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   public long getPeakMemoryUsedBytes() {
     updatePeakMemoryUsed();
     return peakMemoryUsedBytes;
+  }
+
+  public RowBasedChecksum[] getRowBasedChecksums() {
+    return rowBasedChecksums;
+  }
+  public long getAggregatedChecksumValue() {
+    return RowBasedChecksum.getAggregatedChecksumValue(rowBasedChecksums);
   }
 
   /**
@@ -234,7 +250,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, mapId);
+      blockManager.shuffleServerId(), partitionLengths, mapId, getAggregatedChecksumValue());
   }
 
   @VisibleForTesting
@@ -252,6 +268,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
     sorter.insertRecord(
       serBuffer.getBuf(), Platform.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
+    if (rowBasedChecksums.length > 0) {
+      rowBasedChecksums[partitionId].update(key, record._2());
+    }
   }
 
   @VisibleForTesting

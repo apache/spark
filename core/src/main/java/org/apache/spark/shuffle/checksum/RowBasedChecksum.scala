@@ -1,0 +1,109 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.shuffle.checksum
+
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
+import java.util.zip.Checksum
+
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
+
+/**
+ * A class for computing checksum for input (key, value) pairs. The checksum is independent of
+ * the order of the input (key, value) pairs. It is done by computing a checksum for each row
+ * first, and then computing the XOR for all the row checksums.
+ */
+abstract class RowBasedChecksum() extends Serializable {
+  private var checksumValue: Long = 0
+  /** Returns the checksum value computed */
+  def getValue: Long = checksumValue
+
+  /** Updates the row-based checksum with the given (key, value) pair */
+  def update(key: Any, value: Any): Unit = {
+    val rowChecksumValue = calculateRowChecksum(key, value)
+    checksumValue = checksumValue ^ rowChecksumValue
+  }
+
+  /** Computes and returns the checksum value for the given (key, value) pair */
+  protected def calculateRowChecksum(key: Any, value: Any): Long
+}
+
+/**
+ * A Concrete implementation of RowBasedChecksum. The checksum for each row is
+ * computed by first converting the (key, value) pair to byte array using OutputStreams,
+ * and then computing the checksum for the byte array.
+ *
+ * @param checksumAlgorithm the algorithm used for computing checksum.
+ */
+class OutputStreamRowBasedChecksum(checksumAlgorithm: String)
+  extends RowBasedChecksum() {
+
+  /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
+  final private class MyByteArrayOutputStream(size: Int)
+    extends ByteArrayOutputStream(size) {
+    def getBuf: Array[Byte] = buf
+  }
+
+  private val DEFAULT_INITIAL_SER_BUFFER_SIZE = 32 * 1024
+
+  @transient private lazy val serBuffer =
+    new MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE)
+  @transient private lazy val objOut = new ObjectOutputStream(serBuffer)
+
+  @transient
+  protected lazy val checksum: Checksum =
+    ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm)
+
+  override protected def calculateRowChecksum(key: Any, value: Any): Long = {
+    assert(checksum != null, "Checksum is null")
+
+    // Converts the (key, value) pair into byte array.
+    objOut.reset()
+    serBuffer.reset()
+    objOut.writeObject((key, value))
+    objOut.flush()
+    serBuffer.flush()
+
+    // Computes and returns the checksum for the byte array.
+    checksum.reset()
+    checksum.update(serBuffer.getBuf, 0, serBuffer.size())
+    checksum.getValue
+  }
+}
+
+object RowBasedChecksum {
+  def createPartitionRowBasedChecksums(
+      numPartitions: Int,
+      checksumAlgorithm: String): Array[RowBasedChecksum] = {
+    val rowBasedChecksums: Array[RowBasedChecksum] = new Array[RowBasedChecksum](numPartitions)
+    for (i <- 0 until numPartitions) {
+      rowBasedChecksums(i) = new OutputStreamRowBasedChecksum(checksumAlgorithm)
+    }
+    rowBasedChecksums
+  }
+
+  def getAggregatedChecksumValue(rowBasedChecksums: Array[RowBasedChecksum]): Long = {
+    val numPartitions: Int = if (rowBasedChecksums != null) rowBasedChecksums.length else 0
+    var aggregatedChecksum: Long = 0
+    if (numPartitions > 0) {
+      for (i <- 0 until numPartitions) {
+        aggregatedChecksum = aggregatedChecksum * 31 + rowBasedChecksums(i).getValue
+      }
+    }
+    return aggregatedChecksum
+  }
+}
