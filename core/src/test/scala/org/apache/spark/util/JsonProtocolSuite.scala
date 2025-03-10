@@ -1823,7 +1823,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read": 1100,
       |      "Total Records Read": 10,
       |      "Remote Requests Duration": 900,
-      |      "Push Based Shuffle": {
+      |      "Shuffle Push Read Metrics": {
       |         "Corrupt Merged Block Chunks" : 100,
       |         "Merged Fetch Fallback Count" : 100,
       |         "Merged Remote Blocks Fetched" : 0,
@@ -1966,7 +1966,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0,
       |      "Remote Requests Duration": 0,
-      |      "Push Based Shuffle": {
+      |      "Shuffle Push Read Metrics": {
       |         "Corrupt Merged Block Chunks" : 0,
       |         "Merged Fetch Fallback Count" : 0,
       |         "Merged Remote Blocks Fetched" : 0,
@@ -2109,7 +2109,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0,
       |      "Remote Requests Duration": 0,
-      |      "Push Based Shuffle": {
+      |      "Shuffle Push Read Metrics": {
       |         "Corrupt Merged Block Chunks" : 0,
       |         "Merged Fetch Fallback Count" : 0,
       |         "Merged Remote Blocks Fetched" : 0,
