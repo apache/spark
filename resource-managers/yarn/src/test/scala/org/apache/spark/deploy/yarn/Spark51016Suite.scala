@@ -159,7 +159,9 @@ private object Spark51016Suite extends Logging {
           if (correctRows.length != rowsAfterRetry.length) {
             logInfo(s"encounterted test failure incorrect query result. run  index = $i ")
           }
-          assert(correctRows.length == rowsAfterRetry.length)
+          assert(correctRows.length == rowsAfterRetry.length,
+            s"correct rows length = ${correctRows.length}," +
+            s" retry rows length = ${rowsAfterRetry.length}")
           val retriedResults = rowsAfterRetry.toBuffer
           correctRows.foreach(r => {
             val index = retriedResults.indexWhere(x =>
