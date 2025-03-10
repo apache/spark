@@ -1572,7 +1572,8 @@ class TaskSetManagerSuite
     verify(taskSetManagerSpy, times(1)).addPendingTask(0, false, false)
   }
 
-  test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
     sc = new SparkContext("local", "test")
     val addedJarsPreTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet.size === 0)

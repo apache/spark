@@ -504,7 +504,8 @@ class SparkSubmitSuite
     }
   }
 
-  test("SPARK-47495: Not to add primary resource to jars again" +
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: SPARK-47495: Not to add primary resource to jars again" +
     " in k8s client mode & driver runs inside a POD") {
     val clArgs = Seq(
       "--deploy-mode", "client",
@@ -523,7 +524,8 @@ class SparkSubmitSuite
     sparkConf.get("spark.jars").contains("TestUDTF") shouldBe true
   }
 
-  test("SPARK-33782: handles k8s files download to current directory") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: SPARK-33782: handles k8s files download to current directory") {
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -558,7 +560,8 @@ class SparkSubmitSuite
     Files.delete(Paths.get("TestUDTF.jar"))
   }
 
-  test("SPARK-47475: Avoid jars download if scheme matches " +
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: SPARK-47475: Avoid jars download if scheme matches " +
     "spark.kubernetes.jars.avoidDownloadSchemes " +
     "in k8s client mode & driver runs inside a POD") {
     val hadoopConf = new Configuration()

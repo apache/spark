@@ -211,7 +211,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     }
   }
 
-  test("Multi chunk artifact") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: Multi chunk artifact") {
     val promise = Promise[AddArtifactsResponse]()
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {
@@ -235,7 +236,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     }
   }
 
-  test("Mix of single-chunk and chunked artifacts") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: Mix of single-chunk and chunked artifacts") {
     val promise = Promise[AddArtifactsResponse]()
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {

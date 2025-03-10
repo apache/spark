@@ -26,8 +26,7 @@ class StubClassLoaderSuite extends SparkFunSuite {
   // TODO: Modify JAR to remove references to connect.
   // See connector/client/jvm/src/test/resources/StubClassDummyUdf for how the UDFs and jars are
   // created.
-  private val udfNoAJar = new File(
-    "src/test/resources/artifact-tests/udf_noA.jar").toURI.toURL
+  private val udfNoAJar = "src/test/resources/artifact-tests/udf_noA.jar"
   private val classDummyUdf = "org.apache.spark.sql.connect.client.StubClassDummyUdf"
   private val classA = "org.apache.spark.sql.connect.client.A"
 
@@ -73,20 +72,22 @@ class StubClassLoaderSuite extends SparkFunSuite {
       error)
   }
 
-  test("stub missing class") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: stub missing class") {
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
     // Install artifact without class A.
-    val sessionClassLoader =
-      new ChildFirstURLClassLoader(Array(udfNoAJar), stubClassLoader, sysClassLoader)
+    val sessionClassLoader = new ChildFirstURLClassLoader(
+      Array(new File(udfNoAJar).toURI.toURL), stubClassLoader, sysClassLoader)
     // Load udf with A used in the same class.
     loadDummyUdf(sessionClassLoader)
     // Class A should be stubbed.
     assert(stubClassLoader.lastStubbed === classA)
   }
 
-  test("unload stub class") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: unload stub class") {
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
@@ -101,7 +102,7 @@ class StubClassLoaderSuite extends SparkFunSuite {
 
     // Creating a new class loader will unpack the udf correctly.
     val cl2 = new ChildFirstURLClassLoader(
-      Array(udfNoAJar),
+      Array(new File(udfNoAJar).toURI.toURL),
       stubClassLoader, // even with the same stub class loader.
       sysClassLoader)
     // Should be able to load after the artifact is added
