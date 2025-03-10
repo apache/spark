@@ -114,7 +114,7 @@ class TransformWithStateInPandasStateServer(
   // A map to store the iterator id -> Iterator[(Row, Row)] mapping. This is to keep track of the
   // current key-value iterator position for each iterator id in a map state for a grouping key in
   // case user tries to fetch another state variable before the current iterator is exhausted.
-  private var keyValueIterators = if (keyValueIteratorMapForTest != null) {
+  private val keyValueIterators = if (keyValueIteratorMapForTest != null) {
     keyValueIteratorMapForTest
   } else {
     new mutable.HashMap[String, Iterator[(Row, Row)]]()

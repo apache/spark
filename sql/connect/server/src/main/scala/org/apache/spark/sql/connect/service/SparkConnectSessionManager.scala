@@ -49,7 +49,7 @@ class SparkConnectSessionManager extends Logging {
       .build[SessionKey, SessionHolderInfo]()
 
   /** Executor for the periodic maintenance */
-  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+  private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
   private def validateSessionId(

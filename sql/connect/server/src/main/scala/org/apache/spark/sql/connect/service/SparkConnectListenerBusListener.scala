@@ -78,7 +78,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * final ResultComplete response.
    */
   def cleanUp(): Unit = {
-    var listener = streamingQueryServerSideListener.getAndSet(null)
+    val listener = streamingQueryServerSideListener.getAndSet(null)
     if (listener != null) {
       sessionHolder.session.streams.removeListener(listener)
       listener.sendResultComplete()
