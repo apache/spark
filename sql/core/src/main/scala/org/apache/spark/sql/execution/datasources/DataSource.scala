@@ -30,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -261,8 +262,11 @@ case class DataSource(
 
         val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
+        val isSingleVariantColumn = providingClass == classOf[json.JsonFileFormat] &&
+          caseInsensitiveOptions.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)
         // If the schema inference is disabled, only text sources require schema to be specified
-        if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
+        if (!isSchemaInferenceEnabled && !isTextSource && !isSingleVariantColumn &&
+            userSpecifiedSchema.isEmpty) {
           throw QueryExecutionErrors.createStreamingSourceNotSpecifySchemaError()
         }
 
