@@ -42,7 +42,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
@@ -68,10 +68,14 @@ abstract class CSVDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): Option[StructType] = {
-    if (inputPaths.nonEmpty) {
-      Some(infer(sparkSession, inputPaths, parsedOptions))
-    } else {
-      None
+    parsedOptions.singleVariantColumn match {
+      case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
+      case None =>
+        if (inputPaths.nonEmpty) {
+          Some(infer(sparkSession, inputPaths, parsedOptions))
+        } else {
+          None
+        }
     }
   }
 
