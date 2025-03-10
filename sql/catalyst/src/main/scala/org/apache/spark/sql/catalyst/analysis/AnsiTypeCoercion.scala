@@ -176,7 +176,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         } else {
           None
         }
+      case (CharType(_) | VarcharType(_), _: AbstractStringType) => Some(StringType)
       case (_: StringType, _: AbstractStringType) => None
+
 
       // If a function expects integral type, fractional input is not allowed.
       case (_: FractionalType, IntegralType) => None
