@@ -38,9 +38,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, ExpressionInfo, NamedArgumentExpression, NamedExpression, ScalarSubquery, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LocalRelation, LogicalPlan, NamedParametersSupport, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LocalRelation, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -1673,6 +1674,86 @@ class SessionCatalog(
       }
       SQLTableFunction(function.name.unquotedString, function, args, output.toSeq)
     }
+  }
+
+  /**
+   * Constructs a SQL table function plan.
+   * This function should be invoked with the captured SQL configs from the function.
+   *
+   * Example SQL table function:
+   *
+   *   CREATE FUNCTION foo(x INT) RETURNS TABLE(a INT) RETURN SELECT x + 1 AS x1
+   *
+   * Query:
+   *
+   *   SELECT * FROM foo(1);
+   *
+   * Plan:
+   *
+   *   Project [CAST(x1 AS INT) AS a]
+   *   +- LateralJoin lateral-subquery [x]
+   *      :  +- Project [(outer(x) + 1) AS x1]
+   *      :     +- OneRowRelation
+   *      +- Project [CAST(1 AS INT) AS x]
+   *         +- OneRowRelation
+   */
+  def makeSQLTableFunctionPlan(
+      name: String,
+      function: SQLFunction,
+      input: Seq[Expression],
+      outputAttrs: Seq[Attribute]): LogicalPlan = {
+    assert(function.isTableFunc)
+    val funcName = function.name.funcName
+    val inputParam = function.inputParam
+    val returnParam = function.getTableFuncReturnCols
+    val (_, query) = function.getExpressionAndQuery(parser, isTableFunc = true)
+    assert(query.isDefined)
+
+    // Check function arguments
+    val paramSize = inputParam.map(_.size).getOrElse(0)
+    if (input.size > paramSize) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        name, paramSize.toString, input.size)
+    }
+
+    val body = if (inputParam.isDefined) {
+      val param = inputParam.get
+      // Attributes referencing the input parameters inside the function can use the
+      // function name as a qualifier.
+      val qualifier = Seq(funcName)
+      val paddedInput = input ++
+        param.takeRight(paramSize - input.size).map { p =>
+          val defaultExpr = p.getDefault()
+          if (defaultExpr.isDefined) {
+            parseDefault(defaultExpr.get, parser)
+          } else {
+            throw QueryCompilationErrors.wrongNumArgsError(
+              name, paramSize.toString, input.size)
+          }
+        }
+
+      val inputCast = paddedInput.zip(param.fields).map {
+        case (expr, param) =>
+          // Add outer references to all attributes in the function input.
+          val outer = expr.transform {
+            case a: Attribute => OuterReference(a)
+          }
+          Alias(Cast(outer, param.dataType), param.name)(qualifier = qualifier)
+      }
+      val inputPlan = Project(inputCast, OneRowRelation())
+      LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
+    } else {
+      query.get
+    }
+
+    assert(returnParam.length == outputAttrs.length)
+    val output = returnParam.fields.zipWithIndex.map { case (param, i) =>
+      // Since we cannot get the output of a unresolved logical plan, we need
+      // to reference the output column of the lateral join by its position.
+      val child = Cast(GetColumnByOrdinal(paramSize + i, param.dataType), param.dataType)
+      Alias(child, param.name)(exprId = outputAttrs(i).exprId)
+    }
+    SQLFunctionNode(function, SubqueryAlias(funcName, Project(output.toSeq, body)))
   }
 
   /**
