@@ -34,6 +34,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -59,6 +60,26 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       shortName,
       userSpecifiedSchema,
       CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap)).runInPython()
+  }
+
+  /**
+   * (Driver-side) Run Python process to push down filters, get the updated
+   * data source instance and the filter pushdown result.
+   */
+  def pushdownFiltersInPython(
+      pythonResult: PythonDataSourceCreationResult,
+      outputSchema: StructType,
+      filters: Array[Filter]): PythonFilterPushdownResult = {
+    val runner = new UserDefinedPythonDataSourceFilterPushdownRunner(
+      createPythonFunction(pythonResult.dataSource),
+      outputSchema,
+      filters
+    )
+    if (runner.isAnyFilterSupported) {
+      runner.runInPython()
+    } else {
+      PythonFilterPushdownResult(pythonResult.dataSource, filters.map(_ => false))
+    }
   }
 
   /**
@@ -300,6 +321,97 @@ private class UserDefinedPythonDataSourceRunner(
   }
 }
 
+/**
+ * @param isFilterPushed A sequence of bools indicating whether each filter is pushed down.
+ */
+case class PythonFilterPushdownResult(
+    dataSource: Array[Byte],
+    isFilterPushed: collection.Seq[Boolean])
+
+/**
+ * Push down filters to a Python data source.
+ *
+ * @param dataSource
+ *   a Python data source instance
+ * @param schema
+ *   output schema of the Python data source
+ * @param filters
+ *   all filters to be pushed down
+ */
+private class UserDefinedPythonDataSourceFilterPushdownRunner(
+    dataSource: PythonFunction,
+    schema: StructType,
+    filters: collection.Seq[Filter])
+    extends PythonPlannerRunner[PythonFilterPushdownResult](dataSource) {
+
+  private case class SerializedFilter(
+      name: String,
+      columnPath: collection.Seq[String],
+      value: Int,
+      index: Int)
+
+  private val serializedFilters = filters.zipWithIndex.flatMap {
+    case (filter, i) =>
+      filter match {
+        case filter @ org.apache.spark.sql.sources.EqualTo(_, value: Int) =>
+          val columnPath = filter.v2references.head
+          Some(SerializedFilter("EqualTo", columnPath, value, i))
+        case _ =>
+          None
+      }
+  }
+
+  // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
+  override val workerModule = "pyspark.sql.worker.data_source_pushdown_filters"
+
+  def isAnyFilterSupported: Boolean = serializedFilters.nonEmpty
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send Python data source
+    PythonWorkerUtils.writePythonFunction(dataSource, dataOut)
+
+    // Send output schema
+    PythonWorkerUtils.writeUTF(schema.json, dataOut)
+
+    // Send the filters
+    // For now only handle EqualTo filter on int
+    dataOut.writeInt(serializedFilters.length)
+    for (f <- serializedFilters) {
+      PythonWorkerUtils.writeUTF(f.name, dataOut)
+      dataOut.writeInt(f.columnPath.length)
+      for (path <- f.columnPath) {
+        PythonWorkerUtils.writeUTF(path, dataOut)
+      }
+      dataOut.writeInt(f.value)
+    }
+  }
+
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
+    // Receive the picked data source or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
+    }
+
+    // Receive the pickled data source.
+    val pickledDataSourceInstance: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+
+    // Receive the pushed filters as a list of indices.
+    val numFiltersPushed = dataIn.readInt()
+    val isFilterPushed = ArrayBuffer.fill(filters.length)(false)
+    for (_ <- 0 until numFiltersPushed) {
+      val i = dataIn.readInt()
+      isFilterPushed(serializedFilters(i).index) = true
+    }
+
+    PythonFilterPushdownResult(
+      dataSource = pickledDataSourceInstance,
+      isFilterPushed = isFilterPushed
+    )
+  }
+}
+
 case class PythonDataSourceReadInfo(
     func: Array[Byte],
     partitions: Seq[Array[Byte]])
@@ -332,6 +444,7 @@ private class UserDefinedPythonDataSourceReadRunner(
 
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
+    dataOut.writeBoolean(SQLConf.get.pythonFilterPushDown)
 
     dataOut.writeBoolean(isStreaming)
   }
