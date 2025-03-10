@@ -65,6 +65,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
+ * @param providerListener A reference to the state store provider for event callback reporting
  */
 class RocksDB(
     dfsRootDir: String,
@@ -73,7 +74,9 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
-    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
+    enableStateStoreCheckpointIds: Boolean = false,
+    providerListener: Option[RocksDBEventListener] = None)
+  extends Logging {
 
   import RocksDB._
 
@@ -1465,6 +1468,11 @@ class RocksDB(
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
+      // Report to coordinator that the snapshot has been uploaded when
+      // changelog checkpointing is enabled, since that is when stores can lag behind.
+      if (enableChangelogCheckpointing) {
+        providerListener.foreach(_.reportSnapshotUploaded(snapshot.version))
+      }
     } finally {
       snapshot.close()
     }
