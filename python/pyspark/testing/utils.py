@@ -944,6 +944,9 @@ def assertDataFrameEqual(
                     return False
             elif isinstance(val1, VariantVal) and isinstance(val2, VariantVal):
                 return compare_vals(val1.toPython(), val2.toPython())
+            elif isinstance(val1, str) and isinstance(val2, str):
+                if abs(float(val1) - float(val2)) > (atol + rtol * abs(float(val2))):
+                    return False
             else:
                 if val1 != val2:
                     return False
