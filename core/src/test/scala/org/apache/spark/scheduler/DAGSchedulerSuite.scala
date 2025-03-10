@@ -3277,11 +3277,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.map(_.id) == Seq(1, 2))
     // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
-    // TODO: THIS ASSERTION APPEARS TO BE WRONG. As the ShuffleMapStage is inDeterminate all
-    // the partitions need to be retried
-    /* assert(failedStages.collect {
-      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
-    }.head.findMissingPartitions() == Seq(0)) */
+    // As the ShuffleMapStage is inDeterminate all the partitions need to be retried
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
     }.head.findMissingPartitions() == Seq(0, 1))
@@ -4253,13 +4249,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.map(_.id) == Seq(1, 2))
     // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
-    // TODO: THIS ASSERTION APPEARS TO BE WRONG. As the ShuffleMapStage is inDeterminate all
-    // the partitions need to be retried
-    /*
-    assert(failedStages.collect {
-      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
-    }.head.findMissingPartitions() == Seq(0))
-     */
+    // As the ShuffleMapStage is inDeterminate all the partitions need to be retried
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
     }.head.findMissingPartitions() == Seq(0, 1))

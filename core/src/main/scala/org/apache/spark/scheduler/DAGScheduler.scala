@@ -1903,7 +1903,7 @@ private[spark] class DAGScheduler(
         val isZombieIndeterminate =
           (task.stageAttemptId < stage.latestInfo.attemptNumber()
             && stage.isIndeterminate) ||
-            stage.treatAllPartitionsMissing(task.stageAttemptId)
+            stage.areAllPartitionsMissing(task.stageAttemptId)
         if (!isZombieIndeterminate) {
           task match {
             case rt: ResultTask[_, _] =>
@@ -2183,23 +2183,20 @@ private[spark] class DAGScheduler(
                         abortStage(mapStage, reason, None)
                       } else {
                         rollingBackStages += mapStage
-                          mapStage.markAttemptIdForAllPartitionsMissing(
-                            mapStage.latestInfo.attemptNumber())
-                        }
-                      } else {
-                        mapStage.markAttemptIdForAllPartitionsMissing(
-                          mapStage.latestInfo.attemptNumber())
+                        mapStage.markAllPartitionsMissing()
                       }
+                    } else {
+                      mapStage.markAllPartitionsMissing()
+                    }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>
                     val numMissingPartitions = resultStage.findMissingPartitions().length
                     if (numMissingPartitions < resultStage.numTasks) {
                       // TODO: support to rollback result tasks.
                       abortStage(resultStage, generateErrorMessage(resultStage), None)
-                      } else {
-                        resultStage.markAttemptIdForAllPartitionsMissing(
-                          resultStage.latestInfo.attemptNumber())
-                      }
+                    } else {
+                      resultStage.markAllPartitionsMissing()
+                    }
 
                   case _ =>
                 }

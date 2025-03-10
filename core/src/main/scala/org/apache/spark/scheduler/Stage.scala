@@ -137,9 +137,9 @@ private[scheduler] abstract class Stage(
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
   }
 
-  def treatAllPartitionsMissing(attemptId: Int): Boolean =
-    this.attemptIdAllPartitionsMissing == attemptId
+  def areAllPartitionsMissing(attemptId: Int): Boolean =
+    this.attemptIdAllPartitionsMissing >= attemptId
 
-  def markAttemptIdForAllPartitionsMissing(attemptId: Int): Unit =
-    this.attemptIdAllPartitionsMissing = attemptId
+  def markAllPartitionsMissing(): Unit =
+    this.attemptIdAllPartitionsMissing = this.latestInfo.attemptNumber()
 }
