@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
@@ -179,7 +179,7 @@ case class AssertTrue(left: Expression, right: Expression, replacement: Expressi
   }
 
   def this(left: Expression) = {
-    this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
+    this(left, Literal(s"'${toPrettySQL(left)}' is not true!"))
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)
