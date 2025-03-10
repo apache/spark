@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
+import org.apache.spark.sql.catalyst.util.{ExpressionConverter, V2ExpressionBuilder}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructField, StructType}
@@ -317,6 +318,12 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
       Some(new Predicate("=", Array(FieldReference("col"), LiteralValue(true, BooleanType)))))
   }
 
+  test("round trip conversion of math functions") {
+    checkRoundTripConversion(
+      v1Expr = Log10(Literal(100)),
+      v2Expr = new GeneralScalarExpression("LOG10", Array(LiteralValue(100, IntegerType))))
+  }
+
   /**
    * Translate the given Catalyst [[Expression]] into data source V2 [[Predicate]]
    * then verify against the given [[Predicate]].
@@ -325,5 +332,16 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
     assertResult(result) {
       DataSourceV2Strategy.translateFilterV2(catalystFilter)
     }
+  }
+
+  private def checkRoundTripConversion(v1Expr: Expression, v2Expr: V2Expression): Unit = {
+    val v2ExprActual = new V2ExpressionBuilder(v1Expr).build().getOrElse {
+      fail(s"can't convert to V2 expression: $v1Expr")
+    }
+    assert(v2ExprActual == v2Expr, "V1 expressions must match")
+    val v1ExprActual = ExpressionConverter.toV1(v2ExprActual).getOrElse {
+      fail(s"can't convert back to V1 expression: $v2ExprActual")
+    }
+    assert(v1ExprActual == v1Expr, "V1 expressions must match")
   }
 }
