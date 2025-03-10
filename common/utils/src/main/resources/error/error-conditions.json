@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OUT_OF_MEMORY" : {
+    "message" : [
+      "No enough memory for aggregation"
+    ],
+    "sqlState" : "82001"
+  },
   "ALL_PARAMETERS_MUST_BE_NAMED" : {
     "message" : [
       "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
@@ -4392,6 +4398,12 @@
     ],
     "sqlState" : "XXKD0"
   },
+  "POINTER_ARRAY_OUT_OF_MEMORY" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ],
+    "sqlState" : "82002"
+  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
@@ -4644,6 +4656,12 @@
       "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
     ],
     "sqlState" : "42601"
+  },
+  "SPILL_OUT_OF_MEMORY" : {
+    "message" : [
+      "Error while calling spill() on <consumerToSpill> : <message>"
+    ],
+    "sqlState" : "82003"
   },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
@@ -9325,21 +9343,6 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3300" : {
-    "message" : [
-      "error while calling spill() on <consumerToSpill> : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3301" : {
-    "message" : [
-      "Not enough memory to grow pointer array"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3302" : {
-    "message" : [
-      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

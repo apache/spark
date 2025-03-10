@@ -110,6 +110,15 @@ private[sql] class SparkConnectClient(
     bstub.analyzePlan(request)
   }
 
+  private def isValidUUID(uuid: String): Boolean = {
+    try {
+      UUID.fromString(uuid)
+      true
+    } catch {
+      case _: IllegalArgumentException => false
+    }
+  }
+
   /**
    * Execute the plan and return response iterator.
    *
@@ -117,7 +126,9 @@ private[sql] class SparkConnectClient(
    * done. If you don't close it, it and the underlying data will be cleaned up once the iterator
    * is garbage collected.
    */
-  def execute(plan: proto.Plan): CloseableIterator[proto.ExecutePlanResponse] = {
+  def execute(
+      plan: proto.Plan,
+      operationId: Option[String] = None): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()
@@ -127,6 +138,13 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+    operationId.foreach { opId =>
+      require(
+        isValidUUID(opId),
+        s"Invalid operationId: $opId. The id must be an UUID string of " +
+          "the format `00112233-4455-6677-8899-aabbccddeeff`")
+      request.setOperationId(opId)
+    }
     if (configuration.useReattachableExecute) {
       bstub.executePlanReattachable(request.build())
     } else {

@@ -1228,7 +1228,9 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
-    def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
+    def _execute_plan_request_with_metadata(
+        self, operation_id: Optional[str] = None
+    ) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest(
             session_id=self._session_id,
             client_type=self._builder.userAgent,
@@ -1238,6 +1240,15 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
+        if operation_id is not None:
+            try:
+                uuid.UUID(operation_id, version=4)
+            except ValueError as ve:
+                raise PySparkValueError(
+                    errorClass="INVALID_OPERATION_UUID_ID",
+                    messageParameters={"arg_name": "operation_id", "origin": str(ve)},
+                )
+            req.operation_id = operation_id
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
