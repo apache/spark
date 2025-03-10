@@ -45,6 +45,9 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *  <li><pre>MODE() WITHIN (ORDER BY input1 [ASC|DESC])</pre> Since 4.0.0</li>
  *  <li><pre>PERCENTILE_CONT(input1) WITHIN (ORDER BY input2 [ASC|DESC])</pre> Since 4.0.0</li>
  *  <li><pre>PERCENTILE_DISC(input1) WITHIN (ORDER BY input2 [ASC|DESC])</pre> Since 4.0.0</li>
+ *  <li><pre>BIT_AND(input1)</pre> Since 4.1.0</li>
+ *  <li><pre>BIT_OR(input1)</pre> Since 4.1.0</li>
+ *  <li><pre>BIT_XOR(input1)</pre> Since 4.1.0</li>
  * </ol>
  *
  * @since 3.3.0
