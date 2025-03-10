@@ -51,7 +51,7 @@ private[spark] class BarrierCoordinator(
 
   // TODO SPARK-25030 Create a Timer() in the mainClass submitted to SparkSubmit makes it unable to
   // fetch result, we shall fix the issue.
-  private lazy val timer = new Timer("BarrierCoordinator barrier epoch increment timer")
+  private lazy val timer = new Timer("BarrierCoordinator barrier epoch increment timer", true)
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
@@ -77,6 +77,7 @@ private[spark] class BarrierCoordinator(
       states.forEachValue(1, clearStateConsumer)
       states.clear()
       listenerBus.removeListener(listener)
+      timer.cancel()
     } finally {
       super.onStop()
     }
