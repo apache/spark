@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark
 
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.matching.Regex
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 
-private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extends Logging {
-  import ExecutorLogUrlHandler._
+
+private[spark] class LogUrlHandler(logUrlPattern: Option[String]) extends Logging {
+  import LogUrlHandler._
 
   private val informedForMissingAttributes = new AtomicBoolean(false)
 
@@ -83,7 +83,7 @@ private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extend
       allPatterns: Set[String],
       allAttributes: Set[String]): Unit = {
     if (informedForMissingAttributes.compareAndSet(false, true)) {
-      logInfo(log"Fail to renew executor log urls: ${MDC(LogKeys.REASON, reason)}." +
+      logInfo(log"Fail to renew log urls: ${MDC(LogKeys.REASON, reason)}." +
         log" Required: ${MDC(LogKeys.REGEX, allPatterns)} / " +
         log"available: ${MDC(LogKeys.ATTRIBUTE_MAP, allAttributes)}." +
         log" Falling back to show app's original log urls.")
@@ -91,6 +91,6 @@ private[spark] class ExecutorLogUrlHandler(logUrlPattern: Option[String]) extend
   }
 }
 
-private[spark] object ExecutorLogUrlHandler {
+private[spark] object LogUrlHandler {
   val CUSTOM_URL_PATTERN_REGEX: Regex = "\\{\\{([A-Za-z0-9_\\-]+)\\}\\}".r
 }
