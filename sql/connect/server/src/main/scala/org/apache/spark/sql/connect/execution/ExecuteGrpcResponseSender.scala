@@ -191,6 +191,18 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   /**
+   * Enqueue an acknowledgement message to the response observer.
+   */
+  private def enqueueAckResponse(): Unit = {
+    logDebug(s"Enqueue acknowledgement for opId=${executeHolder.operationId}")
+    val ackResponse = ExecutePlanResponse
+      .newBuilder()
+      .setAcknowledgement(ExecutePlanResponse.Acknowledgement.newBuilder().build())
+      .build()
+    executeHolder.responseObserver.tryOnNext(ackResponse)
+  }
+
+  /**
    * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
    *
    * In non reattachable execution, it will keep sending responses until the query finishes. In
@@ -203,6 +215,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    *   that. 0 means start from beginning (since first response has index 1)
    */
   def execute(lastConsumedStreamIndex: Long): Unit = {
+    enqueueAckResponse()
     logInfo(
       log"Starting for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
         log"reattachable=${MDC(REATTACHABLE, executeHolder.reattachable)}, " +
