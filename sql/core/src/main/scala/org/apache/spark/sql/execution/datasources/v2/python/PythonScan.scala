@@ -16,26 +16,43 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.JobArtifactSet
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
+import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
+import org.apache.spark.util.Utils
 
 class PythonScan(
-     ds: PythonDataSourceV2,
-     shortName: String,
-     outputSchema: StructType,
-     options: CaseInsensitiveStringMap) extends Scan {
+    ds: PythonDataSourceV2,
+    shortName: String,
+    outputSchema: StructType,
+    options: CaseInsensitiveStringMap,
+    metadata: => Map[String, String]
+) extends Scan
+    with SupportsMetadata {
+  private lazy val sparkSession = SparkSession.active
+  private def maxMetadataValueLength = sparkSession.sessionState.conf.maxMetadataStringLength
 
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
     new PythonMicroBatchStream(ds, shortName, outputSchema, options)
 
-  override def description: String = "(Python)"
+  override def description: String = {
+    val metadataStr = getMetaData().toSeq.sorted.map {
+      case (key, value) =>
+        val redactedValue =
+          Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
+        key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
+    }.mkString(", ")
+    s"(Python) $metadataStr"
+  }
 
   override def readSchema(): StructType = outputSchema
 
@@ -44,6 +61,8 @@ class PythonScan(
 
   override def columnarSupportMode(): Scan.ColumnarSupportMode =
     Scan.ColumnarSupportMode.UNSUPPORTED
+
+  override def getMetaData(): Map[String, String] = metadata
 }
 
 class PythonBatch(
