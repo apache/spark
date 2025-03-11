@@ -259,18 +259,18 @@ class Transformer(Params, metaclass=ABCMeta):
             else:
                 transformed = self._transform(dataset)
 
-            from pyspark.sql.utils import is_remote
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
-            # Keep a reference to the source transformer in the client side, for this case:
+            # Keep a reference to the source transformer in the transformed dataframe and all its descendants.
+            # To dealy the GC of the model. For this case:
             #
             # def fit_transform(df):
             #     model = estimator.fit(df)
             #     return model.transform(df)
             #
             # output = fit_transform(df)
-            if is_remote():
-                # attach the source transformer to the internal plan,
-                # so that all descendant plans also keep it.
+            #
+            if isinstance(transformed, ConnectDataFrame):
                 transformed._plan.__source_transformer__ = self  # type: ignore[attr-defined]
 
             return transformed
