@@ -78,30 +78,26 @@ reading, writing and processing data in the custom format. The plugins (`CustomC
    mvn clean package
    ```
 
-3. **Download the `4.0.0-preview2` release to use as the Spark Connect Server**:
-   - Choose a distribution from https://archive.apache.org/dist/spark/spark-4.0.0-preview2/.
-   - Example: `curl -L https://archive.apache.org/dist/spark/spark-4.0.0-preview2/spark-4.0.0-preview2-bin-hadoop3.tgz | tar xz`
-
-4. **Copy relevant JARs to the root of the unpacked Spark distribution**:
+3. **Copy relevant JARs to the root of the unpacked Spark distribution**:
    ```bash
-    cp \
-    <SPARK_HOME>/connect-examples/server-library-example/resources/spark-daria_2.13-1.2.3.jar \
-    <SPARK_HOME>/connect-examples/server-library-example/common/target/spark-server-library-example-common-1.0.0.jar \
-    <SPARK_HOME>/connect-examples/server-library-example/server/target/spark-server-library-example-server-extension-1.0.0.jar \
-    .
+   cp \
+   connect-examples/server-library-example/resources/spark-daria_2.13-1.2.3.jar \
+   connect-examples/server-library-example/common/target/spark-server-library-example-common-1.0.0.jar \
+   connect-examples/server-library-example/server/target/spark-server-library-example-server-extension-1.0.0.jar \
+   .
    ```
-5. **Start the Spark Connect Server with the relevant JARs**:
+4. **Start the Spark Connect Server with the relevant JARs**:
    ```bash
     bin/spark-connect-shell \
    --jars spark-server-library-example-server-extension-1.0.0.jar,spark-server-library-example-common-1.0.0.jar,spark-daria_2.13-1.2.3.jar \
    --conf spark.connect.extensions.relation.classes=org.apache.connect.examples.serverlibrary.CustomRelationPlugin \
    --conf spark.connect.extensions.command.classes=org.apache.connect.examples.serverlibrary.CustomCommandPlugin
    ```
-6. **In a different terminal, navigate back to the root of the sample project and start the client**:
+5. **In a different terminal, start the client**:
    ```bash
-   java -cp client/target/spark-server-library-client-package-scala-1.0.0.jar org.apache.connect.examples.serverlibrary.CustomTableExample
+   java -cp connect-examples/server-library-example/client/target/spark-server-library-client-package-scala-1.0.0.jar org.apache.connect.examples.serverlibrary.CustomTableExample
    ```
-7. **Notice the printed output in the client terminal as well as the creation of the cloned table**:
+6. **Notice the printed output in the client terminal as well as the creation of the cloned table**:
 ```protobuf
 Explaining plan for custom table: sample_table with path: <SPARK_HOME>/spark/connect-examples/server-library-example/client/../resources/dummy_data.custom
 == Parsed Logical Plan ==

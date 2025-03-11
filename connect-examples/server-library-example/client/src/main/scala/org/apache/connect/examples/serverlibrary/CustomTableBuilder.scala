@@ -19,7 +19,7 @@ package org.apache.connect.examples.serverlibrary
 
 import com.google.protobuf.Any
 import org.apache.spark.connect.proto.Command
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.SparkSession
 
 import org.apache.connect.examples.serverlibrary.CustomTable
 

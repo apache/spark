@@ -37,12 +37,6 @@
       <groupId>org.apache.connect.examples.serverlibrary</groupId>
       <artifactId>spark-server-library-example-common</artifactId>
       <version>1.0.0</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.protobuf</groupId>
-          <artifactId>protobuf-java</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <!-- spark-connect-common contains proto definitions that we require to build custom commands/relations/expressions -->
     <dependency>
@@ -62,7 +56,11 @@
       <artifactId>scala-library</artifactId>
       <version>${scala.version}</version>
     </dependency>
-
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${connect.guava.version}</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -99,13 +97,18 @@
               <shadedArtifactAttached>false</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <createDependencyReducedPom>false</createDependencyReducedPom>
+              <filters>
+                <filter>
+                  <artifact>com.fasterxml.jackson.core:jackson-core</artifact>
+                  <excludes>
+                    <exclude>META-INF/versions/**</exclude>
+                  </excludes>
+                </filter>
+              </filters>
               <relocations>
                 <relocation>
-                  <pattern>com.google</pattern>
-                  <shadedPattern>org.sparkproject.com.google</shadedPattern>
-                  <excludes>
-                    <exclude>com.google.common.**</exclude>
-                  </excludes>
+                  <pattern>com.google.common</pattern>
+                  <shadedPattern>org.sparkproject.guava</shadedPattern>
                 </relocation>
               </relocations>
               <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->

@@ -36,7 +36,8 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <scala.binary>2.13</scala.binary>
     <scala.version>2.13.15</scala.version>
-    <protobuf.version>3.25.4</protobuf.version>
-    <spark.version>4.0.0-preview2</spark.version>
+    <protobuf.version>4.29.3</protobuf.version>
+    <spark.version>4.1.0-SNAPSHOT</spark.version>
+    <connect.guava.version>33.4.0-jre</connect.guava.version>
   </properties>
 </project>

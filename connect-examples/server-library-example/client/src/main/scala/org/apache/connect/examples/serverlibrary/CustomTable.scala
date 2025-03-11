@@ -19,7 +19,8 @@ package org.apache.connect.examples.serverlibrary
 
 import com.google.protobuf.Any
 import org.apache.spark.connect.proto.Command
-import org.apache.spark.sql.{functions, Column, DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{functions, Column, Row}
+import org.apache.spark.sql.connect.{Dataset, SparkSession}
 
 import org.apache.connect.examples.serverlibrary.proto
 import org.apache.connect.examples.serverlibrary.proto.CreateTable.Column.{DataType => ProtoDataType}
