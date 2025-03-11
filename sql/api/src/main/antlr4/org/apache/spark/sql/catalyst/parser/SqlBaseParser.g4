@@ -1190,6 +1190,7 @@ primaryExpression
 
 literalType
     : DATE
+    | TIME
     | TIMESTAMP | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | INTERVAL
     | BINARY_HEX

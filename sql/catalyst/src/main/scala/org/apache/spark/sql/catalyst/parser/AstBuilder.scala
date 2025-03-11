@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils, SparkParserUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -3347,6 +3347,7 @@ class AstBuilder extends DataTypeAstBuilder
         val zoneId = getZoneId(conf.sessionLocalTimeZone)
         val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
         specialDate.getOrElse(toLiteral(stringToDate, DateType))
+      case TIME => toLiteral(stringToTime, TimeType())
       case TIMESTAMP_NTZ =>
         convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
           .map(Literal(_, TimestampNTZType))
