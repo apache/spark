@@ -53,6 +53,7 @@ from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsC
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
+    ArrowStreamPandasUDTFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
@@ -978,6 +979,7 @@ def use_large_var_types(runner_conf):
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type):
     prefers_large_var_types = False
+    legacy_pandas_conversion = False
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         runner_conf = {}
@@ -988,8 +990,25 @@ def read_udtf(pickleSer, infile, eval_type):
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
         prefers_large_var_types = use_large_var_types(runner_conf)
+        legacy_pandas_conversion = (
+            runner_conf.get(
+                "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
+            ).lower()
+            == "true"
+        )
+        if legacy_pandas_conversion:
+            ser = ArrowStreamUDTFSerializer()
+        else:
+            # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
+            safecheck = (
+                runner_conf.get(
+                    "spark.sql.execution.pandas.convertToArrowArraySafely", "false"
+                ).lower()
+                == "true"
+            )
+            timezone = runner_conf.get("spark.sql.session.timeZone", None)
+            ser = ArrowStreamPandasUDTFSerializer(timezone, safecheck)
 
-        ser = ArrowStreamUDTFSerializer()
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
@@ -1296,7 +1315,126 @@ def read_udtf(pickleSer, infile, eval_type):
 
     check_output_row_against_schema = build_null_checker(return_type)
 
-    if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
+    if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF and legacy_pandas_conversion:
+
+        def wrap_arrow_udtf(f, return_type):
+            import pandas as pd
+
+            arrow_return_type = to_arrow_type(
+                return_type, prefers_large_types=use_large_var_types(runner_conf)
+            )
+            return_type_size = len(return_type)
+
+            def verify_result(result):
+                if not isinstance(result, pd.DataFrame):
+                    raise PySparkTypeError(
+                        errorClass="INVALID_ARROW_UDTF_RETURN_TYPE",
+                        messageParameters={
+                            "return_type": type(result).__name__,
+                            "value": str(result),
+                            "func": f.__name__,
+                        },
+                    )
+
+                # Validate the output schema when the result dataframe has either output
+                # rows or columns. Note that we avoid using `df.empty` here because the
+                # result dataframe may contain an empty row. For example, when a UDTF is
+                # defined as follows: def eval(self): yield tuple().
+                if len(result) > 0 or len(result.columns) > 0:
+                    if len(result.columns) != return_type_size:
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                            messageParameters={
+                                "expected": str(return_type_size),
+                                "actual": str(len(result.columns)),
+                                "func": f.__name__,
+                            },
+                        )
+
+                # Verify the type and the schema of the result.
+                verify_pandas_result(
+                    result, return_type, assign_cols_by_name=False, truncate_return_schema=False
+                )
+                return result
+
+            # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+            def func(*a: Any) -> Any:
+                try:
+                    return f(*a)
+                except SkipRestOfInputTableException:
+                    raise
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_EXEC_ERROR",
+                        messageParameters={"method_name": f.__name__, "error": str(e)},
+                    )
+
+            def check_return_value(res):
+                # Check whether the result of an arrow UDTF is iterable before
+                # using it to construct a pandas DataFrame.
+                if res is not None:
+                    if not isinstance(res, Iterable):
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_RETURN_NOT_ITERABLE",
+                            messageParameters={
+                                "type": type(res).__name__,
+                                "func": f.__name__,
+                            },
+                        )
+                    if check_output_row_against_schema is not None:
+                        for row in res:
+                            if row is not None:
+                                check_output_row_against_schema(row)
+                            yield row
+                    else:
+                        yield from res
+
+            def evaluate(*args: pd.Series):
+                if len(args) == 0:
+                    res = func()
+                    yield verify_result(pd.DataFrame(check_return_value(res))), arrow_return_type
+                else:
+                    # Create tuples from the input pandas Series, each tuple
+                    # represents a row across all Series.
+                    row_tuples = zip(*args)
+                    for row in row_tuples:
+                        res = func(*row)
+                        yield verify_result(
+                            pd.DataFrame(check_return_value(res))
+                        ), arrow_return_type
+
+            return evaluate
+
+        eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
+            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+        )
+        eval = wrap_arrow_udtf(eval_func_kwargs_support, return_type)
+
+        if hasattr(udtf, "terminate"):
+            terminate = wrap_arrow_udtf(getattr(udtf, "terminate"), return_type)
+        else:
+            terminate = None
+
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
+        def mapper(_, it):
+            try:
+                for a in it:
+                    # The eval function yields an iterator. Each element produced by this
+                    # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
+                    yield from eval(*[a[o] for o in args_kwargs_offsets])
+                if terminate is not None:
+                    yield from terminate()
+            except SkipRestOfInputTableException:
+                if terminate is not None:
+                    yield from terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
+
+        return mapper, None, ser, ser
+
+    elif eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF and not legacy_pandas_conversion:
 
         def wrap_arrow_udtf(f, return_type):
             import pyarrow as pa
@@ -1389,7 +1527,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     return ret
                 except Exception as e:
                     raise PySparkRuntimeError(
-                        errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
+                        errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
                         messageParameters={
                             "data": str(data),
                             "schema": return_type.simpleString(),
@@ -1443,7 +1581,6 @@ def read_udtf(pickleSer, infile, eval_type):
                     cleanup()
 
         return mapper, None, ser, ser
-
     else:
 
         def wrap_udtf(f, return_type):
