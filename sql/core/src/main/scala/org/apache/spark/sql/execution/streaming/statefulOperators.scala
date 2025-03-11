@@ -485,20 +485,6 @@ trait StateStoreWriter
     }.toMap
   }
 
-  private def stateStoreInstanceMetricObjects: Map[String, StateStoreInstanceMetric] = {
-    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
-    val maxPartitions = stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
-
-    (0 until maxPartitions).flatMap { partitionId =>
-      provider.supportedInstanceMetrics.flatMap { metric =>
-        stateStoreNames.map { storeName =>
-          val metricWithPartition = metric.withNewId(partitionId, storeName)
-          (metricWithPartition.name, metricWithPartition)
-        }
-      }
-    }.toMap
-  }
-
   /**
    * Set of stateful operator custom metrics. These are captured as part of the generic
    * key-value map [[StateOperatorProgress.customMetrics]].
