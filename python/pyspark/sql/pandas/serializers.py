@@ -612,11 +612,13 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         """
         Create an Arrow record batch from the given pandas.Series pandas.DataFrame
         or list of Series or DataFrame, with optional type.
+
         Parameters
         ----------
         series : pandas.Series or pandas.DataFrame or list
             A single series or dataframe, list of series or dataframe,
             or list of (series or dataframe, arrow_type)
+
         Returns
         -------
         pyarrow.RecordBatch
@@ -661,6 +663,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         from a given pandas.Series and an arrow type. The difference here is that we always
         use arrow cast when creating the arrow array. Also, the error messages are specific
         to arrow-optimized Python UDTFs.
+
         Parameters
         ----------
         series : pandas.Series
@@ -672,6 +675,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         arrow_cast: bool, optional
             Whether to apply Arrow casting when the user-specified return type mismatches the
             actual return values.
+
         Returns
         -------
         pyarrow.Array
@@ -711,7 +715,8 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             raise PySparkRuntimeError(
                 errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
                 messageParameters={
-                    "data": series,
+                    "col_name": series.name,
+                    "col_type": str(series.dtype),
                     "arrow_type": arrow_type,
                 },
             ) from None
