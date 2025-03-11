@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.hive
 
+import java.lang.reflect.{InvocationTargetException, Method}
+
 import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, UDF}
+import org.apache.hadoop.hive.ql.exec.{DefaultUDFMethodResolver, SparkDefaultUDFMethodResolver, UDF, UDFArgumentException}
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory, ObjectInspectorUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -70,8 +73,10 @@ class HiveSimpleUDFEvaluator(
   extends HiveUDFEvaluatorBase[UDF](funcWrapper, children) {
 
   @transient
-  lazy val method = function.getResolver.
-    getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
+  lazy val method: Method = (function.getResolver match {
+    case r: DefaultUDFMethodResolver => new SparkDefaultUDFMethodResolver(r)
+    case r => r
+  }).getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
 
   @transient
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
@@ -98,10 +103,22 @@ class HiveSimpleUDFEvaluator(
       method.getGenericReturnType, ObjectInspectorOptions.JAVA))
 
   override def doEvaluate(): Any = {
-    val ret = FunctionRegistry.invoke(
-      method,
-      function,
-      conversionHelper.convertIfNecessary(inputs: _*): _*)
+    val arguments = conversionHelper.convertIfNecessary(inputs: _*)
+    // Follow behavior of o.a.h.hive.ql.exec.FunctionRegistry#invoke
+    val ret = try {
+      method.invoke(function, arguments: _*)
+    } catch {
+      case e: Exception =>
+        val argumentString =
+          if (arguments == null) "null" else arguments.mkString("{", ",", "}")
+        val detailedMsg = if (e.isInstanceOf[InvocationTargetException]) {
+          e.getCause.getMessage
+        } else {
+          e.getMessage
+        }
+        throw new HiveException(
+          s"Unable to execute method $method with arguments $argumentString:$detailedMsg", e)
+    }
     unwrapper(ret)
   }
 }
@@ -111,17 +128,41 @@ class HiveGenericUDFEvaluator(
   extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
 
   @transient
-  private lazy val argumentInspectors = children.map(toInspector)
+  private lazy val argumentInspectors = children.map(toInspector).toArray
 
   @transient
   lazy val returnInspector = {
-    function.initializeAndFoldConstants(argumentInspectors.toArray)
+    // Inline o.a.h.hive.ql.udf.generic.GenericUDF#initializeAndFoldConstants, but
+    // elminate calls o.a.h.hive.ql.exec.FunctionRegistry to avoid initializing Hive
+    // built-in UDFs.
+    val oi = function.initialize(argumentInspectors)
+    // If the UDF depends on any external resources, we can't fold because the
+    // resources may not be available at compile time.
+    if (function.getRequiredFiles == null && function.getRequiredJars == null &&
+      argumentInspectors.forall(ObjectInspectorUtils.isConstantObjectInspector) &&
+      !ObjectInspectorUtils.isConstantObjectInspector(oi) &&
+      isUDFDeterministic &&
+      ObjectInspectorUtils.supportsConstantObjectInspector(oi)) {
+      val argumentValues: Array[DeferredObject] = argumentInspectors.map { argumentInspector =>
+        new GenericUDF.DeferredJavaObject(
+          argumentInspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue)
+      }
+      try {
+        val constantValue = function.evaluate(argumentValues)
+        ObjectInspectorUtils.getConstantObjectInspector(oi, constantValue)
+      } catch {
+        case e: HiveException =>
+          throw new UDFArgumentException(e)
+      }
+    } else {
+      oi
+    }
   }
 
   @transient
   private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
     case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
-  }.toArray[DeferredObject]
+  }
 
   @transient
   private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
