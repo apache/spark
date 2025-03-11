@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.hive
 
-import java.lang.reflect.{InvocationTargetException, Method}
+import java.lang.reflect.Method
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.hive.ql.exec.{DefaultUDFMethodResolver, SparkDefaultUDFMethodResolver, UDF, UDFArgumentException}
+import org.apache.hadoop.hive.ql.exec.{DefaultUDFMethodResolver, HiveFunctionRegistryUtils, SparkDefaultUDFMethodResolver, UDF, UDFArgumentException}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
@@ -103,22 +103,10 @@ class HiveSimpleUDFEvaluator(
       method.getGenericReturnType, ObjectInspectorOptions.JAVA))
 
   override def doEvaluate(): Any = {
-    val arguments = conversionHelper.convertIfNecessary(inputs: _*)
-    // Follow behavior of o.a.h.hive.ql.exec.FunctionRegistry#invoke
-    val ret = try {
-      method.invoke(function, arguments: _*)
-    } catch {
-      case e: Exception =>
-        val argumentString =
-          if (arguments == null) "null" else arguments.mkString("{", ",", "}")
-        val detailedMsg = if (e.isInstanceOf[InvocationTargetException]) {
-          e.getCause.getMessage
-        } else {
-          e.getMessage
-        }
-        throw new HiveException(
-          s"Unable to execute method $method with arguments $argumentString:$detailedMsg", e)
-    }
+    val ret = HiveFunctionRegistryUtils.invoke(
+      method,
+      function,
+      conversionHelper.convertIfNecessary(inputs: _*): _*)
     unwrapper(ret)
   }
 }

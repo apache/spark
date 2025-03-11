@@ -148,16 +148,16 @@
       <artifactId>byte-buddy-agent</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-llap-common</artifactId>
-      <scope>${hive.llap.scope}</scope>
-    </dependency>
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-llap-client</artifactId>
-      <scope>${hive.llap.scope}</scope>
-    </dependency>
+<!--    <dependency>-->
+<!--      <groupId>${hive.group}</groupId>-->
+<!--      <artifactId>hive-llap-common</artifactId>-->
+<!--      <scope>${hive.llap.scope}</scope>-->
+<!--    </dependency>-->
+<!--    <dependency>-->
+<!--      <groupId>${hive.group}</groupId>-->
+<!--      <artifactId>hive-llap-client</artifactId>-->
+<!--      <scope>${hive.llap.scope}</scope>-->
+<!--    </dependency>-->
     <dependency>
       <groupId>net.sf.jpam</groupId>
       <artifactId>jpam</artifactId>
