@@ -207,8 +207,8 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
             else:
                 raise RuntimeError(f"Unsupported {self}")
 
-            # Keep a reference to the source transformer in the transformed dataframe and all its descendants.
-            # To delay the GC of the model.
+            # To delay the GC of the model, keep a reference to the source transformer
+            # in the transformed dataframe and all its descendants.
             # For this case:
             #
             # def fit_transform(df):
