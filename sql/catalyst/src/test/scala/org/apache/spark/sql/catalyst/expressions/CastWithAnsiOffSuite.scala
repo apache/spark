@@ -901,4 +901,10 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
           castOverflowErrMsg(toType))
     }
   }
+
+  test("cast invalid string input to time") {
+    Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
+      checkEvaluation(cast(invalidInput, TimeType()), null)
+    }
+  }
 }
