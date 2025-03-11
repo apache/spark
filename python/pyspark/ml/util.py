@@ -185,29 +185,40 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
 
                 assert isinstance(self._java_obj, str)
                 params = serialize_ml_params(self, session.client)
-                return ConnectDataFrame(
-                    TransformerRelation(
-                        child=dataset._plan, name=self._java_obj, ml_params=params, is_model=True
-                    ),
-                    session,
+                plan = TransformerRelation(
+                    child=dataset._plan,
+                    name=self._java_obj,
+                    ml_params=params,
+                    is_model=True,
                 )
             elif isinstance(self, Transformer):
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
                 params = serialize_ml_params(self, session.client)
-                return ConnectDataFrame(
-                    TransformerRelation(
-                        child=dataset._plan,
-                        name=self._java_obj,
-                        ml_params=params,
-                        uid=self.uid,
-                        is_model=False,
-                    ),
-                    session,
+                plan = TransformerRelation(
+                    child=dataset._plan,
+                    name=self._java_obj,
+                    ml_params=params,
+                    uid=self.uid,
+                    is_model=False,
                 )
+
             else:
                 raise RuntimeError(f"Unsupported {self}")
+
+            # Keep a reference to the source transformer in the transformed dataframe and all its descendants.
+            # To delay the GC of the model.
+            # For this case:
+            #
+            # def fit_transform(df):
+            #     model = estimator.fit(df)
+            #     return model.transform(df)
+            #
+            # output = fit_transform(df)
+            #
+            plan.__source_transformer__ = self  # type: ignore[attr-defined]
+            return ConnectDataFrame(plan=plan, session=session)
         else:
             return f(self, dataset)
 

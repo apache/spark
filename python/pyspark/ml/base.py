@@ -255,25 +255,9 @@ class Transformer(Params, metaclass=ABCMeta):
             params = dict()
         if isinstance(params, dict):
             if params:
-                transformed = self.copy(params)._transform(dataset)
+                return self.copy(params)._transform(dataset)
             else:
-                transformed = self._transform(dataset)
-
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-            # Keep a reference to the source transformer in the transformed dataframe and all its descendants.
-            # To dealy the GC of the model. For this case:
-            #
-            # def fit_transform(df):
-            #     model = estimator.fit(df)
-            #     return model.transform(df)
-            #
-            # output = fit_transform(df)
-            #
-            if isinstance(transformed, ConnectDataFrame):
-                transformed._plan.__source_transformer__ = self  # type: ignore[attr-defined]
-
-            return transformed
+                return self._transform(dataset)
         else:
             raise TypeError("Params must be a param map but got %s." % type(params))
 
