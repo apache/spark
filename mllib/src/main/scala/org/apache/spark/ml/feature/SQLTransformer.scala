@@ -22,6 +22,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -78,8 +79,18 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     val spark = SparkSession.builder().getOrCreate()
-    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
-    val dummyDF = spark.createDataFrame(dummyRDD, schema)
+
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan($(statement))
+    parsedPlan match {
+      case _: Project => // SELECT a, a + b FROM __THIS__
+      case _: Aggregate => // SELECT a, SUM(B) FROM __THIS__ GROUP BY a
+      case _: Sort => // SELECT a, SUM(B) FROM __THIS__ GROUP BY a ORDER BY a
+      case _ =>
+        throw new IllegalArgumentException("SQL expression must be a SELECT statement, " +
+          s"but got $parsedPlan")
+    }
+
+    val dummyDF = spark.createDataFrame(java.util.List.of[Row](Row.fromSeq(Seq.empty)), schema)
     val tableName = Identifiable.randomUID(uid)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
     dummyDF.createOrReplaceTempView(tableName)
