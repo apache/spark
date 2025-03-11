@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution
 
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.spark.Partitioner
 import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, UnsafeRow}
 import org.apache.spark.util.Utils
 
-trait SqlKey extends Serializable
+trait SqlKey extends Serializable with KryoSerializable
 
 object RowKey {
   def apply(row: UnsafeRow): RowKey = new RowKey(row)
@@ -38,9 +41,28 @@ object SqlKeyPartitioner {
 
 case class RowKey(var row: UnsafeRow) extends SqlKey {
   def this() = this(null)
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    row.write(kryo, output)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    if (row == null) {
+      row = new UnsafeRow();
+    }
+    row.read(kryo, input)
+  }
 }
-case class IntKey(value: Int) extends SqlKey {
+case class IntKey(var value: Int) extends SqlKey {
   def this() = this(-1)
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    output.writeInt(value)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    this.value = input.readInt
+  }
 }
 
 class SqlKeyPartitioner(partitions: Int, real: Option[Partitioner] = None) extends Partitioner {
