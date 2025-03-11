@@ -1873,15 +1873,29 @@ private[spark] class DAGScheduler(
   private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
     val task = event.task
     val stageId = task.stageId
+    val stageOption = stageIdToStage.get(task.stageId)
+    val isIndeterministicZombie = event.reason match {
+      case Success if stageOption.isDefined =>
+        val stage = stageOption.get
+        (task.stageAttemptId < stage.latestInfo.attemptNumber()
+          && stage.isIndeterminate) || stage.areAllPartitionsMissing (task.stageAttemptId)
+
+      case _ => false
+    }
+
 
     outputCommitCoordinator.taskCompleted(
       stageId,
       task.stageAttemptId,
       task.partitionId,
       event.taskInfo.attemptNumber, // this is a task attempt number
-      event.reason)
+      if (isIndeterministicZombie) {
+        TaskKilled(reason = "Indeterminate stage needs all tasks to be retried")
+      } else {
+        event.reason
+      })
 
-    if (!stageIdToStage.contains(task.stageId)) {
+    if (stageOption.isEmpty) {
       // The stage may have already finished when we get this event -- e.g. maybe it was a
       // speculative task. It is important that we send the TaskEnd event in any case, so listeners
       // are properly notified and can chose to handle it. For instance, some listeners are
@@ -1893,18 +1907,14 @@ private[spark] class DAGScheduler(
       return
     }
 
-    val stage = stageIdToStage(task.stageId)
+    val stage = stageOption.get
 
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
     // only updated in certain cases.
-    val isIndeterministicZombie = event.reason match {
+    event.reason match {
       case Success =>
-        val isZombieIndeterminate =
-          (task.stageAttemptId < stage.latestInfo.attemptNumber()
-            && stage.isIndeterminate) ||
-            stage.areAllPartitionsMissing(task.stageAttemptId)
-        if (!isZombieIndeterminate) {
+        if (!isIndeterministicZombie) {
           task match {
             case rt: ResultTask[_, _] =>
               val resultStage = stage.asInstanceOf[ResultStage]
@@ -1919,18 +1929,15 @@ private[spark] class DAGScheduler(
             case _ => updateAccumulators(event)
           }
         }
-        isZombieIndeterminate
 
-      case _: ExceptionFailure | _: TaskKilled =>
-        updateAccumulators(event)
-        false
+      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
 
-      case _ => false
+      case _ =>
     }
     if (trackingCacheVisibility) {
       // Update rdd blocks' visibility status.
       blockManagerMaster.updateRDDBlockVisibility(
-        event.taskInfo.taskId, visible = event.reason == Success)
+        event.taskInfo.taskId, visible = event.reason == Success && !isIndeterministicZombie)
     }
 
     postTaskEnd(event)
@@ -2133,6 +2140,12 @@ private[spark] class DAGScheduler(
             failedStages += failedStage
             failedStages += mapStage
             if (noResubmitEnqueued) {
+              def generateErrorMessage(stage: Stage): String = {
+                "A shuffle map stage with indeterminate output was failed and retried. " +
+                  s"However, Spark cannot rollback the $stage to re-process the input data, " +
+                  "and has to fail this job. Please eliminate the indeterminacy by " +
+                  "checkpointing the RDD before repartition and try again."
+              }
               // If the map stage is INDETERMINATE, which means the map tasks may return
               // different result when re-try, we need to re-try all the tasks of the failed
               // stage and its succeeding stages, because the input data will be changed after the
@@ -2157,13 +2170,6 @@ private[spark] class DAGScheduler(
                       collectStagesToRollback(s :: stageChain)
                     }
                   }
-                }
-
-                def generateErrorMessage(stage: Stage): String = {
-                  "A shuffle map stage with indeterminate output was failed and retried. " +
-                    s"However, Spark cannot rollback the $stage to re-process the input data, " +
-                    "and has to fail this job. Please eliminate the indeterminacy by " +
-                    "checkpointing the RDD before repartition and try again."
                 }
 
                 activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
@@ -2203,6 +2209,19 @@ private[spark] class DAGScheduler(
                 logInfo(log"The shuffle map stage ${MDC(SHUFFLE_ID, mapStage)} with indeterminate output was failed, " +
                   log"we will roll back and rerun below stages which include itself and all its " +
                   log"indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
+              } else if (failedStage.isIndeterminate) {
+                failedStage match {
+                  case resultStage: ResultStage if resultStage.activeJob.isDefined =>
+                    val numMissingPartitions = resultStage.findMissingPartitions().length
+                    if (numMissingPartitions < resultStage.numTasks) {
+                      // TODO: support to rollback result tasks.
+                      abortStage(resultStage, generateErrorMessage(resultStage), None)
+                    } else {
+                      resultStage.markAllPartitionsMissing()
+                    }
+
+                  case _ =>
+                }
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
