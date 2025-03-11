@@ -651,4 +651,5 @@ class InMemoryCatalog(
     requireDbExists(db)
     StringUtils.filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
   }
+
 }
