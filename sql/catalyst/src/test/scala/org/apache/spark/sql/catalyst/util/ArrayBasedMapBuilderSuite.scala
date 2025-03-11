@@ -91,7 +91,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("remove duplicated keys with last wins policy") {
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
       builder.put(1, 1)
       builder.put(2, 2)
@@ -116,7 +116,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
       builder.put(Array(1.toByte), 1)
       builder.put(Array(2.toByte), 2)
@@ -152,7 +152,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
       builder.put(InternalRow(1), 1)
       builder.put(InternalRow(2), 2)
@@ -186,7 +186,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
       builder.put(new GenericArrayData(Seq(1, 1)), 1)
       builder.put(new GenericArrayData(Seq(2, 2)), 2)

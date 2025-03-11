@@ -290,7 +290,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
         CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
@@ -435,7 +435,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         "key" -> "1",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
         MapFromArrays(
@@ -561,7 +561,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         "key" -> "a",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
         new StringToMap(Literal("a:1,b:2,a:3")),

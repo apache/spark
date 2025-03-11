@@ -1495,7 +1495,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     intercept[SparkRuntimeException](df1.selectExpr("map_concat(map1, map2)").collect())
     intercept[SparkRuntimeException](df1.select(map_concat($"map1", $"map2")).collect())
-    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
       checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
       checkAnswer(df1.select(map_concat($"map1", $"map2")), expected1a)
     }
@@ -5200,7 +5200,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       intercept[SparkRuntimeException] {
         dfExample3.select(transform_keys(col("x"), (k, v) => k % 2 === 0 || v)).collect()
       }
-      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.name) {
         checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"),
           Seq(Row(Map(true -> true, true -> false))))
 

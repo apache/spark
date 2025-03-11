@@ -4503,7 +4503,14 @@ object SQLConf {
       .createWithDefault("builtin")
 
   object MapKeyDedupPolicy extends Enumeration {
-    val EXCEPTION, LAST_WIN = Value
+    import scala.language.implicitConversions
+
+    sealed case class PolicyVal(name: String) extends Val(name)
+
+    implicit def valueToPolicyVal(v: Value): PolicyVal = v.asInstanceOf[PolicyVal]
+
+    val EXCEPTION = PolicyVal("EXCEPTION")
+    val LAST_WIN = PolicyVal("LAST_WIN")
   }
 
   val MAP_KEY_DEDUP_POLICY = buildConf("spark.sql.mapKeyDedupPolicy")
@@ -4514,8 +4521,8 @@ object SQLConf {
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(MapKeyDedupPolicy.values.map(_.toString))
-    .createWithDefault(MapKeyDedupPolicy.EXCEPTION.toString)
+    .checkValues(MapKeyDedupPolicy.values.map(_.name))
+    .createWithDefault(MapKeyDedupPolicy.EXCEPTION.name)
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
