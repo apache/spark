@@ -53,7 +53,7 @@ class ColumnarRulesSuite extends PlanTest with SharedSparkSession {
     assert(appliedTwice == expected)
   }
 
-  test("Don't insert redundant ColumnarToRowExec") {
+  test("SPARK-51474: Don't insert redundant ColumnarToRowExec") {
     val rules = ApplyColumnarRulesAndInsertTransitions(
       spark.sessionState.columnarRules, false)
 
