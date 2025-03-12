@@ -1313,8 +1313,7 @@ case class Cast(
             """
           } else {
             code"""
-              scala.Option<Integer> $intOpt =
-                org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c);
+              scala.Option<Integer> $intOpt = $dateTimeUtilsCls.stringToDate($c);
               if ($intOpt.isDefined()) {
                 $evPrim = ((Integer) $intOpt.get()).intValue();
               } else {
@@ -1327,8 +1326,7 @@ case class Cast(
         val zidClass = classOf[ZoneId]
         val zid = JavaCode.global(ctx.addReferenceObj("zoneId", zoneId, zidClass.getName), zidClass)
         (c, evPrim, evNull) =>
-          code"""$evPrim =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, $zid);"""
+          code"""$evPrim = $dateTimeUtilsCls.microsToDays($c, $zid);"""
       case TimestampNTZType =>
         (c, evPrim, evNull) =>
           code"$evPrim = $dateTimeUtilsCls.microsToDays($c, java.time.ZoneOffset.UTC);"
@@ -1481,8 +1479,7 @@ case class Cast(
            """
         } else {
           code"""
-            scala.Option<Long> $longOpt =
-              org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid);
+            scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTimestamp($c, $zid);
             if ($longOpt.isDefined()) {
               $evPrim = ((Long) $longOpt.get()).longValue();
             } else {
@@ -1500,8 +1497,7 @@ case class Cast(
         ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
         zoneIdClass)
       (c, evPrim, evNull) =>
-        code"""$evPrim =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);"""
+        code"""$evPrim = $dateTimeUtilsCls.daysToMicros($c, $zid);"""
     case TimestampNTZType =>
       val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
