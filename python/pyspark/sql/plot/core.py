@@ -694,7 +694,6 @@ class PySparkBoxPlotBase:
         assert len(colnames) > 0
         formatted_colnames = ["`{}`".format(colname) for colname in colnames]
 
-        stats_col = "__pyspark_plotting_box_plot_stats__"
         stats_scols = []
         for i, colname in enumerate(formatted_colnames):
             percentiles = F.percentile_approx(colname, [0.25, 0.50, 0.75], int(1.0 / precision))
@@ -713,6 +712,7 @@ class PySparkBoxPlotBase:
             stats_scols.append(ufence.alias(f"ufence_{i}"))
 
         # compute all stats with a scalar subquery
+        stats_col = "__pyspark_plotting_box_plot_stats__"
         sdf = sdf.select("*", sdf.select(F.struct(*stats_scols)).scalar().alias(stats_col))
 
         result_scols = []
