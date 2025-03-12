@@ -695,7 +695,6 @@ class PySparkBoxPlotBase:
         formatted_colnames = ["`{}`".format(colname) for colname in colnames]
 
         stats_col = "__pyspark_plotting_box_plot_stats__"
-
         stats_scols = []
         for i, colname in enumerate(formatted_colnames):
             percentiles = F.percentile_approx(colname, [0.25, 0.50, 0.75], int(1.0 / precision))
