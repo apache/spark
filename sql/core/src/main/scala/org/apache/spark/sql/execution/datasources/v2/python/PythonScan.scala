@@ -46,10 +46,10 @@ class PythonScan(
   override def description: String = {
     val metadataStr = getMetaData().toSeq.sorted.map {
       case (key, value) =>
-        val maxMetadataValueLength = sparkSession.sessionState.conf.maxMetadataStringLength
         val redactedValue =
           Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
-        key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
+        key + ": " + StringUtils.abbreviate(
+          redactedValue, sparkSession.sessionState.conf.maxMetadataStringLength)
     }.mkString(", ")
     s"(Python) $metadataStr"
   }
