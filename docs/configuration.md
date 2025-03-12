@@ -128,7 +128,7 @@ Spark properties can mainly be divided into two kinds: one related to deployment
 set programmatically through `SparkConf` at runtime, or the behavior may be dependent on which
 cluster manager and deploy mode you choose, so it would be suggested to set them through configuration
 file or `spark-submit` command line options; another is mainly related to Spark runtime control,
-like "spark.task.maxFailures" - these properties can be set in either way.
+like "spark.task.maxFailures" - these properties can be set either way.
 
 ## Viewing Spark Properties
 
