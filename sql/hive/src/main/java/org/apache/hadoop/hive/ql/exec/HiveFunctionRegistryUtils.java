@@ -41,7 +41,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
 public class HiveFunctionRegistryUtils {
 
   public static final SparkLogger LOG =
-          SparkLoggerFactory.getLogger(HiveFunctionRegistryUtils.class);
+    SparkLoggerFactory.getLogger(HiveFunctionRegistryUtils.class);
 
   /**
    * This method is shared between UDFRegistry and UDAFRegistry. methodName will
@@ -103,10 +103,10 @@ public class HiveFunctionRegistryUtils {
           conversionCost += cost;
         }
       }
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Method {} match: passed = {} accepted = {} method = {}",
-            match ? "did" : "didn't", argumentsPassed, argumentsAccepted, m);
-      }
+
+      LOG.debug("Method {} match: passed = {} accepted = {} method = {}",
+          match ? "did" : "didn't", argumentsPassed, argumentsAccepted, m);
+
       if (match) {
         // Always choose the function with least implicit conversions.
         if (conversionCost < leastConversionCost) {
