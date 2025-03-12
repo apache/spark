@@ -20,6 +20,9 @@ package org.apache.spark.shuffle.checksum
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import java.util.zip.Checksum
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 
 /**
@@ -27,15 +30,28 @@ import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
  * the order of the input (key, value) pairs. It is done by computing a checksum for each row
  * first, and then computing the XOR for all the row checksums.
  */
-abstract class RowBasedChecksum() extends Serializable {
+abstract class RowBasedChecksum() extends Serializable with Logging {
+  private var hasError: Boolean = false
   private var checksumValue: Long = 0
-  /** Returns the checksum value computed */
-  def getValue: Long = checksumValue
+  /** Returns the checksum value computed. Tt returns the default checksum value (0) if there
+   * are any errors encountered during the checksum computation.
+   */
+  def getValue: Long = {
+    if (!hasError) checksumValue else 0
+  }
 
   /** Updates the row-based checksum with the given (key, value) pair */
   def update(key: Any, value: Any): Unit = {
-    val rowChecksumValue = calculateRowChecksum(key, value)
-    checksumValue = checksumValue ^ rowChecksumValue
+    if (!hasError) {
+      try {
+        val rowChecksumValue = calculateRowChecksum(key, value)
+        checksumValue = checksumValue ^ rowChecksumValue
+      } catch {
+        case NonFatal(e) =>
+          logInfo("Checksum computation encountered error: ", e)
+          hasError = true
+      }
+    }
   }
 
   /** Computes and returns the checksum value for the given (key, value) pair */

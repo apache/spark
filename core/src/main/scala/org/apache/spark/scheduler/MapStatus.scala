@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -39,7 +39,7 @@ private[spark] trait ShuffleOutputStatus
  * task has shuffle files stored on as well as the sizes of outputs for each reducer, for passing
  * on to the reduce tasks.
  */
-private[spark] sealed trait MapStatus extends ShuffleOutputStatus with Logging {
+private[spark] sealed trait MapStatus extends ShuffleOutputStatus {
   /** Location where this task output is. */
   def location: BlockManagerId
 
