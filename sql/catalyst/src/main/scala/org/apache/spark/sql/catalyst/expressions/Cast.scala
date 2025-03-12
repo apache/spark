@@ -1364,8 +1364,7 @@ case class Cast(
             """
           } else {
             code"""
-              scala.Option<Long> $longOpt =
-                org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTime($c);
+              scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTime($c);
               if ($longOpt.isDefined()) {
                 $evPrim = ((Long) $longOpt.get()).longValue();
               } else {
@@ -1375,7 +1374,7 @@ case class Cast(
           }
 
       case _ =>
-        (_, evPrim, evNull) => code"$evNull = true;"
+        (_, _, evNull) => code"$evNull = true;"
     }
   }
 
