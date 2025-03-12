@@ -75,5 +75,5 @@ ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.29.1 goog
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
 # TODO(SPARK-49862) Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS to Python 3.13 image when it supports Python 3.13
 RUN python3.13 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
-RUN python3.13 -m pip install numpy>=2.1 pyarrow>=18.0.0 six==1.16.0 pandas==2.2.3 scipy coverage matplotlib openpyxl grpcio==1.67.0 grpcio-status==1.67.0 lxml jinja2 && \
+RUN python3.13 -m pip install numpy>=2.1 pyarrow>=19.0.0 six==1.16.0 pandas==2.2.3 scipy coverage matplotlib openpyxl grpcio==1.67.0 grpcio-status==1.67.0 lxml jinja2 && \
     python3.13 -m pip cache purge
