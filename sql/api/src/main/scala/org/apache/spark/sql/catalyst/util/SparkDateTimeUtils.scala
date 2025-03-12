@@ -30,7 +30,7 @@ import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
-import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{DateType, Decimal, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkClassUtils
 
@@ -196,6 +196,16 @@ trait SparkDateTimeUtils {
    */
   def microsToLocalTime(micros: Long): LocalTime = {
     LocalTime.ofNanoOfDay(Math.multiplyExact(micros, NANOS_PER_MICROS))
+  }
+
+  def toSecondsAndNanos(secAndMicros: Decimal): (Int, Int) = {
+    assert(secAndMicros.scale == 6,
+      s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
+    val unscaledSecFrac = secAndMicros.toUnscaledLong
+    val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
+    val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
+    val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
+    (seconds, nanos)
   }
 
   /**

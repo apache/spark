@@ -2589,20 +2589,21 @@ case class MakeTime(
   override def first: Expression = hours
   override def second: Expression = minutes
   override def third: Expression = seconds
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
   override def dataType: DataType = TimeType(TimeType.MAX_PRECISION)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override protected def nullSafeEval(hours: Any, minutes: Any, seconds: Any): Any = {
-    val wholeSecs = seconds.asInstanceOf[Int]
-    val nanoSecs = ((seconds.asInstanceOf[Double] - wholeSecs) * 1_000_000_000).asInstanceOf[Int]
+    val (secs, nanos) = toSecondsAndNanos(seconds.asInstanceOf[Decimal])
+    // TODO do I need to have special handling for postgres compat?
 
     try {
+      // TODO special error handling for decimal with scale != 6?
       val lt = LocalTime.of(
         hours.asInstanceOf[Int],
         minutes.asInstanceOf[Int],
-        wholeSecs,
-        nanoSecs
+        secs,
+        nanos
       )
       localTimeToMicros(lt)
     } catch {
@@ -2918,12 +2919,7 @@ case class MakeTimestamp(
       secAndMicros: Decimal,
       zoneId: ZoneId): Any = {
     try {
-      assert(secAndMicros.scale == 6,
-        s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
-      val unscaledSecFrac = secAndMicros.toUnscaledLong
-      val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
-      val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
-      val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
+      val (seconds, nanos) = toSecondsAndNanos(secAndMicros)
       val ldt = if (seconds == 60) {
         if (nanos == 0) {
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
