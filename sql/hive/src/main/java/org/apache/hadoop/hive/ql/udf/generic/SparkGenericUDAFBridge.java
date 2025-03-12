@@ -17,20 +17,19 @@
 
 package org.apache.hadoop.hive.ql.udf.generic;
 
-import java.io.Serializable;
-import java.lang.reflect.Method;
-import java.lang.reflect.Type;
+import java.io.Serial;
 import java.util.Arrays;
 
-import org.apache.hadoop.hive.ql.exec.*;
+import org.apache.hadoop.hive.ql.exec.DefaultUDAFEvaluatorResolver;
+import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
+import org.apache.hadoop.hive.ql.exec.HiveFunctionRegistryUtils;
+import org.apache.hadoop.hive.ql.exec.SparkDefaultUDAFEvaluatorResolver;
+import org.apache.hadoop.hive.ql.exec.UDAF;
+import org.apache.hadoop.hive.ql.exec.UDAFEvaluator;
+import org.apache.hadoop.hive.ql.exec.UDAFEvaluatorResolver;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
-import org.apache.hadoop.util.ReflectionUtils;
 
 /**
  * A equivalent implementation of {@link GenericUDAFBridge}, but eliminate calls
@@ -39,16 +38,10 @@ import org.apache.hadoop.util.ReflectionUtils;
  * The code is based on Hive 2.3.10.
  */
 @SuppressWarnings("deprecation")
-public class SparkGenericUDAFBridge extends AbstractGenericUDAFResolver {
-
-  UDAF udaf;
+public class SparkGenericUDAFBridge extends GenericUDAFBridge {
 
   public SparkGenericUDAFBridge(UDAF udaf) {
-    this.udaf = udaf;
-  }
-
-  public Class<? extends UDAF> getUDAFClass() {
-    return udaf.getClass();
+      super(udaf);
   }
 
   @Override
@@ -61,112 +54,22 @@ public class SparkGenericUDAFBridge extends AbstractGenericUDAFResolver {
     Class<? extends UDAFEvaluator> udafEvaluatorClass =
         resolver.getEvaluatorClass(Arrays.asList(parameters));
 
-    return new GenericUDAFBridgeEvaluator(udafEvaluatorClass);
+    return new SparkGenericUDAFBridgeEvaluator(udafEvaluatorClass);
   }
 
-  /**
-   * GenericUDAFBridgeEvaluator.
-   */
-  public static class GenericUDAFBridgeEvaluator extends GenericUDAFEvaluator
-      implements Serializable {
+  public static class SparkGenericUDAFBridgeEvaluator
+      extends GenericUDAFBridge.GenericUDAFBridgeEvaluator {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     // Used by serialization only
-    public GenericUDAFBridgeEvaluator() {
+    public SparkGenericUDAFBridgeEvaluator() {
     }
 
-    public Class<? extends UDAFEvaluator> getUdafEvaluator() {
-      return udafEvaluator;
-    }
-
-    public void setUdafEvaluator(Class<? extends UDAFEvaluator> udafEvaluator) {
-      this.udafEvaluator = udafEvaluator;
-    }
-
-    public GenericUDAFBridgeEvaluator(
+    public SparkGenericUDAFBridgeEvaluator(
         Class<? extends UDAFEvaluator> udafEvaluator) {
-      this.udafEvaluator = udafEvaluator;
-    }
-
-    Class<? extends UDAFEvaluator> udafEvaluator;
-
-    transient ObjectInspector[] parameterOIs;
-    transient Object result;
-
-    transient Method iterateMethod;
-    transient Method mergeMethod;
-    transient Method terminatePartialMethod;
-    transient Method terminateMethod;
-
-    transient ConversionHelper conversionHelper;
-
-    @Override
-    public ObjectInspector init(Mode m, ObjectInspector[] parameters) throws HiveException {
-      super.init(m, parameters);
-      parameterOIs = parameters;
-
-      // Get the reflection methods from ue
-      for (Method method : udafEvaluator.getMethods()) {
-        method.setAccessible(true);
-        if (method.getName().equals("iterate")) {
-          iterateMethod = method;
-        }
-        if (method.getName().equals("merge")) {
-          mergeMethod = method;
-        }
-        if (method.getName().equals("terminatePartial")) {
-          terminatePartialMethod = method;
-        }
-        if (method.getName().equals("terminate")) {
-          terminateMethod = method;
-        }
-      }
-
-      // Input: do Java/Writable conversion if needed
-      Method aggregateMethod = null;
-      if (mode == Mode.PARTIAL1 || mode == Mode.COMPLETE) {
-        aggregateMethod = iterateMethod;
-      } else {
-        aggregateMethod = mergeMethod;
-      }
-      conversionHelper = new ConversionHelper(aggregateMethod, parameters);
-
-      // Output: get the evaluate method
-      Method evaluateMethod = null;
-      if (mode == Mode.PARTIAL1 || mode == Mode.PARTIAL2) {
-        evaluateMethod = terminatePartialMethod;
-      } else {
-        evaluateMethod = terminateMethod;
-      }
-      // Get the output ObjectInspector from the return type.
-      Type returnType = evaluateMethod.getGenericReturnType();
-      try {
-        return ObjectInspectorFactory.getReflectionObjectInspector(returnType,
-            ObjectInspectorOptions.JAVA);
-      } catch (RuntimeException e) {
-        throw new HiveException("Cannot recognize return type " + returnType
-            + " from " + evaluateMethod, e);
-      }
-    }
-
-    /** class for storing UDAFEvaluator value. */
-    static class UDAFAgg extends AbstractAggregationBuffer {
-      UDAFEvaluator ueObject;
-
-      UDAFAgg(UDAFEvaluator ueObject) {
-        this.ueObject = ueObject;
-      }
-    }
-
-    @Override
-    public AggregationBuffer getNewAggregationBuffer() {
-      return new UDAFAgg(ReflectionUtils.newInstance(udafEvaluator, null));
-    }
-
-    @Override
-    public void reset(AggregationBuffer agg) throws HiveException {
-      ((UDAFAgg) agg).ueObject.init();
+      super(udafEvaluator);
     }
 
     @Override
