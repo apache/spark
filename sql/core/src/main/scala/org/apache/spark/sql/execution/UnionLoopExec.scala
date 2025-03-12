@@ -22,10 +22,11 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalLimit, LogicalPlan, Project, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LogicalPlan, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.execution.LogicalRDD.rewriteStatsAndConstraints
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
@@ -93,26 +94,12 @@ case class UnionLoopExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"))
 
-  private val simpleRecursion = {
-    recursion match {
-      case Project(_, Filter(_, Project(_, UnionLoopRef(_, _, _)))) =>
-        true
-      case Filter(_, Project(_, UnionLoopRef(_, _, _))) =>
-        true
-      case Project(_, Filter(_, UnionLoopRef(_, _, _))) =>
-        true
-      case Project(_, UnionLoopRef(_, _, _)) =>
-        true
-      case _ =>
-        true
-    }
-  }
-
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
    */
-  private def executeAndCache(plan: LogicalPlan, currentLimit: Int) = {
+  private def executeAndCacheAndCount(
+                                       plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a (local) limit node above the plan and execute
     // the newly created plan.
     val planOrLimitedPlan = if (limit.isDefined) {
@@ -121,16 +108,9 @@ case class UnionLoopExec(
       plan
     }
     val df = Dataset.ofRows(session, planOrLimitedPlan)
-    if (!simpleRecursion) {
-      df.repartition()
-    } else {
-      df
-    }
-  }
-  private def executeAndCacheAndCount(plan: LogicalPlan, currentLimit: Int) = {
-    val newDF = executeAndCache(plan, currentLimit)
-    val count = newDF.count()
-    (newDF, count)
+    val cachedDF = df.repartition()
+    val count = cachedDF.count()
+    (cachedDF, count)
   }
 
   /**
@@ -153,7 +133,7 @@ case class UnionLoopExec(
     // condition of while loop down (limit.isEmpty will be true).
     var currentLimit = limit.getOrElse(-1)
 
-    val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
+    val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
 
@@ -167,11 +147,6 @@ case class UnionLoopExec(
 
     var limitReached: Boolean = false
     // Main loop for obtaining the result of the recursive query.
-    var newRecursion = anchor
-
-    var nextCheck = 1
-
-    val logCase = limit.isEmpty && simpleRecursion
     while (prevCount > 0 && !limitReached) {
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
@@ -182,17 +157,9 @@ case class UnionLoopExec(
       }
 
       // Inherit stats and constraints from the dataset of the previous iteration.
-      val prevPlan = {
-        if (!simpleRecursion) {
-          LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
-            .newInstance()
-        } else {
-          newRecursion
-        }
-      }
-      if (!logCase) {
-        unionChildren += prevPlan
-      }
+      val prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
+        .newInstance()
+      unionChildren += prevPlan
 
       if (limit.isDefined) {
         currentLimit -= prevCount.toInt
@@ -202,6 +169,7 @@ case class UnionLoopExec(
       }
 
       // Update metrics
+      numOutputRows += prevCount
       numIterations += 1
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
@@ -210,54 +178,19 @@ case class UnionLoopExec(
       // This way we support only UNION ALL case. Additional case should be added for UNION case.
       // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
       if (!limitReached) {
-        newRecursion = recursion.transform {
+        val newRecursion = recursion.transform {
           case r: UnionLoopRef =>
-            val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
-              case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
-            }
-            Project(prevPlanToRefMapping, prevPlan)
+            val logicalPlan = prevDF.logicalPlan
+            val optimizedPlan = prevDF.queryExecution.optimizedPlan
+            val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
+            prevPlan.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
         }
 
-        if(currentLevel == nextCheck) {
-          Console.println("Ulazim u cek")
-          val (df, count) = executeAndCacheAndCount(newRecursion, currentLimit)
-          prevDF = df
-          prevCount = count
-          if (logCase) {
-            nextCheck *= 2
-          } else {
-            nextCheck += 1
-          }
-
-        }
-        else {
-          prevCount = 1
-        }
+        val (df, count) = executeAndCacheAndCount(newRecursion, currentLimit)
+        prevDF = df
+        prevCount = count
 
         currentLevel += 1
-      }
-    }
-
-
-    prevDF = executeAndCache(anchor, currentLimit)
-    if (logCase) {
-      for (_ <- 0 to currentLevel) {
-
-        val prevPlan =
-          LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
-            .newInstance()
-        unionChildren += prevPlan
-        newRecursion = recursion.transform {
-          case r: UnionLoopRef =>
-
-            val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
-              case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
-            }
-            Project(prevPlanToRefMapping, prevPlan)
-        }
-
-        val df = executeAndCache(newRecursion, currentLimit)
-        prevDF = df
       }
     }
 
@@ -278,7 +211,6 @@ case class UnionLoopExec(
           df.coalesce(numPartitions)
         }
       }
-      Console.println("selfsync")
       dfMaybeCoalesced.queryExecution.toRdd
     }
   }
