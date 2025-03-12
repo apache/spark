@@ -82,9 +82,10 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
 
     val parsedPlan = spark.sessionState.sqlParser.parsePlan($(statement))
     parsedPlan match {
-      case _: Project => // SELECT a, a + b FROM __THIS__
-      case _: Aggregate => // SELECT a, SUM(B) FROM __THIS__ GROUP BY a
-      case _: Sort => // SELECT a, SUM(B) FROM __THIS__ GROUP BY a ORDER BY a
+      case _: Project =>
+      case _: Filter =>
+      case _: Aggregate =>
+      case _: Sort =>
       case _ =>
         throw new IllegalArgumentException("SQL expression must be a SELECT statement, " +
           s"but got $parsedPlan")
