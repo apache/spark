@@ -33,6 +33,22 @@ CREATE FUNCTION foo1b2(a INT, b INT, c INT, d INT) RETURNS TABLE(c1 INT) RETURN 
 -- Expect (1)
 SELECT * FROM foo1b2(1, 2, 3, 4);
 
+-- 1.1.c Duplicate argument names
+-- Expect failure
+CREATE FUNCTION foo1c1(duplicate INT, DUPLICATE INT) RETURNS INT RETURN 1;
+
+-- Expect failure
+CREATE FUNCTION foo1c2(a INT, b INT, thisisaduplicate INT, c INT, d INT, e INT, f INT, thisIsaDuplicate INT, g INT)
+    RETURNS TABLE (a INT) RETURN SELECT 1;
+
+-- 1.1.d DEFAULT parameters
+-- TODO(SPARK-51439): Support default parameters in SQL UDF
+-- DEFAULT in scalar function
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT NULL) RETURNS INT RETURN a;
+
+-- DEFAULT in table function
+CREATE OR REPLACE FUNCTION foo1d1(a INT, b INT DEFAULT 7) RETURNS TABLE(a INT, b INT) RETURN SELECT a, b;
+
 -------------------------------
 -- 2. Scalar SQL UDF
 -- 2.1 deterministic simple expressions

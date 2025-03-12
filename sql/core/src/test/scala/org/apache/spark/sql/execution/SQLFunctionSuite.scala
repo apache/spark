@@ -63,7 +63,9 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
     withUserDefinedFunction("foo" -> false) {
       sql(
         """
-          | CREATE FUNCTION foo(x INT) RETURNS TABLE(a INT) RETURN SELECT x + 1 AS x1
+          |CREATE FUNCTION foo(x INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x + 1 AS x1
           |""".stripMargin)
       checkAnswer(sql("SELECT * FROM foo(1)"), Row(2))
       checkAnswer(sql(
