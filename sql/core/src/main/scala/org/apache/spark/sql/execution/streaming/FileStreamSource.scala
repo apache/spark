@@ -305,7 +305,10 @@ class FileStreamSource(
     logInfo(log"Processing ${MDC(LogKeys.NUM_FILES, files.length)} files from " +
       log"${MDC(LogKeys.FILE_START_OFFSET, startOffset + 1)}:" +
       log"${MDC(LogKeys.FILE_END_OFFSET, endOffset)}")
-    logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+    // files.mkString() is expensive if the list is long. Avoid it if not needed.
+    if (log.isTraceEnabled()) {
+      logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+    }
     val newDataSource =
       DataSource(
         sparkSession,
@@ -399,7 +402,12 @@ class FileStreamSource(
     } else {
       logTrace(s"Listed ${files.size} file(s) in $listingTimeMs ms")
     }
-    logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+
+    // files.mkString() is expensive if the list is long. Avoid it if trace level is
+    // not enabled.
+    if (log.isTraceEnabled()) {
+      logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+    }
     files
   }
 
