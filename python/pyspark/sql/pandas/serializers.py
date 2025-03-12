@@ -20,6 +20,8 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
+
+import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.loose_version import LooseVersion
 from pyspark.serializers import (
@@ -388,9 +390,16 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         import pyarrow as pa
+        import pandas as pd
 
         for batch in batches:
-            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
+            pandas_batches = [
+                self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()
+            ]
+            if len(pandas_batches) == 0:
+                yield [pd.Series([pyspark._NoValue] * batch.num_rows)]
+            else:
+                yield pandas_batches
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
@@ -1214,8 +1223,17 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
-        result = [(b, t) for x in iterator for y, t in x for b in y]
-        super().dump_stream(result, stream)
+
+        def flatten_iterator():
+            # iterator: iter[list[(iter[pandas.DataFrame], pdf_type)]]
+            for packed in iterator:
+                iter_pdf_with_type = packed[0]
+                iter_pdf = iter_pdf_with_type[0]
+                pdf_type = iter_pdf_with_type[1]
+                for pdf in iter_pdf:
+                    yield (pdf, pdf_type)
+
+        super().dump_stream(flatten_iterator(), stream)
 
 
 class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSerializer):

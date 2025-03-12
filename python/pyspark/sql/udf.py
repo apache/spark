@@ -17,8 +17,6 @@
 """
 User-defined function related classes and functions
 """
-from inspect import getfullargspec
-
 import functools
 import inspect
 import sys
@@ -146,18 +144,7 @@ def _create_py_udf(
     eval_type: int = PythonEvalType.SQL_BATCHED_UDF
 
     if is_arrow_enabled:
-        try:
-            is_func_with_args = len(getfullargspec(f).args) > 0
-        except TypeError:
-            is_func_with_args = False
-        if is_func_with_args:
-            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
-        else:
-            warnings.warn(
-                "Arrow optimization for Python UDFs cannot be enabled for functions"
-                " without arguments.",
-                UserWarning,
-            )
+        eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
 
     return _create_udf(f, returnType, eval_type)
 

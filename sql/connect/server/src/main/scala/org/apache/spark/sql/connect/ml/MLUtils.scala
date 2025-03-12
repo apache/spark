@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.lang.reflect.InvocationTargetException
 import java.util.{Optional, ServiceLoader}
 import java.util.stream.Collectors
 
@@ -688,7 +689,12 @@ private[ml] object MLUtils {
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName)
+    try {
+      invokeMethod(obj, methodName)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def invokeMethodAllowed(
@@ -697,7 +703,12 @@ private[ml] object MLUtils {
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName, args, parameterTypes)
+    try {
+      invokeMethod(obj, methodName, args, parameterTypes)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {
