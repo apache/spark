@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.math.BigDecimal
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalTime}
 import java.time.format.DateTimeFormatter
 
 import scala.collection.immutable
@@ -1213,9 +1213,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(nullResult.schema === new StructType().add("nullTime", TimeType()))
     // Input parameter of UDF is null
     val nullInput = Seq(null.asInstanceOf[java.time.LocalTime]).toDF("nullTime")
-    val constDuration = udf((_: java.time.LocalTime) =>
+    val constTime = udf((_: java.time.LocalTime) =>
       java.time.LocalTime.parse(mockTimeStr))
-    val constResult = nullInput.select(constDuration($"nullTime").as("zeroHour"))
+    val constResult = nullInput.select(constTime($"nullTime").as("zeroHour"))
     checkAnswer(constResult, Row(java.time.LocalTime.parse(mockTimeStr)) :: Nil)
     assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
     // Error in the conversion of UDF result to the internal representation of time
