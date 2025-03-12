@@ -117,7 +117,12 @@ private[sql] object Dataset {
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
-  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan, scriptId: UUID): DataFrame =
+  /** A variant of ofRows that allows passing in a SQL Script ID.
+   * Should only be called from SQL Scripts. */
+  private[sql] def ofRows(
+      sparkSession: SparkSession,
+      logicalPlan: LogicalPlan,
+      scriptId: UUID): DataFrame =
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
       qe.scriptId = Option(scriptId)
