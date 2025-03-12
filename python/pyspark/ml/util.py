@@ -113,6 +113,11 @@ def invoke_remote_attribute_relation(
     methods, obj_ref = _extract_id_methods(instance._java_obj)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
     plan = AttributeRelation(obj_ref, methods)
+
+    # To delay the GC of the model, keep a reference to the source instance,
+    # might be a model or a summary.
+    plan.__source_instance__ = instance  # type: ignore[attr-defined]
+
     return ConnectDataFrame(plan, session)
 
 
