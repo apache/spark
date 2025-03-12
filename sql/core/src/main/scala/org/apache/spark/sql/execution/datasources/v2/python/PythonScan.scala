@@ -35,8 +35,7 @@ class PythonScan(
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
     supportedFilters: Array[Filter]
-) extends Scan
-    with SupportsMetadata {
+) extends Scan with SupportsMetadata {
   private lazy val sparkSession = SparkSession.active
 
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
