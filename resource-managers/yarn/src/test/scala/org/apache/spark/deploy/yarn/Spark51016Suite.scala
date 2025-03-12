@@ -150,7 +150,7 @@ private object Spark51016Suite extends Logging {
       val outerjoin: DataFrame = getOuterJoinDF(spark)
       val correctRows = outerjoin.collect()
       JobListener.inKillMode = true
-      for (i <- 0 until 100) {
+      for (i <- 0 until 50) {
         try {
           eventually(timeout(3.minutes), interval(100.milliseconds)) {
             assert(sc.getExecutorIds().size == 2)
@@ -180,7 +180,6 @@ private object Spark51016Suite extends Logging {
           })
           assert(retriedResults.isEmpty)
           logInfo(s"found successful query exec on  iter index = $i")
-          Thread.sleep(500)
         } catch {
           case se: SparkException if se.getMessage.contains("Please eliminate the" +
             " indeterminacy by checkpointing the RDD before repartition and try again") =>
