@@ -997,8 +997,6 @@ def read_udtf(pickleSer, infile, eval_type):
             == "true"
         )
         if legacy_pandas_conversion:
-            ser = ArrowStreamUDTFSerializer()
-        else:
             # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
             safecheck = (
                 runner_conf.get(
@@ -1008,6 +1006,8 @@ def read_udtf(pickleSer, infile, eval_type):
             )
             timezone = runner_conf.get("spark.sql.session.timeZone", None)
             ser = ArrowStreamPandasUDTFSerializer(timezone, safecheck)
+        else:
+            ser = ArrowStreamUDTFSerializer()
 
     else:
         # Each row is a group so do not batch but send one by one.
