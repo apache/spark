@@ -32,14 +32,8 @@ class PythonScanBuilder(
     with SupportsPushDownFilters {
   private var supportedFilters: Array[Filter] = Array.empty
 
-  private def metadata: Map[String, String] = {
-    Map(
-      "PushedFilters" -> supportedFilters.mkString("[", ", ", "]"),
-      "ReadSchema" -> outputSchema.simpleString
-    )
-  }
-
-  override def build(): Scan = new PythonScan(ds, shortName, outputSchema, options, metadata)
+  override def build(): Scan =
+    new PythonScan(ds, shortName, outputSchema, options, supportedFilters)
 
   // Optionally called by DSv2 once to push down filters before the scan is built.
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {

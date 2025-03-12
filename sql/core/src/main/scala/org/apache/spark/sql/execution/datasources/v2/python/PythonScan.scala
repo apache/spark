@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
 import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -33,11 +34,10 @@ class PythonScan(
     shortName: String,
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
-    metadata: => Map[String, String]
+    supportedFilters: Array[Filter]
 ) extends Scan
     with SupportsMetadata {
   private lazy val sparkSession = SparkSession.active
-  private def maxMetadataValueLength = sparkSession.sessionState.conf.maxMetadataStringLength
 
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
@@ -47,6 +47,7 @@ class PythonScan(
   override def description: String = {
     val metadataStr = getMetaData().toSeq.sorted.map {
       case (key, value) =>
+        val maxMetadataValueLength = sparkSession.sessionState.conf.maxMetadataStringLength
         val redactedValue =
           Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
         key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
@@ -62,7 +63,12 @@ class PythonScan(
   override def columnarSupportMode(): Scan.ColumnarSupportMode =
     Scan.ColumnarSupportMode.UNSUPPORTED
 
-  override def getMetaData(): Map[String, String] = metadata
+  override def getMetaData(): Map[String, String] = {
+    Map(
+      "PushedFilters" -> supportedFilters.mkString("[", ", ", "]"),
+      "ReadSchema" -> outputSchema.simpleString
+    )
+  }
 }
 
 class PythonBatch(
