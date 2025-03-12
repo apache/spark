@@ -121,7 +121,7 @@ class HiveGenericUDFEvaluator(
   @transient
   lazy val returnInspector = {
     // Inline o.a.h.hive.ql.udf.generic.GenericUDF#initializeAndFoldConstants, but
-    // elminate calls o.a.h.hive.ql.exec.FunctionRegistry to avoid initializing Hive
+    // eliminate calls o.a.h.hive.ql.exec.FunctionRegistry to avoid initializing Hive
     // built-in UDFs.
     val oi = function.initialize(argumentInspectors)
     // If the UDF depends on any external resources, we can't fold because the
