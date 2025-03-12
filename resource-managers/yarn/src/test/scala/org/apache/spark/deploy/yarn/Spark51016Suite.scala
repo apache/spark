@@ -26,15 +26,16 @@ import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageSubmitted}
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.apache.spark.tags.ExtendedYarnTest
-import org.apache.spark.{SparkContext, SparkException}
+
 
 @ExtendedYarnTest
 class Spark51016Suite extends BaseYarnClusterSuite {

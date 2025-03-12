@@ -169,7 +169,8 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       extraEnv: Map[String, String] = Map(),
       outFile: Option[File] = None,
       testTimeOut: Int = 3, // minutes
-      timeOutIntervalCheck: Int = 1 /* seconds */): SparkAppHandle.State = {
+      timeOutIntervalCheck: Int = 1 // seconds
+  ): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map(
