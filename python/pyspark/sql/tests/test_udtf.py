@@ -2859,7 +2859,7 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
+class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_eval_type(self):
         def upper(x: str):
             return upper(x)
@@ -3139,10 +3139,10 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
 
-class LegacyUDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
+class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDTFArrowTests, cls).setUpClass()
+        super(LegacyUDTFArrowTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
         cls.spark.conf.set(
             "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "true"
@@ -3154,26 +3154,10 @@ class LegacyUDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
-            super(UDTFArrowTests, cls).tearDownClass()
+            super(LegacyUDTFArrowTests, cls).tearDownClass()
 
 
-class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(UDTFArrowTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
-        cls.spark.conf.set(
-            "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
-        )
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
-            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
-        finally:
-            super(UDTFArrowTests, cls).tearDownClass()
-
+class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_udtf_eval_returning_non_tuple(self):
         @udtf(returnType="a: int")
         class TestUDTF:
@@ -3397,6 +3381,24 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+
+class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(UDTFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
+        finally:
+            super(UDTFArrowTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":
