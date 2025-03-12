@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
@@ -53,12 +53,16 @@ public enum ParquetCompressionCodec {
     return ParquetCompressionCodec.valueOf(s.toUpperCase(Locale.ROOT));
   }
 
-  private static final Map<String, String> codecNameMap =
+  private static final EnumMap<ParquetCompressionCodec, String> codecNameMap =
     Arrays.stream(ParquetCompressionCodec.values()).collect(
-      Collectors.toMap(codec -> codec.name(), codec -> codec.name().toLowerCase(Locale.ROOT)));
+      Collectors.toMap(
+        codec -> codec,
+        codec -> codec.name().toLowerCase(Locale.ROOT),
+        (oldValue, newValue) -> oldValue,
+        () -> new EnumMap<>(ParquetCompressionCodec.class)));
 
   public String lowerCaseName() {
-    return codecNameMap.get(this.name());
+    return codecNameMap.get(this);
   }
 
   public static final List<ParquetCompressionCodec> availableCodecs =

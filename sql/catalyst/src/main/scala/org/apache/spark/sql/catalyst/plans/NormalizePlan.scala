@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.GetViewColumnByNameAndOrdinal
+import org.apache.spark.sql.catalyst.analysis.{DeduplicateRelations, GetViewColumnByNameAndOrdinal}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
@@ -145,6 +145,11 @@ object NormalizePlan extends PredicateHelper {
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
+      case project: Project
+          if project
+            .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
+            .isDefined =>
+        project.child
       case Project(projectList, child) =>
         val projList = projectList
           .map { e =>

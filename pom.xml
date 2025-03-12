@@ -120,7 +120,7 @@
     <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7.1</asm.version>
-    <slf4j.version>2.0.16</slf4j.version>
+    <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.24.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.1</hadoop.version>
@@ -138,7 +138,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.15.0</parquet.version>
-    <orc.version>2.1.0</orc.version>
+    <orc.version>2.1.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.24</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -197,6 +197,7 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
+    <json4s.version>4.0.7</json4s.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.16</jersey.version>
     <joda.version>2.13.0</joda.version>
@@ -214,7 +215,7 @@
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.118.Final</netty.version>
+    <netty.version>4.1.119.Final</netty.version>
     <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.4</junit-jupiter.version>
@@ -724,7 +725,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.10.0</version>
+        <version>9.8.4</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -859,6 +860,56 @@
         <artifactId>protobuf-java-util</artifactId>
         <version>${protobuf.version}</version>
         <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-api</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-protobuf</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-stub</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-netty</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-services</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-inprocess</artifactId>
+        <version>${io.grpc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.api.grpc</groupId>
+        <artifactId>proto-google-common-protos</artifactId>
+        <version>2.41.0</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-codec-http2</artifactId>
+        <version>${netty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-handler-proxy</artifactId>
+        <version>${netty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-unix-common</artifactId>
+        <version>${netty.version}</version>
       </dependency>
       <dependency>
         <groupId>org.roaringbitmap</groupId>
@@ -1117,13 +1168,23 @@
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>4.0.7</version>
+        <version>${json4s.version}</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.json4s</groupId>
+        <artifactId>json4s-core_${scala.binary.version}</artifactId>
+        <version>${json4s.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.json4s</groupId>
+        <artifactId>json4s-ast_${scala.binary.version}</artifactId>
+        <version>${json4s.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
@@ -2497,6 +2558,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-format</artifactId>
+        <version>${arrow.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
         <artifactId>arrow-vector</artifactId>
         <version>${arrow.version}</version>
         <exclusions>
@@ -2513,6 +2579,11 @@
             <artifactId>netty-common</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-memory-core</artifactId>
+        <version>${arrow.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>

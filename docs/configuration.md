@@ -3399,12 +3399,28 @@ They are typically set via the config file and command-line options with `--conf
   <td>4.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.connect.grpc.binding.address</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Address for Spark Connect server to bind.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.connect.grpc.binding.port</code></td>
   <td>
     15002
   </td>
   <td>Port for Spark Connect server to bind.</td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.port.maxRetries</code></td>
+  <td>
+    0
+  </td>
+  <td>The max port retry attempts for the gRPC server binding. By default, it's set to 0, and the server will fail fast in case of port conflicts.</td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.connect.grpc.interceptor.classes</code></td>
@@ -3458,6 +3474,70 @@ Expression types in proto.</td>
 <code>org.apache.spark.sql.connect.plugin.CommandPlugin</code> to support custom
 Command types in proto.</td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.ml.backend.classes</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Comma separated list of classes that implement the trait <code>org.apache.spark.sql.connect.plugin.MLBackendPlugin</code> to replace the specified Spark ML operators with a backend-specific implementation.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.jvmStacktrace.maxSize</code></td>
+  <td>
+    1024
+  </td>
+  <td>Sets the maximum stack trace size to display when `spark.sql.pyspark.jvmStacktrace.enabled` is true.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.ui.retainedSessions</code></td>
+  <td>
+    200
+  </td>
+  <td>The number of client sessions kept in the Spark Connect UI history.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.ui.retainedStatements</code></td>
+  <td>
+    200
+  </td>
+  <td>The number of statements kept in the Spark Connect UI history.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.enrichError.enabled</code></td>
+  <td>
+    true
+  </td>
+  <td>When true, it enriches errors with full exception messages and optionally server-side stacktrace on the client side via an additional RPC.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.serverStacktrace.enabled</code></td>
+  <td>
+    true
+  </td>
+  <td>When true, it sets the server-side stacktrace in the user-facing Spark exception.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.maxMetadataSize</code></td>
+  <td>
+    1024
+  </td>
+  <td>Sets the maximum size of metadata fields. For instance, it restricts metadata fields in `ErrorInfo`.</td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.progress.reportInterval</code></td>
+  <td>
+    2s
+  </td>
+  <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
+  <td>4.0.0</td>
 </tr>
 </table>
 

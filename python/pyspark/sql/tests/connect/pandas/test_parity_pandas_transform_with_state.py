@@ -48,6 +48,10 @@ class TransformWithStateInPandasParityTests(
 
         return cfg
 
+    @unittest.skip("Flaky in spark connect on CI. Skip for now. See SPARK-51368 for details.")
+    def test_schema_evolution_scenarios(self):
+        pass
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state import *  # noqa: F401,E501

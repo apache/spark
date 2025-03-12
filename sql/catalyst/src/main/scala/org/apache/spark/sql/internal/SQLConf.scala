@@ -21,7 +21,6 @@ import java.util.{Locale, Properties, TimeZone}
 import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
-import java.util.zip.Deflater
 
 import scala.collection.immutable
 import scala.jdk.CollectionConverters._
@@ -29,6 +28,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
+import org.apache.avro.file.CodecFactory
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.OutputCommitter
 
@@ -2217,19 +2217,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT =
-    buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
-      .internal()
-      .doc(
-        "Number of state store instance metrics included in streaming query progress messages " +
-        "per stateful operator. Instance metrics are selected based on metric-specific ordering " +
-        "to minimize noise in the progress report."
-      )
-      .version("4.0.0")
-      .intConf
-      .checkValue(k => k >= 0, "Must be greater than or equal to 0")
-      .createWithDefault(5)
-
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
       .internal()
@@ -3271,7 +3258,7 @@ object SQLConf {
       .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ARROW_PYSPARK_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.pyspark.enabled")
@@ -3512,7 +3499,7 @@ object SQLConf {
         "can only be enabled when the given function takes at least one argument.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_UDF_ARROW_CONCURRENCY_LEVEL =
     buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.level")
@@ -4230,8 +4217,8 @@ object SQLConf {
       "The default value is -1 which corresponds to 6 level in the current implementation.")
     .version("2.4.0")
     .intConf
-    .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
-    .createOptional
+    .checkValues((1 to 9).toSet + CodecFactory.DEFAULT_DEFLATE_LEVEL)
+    .createWithDefault(CodecFactory.DEFAULT_DEFLATE_LEVEL)
 
   val AVRO_XZ_LEVEL = buildConf("spark.sql.avro.xz.level")
     .doc("Compression level for the xz codec used in writing of AVRO files. " +
@@ -4240,14 +4227,13 @@ object SQLConf {
     .version("4.0.0")
     .intConf
     .checkValue(v => v > 0 && v <= 9, "The value must be in the range of from 1 to 9 inclusive.")
-    .createOptional
+    .createWithDefault(CodecFactory.DEFAULT_XZ_LEVEL)
 
   val AVRO_ZSTANDARD_LEVEL = buildConf("spark.sql.avro.zstandard.level")
-    .doc("Compression level for the zstandard codec used in writing of AVRO files. " +
-      "The default value is 3.")
+    .doc("Compression level for the zstandard codec used in writing of AVRO files. ")
     .version("4.0.0")
     .intConf
-    .createOptional
+    .createWithDefault(CodecFactory.DEFAULT_ZSTANDARD_LEVEL)
 
   val AVRO_ZSTANDARD_BUFFER_POOL_ENABLED = buildConf("spark.sql.avro.zstandard.bufferPool.enabled")
     .doc("If true, enable buffer pool of ZSTD JNI library when writing of AVRO files")
@@ -5781,9 +5767,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
-
-  def numStateStoreInstanceMetricsToReport: Int =
-    getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 

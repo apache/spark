@@ -840,20 +840,30 @@ object View {
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
-    val sqlConf = new SQLConf()
     // We retain below configs from current session because they are not captured by view
     // as optimization configs but they are still needed during the view resolution.
-    // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
+    // TODO: remove this `retainedHiveConfigs` after the `RelationConversions` is moved to
     // optimization phase.
+    val retainedHiveConfigs = Seq(
+      "spark.sql.hive.convertMetastoreParquet",
+      "spark.sql.hive.convertMetastoreOrc",
+      "spark.sql.hive.convertInsertingPartitionedTable",
+      "spark.sql.hive.convertInsertingUnpartitionedTable",
+      "spark.sql.hive.convertMetastoreCtas"
+    )
+
+    val retainedLoggingConfigs = Seq(
+      "spark.sql.planChangeLog.level",
+      "spark.sql.expressionTreeChangeLog.level"
+    )
+
     val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
-      Seq(
-        "spark.sql.hive.convertMetastoreParquet",
-        "spark.sql.hive.convertMetastoreOrc",
-        "spark.sql.hive.convertInsertingPartitionedTable",
-        "spark.sql.hive.convertInsertingUnpartitionedTable",
-        "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key) || key.startsWith("spark.sql.catalog.")
+      retainedHiveConfigs.contains(key) || retainedLoggingConfigs.contains(key) || key.startsWith(
+        "spark.sql.catalog."
+      )
     }
+
+    val sqlConf = new SQLConf()
     for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }

@@ -328,8 +328,7 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
 
     def _transform(self, dataset: DataFrame) -> DataFrame:
         self.transformSchema(dataset.schema)
-        # TODO(SPARK-48515): Use Arrow Python UDF
-        transformUDF = udf(self.createTransformFunc(), self.outputDataType(), useArrow=False)
+        transformUDF = udf(self.createTransformFunc(), self.outputDataType())
         transformedDataset = dataset.withColumn(
             self.getOutputCol(), transformUDF(dataset[self.getInputCol()])
         )
