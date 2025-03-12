@@ -123,12 +123,12 @@ take the highest precedence, then those through `--conf` flags or `--properties-
 configuration keys have been renamed since earlier versions of Spark; in such cases, the older
 key names are still accepted, but take lower precedence than any instance of the newer key.
 
-Spark properties mainly can be divided into two kinds: one is related to deploy, like
-"spark.driver.memory", "spark.executor.instances", this kind of properties may not be affected when
-setting programmatically through `SparkConf` in runtime, or the behavior is depending on which
-cluster manager and deploy mode you choose, so it would be suggested to set through configuration
+Spark properties can mainly be divided into two kinds: one related to deployment, like
+"spark.driver.memory" and "spark.executor.instances" - these properties may not be affected when
+set programmatically through `SparkConf` at runtime, or the behavior may be dependent on which
+cluster manager and deploy mode you choose, so it would be suggested to set them through configuration
 file or `spark-submit` command line options; another is mainly related to Spark runtime control,
-like "spark.task.maxFailures", this kind of properties can be set in either way.
+like "spark.task.maxFailures" - these properties can be set in either way.
 
 ## Viewing Spark Properties
 
