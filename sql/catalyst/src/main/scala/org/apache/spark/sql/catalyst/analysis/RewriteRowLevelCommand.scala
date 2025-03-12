@@ -190,11 +190,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val outputs = extractOutputs(plan)
 
     val outputsWithRow = filterOutputs(outputs, Set(WRITE_WITH_METADATA_OPERATION, WRITE_OPERATION))
-    val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
+    val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs, true)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, Set(WRITE_WITH_METADATA_OPERATION))
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs, false))
     } else {
       None
     }
@@ -211,7 +211,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
     val rowProjection = if (rowAttrs.nonEmpty) {
       val outputsWithRow = filterOutputs(outputs, DELTA_OPERATIONS_WITH_ROW)
-      Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
+      Some(newLazyProjection(plan, outputsWithRow, rowAttrs, true))
     } else {
       None
     }
@@ -221,7 +221,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, DELTA_OPERATIONS_WITH_METADATA)
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs, false))
     } else {
       None
     }
@@ -251,9 +251,10 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   private def newLazyProjection(
       plan: LogicalPlan,
       outputs: Seq[Seq[Expression]],
-      attrs: Seq[Attribute]): ProjectingInternalRow = {
+      attrs: Seq[Attribute],
+      isRowAttr: Boolean): ProjectingInternalRow = {
     val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
-    createProjectingInternalRow(outputs, colOrdinals, attrs)
+    createProjectingInternalRow(outputs, colOrdinals, attrs, isRowAttr)
   }
 
   // if there are assignment to row ID attributes, original values are projected as special columns
@@ -266,15 +267,20 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
       if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
     }
-    createProjectingInternalRow(outputs, colOrdinals, rowIdAttrs)
+    createProjectingInternalRow(outputs, colOrdinals, rowIdAttrs, true)
   }
 
   private def createProjectingInternalRow(
       outputs: Seq[Seq[Expression]],
       colOrdinals: Seq[Int],
-      attrs: Seq[Attribute]): ProjectingInternalRow = {
+      attrs: Seq[Attribute],
+      isRowAttr: Boolean): ProjectingInternalRow = {
     val schema = StructType(attrs.zipWithIndex.map { case (attr, index) =>
-      val nullable = outputs.exists(output => output(colOrdinals(index)).nullable)
+      val nullable = if (!isRowAttr) {
+        outputs.exists(output => output(colOrdinals(index)).nullable)
+      } else {
+        attr.nullable
+      }
       StructField(attr.name, attr.dataType, nullable, attr.metadata)
     })
     ProjectingInternalRow(schema, colOrdinals)
