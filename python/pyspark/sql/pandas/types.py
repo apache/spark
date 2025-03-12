@@ -53,14 +53,11 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.utils import has_numpy
-
-if has_numpy:
-    import numpy as np
 
 if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
+    import numpy as np
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -70,6 +67,7 @@ def to_arrow_type(
     dt: DataType,
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
+    prefers_large_types: bool = False,
 ) -> "pa.DataType":
     """
     Convert Spark data type to PyArrow type
@@ -110,8 +108,12 @@ def to_arrow_type(
         arrow_type = pa.float64()
     elif type(dt) == DecimalType:
         arrow_type = pa.decimal128(dt.precision, dt.scale)
+    elif type(dt) == StringType and prefers_large_types:
+        arrow_type = pa.large_string()
     elif type(dt) == StringType:
         arrow_type = pa.string()
+    elif type(dt) == BinaryType and prefers_large_types:
+        arrow_type = pa.large_binary()
     elif type(dt) == BinaryType:
         arrow_type = pa.binary()
     elif type(dt) == DateType:
@@ -128,19 +130,34 @@ def to_arrow_type(
     elif type(dt) == ArrayType:
         field = pa.field(
             "element",
-            to_arrow_type(dt.elementType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            to_arrow_type(
+                dt.elementType,
+                error_on_duplicated_field_names_in_struct,
+                timestamp_utc,
+                prefers_large_types,
+            ),
             nullable=dt.containsNull,
         )
         arrow_type = pa.list_(field)
     elif type(dt) == MapType:
         key_field = pa.field(
             "key",
-            to_arrow_type(dt.keyType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            to_arrow_type(
+                dt.keyType,
+                error_on_duplicated_field_names_in_struct,
+                timestamp_utc,
+                prefers_large_types,
+            ),
             nullable=False,
         )
         value_field = pa.field(
             "value",
-            to_arrow_type(dt.valueType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            to_arrow_type(
+                dt.valueType,
+                error_on_duplicated_field_names_in_struct,
+                timestamp_utc,
+                prefers_large_types,
+            ),
             nullable=dt.valueContainsNull,
         )
         arrow_type = pa.map_(key_field, value_field)
@@ -155,7 +172,10 @@ def to_arrow_type(
             pa.field(
                 field.name,
                 to_arrow_type(
-                    field.dataType, error_on_duplicated_field_names_in_struct, timestamp_utc
+                    field.dataType,
+                    error_on_duplicated_field_names_in_struct,
+                    timestamp_utc,
+                    prefers_large_types,
                 ),
                 nullable=field.nullable,
             )
@@ -166,12 +186,17 @@ def to_arrow_type(
         arrow_type = pa.null()
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
-            dt.sqlType(), error_on_duplicated_field_names_in_struct, timestamp_utc
+            dt.sqlType(),
+            error_on_duplicated_field_names_in_struct,
+            timestamp_utc,
+            prefers_large_types,
         )
     elif type(dt) == VariantType:
         fields = [
             pa.field("value", pa.binary(), nullable=False),
-            pa.field("metadata", pa.binary(), nullable=False),
+            # The metadata field is tagged so we can identify that the arrow struct actually
+            # represents a variant.
+            pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
         ]
         arrow_type = pa.struct(fields)
     else:
@@ -186,6 +211,7 @@ def to_arrow_schema(
     schema: StructType,
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
+    prefers_large_types: bool = False,
 ) -> "pa.Schema":
     """
     Convert a schema from Spark to Arrow
@@ -213,12 +239,33 @@ def to_arrow_schema(
     fields = [
         pa.field(
             field.name,
-            to_arrow_type(field.dataType, error_on_duplicated_field_names_in_struct, timestamp_utc),
+            to_arrow_type(
+                field.dataType,
+                error_on_duplicated_field_names_in_struct,
+                timestamp_utc,
+                prefers_large_types,
+            ),
             nullable=field.nullable,
         )
         for field in schema
     ]
     return pa.schema(fields)
+
+
+def is_variant(at: "pa.DataType") -> bool:
+    """Check if a PyArrow struct data type represents a variant"""
+    import pyarrow.types as types
+
+    assert types.is_struct(at)
+
+    return any(
+        (
+            field.name == "metadata"
+            and b"variant" in field.metadata
+            and field.metadata[b"variant"] == b"true"
+        )
+        for field in at
+    ) and any(field.name == "value" for field in at)
 
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
@@ -280,6 +327,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
             from_arrow_type(at.item_type, prefer_timestamp_ntz),
         )
     elif types.is_struct(at):
+        if is_variant(at):
+            return VariantType()
         return StructType(
             [
                 StructField(
@@ -1294,6 +1343,14 @@ def _create_converter_from_pandas(
                     return conv(udt.serialize(value))
 
             return convert_udt
+
+        elif isinstance(dt, VariantType):
+
+            def convert_variant(variant: Any) -> Any:
+                assert isinstance(variant, VariantVal)
+                return {"value": variant.value, "metadata": variant.metadata}
+
+            return convert_variant
 
         return None
 

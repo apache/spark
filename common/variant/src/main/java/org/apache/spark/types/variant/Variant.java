@@ -33,6 +33,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Locale;
+import java.util.UUID;
 
 import static org.apache.spark.types.variant.VariantUtil.*;
 
@@ -123,6 +124,11 @@ public final class Variant {
     return VariantUtil.getType(value, pos);
   }
 
+  // Get a UUID value from the variant.
+  public UUID getUuid() {
+    return VariantUtil.getUuid(value, pos);
+  }
+
   // Get the number of object fields in the variant.
   // It is only legal to call it when `getType()` is `Type.OBJECT`.
   public int objectSize() {
@@ -190,6 +196,18 @@ public final class Variant {
       String key = getMetadataKey(metadata, id);
       Variant v = new Variant(value, metadata, dataStart + offset);
       return new ObjectField(key, v);
+    });
+  }
+
+  // Get the dictionary ID for the object field at the `index` slot. Throws malformedVariant if
+  // `index` is out of the bound of `[0, objectSize())`.
+  // It is only legal to call it when `getType()` is `Type.OBJECT`.
+  public int getDictionaryIdAtIndex(int index) {
+    return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+      if (index < 0 || index >= size) {
+        throw malformedVariant();
+      }
+      return readUnsigned(value, idStart + idSize * index, idSize);
     });
   }
 
@@ -320,6 +338,9 @@ public final class Variant {
         break;
       case BINARY:
         appendQuoted(sb, Base64.getEncoder().encodeToString(VariantUtil.getBinary(value, pos)));
+        break;
+      case UUID:
+        appendQuoted(sb, VariantUtil.getUuid(value, pos).toString());
         break;
     }
   }

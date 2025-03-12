@@ -123,33 +123,97 @@ struct<(INTERVAL '2' YEAR / 2):interval year to month>
 -- !query
 select interval 2 second * 'a'
 -- !query schema
-struct<(INTERVAL '02' SECOND * a):interval day to second>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval 2 second * 'a'"
+  } ]
+}
 
 
 -- !query
 select interval 2 second / 'a'
 -- !query schema
-struct<(INTERVAL '02' SECOND / a):interval day to second>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval 2 second / 'a'"
+  } ]
+}
 
 
 -- !query
 select interval 2 year * 'a'
 -- !query schema
-struct<(INTERVAL '2' YEAR * a):interval year to month>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval 2 year * 'a'"
+  } ]
+}
 
 
 -- !query
 select interval 2 year / 'a'
 -- !query schema
-struct<(INTERVAL '2' YEAR / a):interval year to month>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval 2 year / 'a'"
+  } ]
+}
 
 
 -- !query
@@ -171,17 +235,49 @@ struct<(INTERVAL '2' YEAR * 2):interval year to month>
 -- !query
 select 'a' * interval 2 second
 -- !query schema
-struct<(INTERVAL '02' SECOND * a):interval day to second>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "'a' * interval 2 second"
+  } ]
+}
 
 
 -- !query
 select 'a' * interval 2 year
 -- !query schema
-struct<(INTERVAL '2' YEAR * a):interval year to month>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "'a' * interval 2 year"
+  } ]
+}
 
 
 -- !query
@@ -773,9 +869,26 @@ struct<make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456):interval>
 -- !query
 select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 -- !query schema
-struct<make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "18",
+    "scale" : "6",
+    "value" : "1234567890123456789"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)"
+  } ]
+}
 
 
 -- !query
@@ -823,8 +936,18 @@ select make_dt_interval(2147483647)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "make_dt_interval(2147483647)"
+  } ]
+}
 
 
 -- !query
@@ -864,8 +987,18 @@ select make_ym_interval(178956970, 8)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "make_ym_interval(178956970, 8)"
+  } ]
+}
 
 
 -- !query
@@ -881,8 +1014,18 @@ select make_ym_interval(-178956970, -9)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "make_ym_interval(-178956970, -9)"
+  } ]
+}
 
 
 -- !query
@@ -1847,17 +1990,49 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select '4 11:11' - interval '4 22:12' day to minute
 -- !query schema
-struct<4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'4 11:11'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "'4 11:11' - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
 select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query schema
-struct<4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'4 12:12:12'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "'4 12:12:12' + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1919,17 +2094,49 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str - INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str + INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -2316,12 +2523,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22015",
-  "messageParameters" : {
-    "alternative" : "",
-    "message" : "integer overflow"
-  }
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
 }
 
 
@@ -2332,11 +2535,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "functionName" : "`try_subtract`"
   }
 }
 
@@ -2348,11 +2550,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "functionName" : "`try_add`"
   }
 }
 
@@ -2661,11 +2862,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2684,11 +2884,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2741,11 +2940,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2764,11 +2962,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",

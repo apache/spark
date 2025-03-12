@@ -22,6 +22,7 @@ name: "Build (master, Scala 2.13, Hadoop 3, JDK 21)"
 on:
   schedule:
     - cron: '0 4 * * *'
+  workflow_dispatch:
 
 jobs:
   run-build:
@@ -36,6 +37,8 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
+          "PYTHON_TO_TEST": "python3.11",
           "SKIP_MIMA": "true",
           "SKIP_UNIDOC": "true",
           "DEDICATED_JVM_SBT_TESTS": "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV1Suite,org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV2Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV1Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV2Suite"

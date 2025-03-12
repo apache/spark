@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1394,7 +1393,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(1).toDF("a")
     val schema = StructType(StructField("b", ObjectType(classOf[java.lang.Integer])) :: Nil)
     val row = InternalRow.fromSeq(Seq(Integer.valueOf(1)))
-    val structData = column(Literal.create(row, schema))
+    val structData = Column(Literal.create(row, schema))
     checkError(
       exception = intercept[AnalysisException] {
         df.select($"a").withColumn("c", to_json(structData)).collect()
@@ -1455,5 +1454,29 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val plan = df.queryExecution.executedPlan
     assert(plan.isInstanceOf[WholeStageCodegenExec])
     checkAnswer(df, Row(null))
+  }
+
+  test("function json_tuple - field names foldable") {
+    withTempView("t") {
+      val json = """{"a":1, "b":2, "c":3}"""
+      val df = Seq((json, "a", "b", "c")).toDF("json", "c1", "c2", "c3")
+      df.createOrReplaceTempView("t")
+
+      // Json and all field names are foldable.
+      val df1 = sql(s"SELECT json_tuple('$json', 'a', 'b', 'c') from t")
+      checkAnswer(df1, Row("1", "2", "3"))
+
+      // All field names are foldable.
+      val df2 = sql("SELECT json_tuple(json, 'a', 'b', 'c') from t")
+      checkAnswer(df2, Row("1", "2", "3"))
+
+      // The field names some foldable, some non-foldable.
+      val df3 = sql("SELECT json_tuple(json, 'a', c2, 'c') from t")
+      checkAnswer(df3, Row("1", "2", "3"))
+
+      // All field names are non-foldable.
+      val df4 = sql("SELECT json_tuple(json, c1, c2, c3) from t")
+      checkAnswer(df4, Row("1", "2", "3"))
+    }
   }
 }

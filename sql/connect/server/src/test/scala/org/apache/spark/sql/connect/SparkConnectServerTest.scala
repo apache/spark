@@ -128,6 +128,17 @@ trait SparkConnectServerTest extends SharedSparkSession {
     req.build()
   }
 
+  protected def buildReleaseSessionRequest(
+      sessionId: String = defaultSessionId,
+      allowReconnect: Boolean = false) = {
+    proto.ReleaseSessionRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setAllowReconnect(allowReconnect)
+      .build()
+  }
+
   protected def buildPlan(query: String) = {
     proto.Plan.newBuilder().setRoot(dsl.sql(query)).build()
   }
@@ -135,7 +146,12 @@ trait SparkConnectServerTest extends SharedSparkSession {
   protected def buildLocalRelation[A <: Product: TypeTag](data: Seq[A]) = {
     val encoder = ScalaReflection.encoderFor[A]
     val arrowData =
-      ArrowSerializer.serialize(data.iterator, encoder, allocator, TimeZone.getDefault.getID)
+      ArrowSerializer.serialize(
+        data.iterator,
+        encoder,
+        allocator,
+        TimeZone.getDefault.getID,
+        largeVarTypes = false)
     val localRelation = proto.LocalRelation
       .newBuilder()
       .setData(arrowData)
@@ -156,7 +172,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
       case Right(executions) =>
         // all rpc detached.
         assert(
-          executions.forall(_.lastAttachedRpcTimeMs.isDefined),
+          executions.forall(_.lastAttachedRpcTimeNs.isDefined),
           s"Expected no RPCs, but got $executions")
     }
   }

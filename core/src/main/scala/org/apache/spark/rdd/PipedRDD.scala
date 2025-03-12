@@ -240,7 +240,7 @@ private object PipedRDD {
   def tokenize(command: String): Seq[String] = {
     val buf = new ArrayBuffer[String]
     val tok = new StringTokenizer(command)
-    while(tok.hasMoreElements) {
+    while (tok.hasMoreElements) {
       buf += tok.nextToken()
     }
     buf.toSeq

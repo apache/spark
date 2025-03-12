@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.*;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -105,6 +107,14 @@ public class VariantBuilder {
     }
     writeLong(metadata, offsetStart + numKeys * offsetSize, currentOffset, offsetSize);
     return new Variant(Arrays.copyOfRange(writeBuffer, 0, writePos), metadata);
+  }
+
+  // Return the variant value only, without metadata.
+  // Used in shredding to produce a final value, where all shredded values refer to a common
+  // metadata. It is expected to be called instead of `result()`, although it is valid to call both
+  // methods, in any order.
+  public byte[] valueWithoutMetadata() {
+    return Arrays.copyOfRange(writeBuffer, 0, writePos);
   }
 
   public void appendString(String str) {
@@ -230,6 +240,18 @@ public class VariantBuilder {
     writePos += U32_SIZE;
     System.arraycopy(binary, 0, writeBuffer, writePos, binary.length);
     writePos += binary.length;
+  }
+
+  public void appendUuid(UUID uuid) {
+    checkCapacity(1 + 16);
+    writeBuffer[writePos++] = primitiveHeader(UUID);
+
+    // UUID is stored big-endian, so don't use writeLong.
+    ByteBuffer buffer = ByteBuffer.wrap(writeBuffer, writePos, 16);
+    buffer.order(ByteOrder.BIG_ENDIAN);
+    buffer.putLong(writePos, uuid.getMostSignificantBits());
+    buffer.putLong(writePos + 8, uuid.getLeastSignificantBits());
+    writePos += 16;
   }
 
   // Add a key to the variant dictionary. If the key already exists, the dictionary is not modified.
@@ -404,13 +426,24 @@ public class VariantBuilder {
         });
         break;
       default:
-        int size = valueSize(value, pos);
-        checkIndex(pos + size - 1, value.length);
-        checkCapacity(size);
-        System.arraycopy(value, pos, writeBuffer, writePos, size);
-        writePos += size;
+        shallowAppendVariantImpl(value, pos);
         break;
     }
+  }
+
+  // Append the variant value without rewriting or creating any metadata. This is used when
+  // building an object during shredding, where there is a fixed pre-existing metadata that
+  // all shredded values will refer to.
+  public void shallowAppendVariant(Variant v) {
+    shallowAppendVariantImpl(v.value, v.pos);
+  }
+
+  private void shallowAppendVariantImpl(byte[] value, int pos) {
+    int size = valueSize(value, pos);
+    checkIndex(pos + size - 1, value.length);
+    checkCapacity(size);
+    System.arraycopy(value, pos, writeBuffer, writePos, size);
+    writePos += size;
   }
 
   private void checkCapacity(int additional) {

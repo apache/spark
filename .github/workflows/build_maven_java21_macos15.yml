@@ -22,6 +22,7 @@ name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, MacOS-15)"
 on:
   schedule:
     - cron: '0 20 */2 * *'
+  workflow_dispatch:
 
 jobs:
   run-build:
@@ -35,5 +36,9 @@ jobs:
       os: macos-15
       envs: >-
         {
-          "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"
+          "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES",
+          "SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "256",
+          "SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "256",
+          "SPARK_TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "48",
+          "SPARK_TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "48"
         }

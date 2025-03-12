@@ -146,6 +146,6 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
     logInfo(log"Thread ${MDC(LogKeys.THREAD_ID, threadId)} " +
       log"spilling in-memory map of ${MDC(LogKeys.BYTE_SIZE,
         org.apache.spark.util.Utils.bytesToString(size))} to disk " +
-      log"(${MDC(LogKeys.SPILL_TIMES, _spillCount)} times so far)")
+      log"(${MDC(LogKeys.NUM_SPILLS, _spillCount)} times so far)")
   }
 }

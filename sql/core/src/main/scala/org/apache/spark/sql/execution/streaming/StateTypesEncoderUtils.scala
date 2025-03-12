@@ -30,6 +30,11 @@ import org.apache.spark.sql.types._
  * files and to be passed into `RocksDBStateKey(/Value)Encoder`.
  */
 object TransformWithStateKeyValueRowSchemaUtils {
+  /**
+   * Creates a schema that is the concatenation of the grouping key and a user-defined
+   * key. This is used by MapState to create a composite key that is then treated as
+   * an "elementKey" by OneToOneTTLState.
+   */
   def getCompositeKeySchema(
       groupingKeySchema: StructType,
       userKeySchema: StructType): StructType = {
@@ -38,24 +43,37 @@ object TransformWithStateKeyValueRowSchemaUtils {
       .add("userKey", new StructType(userKeySchema.fields))
   }
 
-  def getSingleKeyTTLRowSchema(keySchema: StructType): StructType =
+  /**
+   * Represents the schema of keys in the TTL index, managed by TTLState implementations.
+   * There is no value associated with entries in the TTL index, so there is no method
+   * called, for example, getTTLValueSchema.
+   */
+  def getTTLRowKeySchema(keySchema: StructType): StructType =
     new StructType()
       .add("expirationMs", LongType)
-      .add("groupingKey", keySchema)
+      .add("elementKey", keySchema)
 
-  def getCompositeKeyTTLRowSchema(
-      groupingKeySchema: StructType,
-      userKeySchema: StructType): StructType =
+  /**
+   * Represents the schema of a single long value, which is used to store the expiration
+   * timestamp of elements in the minimum index, managed by OneToManyTTLState.
+   */
+  def getExpirationMsRowSchema(): StructType =
     new StructType()
       .add("expirationMs", LongType)
-      .add("groupingKey", new StructType(groupingKeySchema.fields))
-      .add("userKey", new StructType(userKeySchema.fields))
 
+  /**
+   * Represents the schema of an element with TTL in the primary index. We store the expiration
+   * of each value along with the value itself, since each value has its own TTL. It is used as
+   * the value schema of every value, for every stateful variable.
+   */
   def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
     if (hasTTL) {
-      new StructType().add("value", schema)
+      new StructType()
+        .add("value", schema)
         .add("ttlExpirationMs", LongType)
-    } else schema
+    } else {
+      schema
+    }
   }
 }
 
@@ -118,7 +136,9 @@ class StateTypesEncoder[V](
   def decodeValue(row: UnsafeRow): V = {
     if (hasTtl) {
       rowToObjDeserializer.apply(row.getStruct(0, valEncoder.schema.length))
-    } else rowToObjDeserializer.apply(row)
+    } else {
+      rowToObjDeserializer.apply(row)
+    }
   }
 
   /**
@@ -225,10 +245,6 @@ class CompositeKeyStateEncoder[K, V](
     compositeKeyProjection(InternalRow(groupingKey, userKey))
   }
 
-  def decodeUserKey(row: UnsafeRow): K = {
-    userKeyRowToObjDeserializer.apply(row)
-  }
-
   /**
    * The input row is of composite Key schema.
    * Only user key is returned though grouping key also exist in the row.
@@ -239,37 +255,14 @@ class CompositeKeyStateEncoder[K, V](
 }
 
 /** Class for TTL with single key serialization */
-class SingleKeyTTLEncoder(
-    keyExprEnc: ExpressionEncoder[Any]) {
+class TTLEncoder(schema: StructType) {
 
-  private val ttlKeyProjection = UnsafeProjection.create(
-    getSingleKeyTTLRowSchema(keyExprEnc.schema))
+  private val ttlKeyProjection = UnsafeProjection.create(getTTLRowKeySchema(schema))
 
-  def encodeTTLRow(expirationMs: Long, groupingKey: UnsafeRow): UnsafeRow = {
+  // Take a groupingKey UnsafeRow and turn it into a (expirationMs, groupingKey) UnsafeRow.
+  def encodeTTLRow(expirationMs: Long, elementKey: UnsafeRow): UnsafeRow = {
     ttlKeyProjection.apply(
-      InternalRow(expirationMs, groupingKey.asInstanceOf[InternalRow]))
-  }
-}
-
-/** Class for TTL with composite key serialization */
-class CompositeKeyTTLEncoder[K](
-    keyExprEnc: ExpressionEncoder[Any],
-    userKeyEnc: ExpressionEncoder[Any]) {
-
-  private val ttlKeyProjection = UnsafeProjection.create(
-    getCompositeKeyTTLRowSchema(keyExprEnc.schema, userKeyEnc.schema))
-
-  def encodeTTLRow(
-      expirationMs: Long,
-      groupingKey: UnsafeRow,
-      userKey: UnsafeRow): UnsafeRow = {
-    ttlKeyProjection.apply(
-      InternalRow(
-        expirationMs,
-        groupingKey.getStruct(0, keyExprEnc.schema.length)
-          .asInstanceOf[InternalRow],
-        userKey.getStruct(0, userKeyEnc.schema.length)
-          .asInstanceOf[InternalRow]))
+      InternalRow(expirationMs, elementKey.asInstanceOf[InternalRow]))
   }
 }
 

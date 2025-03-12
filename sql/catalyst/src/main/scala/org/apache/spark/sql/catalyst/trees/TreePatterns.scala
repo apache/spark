@@ -63,6 +63,7 @@ object TreePattern extends Enumeration  {
   val LAMBDA_VARIABLE: Value = Value
   val LATERAL_COLUMN_ALIAS_REFERENCE: Value = Value
   val LATERAL_SUBQUERY: Value = Value
+  val LAZY_EXPRESSION: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
@@ -78,6 +79,8 @@ object TreePattern extends Enumeration  {
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
   val PARAMETERIZED_QUERY: Value = Value
+  val PIPE_EXPRESSION: Value = Value
+  val PIPE_OPERATOR: Value = Value
   val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value
@@ -89,6 +92,9 @@ object TreePattern extends Enumeration  {
   val SCALA_UDF: Value = Value
   val SESSION_WINDOW: Value = Value
   val SORT: Value = Value
+  val SQL_FUNCTION_EXPRESSION: Value = Value
+  val SQL_SCALAR_FUNCTION: Value = Value
+  val SQL_TABLE_FUNCTION: Value = Value
   val SUBQUERY_ALIAS: Value = Value
   val SUM: Value = Value
   val TIME_WINDOW: Value = Value
@@ -145,6 +151,7 @@ object TreePattern extends Enumeration  {
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value
+  val UNRESOLVED_COLLATION: Value = Value
   val UNRESOLVED_DESERIALIZER: Value = Value
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_HAVING: Value = Value
@@ -153,7 +160,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
-  val UNRESOLVED_IDENTIFIER_WITH_CTE: Value = Value
+  val UNRESOLVED_PLAN_ID: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value

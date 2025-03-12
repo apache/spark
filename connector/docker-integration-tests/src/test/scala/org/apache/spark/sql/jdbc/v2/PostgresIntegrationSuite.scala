@@ -23,30 +23,21 @@ import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.DatabaseOnDocker
+import org.apache.spark.sql.jdbc.PostgresDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:17.0-alpine)
+ * To run this test suite for a specific version (e.g., postgres:17.2-alpine)
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.0-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresIntegrationSuite"
  * }}}
  */
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.0-alpine")
-    override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 5432
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
-  }
+  override val db = new PostgresDatabaseOnDocker
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -107,24 +98,46 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement("CREATE TABLE array_timestamptz (col timestamptz[])")
       .executeUpdate()
 
-    connection.prepareStatement("INSERT INTO array_int VALUES (array[array[10]])").executeUpdate()
-    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[array[10]])")
+    connection.prepareStatement("INSERT INTO array_int VALUES (array[10]), (array[array[10]])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[array[10]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_boolean VALUES (array[array[true]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_float VALUES (array[array[10.5]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_double VALUES (array[array[10.1]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_timestamp VALUES (" +
-      "array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[10]), " +
+      "(array[array[10]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[10]), " +
+      "(array[array[10]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_boolean VALUES (array[true]), " +
+      "(array[array[true]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_float VALUES (array[10.5]), " +
+      "(array[array[10.5]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_double VALUES (array[10.1]), " +
+      "(array[array[10.1]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_timestamp VALUES " +
+      "(array['2022-01-01 09:15'::timestamp]), " +
+      "(array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
     connection.prepareStatement("INSERT INTO array_timestamptz VALUES " +
+      "(array['2022-01-01 09:15'::timestamptz]), " +
       "(array[array['2022-01-01 09:15'::timestamptz]])").executeUpdate()
     connection.prepareStatement(
     "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
     .executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE array_of_int (col int[])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_of_int " +
+      "VALUES (array[1])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE ctas_array_of_int " +
+      "AS SELECT * FROM array_of_int").executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE array_of_array_of_int (col int[][])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_of_array_of_int " +
+      "VALUES (array[array[1],array[2]])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE ctas_array_of_array_of_int " +
+      "AS SELECT * FROM array_of_array_of_int").executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE unsupported_array_of_array_of_int (col int[][])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO unsupported_array_of_array_of_int " +
+      "VALUES (array[array[1],array[2]]), (array[3])").executeUpdate()
   }
 
   test("Test multi-dimensional column types") {
@@ -171,6 +184,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
     connection.prepareStatement("INSERT INTO datetime VALUES " +
       "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
+    // '2022-01-01' is Saturday and is in ISO year 2021.
+    connection.prepareStatement("INSERT INTO datetime VALUES " +
+      "('tom', '2022-01-01', '2022-01-01 00:00:00')").executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -230,6 +246,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     }
   }
 
+  test("SPARK-49695: Postgres fix xor push-down") {
+    val df = spark.sql(s"select dept, name from $catalogName.employee where dept ^ 6 = 0")
+    val rows = df.collect()
+    checkFilterPushed(df)
+    assert(rows.length == 1)
+    assert(rows(0).getInt(0) === 6)
+    assert(rows(0).getString(1) === "jen")
+  }
+
   override def testDatetime(tbl: String): Unit = {
     val df1 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
@@ -256,17 +281,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     val df4 = sql(s"SELECT name FROM $tbl WHERE hour(time1) = 0 AND minute(time1) = 0")
     checkFilterPushed(df4)
     val rows4 = df4.collect()
-    assert(rows4.length === 2)
+    assert(rows4.length === 3)
     assert(rows4(0).getString(0) === "amy")
     assert(rows4(1).getString(0) === "alex")
+    assert(rows4(2).getString(0) === "tom")
 
     val df5 = sql(s"SELECT name FROM $tbl WHERE " +
-      "extract(WEEk from date1) > 10 AND extract(YEAROFWEEK from date1) = 2022")
+      "extract(WEEK from date1) > 10 AND extract(YEAR from date1) = 2022")
     checkFilterPushed(df5)
     val rows5 = df5.collect()
-    assert(rows5.length === 2)
+    assert(rows5.length === 3)
     assert(rows5(0).getString(0) === "amy")
     assert(rows5(1).getString(0) === "alex")
+    assert(rows5(2).getString(0) === "tom")
 
     val df6 = sql(s"SELECT name FROM $tbl WHERE date_add(date1, 1) = date'2022-05-20' " +
       "AND datediff(date1, '2022-05-10') > 0")
@@ -281,11 +308,25 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows7.length === 1)
     assert(rows7(0).getString(0) === "alex")
 
-    val df8 = sql(s"SELECT name FROM $tbl WHERE dayofweek(date1) = 4")
-    checkFilterPushed(df8)
-    val rows8 = df8.collect()
-    assert(rows8.length === 1)
-    assert(rows8(0).getString(0) === "alex")
+    withClue("dayofweek") {
+      val dow = sql(s"SELECT dayofweek(date1) FROM $tbl WHERE name = 'alex'")
+        .collect().head.getInt(0)
+      val df = sql(s"SELECT name FROM $tbl WHERE dayofweek(date1) = $dow")
+      checkFilterPushed(df)
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "alex")
+    }
+
+    withClue("yearofweek") {
+      val yow = sql(s"SELECT extract(YEAROFWEEK from date1) FROM $tbl WHERE name = 'tom'")
+        .collect().head.getInt(0)
+      val df = sql(s"SELECT name FROM $tbl WHERE extract(YEAROFWEEK from date1) = $yow")
+      checkFilterPushed(df)
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "tom")
+    }
 
     val df9 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 order by dayofyear(date1) limit 1")
@@ -301,5 +342,59 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows10.length === 2)
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
+  }
+
+  test("Test reading 2d array from table created via CTAS command - positive test") {
+    val dfNoCTASTable = sql(s"SELECT * FROM $catalogName.array_of_int")
+    val dfWithCTASTable = sql(s"SELECT * FROM $catalogName.ctas_array_of_int")
+
+    checkAnswer(dfWithCTASTable, dfNoCTASTable.collect())
+  }
+
+  test("Test reading 2d array from table created via CTAS command - negative test") {
+    val dfNoCTASTable = sql(s"SELECT * FROM $catalogName.array_of_int")
+
+    checkError(
+      exception = intercept[org.apache.spark.SparkSQLException] {
+        // This should fail as only 1D CTAS tables are supported
+        sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int").collect()
+      },
+      condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+      parameters = Map("pos" -> "0", "type" -> "\"ARRAY<INT>\"")
+    )
+  }
+
+  test("Test reading multiple dimension array from table created via CTAS command") {
+    checkError(
+      exception = intercept[org.apache.spark.SparkSQLException] {
+        sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
+      },
+      condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+      parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\"")
+    )
+  }
+
+  test("SPARK-51321: Postgres pushdown for RPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE rpad(name, 10, 'x') = 'amyxxxxxxx'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-51321: Postgres pushdown for LPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE lpad(name, 10, 'x') = 'xxxxxxxamy'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "amy")
   }
 }

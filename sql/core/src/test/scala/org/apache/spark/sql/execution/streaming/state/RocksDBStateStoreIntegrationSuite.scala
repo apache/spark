@@ -31,7 +31,7 @@ import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.util.Utils
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   testWithColumnFamilies("RocksDBStateStore",
@@ -107,8 +107,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
-              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumExternalColumnFamilies",
-              "rocksdbNumInternalColumnFamilies"))
+              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumInternalColFamiliesKeys",
+              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies"))
           }
         } finally {
           query.stop()

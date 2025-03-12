@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Use `SparkSession.dataSource` to access this.
  */
 @Evolving
-class DataSourceRegistration private[sql] (dataSourceManager: DataSourceManager)
+private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataSourceManager)
   extends Logging {
 
   protected[sql] def registerPython(

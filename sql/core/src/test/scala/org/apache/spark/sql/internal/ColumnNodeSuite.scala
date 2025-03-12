@@ -19,9 +19,10 @@ package org.apache.spark.sql.internal
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{functions, Dataset}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExprId}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.classic.{Dataset, ExpressionColumnNode}
+import org.apache.spark.sql.functions
 import org.apache.spark.sql.types.{IntegerType, LongType, Metadata, MetadataBuilder, StringType}
 
 class ColumnNodeSuite extends SparkFunSuite {

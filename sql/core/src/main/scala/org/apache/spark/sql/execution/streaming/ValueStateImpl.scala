@@ -54,11 +54,6 @@ class ValueStateImpl[S](
     get() != null
   }
 
-  /** Function to return Option of value if exists and None otherwise */
-  override def getOption(): Option[S] = {
-    Option(get())
-  }
-
   /** Function to return associated value with key if exists and null otherwise */
   override def get(): S = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()

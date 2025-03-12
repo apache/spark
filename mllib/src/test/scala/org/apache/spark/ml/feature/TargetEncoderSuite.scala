@@ -376,15 +376,13 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
     val df_noindex = spark
       .createDataFrame(sc.parallelize(data_binary :+ data_noindex), schema)
 
-    val ex = intercept[SparkException] {
+    val ex = intercept[SparkRuntimeException] {
       val model = encoder.fit(df_noindex)
       print(model.stats)
     }
 
-    assert(ex.isInstanceOf[SparkException])
     assert(ex.getMessage.contains(
-      "Values from column input3 must be indices, but got 5.1"))
-
+      "Values MUST be non-negative integers, but got 5.1"))
   }
 
   test("TargetEncoder - invalid label") {
@@ -407,7 +405,6 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
     model.stats.zip(expected_stats_continuous).foreach{
       case (actual, expected) => assert(actual.equals(expected))
     }
-
   }
 
   test("TargetEncoder - non-binary labels") {
@@ -423,15 +420,13 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
     val df_non_binary = spark
       .createDataFrame(sc.parallelize(data_binary :+ data_non_binary), schema)
 
-    val ex = intercept[SparkException] {
+    val ex = intercept[SparkRuntimeException] {
       val model = encoder.fit(df_non_binary)
       print(model.stats)
     }
 
-    assert(ex.isInstanceOf[SparkException])
     assert(ex.getMessage.contains(
-      "Values from column label must be binary (0,1) but got 2.0"))
-
+      "Labels for TARGET_BINARY must be {0, 1}, but got 2.0"))
   }
 
   test("TargetEncoder - features renamed") {

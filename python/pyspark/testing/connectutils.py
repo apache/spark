@@ -155,6 +155,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             conf._jconf.remove("spark.master")
         conf.set("spark.connect.execute.reattachable.senderMaxStreamDuration", "1s")
         conf.set("spark.connect.execute.reattachable.senderMaxStreamSize", "123")
+        # Set a static token for all tests so the parallelism doesn't overwrite each
+        # tests' environment variables
+        conf.set("spark.connect.authenticate.token", "deadbeef")
         return conf
 
     @classmethod

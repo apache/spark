@@ -230,6 +230,9 @@ class RobustScalerModel private[ml] (
 
   import RobustScalerModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Vectors.empty)
+
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 

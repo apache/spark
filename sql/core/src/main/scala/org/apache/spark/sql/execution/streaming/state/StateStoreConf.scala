@@ -83,6 +83,9 @@ class StateStoreConf(
   /** The interval of maintenance tasks. */
   val maintenanceInterval = sqlConf.streamingMaintenanceInterval
 
+  /** The interval of maintenance tasks. */
+  val stateStoreEncodingFormat = sqlConf.stateStoreEncodingFormat
+
   /**
    * When creating new state store checkpoint, which format version to use.
    */

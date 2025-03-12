@@ -165,4 +165,6 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
   def deleteIfNotStagingDir(path: Path, fs: FileSystem): Unit = {
     if (Option(path) != stagingDirForCreating) fs.delete(path, true)
   }
+
+  override def toString: String = s"HiveTempPath($path)"
 }

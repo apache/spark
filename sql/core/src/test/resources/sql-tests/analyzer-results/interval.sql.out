@@ -605,63 +605,63 @@ Project [INTERVAL '59' SECOND AS INTERVAL '59' SECOND#x]
 -- !query
 select make_interval(1)
 -- !query analysis
-Project [make_interval(1, 0, 0, 0, 0, 0, 0.000000, false) AS make_interval(1, 0, 0, 0, 0, 0, 0.000000)#x]
+Project [make_interval(1, 0, 0, 0, 0, 0, 0.000000, true) AS make_interval(1, 0, 0, 0, 0, 0, 0.000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(1, 2)
 -- !query analysis
-Project [make_interval(1, 2, 0, 0, 0, 0, 0.000000, false) AS make_interval(1, 2, 0, 0, 0, 0, 0.000000)#x]
+Project [make_interval(1, 2, 0, 0, 0, 0, 0.000000, true) AS make_interval(1, 2, 0, 0, 0, 0, 0.000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(1, 2, 3)
 -- !query analysis
-Project [make_interval(1, 2, 3, 0, 0, 0, 0.000000, false) AS make_interval(1, 2, 3, 0, 0, 0, 0.000000)#x]
+Project [make_interval(1, 2, 3, 0, 0, 0, 0.000000, true) AS make_interval(1, 2, 3, 0, 0, 0, 0.000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(1, 2, 3, 4)
 -- !query analysis
-Project [make_interval(1, 2, 3, 4, 0, 0, 0.000000, false) AS make_interval(1, 2, 3, 4, 0, 0, 0.000000)#x]
+Project [make_interval(1, 2, 3, 4, 0, 0, 0.000000, true) AS make_interval(1, 2, 3, 4, 0, 0, 0.000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(1, 2, 3, 4, 5)
 -- !query analysis
-Project [make_interval(1, 2, 3, 4, 5, 0, 0.000000, false) AS make_interval(1, 2, 3, 4, 5, 0, 0.000000)#x]
+Project [make_interval(1, 2, 3, 4, 5, 0, 0.000000, true) AS make_interval(1, 2, 3, 4, 5, 0, 0.000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(1, 2, 3, 4, 5, 6)
 -- !query analysis
-Project [make_interval(1, 2, 3, 4, 5, 6, 0.000000, false) AS make_interval(1, 2, 3, 4, 5, 6, 0.000000)#x]
+Project [make_interval(1, 2, 3, 4, 5, 6, 0.000000, true) AS make_interval(1, 2, 3, 4, 5, 6, 0.000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009)
 -- !query analysis
-Project [make_interval(1, 2, 3, 4, 5, 6, cast(7.008009 as decimal(18,6)), false) AS make_interval(1, 2, 3, 4, 5, 6, 7.008009)#x]
+Project [make_interval(1, 2, 3, 4, 5, 6, cast(7.008009 as decimal(18,6)), true) AS make_interval(1, 2, 3, 4, 5, 6, 7.008009)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456)
 -- !query analysis
-Project [make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456, false) AS make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456)#x]
+Project [make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456, true) AS make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 -- !query analysis
-Project [make_interval(0, 0, 0, 0, 0, 0, cast(1234567890123456789 as decimal(18,6)), false) AS make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)#x]
+Project [make_interval(0, 0, 0, 0, 0, 0, cast(1234567890123456789 as decimal(18,6)), true) AS make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)#x]
 +- OneRowRelation
 
 

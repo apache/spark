@@ -19,11 +19,11 @@ package org.apache.spark.sql
 
 import java.sql.Timestamp
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -104,6 +104,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           Literal.create("DuMmY sTrInG".getBytes)
       }
       case BooleanType => Literal(true)
+      case ByteType => Literal(5.toByte)
       case _: DatetimeType => Literal(Timestamp.valueOf("2009-07-30 12:58:59"))
       case DecimalType => Literal((new Decimal).set(5))
       case _: DecimalType => Literal((new Decimal).set(5))
@@ -183,6 +184,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case Utf8Lcase => "Cast('DuMmY sTrInG' collate utf8_lcase as BINARY)"
         }
       case BooleanType => "True"
+      case ByteType => "cast(5 as tinyint)"
       case _: DatetimeType => "date'2016-04-08'"
       case DecimalType => "5.0"
       case _: DecimalType => "5.0"
@@ -243,6 +245,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case AnyTimestampType => "TIMESTAMP"
       case BinaryType => "BINARY"
       case BooleanType => "BOOLEAN"
+      case ByteType => "TINYINT"
       case _: DatetimeType => "DATE"
       case DecimalType => "DECIMAL(2, 1)"
       case _: DecimalType => "DECIMAL(2, 1)"
@@ -459,7 +462,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    */
   def generateTableData(
       inputTypes: Seq[AbstractDataType],
-      collationType: CollationType): DataFrame = {
+      collationType: CollationType): classic.DataFrame = {
     val tblName = collationType match {
       case Utf8Binary => "tbl"
       case Utf8Lcase => "tbl_lcase"
@@ -636,113 +639,49 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
 
       withTable("tbl", "tbl_lcase") {
+        withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+          val utf8_df = generateTableData(expr.inputTypes.take(2), Utf8Binary)
+          val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8Lcase)
 
-        val utf8_df = generateTableData(expr.inputTypes.take(2), Utf8Binary)
-        val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8Lcase)
+          val utf8BinaryResult = try {
+            val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
+            df.getRows(1, 0)
+            scala.util.Right(df)
+          } catch {
+            case e: Throwable => scala.util.Left(e)
+          }
+          val utf8LcaseResult = try {
+            val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8Lcase))
+            df.getRows(1, 0)
+            scala.util.Right(df)
+          } catch {
+            case e: Throwable => scala.util.Left(e)
+          }
 
-        val utf8BinaryResult = try {
-          val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
-          df.getRows(1, 0)
-          scala.util.Right(df)
-        } catch {
-          case e: Throwable => scala.util.Left(e)
-        }
-        val utf8LcaseResult = try {
-          val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8Lcase))
-          df.getRows(1, 0)
-          scala.util.Right(df)
-        } catch {
-          case e: Throwable => scala.util.Left(e)
-        }
+          assert(utf8BinaryResult.isLeft === utf8LcaseResult.isLeft)
 
-        assert(utf8BinaryResult.isLeft === utf8LcaseResult.isLeft)
+          if (utf8BinaryResult.isRight) {
+            val utf8BinaryResultChecked = utf8BinaryResult.getOrElse(null)
+            val utf8LcaseResultChecked = utf8LcaseResult.getOrElse(null)
 
-        if (utf8BinaryResult.isRight) {
-          val utf8BinaryResultChecked = utf8BinaryResult.getOrElse(null)
-          val utf8LcaseResultChecked = utf8LcaseResult.getOrElse(null)
+            val dt = utf8BinaryResultChecked.schema.fields.head.dataType
 
-          val dt = utf8BinaryResultChecked.schema.fields.head.dataType
-
-          dt match {
-            case st if utf8BinaryResultChecked != null && utf8LcaseResultChecked != null &&
-              hasStringType(st) =>
-              // scalastyle:off caselocale
-              assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
-                utf8LcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
+            dt match {
+              case st if utf8BinaryResultChecked != null && utf8LcaseResultChecked != null &&
+                hasStringType(st) =>
+                // scalastyle:off caselocale
+                assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
+                  utf8LcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
               // scalastyle:on caselocale
-            case _ =>
-              assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
-                utf8LcaseResultChecked.getRows(1, 0)(1))
+              case _ =>
+                assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
+                  utf8LcaseResultChecked.getRows(1, 0)(1))
+            }
           }
-        }
-        else {
-          assert(utf8BinaryResult.getOrElse(new Exception()).getClass
-            == utf8LcaseResult.getOrElse(new Exception()).getClass)
-        }
-      }
-    }
-  }
-
-  /**
-   * This test does following:
-   * 1) Extract all expressions
-   * 2) Run example queries for different session level default  collations
-   * 3) Check if both expressions throw an exception
-   * 4) If no exception, check if the result is the same
-   * 5) Otherwise, check if exceptions are the same
-   */
-  test("SPARK-48280: Expression Walker for SQL query examples") {
-    val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
-      spark.sessionState.catalog.lookupFunctionInfo(funcId)
-    }
-
-    // If expression is expected to return different results, it needs to be skipped
-    val toSkip = List(
-      // need to skip as these give timestamp/time related output
-      "current_timestamp",
-      "unix_timestamp",
-      "localtimestamp",
-      "now",
-      // need to skip as plans differ in STRING <-> STRING COLLATE UTF8_LCASE
-      "current_timezone",
-      "schema_of_variant",
-      // need to skip as result is expected to differ
-      "collation",
-      "contains",
-      "aes_encrypt",
-      "translate",
-      "replace",
-      "grouping",
-      "grouping_id",
-      "reflect",
-      "try_reflect",
-      "java_method",
-      "hash",
-      "xxhash64",
-      // need to skip as these are random functions
-      "rand",
-      "random",
-      "randn",
-      "uuid",
-      "shuffle",
-      // other functions which are not yet supported
-      "to_avro",
-      "from_avro",
-      "to_protobuf",
-      "from_protobuf"
-    )
-
-    for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      for (query <- "> .*;".r.findAllIn(funInfo.getExamples).map(s => s.substring(2))) {
-        try {
-          val resultUTF8 = sql(query)
-          withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
-            val resultUTF8Lcase = sql(query)
-            assert(resultUTF8.collect() === resultUTF8Lcase.collect())
+          else {
+            assert(utf8BinaryResult.getOrElse(new Exception()).getClass
+              == utf8LcaseResult.getOrElse(new Exception()).getClass)
           }
-        } catch {
-          case e: SparkRuntimeException => assert(e.getCondition == "USER_RAISED_EXCEPTION")
-          case other: Throwable => throw other
         }
       }
     }

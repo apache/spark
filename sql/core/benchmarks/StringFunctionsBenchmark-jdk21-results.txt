@@ -2,10 +2,10 @@
 SQL string functions
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.5+11-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 regexp_replace:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regexp_replace('*-*', '(\\d+)', 'num')              503            527          32          2.0         503.0       1.0X
+regexp_replace('*-*', '(\\d+)', 'num')              500            515          11          2.0         499.9       1.0X
 
 

@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -63,7 +63,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
-  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+)\s*$""".r
   private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
 
@@ -106,14 +106,14 @@ class SparkSqlAstBuilder extends AstBuilder {
         SetCommand(Some(keyStr -> None))
       }
     } else {
-      remainder(ctx.SET.getSymbol).trim match {
+      remainder(ctx.SET.getSymbol).trim.replaceAll(";+$", "") match {
         case configKeyValueDef(key, value) =>
           SetCommand(Some(key -> Option(value.trim)))
         case configKeyDef(key) =>
           SetCommand(Some(key -> None))
-        case s if s == "-v" =>
+        case s if s.trim == "-v" =>
           SetCommand(Some("-v" -> None))
-        case s if s.isEmpty =>
+        case s if s.trim.isEmpty =>
           SetCommand(None)
         case _ => throw QueryParsingErrors.unexpectedFormatForSetConfigurationError(ctx)
       }
@@ -146,7 +146,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    remainder(ctx.RESET.getSymbol).trim match {
+    remainder(ctx.RESET.getSymbol).trim.replaceAll(";+$", "") match {
       case configKeyDef(key) =>
         ResetCommand(Some(key))
       case s if s.trim.isEmpty =>
@@ -158,22 +158,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitResetQuotedConfiguration(
       ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
     ResetCommand(Some(ctx.configKey().getText))
-  }
-
-  /**
-   * Create a [[SetCommand]] logical plan to set [[SQLConf.DEFAULT_COLLATION]]
-   * Example SQL :
-   * {{{
-   *   SET COLLATION UNICODE;
-   * }}}
-   */
-  override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
-    val collationName = ctx.collationName.getText
-    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
-      throw QueryCompilationErrors.trimCollationNotEnabledError()
-    }
-    val key = SQLConf.DEFAULT_COLLATION.key
-    SetCommand(Some(key -> Some(ctx.identifier.getText.toUpperCase(Locale.ROOT))))
   }
 
   /**
@@ -377,7 +361,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
-      val (_, _, _, _, options, location, _, _, _) =
+      val (_, _, _, _, options, location, _, _, _, _) =
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
@@ -520,6 +504,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *
    *   create_view_clauses (order insensitive):
    *     [COMMENT view_comment]
+   *     [DEFAULT COLLATION collation_name]
    *     [TBLPROPERTIES (property_name = property_value, ...)]
    * }}}
    */
@@ -529,6 +514,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.collationSpec(), "DEFAULT COLLATION", ctx)
     checkDuplicateClauses(ctx.schemaBinding(), "WITH SCHEMA", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
@@ -584,6 +570,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
+        visitCollationSpecList(ctx.collationSpec()),
         properties,
         Some(originalText),
         qPlan,
@@ -609,6 +596,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           tableIdentifier,
           userSpecifiedColumns,
           visitCommentSpecList(ctx.commentSpec()),
+          visitCollationSpecList(ctx.collationSpec()),
           properties,
           Option(source(ctx.query)),
           otherPlans.head,
@@ -719,8 +707,19 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       withIdentClause(ctx.identifierReference(), functionIdentifier => {
         if (ctx.TEMPORARY == null) {
-          // TODO: support creating persistent UDFs.
-          operationNotAllowed(s"creating persistent SQL functions is not supported", ctx)
+          CreateUserDefinedFunction(
+            UnresolvedIdentifier(functionIdentifier),
+            inputParamText,
+            returnTypeText,
+            exprText,
+            queryText,
+            comment,
+            deterministic,
+            containsSQL,
+            language,
+            isTableFunc,
+            ctx.EXISTS != null,
+            ctx.REPLACE != null)
         } else {
           // Disallow to define a temporary function with `IF NOT EXISTS`
           if (ctx.EXISTS != null) {
@@ -1137,5 +1136,47 @@ class SparkSqlAstBuilder extends AstBuilder {
     UnsetNamespacePropertiesCommand(
       withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
       cleanedProperties)
+  }
+
+  /**
+   * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
+   * command.
+   */
+  override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
+    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
+    val asJson = ctx.JSON != null
+    if (asJson && !isExtended) {
+      val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("table")
+      throw QueryCompilationErrors.describeJsonNotExtendedError(tableName)
+    }
+    val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
+    if (ctx.describeColName != null) {
+      if (ctx.partitionSpec != null) {
+        throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
+      } else if (asJson) {
+        throw QueryCompilationErrors.describeColJsonUnsupportedError()
+      } else {
+        DescribeColumn(
+          relation,
+          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
+          isExtended)
+      }
+    } else {
+      val partitionSpec = if (ctx.partitionSpec != null) {
+        // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
+        visitPartitionSpec(ctx.partitionSpec).map {
+          case (key, Some(value)) => key -> value
+          case (key, _) =>
+            throw QueryParsingErrors.emptyPartitionKeyError(key, ctx.partitionSpec)
+        }
+      } else {
+        Map.empty[String, String]
+      }
+      if (asJson) {
+        DescribeRelationJsonCommand(relation, partitionSpec, isExtended)
+      } else {
+        DescribeRelation(relation, partitionSpec, isExtended)
+      }
+    }
   }
 }

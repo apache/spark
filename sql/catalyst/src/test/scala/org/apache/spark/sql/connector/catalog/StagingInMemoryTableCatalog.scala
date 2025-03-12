@@ -78,7 +78,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     maybeSimulateFailedTableCreation(properties)
   }
 
-  private abstract class TestStagedTable(
+  protected abstract class TestStagedTable(
       ident: Identifier,
       delegateTable: InMemoryTable)
     extends StagedTable with SupportsWrite with SupportsRead {

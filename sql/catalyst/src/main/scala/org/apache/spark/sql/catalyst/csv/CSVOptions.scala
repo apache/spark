@@ -103,6 +103,16 @@ class CSVOptions(
 
   val delimiter = CSVExprUtils.toDelimiterStr(
     parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
+
+  val extension = {
+    val ext = parameters.getOrElse(EXTENSION, "csv")
+    if (ext.size != 3 && !ext.forall(_.isLetter)) {
+      throw QueryExecutionErrors.invalidFileExtensionError(EXTENSION, ext)
+    }
+
+    ext
+  }
+
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
   val charset = parameters.get(ENCODING).orElse(parameters.get(CHARSET))
@@ -385,6 +395,7 @@ object CSVOptions extends DataSourceOptions {
   val NEGATIVE_INF = newOption("negativeInf")
   val TIME_ZONE = newOption("timeZone")
   val UNESCAPED_QUOTE_HANDLING = newOption("unescapedQuoteHandling")
+  val EXTENSION = newOption("extension")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

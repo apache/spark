@@ -19,11 +19,10 @@ import math
 
 from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkValueError
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
-from pyspark.sql.types import NumericType
 from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
 
 if TYPE_CHECKING:
@@ -86,6 +85,13 @@ class PySparkSampledPlotBase:
 
 
 class PySparkPlotAccessor:
+    """
+    Accessor for DataFrame plotting functionality in PySpark.
+
+    Users can call the accessor as ``df.plot(kind="line")`` or use the dedicated
+    methods like ``df.plot.line(...)`` to generate plots.
+    """
+
     plot_data_map = {
         "area": PySparkSampledPlotBase().get_sampled,
         "bar": PySparkTopNPlotBase().get_top_n,
@@ -295,7 +301,7 @@ class PySparkPlotAccessor:
         """
         return self(kind="area", x=x, y=y, **kwargs)
 
-    def pie(self, x: str, y: str, **kwargs: Any) -> "Figure":
+    def pie(self, x: str, y: Optional[str], **kwargs: Any) -> "Figure":
         """
         Generate a pie plot.
 
@@ -306,8 +312,8 @@ class PySparkPlotAccessor:
         ----------
         x : str
             Name of column to be used as the category labels for the pie plot.
-        y : str
-            Name of the column to plot.
+        y : str, optional
+            Name of the column to plot. If not provided, `subplots=True` must be passed at `kwargs`.
         **kwargs
             Additional keyword arguments.
 
@@ -327,19 +333,8 @@ class PySparkPlotAccessor:
         >>> columns = ["sales", "signups", "visits", "date"]
         >>> df = spark.createDataFrame(data, columns)
         >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
+        >>> df.plot.pie(x='date', subplots=True)  # doctest: +SKIP
         """
-        schema = self.data.schema
-
-        # Check if 'y' is a numerical column
-        y_field = schema[y] if y in schema.names else None
-        if y_field is None or not isinstance(y_field.dataType, NumericType):
-            raise PySparkTypeError(
-                errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
-                messageParameters={
-                    "arg_name": "y",
-                    "arg_type": str(y_field.dataType.__class__.__name__) if y_field else "None",
-                },
-            )
         return self(kind="pie", x=x, y=y, **kwargs)
 
     def box(self, column: Optional[Union[str, List[str]]] = None, **kwargs: Any) -> "Figure":
@@ -427,9 +422,9 @@ class PySparkPlotAccessor:
         >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
         >>> columns = ["length", "width", "species"]
         >>> df = spark.createDataFrame(data, columns)
-        >>> df.plot.kde(bw_method=0.3)  # doctest: +SKIP
-        >>> df.plot.kde(column=["length", "width"], bw_method=0.3)  # doctest: +SKIP
-        >>> df.plot.kde(column="length", bw_method=0.3)  # doctest: +SKIP
+        >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
+        >>> df.plot.kde(column=["length", "width"], bw_method=0.3, ind=100)  # doctest: +SKIP
+        >>> df.plot.kde(column="length", bw_method=0.3, ind=100)  # doctest: +SKIP
         """
         return self(kind="kde", column=column, bw_method=bw_method, ind=ind, **kwargs)
 
@@ -560,29 +555,30 @@ class PySparkHistogramPlotBase:
     @staticmethod
     def compute_hist(sdf: "DataFrame", bins: Sequence[float]) -> List["pd.Series"]:
         require_minimum_pandas_version()
-        import pandas as pd
 
         assert isinstance(bins, list)
 
+        spark = sdf._session
+        assert spark is not None
+
         # 1. Make the bucket output flat to:
-        #     +----------+-------+
-        #     |__group_id|buckets|
-        #     +----------+-------+
-        #     |0         |0.0    |
-        #     |0         |0.0    |
-        #     |0         |1.0    |
-        #     |0         |2.0    |
-        #     |0         |3.0    |
-        #     |0         |3.0    |
-        #     |1         |0.0    |
-        #     |1         |1.0    |
-        #     |1         |1.0    |
-        #     |1         |2.0    |
-        #     |1         |1.0    |
-        #     |1         |0.0    |
-        #     +----------+-------+
+        #     +----------+--------+
+        #     |__group_id|__bucket|
+        #     +----------+--------+
+        #     |0         |0       |
+        #     |0         |0       |
+        #     |0         |1       |
+        #     |0         |2       |
+        #     |0         |3       |
+        #     |0         |3       |
+        #     |1         |0       |
+        #     |1         |1       |
+        #     |1         |1       |
+        #     |1         |2       |
+        #     |1         |1       |
+        #     |1         |0       |
+        #     +----------+--------+
         colnames = sdf.columns
-        bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
         # determines which bucket a given value falls into, based on predefined bin intervals
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
@@ -605,44 +601,59 @@ class PySparkHistogramPlotBase:
             .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN())
             .select(
                 F.col("__group_id"),
-                binary_search_for_buckets(F.col("__value")).cast("double").alias("__bucket"),
+                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
             )
         )
 
-        # 2. Calculate the count based on each group and bucket.
-        #     +----------+-------+------+
-        #     |__group_id|buckets| count|
-        #     +----------+-------+------+
-        #     |0         |0.0    |2     |
-        #     |0         |1.0    |1     |
-        #     |0         |2.0    |1     |
-        #     |0         |3.0    |2     |
-        #     |1         |0.0    |2     |
-        #     |1         |1.0    |3     |
-        #     |1         |2.0    |1     |
-        #     +----------+-------+------+
-        result = (
-            output_df.groupby("__group_id", "__bucket")
-            .agg(F.count("*").alias("count"))
-            .toPandas()
-            .sort_values(by=["__group_id", "__bucket"])
+        # 2. Calculate the count based on each group and bucket, also fill empty bins.
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
+        #     |1         |3       |0     | <- fill empty bins with zeros (by joining with bin_df)
+        #     +----------+--------+------+
+        output_df = output_df.groupby("__group_id", "__bucket").agg(F.count("*").alias("count"))
+
+        # Generate all possible combinations of group id and bucket
+        bin_df = (
+            spark.range(len(colnames))
+            .select(
+                F.col("id").alias("__group_id"),
+                F.explode(F.lit(list(range(len(bins) - 1)))).alias("__bucket"),
+            )
+            .hint("broadcast")
         )
 
-        # 3. Fill empty bins and calculate based on each group id. From:
+        output_df = (
+            bin_df.join(output_df, ["__group_id", "__bucket"], "left")
+            .select("__group_id", "__bucket", F.nvl(F.col("count"), F.lit(0)).alias("count"))
+            .coalesce(1)
+            .sortWithinPartitions("__group_id", "__bucket")
+            .select("__group_id", "count")
+        )
+
+        # 3. Calculate based on each group id. From:
         #     +----------+--------+------+
         #     |__group_id|__bucket| count|
         #     +----------+--------+------+
-        #     |0         |0.0     |2     |
-        #     |0         |1.0     |1     |
-        #     |0         |2.0     |1     |
-        #     |0         |3.0     |2     |
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
         #     +----------+--------+------+
         #     +----------+--------+------+
         #     |__group_id|__bucket| count|
         #     +----------+--------+------+
-        #     |1         |0.0     |2     |
-        #     |1         |1.0     |3     |
-        #     |1         |2.0     |1     |
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
+        #     |1         |3       |0     |
         #     +----------+--------+------+
         #
         # to:
@@ -664,16 +675,11 @@ class PySparkHistogramPlotBase:
         #     |0                |
         #     |0                |
         #     +-----------------+
+        result = output_df.toPandas()
         output_series = []
-        for i, (input_column_name, bucket_name) in enumerate(zip(colnames, bucket_names)):
-            current_bucket_result = result[result["__group_id"] == i]
-            # generates a pandas DF with one row for each bin
-            # we need this as some of the bins may be empty
-            indexes = pd.DataFrame({"__bucket": list(range(0, len(bins) - 1))})
-            # merges the bins with counts on it and fills remaining ones with zeros
-            pdf = indexes.merge(current_bucket_result, how="left", on=["__bucket"]).fillna(0)[
-                ["count"]
-            ]
+        for i, input_column_name in enumerate(colnames):
+            pdf = result[result["__group_id"] == i]
+            pdf = pdf[["count"]]
             pdf.columns = [input_column_name]
             output_series.append(pdf[input_column_name])
 

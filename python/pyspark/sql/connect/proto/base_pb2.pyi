@@ -43,6 +43,7 @@ import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.ml_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -484,6 +485,21 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        JSON_STRING_FIELD_NUMBER: builtins.int
+        json_string: builtins.str
+        """(Required) The JSON formatted string to be converted to DDL."""
+        def __init__(
+            self,
+            *,
+            json_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["json_string", b"json_string"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
@@ -501,6 +517,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    JSON_TO_DDL_FIELD_NUMBER: builtins.int
     SPARK_WEB_URL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
@@ -551,6 +568,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
     @property
+    def json_to_ddl(self) -> global___AnalyzePlanRequest.JsonToDDL: ...
+    @property
     def spark_web_url(self) -> global___AnalyzePlanRequest.SparkWebUrl: ...
     def __init__(
         self,
@@ -572,6 +591,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
+        json_to_ddl: global___AnalyzePlanRequest.JsonToDDL | None = ...,
         spark_web_url: global___AnalyzePlanRequest.SparkWebUrl | None = ...,
     ) -> None: ...
     def HasField(
@@ -599,6 +619,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "same_semantics",
@@ -644,6 +666,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "same_semantics",
@@ -695,6 +719,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "json_to_ddl",
             "spark_web_url",
         ]
         | None
@@ -915,6 +940,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
 
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DDL_STRING_FIELD_NUMBER: builtins.int
+        ddl_string: builtins.str
+        def __init__(
+            self,
+            *,
+            ddl_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -930,6 +969,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    JSON_TO_DDL_FIELD_NUMBER: builtins.int
     SPARK_WEB_URL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
@@ -963,6 +1003,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
     @property
+    def json_to_ddl(self) -> global___AnalyzePlanResponse.JsonToDDL: ...
+    @property
     def spark_web_url(self) -> global___AnalyzePlanResponse.SparkWebUrl: ...
     def __init__(
         self,
@@ -982,6 +1024,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
+        json_to_ddl: global___AnalyzePlanResponse.JsonToDDL | None = ...,
         spark_web_url: global___AnalyzePlanResponse.SparkWebUrl | None = ...,
     ) -> None: ...
     def HasField(
@@ -999,6 +1042,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "result",
@@ -1034,6 +1079,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "json_to_ddl",
+            b"json_to_ddl",
             "persist",
             b"persist",
             "result",
@@ -1075,6 +1122,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "json_to_ddl",
             "spark_web_url",
         ]
         | None
@@ -1581,6 +1629,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     CREATE_RESOURCE_PROFILE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
     CHECKPOINT_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    ML_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1645,6 +1694,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def checkpoint_command_result(self) -> global___CheckpointCommandResult:
         """Response for command that checkpoints a DataFrame."""
     @property
+    def ml_command_result(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommandResult:
+        """ML command response"""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1686,6 +1738,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
+        ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1709,6 +1762,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
+            "ml_command_result",
+            b"ml_command_result",
             "response_type",
             b"response_type",
             "result_complete",
@@ -1744,6 +1799,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
+            "ml_command_result",
+            b"ml_command_result",
             "observed_metrics",
             b"observed_metrics",
             "operation_id",
@@ -1787,6 +1844,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "create_resource_profile_command_result",
             "execution_progress",
             "checkpoint_command_result",
+            "ml_command_result",
             "extension",
         ]
         | None
@@ -1921,17 +1979,32 @@ class ConfigRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         PAIRS_FIELD_NUMBER: builtins.int
+        SILENT_FIELD_NUMBER: builtins.int
         @property
         def pairs(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___KeyValue]:
             """(Required) The config key-value pairs to set."""
+        silent: builtins.bool
+        """(Optional) Whether to ignore failures."""
         def __init__(
             self,
             *,
             pairs: collections.abc.Iterable[global___KeyValue] | None = ...,
+            silent: builtins.bool | None = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["_silent", b"_silent", "silent", b"silent"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_silent", b"_silent", "pairs", b"pairs", "silent", b"silent"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_silent", b"_silent"]
+        ) -> typing_extensions.Literal["silent"] | None: ...
 
     class Get(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -3216,6 +3289,7 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    ALLOW_RECONNECT_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -3234,12 +3308,27 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
+    allow_reconnect: builtins.bool
+    """Signals the server to allow the client to reconnect to the session after it is released.
+
+    By default, the server tombstones the session upon release, preventing reconnections and
+    fully cleaning the session state.
+
+    If this flag is set to true, the server may permit the client to reconnect to the session
+    post-release, even if the session state has been cleaned. This can result in missing state,
+    such as Temporary Views, Temporary UDFs, or the Current Catalog, in the reconnected session.
+
+    Use this option sparingly and only when the client fully understands the implications of
+    reconnecting to a released session. The client must ensure that any queries executed do not
+    rely on the session state prior to its release.
+    """
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         client_type: builtins.str | None = ...,
+        allow_reconnect: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3257,6 +3346,8 @@ class ReleaseSessionRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
+            "allow_reconnect",
+            b"allow_reconnect",
             "client_type",
             b"client_type",
             "session_id",

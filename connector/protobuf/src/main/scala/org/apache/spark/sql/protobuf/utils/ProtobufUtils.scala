@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql.protobuf.utils
 
-import java.io.File
-import java.io.FileNotFoundException
-import java.nio.file.NoSuchFileException
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
-import scala.util.control.NonFatal
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
 import com.google.protobuf.DescriptorProtos.{FileDescriptorProto, FileDescriptorSet}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.TypeRegistry
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -225,18 +220,6 @@ private[sql] object ProtobufUtils extends Logging {
     descriptorOpt match {
       case Some(d) => d
       case None => throw QueryCompilationErrors.unableToLocateProtobufMessageError(messageName)
-    }
-  }
-
-  def readDescriptorFileContent(filePath: String): Array[Byte] = {
-    try {
-      FileUtils.readFileToByteArray(new File(filePath))
-    } catch {
-      case ex: FileNotFoundException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case ex: NoSuchFileException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
     }
   }
 

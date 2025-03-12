@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, U
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 
 /**
  * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for
@@ -108,6 +109,7 @@ case class WindowSpecDefinition(
   private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
     case (DateType, IntegerType) => true
     case (DateType, _: YearMonthIntervalType) => true
+    case (DateType, DayTimeIntervalType(DAY, DAY)) => true
     case (TimestampType | TimestampNTZType, CalendarIntervalType) => true
     case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) => true
     case (TimestampType | TimestampNTZType, _: DayTimeIntervalType) => true

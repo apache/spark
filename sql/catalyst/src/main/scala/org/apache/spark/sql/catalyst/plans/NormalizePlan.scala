@@ -17,21 +17,66 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.analysis.GetViewColumnByNameAndOrdinal
+import java.util.HashMap
+
+import org.apache.spark.sql.catalyst.analysis.{DeduplicateRelations, GetViewColumnByNameAndOrdinal}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical._
 
 object NormalizePlan extends PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    normalizePlan(normalizeExprIds(plan))
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedExpressions = normalizeExpressions(plan)
+    val withNormalizedExprIds = normalizeExprIds(withNormalizedExpressions)
+    normalizePlan(withNormalizedExprIds)
+  }
+
+  /**
+   * Normalizes expressions in a plan, that either produces non-deterministic results or
+   * will be different between fixed-point and single-pass analyzer, due to the nature
+   * of bottom-up resolution. Before normalization, pre-process the plan by replacing all
+   * [[RuntimeReplaceable]] nodes with their replacements.
+   */
+  def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
+    withNormalizedRuntimeReplaceable.transformAllExpressions {
+      case subqueryExpression: SubqueryExpression =>
+        val normalizedPlan = normalizeExpressions(subqueryExpression.plan)
+        subqueryExpression.withNewPlan(normalizedPlan)
+      case commonExpressionDef: CommonExpressionDef =>
+        commonExpressionDef.copy(id = new CommonExpressionId(id = 0))
+      case commonExpressionRef: CommonExpressionRef =>
+        commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
+      case expressionWithRandomSeed: ExpressionWithRandomSeed =>
+        expressionWithRandomSeed.withNewSeed(0)
+    }
+  }
+
+  /**
+   * Normalize [[RuntimeReplaceable]] nodes by replacing them with their replacement expressions.
+   * This is necessary because fixed-point analyzer may produce non-deterministic results when
+   * resolving original expressions. For example, in a query like:
+   *
+   * {{{ SELECT assert_true(1) }}}
+   *
+   * Before resolution, we have [[UnresolvedFunction]] whose child is Literal(1). This child will
+   * first be converted to Cast(Literal(1), BooleanType) by type coercion. Because in this case
+   * [[Cast]] doesn't require timezone, the expression will be implicitly resolved. Because the
+   * child of initially unresolved function is resolved, the function can be converted to
+   * [[AssertTrue]], which is of type [[InheritAnalysisRules]]. However, because the only child of
+   * [[InheritAnalysisRules]] is the replacement expression, the original expression will be lost
+   * and timezone will never be applied. This causes inconsistencies, because fixed-point semantic
+   * is to ALWAYS apply timezone, regardless of whether the Cast actually needs it.
+   */
+  def normalizeRuntimeReplaceable(plan: LogicalPlan): LogicalPlan = ReplaceExpressions(plan)
 
   /**
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
    */
   def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
-    plan transformAllExpressions {
+    plan.transformAllExpressions {
       case s: ScalarSubquery =>
         s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case s: LateralSubquery =>
@@ -68,9 +113,14 @@ object NormalizePlan extends PredicateHelper {
    *   etc., will all now be equivalent.
    * - Sample the seed will replaced by 0L.
    * - Join conditions will be resorted by hashCode.
+   * - CTERelationDef ids will be rewritten using a monitonically increasing counter from 0.
+   * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
+   *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
+   *   refs.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
-    plan transform {
+    val cteIdNormalizer = new CteIdNormalizer
+    plan.transformUpWithSubqueries {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
           splitConjunctivePredicates(condition)
@@ -95,6 +145,11 @@ object NormalizePlan extends PredicateHelper {
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
+      case project: Project
+          if project
+            .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
+            .isDefined =>
+        project.child
       case Project(projectList, child) =>
         val projList = projectList
           .map { e =>
@@ -105,6 +160,19 @@ object NormalizePlan extends PredicateHelper {
           .asInstanceOf[Seq[NamedExpression]]
         Project(projList, child)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+      case localRelation: LocalRelation if !localRelation.data.isEmpty =>
+        /**
+         * A substitute for the [[LocalRelation.data]]. [[GenericInternalRow]] is incomparable for
+         * maps, because [[ArrayBasedMapData]] doesn't define [[equals]].
+         */
+        val unsafeProjection = UnsafeProjection.create(localRelation.schema)
+        localRelation.copy(data = localRelation.data.map { row =>
+          unsafeProjection(row)
+        })
+      case cteRelationDef: CTERelationDef =>
+        cteIdNormalizer.normalizeDef(cteRelationDef)
+      case cteRelationRef: CTERelationRef =>
+        cteIdNormalizer.normalizeRef(cteRelationRef)
     }
   }
 
@@ -123,5 +191,27 @@ object NormalizePlan extends PredicateHelper {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
+  }
+}
+
+class CteIdNormalizer {
+  private var cteIdCounter: Long = 0
+  private val oldToNewIdMapping = new HashMap[Long, Long]
+
+  def normalizeDef(cteRelationDef: CTERelationDef): CTERelationDef = {
+    try {
+      oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
+      cteRelationDef.copy(id = cteIdCounter)
+    } finally {
+      cteIdCounter += 1
+    }
+  }
+
+  def normalizeRef(cteRelationRef: CTERelationRef): CTERelationRef = {
+    if (oldToNewIdMapping.containsKey(cteRelationRef.cteId)) {
+      cteRelationRef.copy(cteId = oldToNewIdMapping.get(cteRelationRef.cteId))
+    } else {
+      cteRelationRef
+    }
   }
 }

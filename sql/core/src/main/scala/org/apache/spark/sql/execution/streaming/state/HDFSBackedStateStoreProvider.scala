@@ -291,7 +291,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
-      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
@@ -338,7 +339,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
     assert(
       !storeConf.enableStateStoreCheckpointIds,
       "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
@@ -603,7 +605,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       input = decompressStream(sourceStream)
       var eof = false
 
-      while(!eof) {
+      while (!eof) {
         val keySize = input.readInt()
         if (keySize == -1) {
           eof = true
@@ -656,7 +658,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       rawOutput = fm.createAtomic(targetFile, overwriteIfPossible = true)
       output = compressStream(rawOutput)
       val iter = map.iterator()
-      while(iter.hasNext) {
+      while (iter.hasNext) {
         val entry = iter.next()
         val keyBytes = entry.key.getBytes()
         val valueBytes = entry.value.getBytes()

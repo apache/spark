@@ -54,6 +54,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
@@ -103,7 +104,8 @@ private[spark] object Utils
   with SparkErrorUtils
   with SparkFileUtils
   with SparkSerDeUtils
-  with SparkStreamUtils {
+  with SparkStreamUtils
+  with SparkStringUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -1354,8 +1356,10 @@ private[spark] object Utils
   val TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE =
     "Full stacktrace of original doTryWithCallerStacktrace caller"
 
-  val TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE =
-    "Stacktrace under doTryWithCallerStacktrace"
+  class OriginalTryStackTraceException()
+    extends Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE) {
+    var doTryWithCallerStacktraceDepth: Int = 0
+  }
 
   /**
    * Use Try with stacktrace substitution for the caller retrieving the error.
@@ -1383,14 +1387,19 @@ private[spark] object Utils
         val commonSuffixLen = origStackTrace.reverse.zip(currentStackTrace.reverse).takeWhile {
           case (exElem, currentElem) => exElem == currentElem
         }.length
-        val belowEx = new Exception(TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE)
-        belowEx.setStackTrace(origStackTrace.dropRight(commonSuffixLen))
-        ex.addSuppressed(belowEx)
-
-        // keep the full original stack trace in a suppressed exception.
-        val fullEx = new Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
-        fullEx.setStackTrace(origStackTrace)
-        ex.addSuppressed(fullEx)
+        // Add the full stack trace of the original caller as the suppressed exception.
+        // It may already be there if it's a nested call to doTryWithCallerStacktrace.
+        val origEx = ex.getSuppressed.find { e =>
+          e.isInstanceOf[OriginalTryStackTraceException]
+        }.getOrElse {
+          val fullEx = new OriginalTryStackTraceException()
+          fullEx.setStackTrace(origStackTrace)
+          ex.addSuppressed(fullEx)
+          fullEx
+        }.asInstanceOf[OriginalTryStackTraceException]
+        // Update the depth of the stack of the current doTryWithCallerStacktrace, for stitching
+        // it with the stack of getTryWithCallerStacktrace.
+        origEx.doTryWithCallerStacktraceDepth = origStackTrace.size - commonSuffixLen
       case Success(_) => // nothing
     }
     t
@@ -1406,7 +1415,7 @@ private[spark] object Utils
    * Full stack trace of the original doTryWithCallerStacktrace caller can be retrieved with
    * ```
    * ex.getSuppressed.find { e =>
-   * e.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE
+   *   e.isInstanceOf[Utils.OriginalTryStackTraceException]
    * }
    * ```
    *
@@ -1416,13 +1425,15 @@ private[spark] object Utils
    */
   def getTryWithCallerStacktrace[T](t: Try[T]): T = t match {
     case Failure(ex) =>
-      val belowStacktrace = ex.getSuppressed.find { e =>
+      val originalStacktraceEx = ex.getSuppressed.find { e =>
         // added in doTryWithCallerStacktrace
-        e.getMessage == TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE
+        e.isInstanceOf[OriginalTryStackTraceException]
       }.getOrElse {
         // If we don't have the expected stacktrace information, just rethrow
         throw ex
-      }.getStackTrace
+      }.asInstanceOf[OriginalTryStackTraceException]
+      val belowStacktrace = originalStacktraceEx.getStackTrace
+        .take(originalStacktraceEx.doTryWithCallerStacktraceDepth)
       // We are modifying and throwing the original exception. It would be better if we could
       // return a copy, but we can't easily clone it and preserve. If this is accessed from
       // multiple threads that then look at the stack trace, this could break.
@@ -2429,11 +2440,18 @@ private[spark] object Utils
 
   /**
    * Returns the current user name. This is the currently logged in user, unless that's been
-   * overridden by the `SPARK_USER` environment variable.
+   * overridden by the `SPARK_USER` environment variable. In case of exceptions, returns the value
+   * of {@code System.getProperty("user.name", "<unknown>")}.
    */
   def getCurrentUserName(): String = {
-    Option(System.getenv("SPARK_USER"))
-      .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+    try {
+      Option(System.getenv("SPARK_USER"))
+        .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+    } catch {
+      // JEP 486: Permanently Disable the Security Manager
+      case e: UnsupportedOperationException if e.getMessage().contains("getSubject") =>
+        System.getProperty("user.name", "<unknown>")
+    }
   }
 
   val EMPTY_USER_GROUPS = Set.empty[String]
@@ -2512,7 +2530,7 @@ private[spark] object Utils
    *
    * @return whether it is local mode
    */
-  def isLocalMaster(conf: SparkConf): Boolean = {
+  def isLocalMaster(conf: ReadOnlySparkConf): Boolean = {
     val master = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
   }
@@ -2596,7 +2614,7 @@ private[spark] object Utils
   /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
-  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+  def isDynamicAllocationEnabled(conf: ReadOnlySparkConf): Boolean = {
     val dynamicAllocationEnabled = conf.get(DYN_ALLOCATION_ENABLED)
     dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
@@ -2679,7 +2697,7 @@ private[spark] object Utils
    * loading SparkConf.
    */
   def resetStructuredLogging(sparkConf: SparkConf): Unit = {
-    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+    if (sparkConf.get(STRUCTURED_LOGGING_ENABLED)) {
       Logging.enableStructuredLogging()
     } else {
       Logging.disableStructuredLogging()
@@ -2797,10 +2815,6 @@ private[spark] object Utils
 
       case cmd => cmd
     }
-  }
-
-  def stringToSeq(str: String): Seq[String] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
   }
 
   /**
@@ -2948,6 +2962,15 @@ private[spark] object Utils
     str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
+  def nameForAppAndAttempt(appId: String, appAttemptId: Option[String]): String = {
+    val base = sanitizeDirName(appId)
+    if (appAttemptId.isDefined) {
+      base + "_" + sanitizeDirName(appAttemptId.get)
+    } else {
+      base
+    }
+  }
+
   def isClientMode(conf: SparkConf): Boolean = {
     "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
   }
@@ -2983,7 +3006,7 @@ private[spark] object Utils
       return props
     }
     val resultProps = new Properties()
-    props.forEach((k, v) => resultProps.put(k, v))
+    resultProps.putAll(props.clone().asInstanceOf[Properties])
     resultProps
   }
 
@@ -3072,6 +3095,18 @@ private[spark] object Utils
   }
 
   /**
+   * Create a resource uninterruptibly if we are in a task thread (i.e., TaskContext.get() != null).
+   * Otherwise, create the resource normally. This is mainly used in the situation where we want to
+   * create a multi-layer resource in a task thread. The uninterruptible behavior ensures we don't
+   * leak the underlying resources when there is a task cancellation request,
+   */
+  def createResourceUninterruptiblyIfInTaskThread[R <: Closeable](createResource: => R): R = {
+    Option(TaskContext.get()).map(_.createResourceUninterruptibly {
+      createResource
+    }).getOrElse(createResource)
+  }
+
+  /**
    * Return the median number of a long array
    *
    * @param sizes
@@ -3137,6 +3172,9 @@ private[util] object CallerContext extends Logging {
  * specific applications impacting parts of the Hadoop system and potential problems they may be
  * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
  * very helpful to track which upper level job issues it.
+ * The context information is also set in the audit context for cloud storage
+ * connectors. If supported, this gets marshalled as part of the HTTP Referrer header
+ * or similar field, and so ends up in the store service logs themselves.
  *
  * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
  *
@@ -3187,11 +3225,15 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[HadoopCallerContext]].
+   * [[HadoopCallerContext]], which is included in IPC calls,
+   * and the Hadoop audit context, which may be included in cloud storage
+   * requests.
    */
   def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
     val hdfsContext = new HadoopCallerContextBuilder(context).build()
     HadoopCallerContext.setCurrent(hdfsContext)
+    // set the audit context for to object stores, with the prefix "spark"
+    currentAuditContext.put("spark", context)
   }
 }
 

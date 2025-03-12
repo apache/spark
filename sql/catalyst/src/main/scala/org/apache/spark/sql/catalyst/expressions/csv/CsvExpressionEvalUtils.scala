@@ -18,9 +18,78 @@ package org.apache.spark.sql.catalyst.expressions.csv
 
 import com.univocity.parsers.csv.CsvParser
 
-import org.apache.spark.sql.catalyst.csv.{CSVInferSchema, CSVOptions}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.csv.{CSVInferSchema, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, PermissiveMode}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, NullType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
+
+/**
+ * The expression `CsvToStructs` will utilize it to support codegen.
+ */
+case class CsvToStructsEvaluator(
+    options: Map[String, String],
+    nullableSchema: StructType,
+    nameOfCorruptRecord: String,
+    timeZoneId: Option[String],
+    requiredSchema: Option[StructType]) {
+
+  // This converts parsed rows to the desired output by the given schema.
+  @transient
+  private lazy val converter = (rows: Iterator[InternalRow]) => {
+    if (!rows.hasNext) {
+      throw SparkException.internalError("Expected one row from CSV parser.")
+    }
+    val result = rows.next()
+    // CSV's parser produces one record only.
+    assert(!rows.hasNext)
+    result
+  }
+
+  @transient
+  private lazy val parser = {
+    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
+    // the unicode specification, which should not appear in Java's strings.
+    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
+    // scalastyle:off nonascii
+    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
+    // scalastyle:on nonascii
+    val parsedOptions = new CSVOptions(
+      exprOptions,
+      columnPruning = true,
+      defaultTimeZoneId = timeZoneId.get,
+      defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
+    val mode = parsedOptions.parseMode
+    if (mode != PermissiveMode && mode != FailFastMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
+    }
+    ExprUtils.verifyColumnNameOfCorruptRecord(
+      nullableSchema,
+      parsedOptions.columnNameOfCorruptRecord)
+
+    val actualSchema =
+      StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val actualRequiredSchema =
+      StructType(requiredSchema.map(_.asNullable).getOrElse(nullableSchema)
+        .filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val rawParser = new UnivocityParser(actualSchema,
+      actualRequiredSchema,
+      parsedOptions)
+    new FailureSafeParser[String](
+      input => rawParser.parse(input),
+      mode,
+      nullableSchema,
+      parsedOptions.columnNameOfCorruptRecord)
+  }
+
+  final def evaluate(csv: UTF8String): InternalRow = {
+    if (csv == null) return null
+    converter(parser.parse(csv.toString))
+  }
+}
 
 case class SchemaOfCsvEvaluator(options: Map[String, String]) {
 

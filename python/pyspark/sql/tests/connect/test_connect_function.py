@@ -54,14 +54,14 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # Disable the shared namespace so pyspark.sql.functions, etc point the regular
         # PySpark libraries.
         os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
-        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark sesion.
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
         cls.spark = PySparkSession._instantiatedSession
         assert cls.spark is not None
 
     @classmethod
     def tearDownClass(cls):
         cls.spark = cls.connect  # Stopping Spark Connect closes the session in JVM at the server.
-        super(SparkConnectFunctionTests, cls).setUpClass()
+        super(SparkConnectFunctionTests, cls).tearDownClass()
         del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
@@ -590,6 +590,10 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.avg, SF.avg),
             (CF.collect_list, SF.collect_list),
             (CF.collect_set, SF.collect_set),
+            (CF.listagg, SF.listagg),
+            (CF.listagg_distinct, SF.listagg_distinct),
+            (CF.string_agg, SF.string_agg),
+            (CF.string_agg_distinct, SF.string_agg_distinct),
             (CF.count, SF.count),
             (CF.first, SF.first),
             (CF.kurtosis, SF.kurtosis),

@@ -18,8 +18,8 @@
 import unittest
 from pyspark.errors import PySparkValueError
 from pyspark.sql import Row
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_plotly,
     plotly_requirement_message,
     have_pandas,

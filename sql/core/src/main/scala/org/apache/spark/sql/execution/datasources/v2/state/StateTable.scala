@@ -26,11 +26,16 @@ import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStoreColFamilySchema, StateStoreConf}
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateSchemaProvider, StateStoreColFamilySchema, StateStoreConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/** An implementation of [[Table]] with [[SupportsRead]] for State Store data source. */
+/**
+ * An implementation of [[Table]] with [[SupportsRead]] for State Store data source.
+ * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
+ *                               their corresponding schemas, enabling reading of state data
+ *                               written with older schema versions
+ */
 class StateTable(
     session: SparkSession,
     override val schema: StructType,
@@ -38,7 +43,8 @@ class StateTable(
     stateConf: StateStoreConf,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+    stateSchemaProviderOpt: Option[StateSchemaProvider])
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._
@@ -79,7 +85,7 @@ class StateTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new StateScanBuilder(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
-      stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
+      stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt)
 
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 

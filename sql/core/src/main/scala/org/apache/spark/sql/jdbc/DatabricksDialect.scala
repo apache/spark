@@ -44,7 +44,7 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case DoubleType => Some(JdbcType("DOUBLE", java.sql.Types.DOUBLE))
-    case _: StringType => Some(JdbcType("STRING", java.sql.Types.VARCHAR))
+    case StringType => Some(JdbcType("STRING", java.sql.Types.VARCHAR))
     case BinaryType => Some(JdbcType("BINARY", java.sql.Types.BINARY))
     case _ => None
   }
@@ -62,6 +62,8 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
   override def getTableSample(sample: TableSampleInfo): String = {
     s"TABLESAMPLE (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
   }
+
+  override def supportsHint: Boolean = true
 
   // Override listSchemas to run "show schemas" as a PreparedStatement instead of
   // invoking getMetaData.getSchemas as it may not work correctly in older versions of the driver.

@@ -74,6 +74,7 @@ Spark Context APIs
     SparkContext.getJobTags
     SparkContext.getLocalProperty
     SparkContext.getOrCreate
+    SparkContext.getSystemProperty
     SparkContext.hadoopFile
     SparkContext.hadoopRDD
     SparkContext.listArchives

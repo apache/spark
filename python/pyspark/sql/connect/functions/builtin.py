@@ -1064,6 +1064,64 @@ def collect_set(col: "ColumnOrName") -> Column:
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__
 
 
+def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("listagg", col)
+    else:
+        return _invoke_function_over_columns("listagg", col, lit(delimiter))
+
+
+listagg.__doc__ = pysparkfuncs.listagg.__doc__
+
+
+def listagg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("listagg", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
+
+
+listagg_distinct.__doc__ = pysparkfuncs.listagg_distinct.__doc__
+
+
+def string_agg(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("string_agg", col)
+    else:
+        return _invoke_function_over_columns("string_agg", col, lit(delimiter))
+
+
+string_agg.__doc__ = pysparkfuncs.string_agg.__doc__
+
+
+def string_agg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("string_agg", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
+
+
+string_agg_distinct.__doc__ = pysparkfuncs.string_agg_distinct.__doc__
+
+
 def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("corr", col1, col2)
 
@@ -1552,7 +1610,7 @@ def count_if(col: "ColumnOrName") -> Column:
 count_if.__doc__ = pysparkfuncs.count_if.__doc__
 
 
-def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+def histogram_numeric(col: "ColumnOrName", nBins: Column) -> Column:
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
 
@@ -2103,15 +2161,23 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
 
 
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("variant_get", _to_col(v), path, lit(targetType))
 
 
 variant_get.__doc__ = pysparkfuncs.variant_get.__doc__
 
 
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("try_variant_get", _to_col(v), path, lit(targetType))
 
 
 try_variant_get.__doc__ = pysparkfuncs.try_variant_get.__doc__
@@ -3040,6 +3106,13 @@ def collation(col: "ColumnOrName") -> Column:
 collation.__doc__ = pysparkfuncs.collation.__doc__
 
 
+def quote(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("quote", col)
+
+
+quote.__doc__ = pysparkfuncs.quote.__doc__
+
+
 # Date/Timestamp functions
 
 
@@ -3712,6 +3785,31 @@ def make_dt_interval(
 
 
 make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
+
+
+def try_make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    _weeks = lit(0) if weeks is None else _to_col(weeks)
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns(
+        "try_make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
+
+
+try_make_interval.__doc__ = pysparkfuncs.try_make_interval.__doc__
 
 
 def make_interval(

@@ -17,14 +17,6 @@
 
 import unittest
 
-import numpy as np
-
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
-
 from pyspark.ml.torch.distributor import (
     TorchDistributor,
     _get_spark_partition_data_loader,
@@ -33,7 +25,9 @@ from pyspark.sql import SparkSession
 from pyspark.ml.linalg import Vectors
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
@@ -46,6 +40,8 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
         self.spark.stop()
 
     def _check_data_loader_result_correctness(self, result, expected):
+        import numpy as np
+
         assert len(result) == len(expected)
 
         for res_row, exp_row in zip(result, expected):

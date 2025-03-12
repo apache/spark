@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -31,9 +32,12 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.v2.{AppendDataExecV1, OverwriteByExpressionExecV1}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources._
@@ -193,6 +197,43 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
       df2.writeTo("test").overwrite(lit(true))
       checkAnswer(session.read.table("test"), Row(2, "y") :: Nil)
 
+    } finally {
+      SparkSession.setActiveSession(spark)
+      SparkSession.setDefaultSession(spark)
+    }
+  }
+
+  test("SPARK-50315: metrics for V1 fallback writers") {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    try {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
+        .getOrCreate()
+
+      def captureWrite(sparkSession: SparkSession)(thunk: => Unit): SparkPlan = {
+        val queryExecutions = withQueryExecutionsCaptured(sparkSession)(thunk)
+        val v1FallbackWritePlans = queryExecutions.map(_.executedPlan).filter {
+          case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 => true
+          case _ => false
+        }
+
+        assert(v1FallbackWritePlans.size === 1)
+        v1FallbackWritePlans.head
+      }
+
+      val appendPlan = captureWrite(session) {
+        val df = session.createDataFrame(Seq((1, "x")))
+        df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+      }
+      assert(appendPlan.metrics("numOutputRows").value === 1)
+
+      val overwritePlan = captureWrite(session) {
+        val df2 = session.createDataFrame(Seq((2, "y")))
+        df2.writeTo("test").overwrite(lit(true))
+      }
+      assert(overwritePlan.metrics("numOutputRows").value === 1)
     } finally {
       SparkSession.setActiveSession(spark)
       SparkSession.setDefaultSession(spark)
@@ -376,10 +417,23 @@ class InMemoryTableWithV1Fallback(
     }
 
     override def build(): V1Write = new V1Write {
+      case class SupportedV1WriteMetric(name: String, description: String) extends CustomSumMetric
+
+      override def supportedCustomMetrics(): Array[CustomMetric] =
+        Array(SupportedV1WriteMetric("numOutputRows", "Number of output rows"))
+
+      private var writeMetrics = Array.empty[CustomTaskMetric]
+
+      override def reportDriverMetrics(): Array[CustomTaskMetric] = writeMetrics
+
       override def toInsertableRelation: InsertableRelation = {
         (data: DataFrame, overwrite: Boolean) => {
           assert(!overwrite, "V1 write fallbacks cannot be called with overwrite=true")
           val rows = data.collect()
+
+          case class V1WriteTaskMetric(name: String, value: Long) extends CustomTaskMetric
+          writeMetrics = Array(V1WriteTaskMetric("numOutputRows", rows.length))
+
           rows.groupBy(getPartitionValues).foreach { case (partition, elements) =>
             if (dataMap.contains(partition) && mode == "append") {
               dataMap.put(partition, dataMap(partition) ++ elements)

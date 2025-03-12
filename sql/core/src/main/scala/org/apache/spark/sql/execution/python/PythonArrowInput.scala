@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
@@ -48,7 +49,7 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def pythonMetrics: Map[String, SQLMetric]
 
-  protected def writeNextInputToArrowStream(
+  protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
@@ -71,17 +72,17 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
   protected var writer: ArrowStreamWriter = _
 
-protected def close(): Unit = {
-  Utils.tryWithSafeFinally {
-    // end writes footer to the output stream and doesn't clean any resources.
-    // It could throw exception if the output stream is closed, so it should be
-    // in the try block.
-    writer.end()
-  } {
-    root.close()
-    allocator.close()
+  protected def close(): Unit = {
+    Utils.tryWithSafeFinally {
+      // end writes footer to the output stream and doesn't clean any resources.
+      // It could throw exception if the output stream is closed, so it should be
+      // in the try block.
+      writer.end()
+    } {
+      root.close()
+      allocator.close()
+    }
   }
-}
 
   protected override def newWriter(
       env: SparkEnv,
@@ -104,7 +105,7 @@ protected def close(): Unit = {
         }
 
         assert(writer != null)
-        writeNextInputToArrowStream(root, writer, dataOut, inputIterator)
+        writeNextBatchToArrowStream(root, writer, dataOut, inputIterator)
       }
     }
   }
@@ -112,9 +113,9 @@ protected def close(): Unit = {
 
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
-  private val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
+  protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
-  protected def writeNextInputToArrowStream(
+  protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
@@ -136,6 +137,59 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       true
     } else {
       super[PythonArrowInput].close()
+      false
+    }
+  }
+}
+
+
+private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
+  self: BasePythonRunner[Iterator[InternalRow], _] =>
+  private val arrowMaxRecordsPerBatch = {
+    val v = SQLConf.get.arrowMaxRecordsPerBatch
+    if (v > 0) v else Int.MaxValue
+  }
+
+  private val maxBytesPerBatch = SQLConf.get.arrowMaxBytesPerBatch
+
+  // Marker inside the input iterator to indicate the start of the next batch.
+  private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
+
+  override protected def writeNextBatchToArrowStream(
+      root: VectorSchemaRoot,
+      writer: ArrowStreamWriter,
+      dataOut: DataOutputStream,
+      inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
+    if (!nextBatchStart.hasNext) {
+      if (inputIterator.hasNext) {
+        nextBatchStart = inputIterator.next()
+      }
+    }
+    if (nextBatchStart.hasNext) {
+      val startData = dataOut.size()
+
+      var numRowsInBatch: Int = 0
+
+      def underBatchSizeLimit: Boolean =
+        (maxBytesPerBatch == Int.MaxValue) || (arrowWriter.sizeInBytes() < maxBytesPerBatch)
+
+      while (nextBatchStart.hasNext && numRowsInBatch < arrowMaxRecordsPerBatch &&
+        underBatchSizeLimit) {
+        arrowWriter.write(nextBatchStart.next())
+        numRowsInBatch += 1
+      }
+
+      assert(numRowsInBatch > 0)
+      assert(numRowsInBatch <= arrowMaxRecordsPerBatch)
+      arrowWriter.finish()
+      writer.writeBatch()
+
+      arrowWriter.reset()
+      val deltaData = dataOut.size() - startData
+      pythonMetrics("pythonDataSent") += deltaData
+      true
+    } else {
+      super[BasicPythonArrowInput].close()
       false
     }
   }

@@ -372,6 +372,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
+  test("encoding/decoding TimeType to/from java.time.LocalTime") {
+    val schema = new StructType().add("t", TimeType())
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
+    val localTime = java.time.LocalTime.parse("20:38:45.123456")
+    val row = toRow(encoder, Row(localTime))
+    assert(row.getLong(0) === DateTimeUtils.localTimeToMicros(localTime))
+    val readback = fromRow(encoder, row)
+    assert(readback.get(0).equals(localTime))
+  }
+
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
     dayTimeIntervalTypes.foreach { dayTimeIntervalType =>
       val schema = new StructType().add("d", dayTimeIntervalType)
@@ -487,5 +497,42 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val encoder = ExpressionEncoder(schema, lenient = true).resolveAndBind()
     val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
+  }
+
+  test("do not allow serializing too long strings into char/varchar") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        val schema = new StructType().add("c", typ)
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val value = "abcdef"
+        checkError(
+          exception = intercept[SparkRuntimeException]({
+            val row = toRow(encoder, Row(value))
+          }),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
+      }
+    }
+  }
+
+  test("do not allow deserializing too long strings into char/varchar") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        val fromSchema = new StructType().add("c", StringType)
+        val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
+        val toSchema = new StructType().add("c", typ)
+        val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
+        val value = "abcdef"
+        val row = toRow(fromEncoder, Row(value))
+        checkError(
+          exception = intercept[SparkRuntimeException]({
+            val value = fromRow(toEncoder, row)
+          }),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
+      }
+    }
   }
 }

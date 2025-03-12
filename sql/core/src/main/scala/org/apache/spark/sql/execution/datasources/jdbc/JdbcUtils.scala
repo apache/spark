@@ -127,7 +127,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // RDD column names for user convenience.
       rddSchema.fields.map { col =>
         tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
-          throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
+          throw QueryCompilationErrors.columnNotFoundInSchemaError(
+            col.dataType, col.name, table, rddSchema.fieldNames)
         }
       }
     }
@@ -1271,7 +1272,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def classifyException[T](
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       dialect: JdbcDialect,
       description: String,
@@ -1281,7 +1282,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     } catch {
       case e: SparkThrowable with Throwable => throw e
       case e: Throwable =>
-        throw dialect.classifyException(e, errorClass, messageParameters, description, isRuntime)
+        throw dialect.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 

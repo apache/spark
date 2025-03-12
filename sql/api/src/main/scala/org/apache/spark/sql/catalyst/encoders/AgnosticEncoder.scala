@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.{sql => jsql}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInt}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 
 import scala.reflect.{classTag, ClassTag}
 
@@ -231,6 +231,8 @@ object AgnosticEncoders {
   // Nullable leaf encoders
   case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
   case object StringEncoder extends LeafEncoder[String](StringType)
+  case class CharEncoder(length: Int) extends LeafEncoder[String](CharType(length))
+  case class VarcharEncoder(length: Int) extends LeafEncoder[String](VarcharType(length))
   case object BinaryEncoder extends LeafEncoder[Array[Byte]](BinaryType)
   case object ScalaBigIntEncoder extends LeafEncoder[BigInt](DecimalType.BigIntDecimal)
   case object JavaBigIntEncoder extends LeafEncoder[JBigInt](DecimalType.BigIntDecimal)
@@ -247,6 +249,7 @@ object AgnosticEncoders {
   case class InstantEncoder(override val lenientSerialization: Boolean)
       extends LeafEncoder[Instant](TimestampType)
   case object LocalDateTimeEncoder extends LeafEncoder[LocalDateTime](TimestampNTZType)
+  case object LocalTimeEncoder extends LeafEncoder[LocalTime](TimeType())
 
   case class SparkDecimalEncoder(dt: DecimalType) extends LeafEncoder[Decimal](dt)
   case class ScalaDecimalEncoder(dt: DecimalType) extends LeafEncoder[BigDecimal](dt)
@@ -274,11 +277,14 @@ object AgnosticEncoders {
    * another encoder. This is fallback for scenarios where objects can't be represented using
    * standard encoders, an example of this is where we use a different (opaque) serialization
    * format (i.e. java serialization, kryo serialization, or protobuf).
+   * @param nullable
+   *   defaults to false indicating the codec guarantees decode / encode results are non-nullable
    */
   case class TransformingEncoder[I, O](
       clsTag: ClassTag[I],
       transformed: AgnosticEncoder[O],
-      codecProvider: () => Codec[_ >: I, O])
+      codecProvider: () => Codec[_ >: I, O],
+      override val nullable: Boolean = false)
       extends AgnosticEncoder[I] {
     override def isPrimitive: Boolean = transformed.isPrimitive
     override def dataType: DataType = transformed.dataType

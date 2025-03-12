@@ -15,14 +15,12 @@
 # limitations under the License.
 #
 
-import glob
 import os
 import struct
 import sys
 import unittest
 import difflib
 import functools
-import math
 from decimal import Decimal
 from time import time, sleep
 from typing import (
@@ -35,28 +33,9 @@ from typing import (
 )
 from itertools import zip_longest
 
-have_scipy = False
-have_numpy = False
-try:
-    import scipy  # noqa: F401
-
-    have_scipy = True
-except ImportError:
-    # No SciPy, but that's okay, we'll skip those tests
-    pass
-try:
-    import numpy as np  # noqa: F401
-
-    have_numpy = True
-except ImportError:
-    # No NumPy, but that's okay, we'll skip those tests
-    pass
-
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
-from pyspark.errors.exceptions.captured import CapturedException
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
@@ -65,7 +44,74 @@ from pyspark.sql.functions import col, when
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
-SPARK_HOME = _find_spark_home()
+
+def have_package(name: str) -> bool:
+    import importlib
+
+    return importlib.util.find_spec(name) is not None
+
+
+have_numpy = have_package("numpy")
+numpy_requirement_message = None if have_numpy else "No module named 'numpy'"
+
+have_scipy = have_package("scipy")
+scipy_requirement_message = None if have_scipy else "No module named 'scipy'"
+
+have_sklearn = have_package("sklearn")
+sklearn_requirement_message = None if have_sklearn else "No module named 'sklearn'"
+
+have_torch = have_package("torch")
+torch_requirement_message = None if have_torch else "No module named 'torch'"
+
+have_torcheval = have_package("torcheval")
+torcheval_requirement_message = None if have_torcheval else "No module named 'torcheval'"
+
+have_deepspeed = have_package("deepspeed")
+deepspeed_requirement_message = None if have_deepspeed else "No module named 'deepspeed'"
+
+have_plotly = have_package("plotly")
+plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
+
+have_matplotlib = have_package("matplotlib")
+matplotlib_requirement_message = None if have_matplotlib else "No module named 'matplotlib'"
+
+have_tabulate = have_package("tabulate")
+tabulate_requirement_message = None if have_tabulate else "No module named 'tabulate'"
+
+have_graphviz = have_package("graphviz")
+graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
+
+have_flameprof = have_package("flameprof")
+flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
+
+have_jinja2 = have_package("jinja2")
+jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
+
+have_openpyxl = have_package("openpyxl")
+openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+
+pandas_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+    require_minimum_pandas_version()
+except Exception as e:
+    # If Pandas version requirement is not satisfied, skip related tests.
+    pandas_requirement_message = str(e)
+
+have_pandas = pandas_requirement_message is None
+
+
+pyarrow_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+    require_minimum_pyarrow_version()
+except Exception as e:
+    # If Arrow version requirement is not satisfied, skip related tests.
+    pyarrow_requirement_message = str(e)
+
+have_pyarrow = pyarrow_requirement_message is None
 
 
 def read_int(b):
@@ -207,31 +253,6 @@ class ByteArrayOutput:
         pass
 
 
-def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
-    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
-    # vary for SBT or Maven specifically. See also SPARK-26856
-    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
-
-    # We should ignore the following jars
-    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-
-    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
-    # build because the artifact jars are in different directories.
-    sbt_build = glob.glob(
-        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
-    )
-    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
-    jar_paths = sbt_build + maven_build
-    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
-
-    if not jars:
-        return None
-    elif len(jars) > 1:
-        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
-    else:
-        return jars[0]
-
-
 def _terminal_color_support():
     try:
         # determine if environment supports color
@@ -288,6 +309,7 @@ class PySparkErrorTestUtils:
         messageParameters: Optional[Dict[str, str]] = None,
         query_context_type: Optional[QueryContextType] = None,
         fragment: Optional[str] = None,
+        matchPVals: bool = False,
     ):
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
@@ -303,7 +325,7 @@ class PySparkErrorTestUtils:
 
         # Test error class
         expected = errorClass
-        actual = exception.getErrorClass()
+        actual = exception.getCondition()
         self.assertEqual(
             expected, actual, f"Expected error class was '{expected}', got '{actual}'."
         )
@@ -311,9 +333,30 @@ class PySparkErrorTestUtils:
         # Test message parameters
         expected = messageParameters
         actual = exception.getMessageParameters()
-        self.assertEqual(
-            expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
-        )
+        if matchPVals:
+            self.assertEqual(
+                len(expected),
+                len(actual),
+                "Expected message parameters count does not match actual message parameters count"
+                f": {len(expected)}, {len(actual)}.",
+            )
+            for key, value in expected.items():
+                self.assertIn(
+                    key,
+                    actual,
+                    f"Expected message parameter key '{key}' was not found "
+                    "in actual message parameters.",
+                )
+                self.assertRegex(
+                    actual[key],
+                    value,
+                    f"Expected message parameter value '{value}' does not match actual message "
+                    f"parameter value '{actual[key]}'.",
+                ),
+        else:
+            self.assertEqual(
+                expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+            )
 
         # Test query context
         if query_context:

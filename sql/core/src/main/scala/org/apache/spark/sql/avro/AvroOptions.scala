@@ -82,14 +82,14 @@ private[sql] class AvroOptions(
 
   /**
    * Top level record name in write result, which is required in Avro spec.
-   * See https://avro.apache.org/docs/1.11.3/specification/#schema-record .
+   * See https://avro.apache.org/docs/1.12.0/specification/#schema-record .
    * Default value is "topLevelRecord"
    */
   val recordName: String = parameters.getOrElse(RECORD_NAME, "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
-   * See Avro spec for details: https://avro.apache.org/docs/1.11.3/specification/#schema-record .
+   * See Avro spec for details: https://avro.apache.org/docs/1.12.0/specification/#schema-record .
    */
   val recordNamespace: String = parameters.getOrElse(RECORD_NAMESPACE, "")
 

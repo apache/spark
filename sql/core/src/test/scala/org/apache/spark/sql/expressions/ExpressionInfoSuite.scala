@@ -79,7 +79,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     assert(info.getSource === "built-in")
 
     val validSources = Seq(
-      "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal")
+      "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal",
+      "sql_udf")
     validSources.foreach { source =>
       val info = new ExpressionInfo(
         "testClass", null, "testName", null, "", "", "", "", "", "", source)
@@ -229,6 +230,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Requires dynamic class loading not available in this test suite.
       "org.apache.spark.sql.catalyst.expressions.FromAvro",
       "org.apache.spark.sql.catalyst.expressions.ToAvro",
+      "org.apache.spark.sql.catalyst.expressions.SchemaOfAvro",
       "org.apache.spark.sql.catalyst.expressions.FromProtobuf",
       "org.apache.spark.sql.catalyst.expressions.ToProtobuf",
       classOf[CurrentUser].getName,
@@ -288,15 +290,16 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       candidateExprsToCheck.filter(superClass.isAssignableFrom).foreach { clazz =>
         val isEvalOverrode = clazz.getMethod("eval", classOf[InternalRow]) !=
           superClass.getMethod("eval", classOf[InternalRow])
-        val isNullIntolerantMixedIn = classOf[NullIntolerant].isAssignableFrom(clazz)
-        if (isEvalOverrode && isNullIntolerantMixedIn) {
-          fail(s"${clazz.getName} should not extend ${classOf[NullIntolerant].getSimpleName}, " +
+        val isNullIntolerantOverridden = clazz.getMethod("nullIntolerant") !=
+          classOf[Expression].getMethod("nullIntolerant")
+        if (isEvalOverrode && isNullIntolerantOverridden) {
+          fail(s"${clazz.getName} should not override nullIntolerant, " +
             s"or add ${clazz.getName} in the ignoreSet of this test.")
-        } else if (!isEvalOverrode && !isNullIntolerantMixedIn) {
-          fail(s"${clazz.getName} should extend ${classOf[NullIntolerant].getSimpleName}.")
+        } else if (!isEvalOverrode && !isNullIntolerantOverridden) {
+          fail(s"${clazz.getName} should override nullIntolerant.")
         } else {
-          assert((!isEvalOverrode && isNullIntolerantMixedIn) ||
-            (isEvalOverrode && !isNullIntolerantMixedIn))
+          assert((!isEvalOverrode && isNullIntolerantOverridden) ||
+            (isEvalOverrode && !isNullIntolerantOverridden))
         }
       }
     }

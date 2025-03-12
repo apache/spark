@@ -24,10 +24,7 @@ import numpy as np
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.ml.tests.connect.test_connect_classification import (
-    have_torch,
-    torch_requirement_message,
-)
+from pyspark.testing.utils import have_torch, torch_requirement_message
 
 if should_test_connect:
     from pyspark.ml.connect.feature import StandardScaler

@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, AnalysisException, Strategy}
+import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,12 +32,14 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.{SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
+import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -106,28 +108,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     private def planTakeOrdered(plan: LogicalPlan): Option[SparkPlan] = plan match {
       // We should match the combination of limit and offset first, to get the optimal physical
       // plan, instead of planning limit and offset separately.
-      case LimitAndOffset(limit, offset, Sort(order, true, child))
+      case LimitAndOffset(limit, offset, Sort(order, true, child, _))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, child.output, planLater(child), offset))
-      case LimitAndOffset(limit, offset, Project(projectList, Sort(order, true, child)))
+      case LimitAndOffset(limit, offset, Project(projectList, Sort(order, true, child, _)))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child), offset))
       // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-      case OffsetAndLimit(offset, limit, Sort(order, true, child))
+      case OffsetAndLimit(offset, limit, Sort(order, true, child, _))
           if offset + limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           offset + limit, order, child.output, planLater(child), offset))
-      case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child)))
+      case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child, _)))
           if offset + limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           offset + limit, order, projectList, planLater(child), offset))
-      case Limit(IntegerLiteral(limit), Sort(order, true, child))
+      case Limit(IntegerLiteral(limit), Sort(order, true, child, _))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, child.output, planLater(child)))
-      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
+      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child, _)))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child)))
@@ -607,7 +609,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is disallowed because those two distinct
             // aggregates have different column expressions.
             val distinctExpressions =
-              functionsWithDistinct.head.aggregateFunction.children.filterNot(_.foldable)
+            functionsWithDistinct.head.aggregateFunction.children
+              .filterNot(_.foldable)
+              .map {
+                case s: SortOrder => s.child
+                case e => e
+              }
             val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
               // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
               // because `distinctExpressions` is not extracted during logical phase.
@@ -731,11 +738,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
         timeout, hasInitialState, stateGroupAttr, sda, sDeser, initialState, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+        val skipEmittingInitialStateKeys =
+          conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS)
         val execPlan = FlatMapGroupsWithStateExec(
           func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
           None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
-          planLater(initialState), hasInitialState, planLater(child)
+          planLater(initialState), hasInitialState, skipEmittingInitialStateKeys, planLater(child)
         )
         execPlan :: Nil
       case _ =>
@@ -789,8 +798,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object TransformWithStateInPandasStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case t @ TransformWithStateInPandas(
-      func, _, outputAttrs, outputMode, timeMode, child,
-      hasInitialState, initialState, _, initialStateSchema) =>
+        func, _, outputAttrs, outputMode, timeMode, child,
+        hasInitialState, initialState, _, initialStateSchema) =>
         val execPlan = TransformWithStateInPandasExec(
           func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
@@ -798,6 +807,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           planLater(child),
+          isStreaming = true,
           hasInitialState,
           planLater(initialState),
           t.rightAttributes,
@@ -819,10 +829,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case FlatMapGroupsInPandasWithState(
         func, groupAttr, outputAttr, stateType, outputMode, timeout, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
-        val execPlan = python.FlatMapGroupsInPandasWithStateExec(
+        val execPlan = FlatMapGroupsInPandasWithStateExec(
           func, groupAttr, outputAttr, stateType, None, stateVersion, outputMode, timeout,
           batchTimestampMs = None, eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None, planLater(child)
+          eventTimeWatermarkForEviction = None,
+          skipEmittingInitialStateKeys = false,
+          planLater(child)
         )
         execPlan :: Nil
       case _ =>
@@ -947,10 +959,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, keyDeserializer, valueDeserializer, grouping, data, output, stateEncoder, outputMode,
           isFlatMapGroupsWithState, timeout, hasInitialState, initialStateGroupAttrs,
           initialStateDataAttrs, initialStateDeserializer, initialState, child) =>
+        val skipEmittingInitialStateKeys =
+          conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS)
         FlatMapGroupsWithStateExec.generateSparkPlanForBatchQueries(
           f, keyDeserializer, valueDeserializer, initialStateDeserializer, grouping,
           initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
-          hasInitialState, planLater(initialState), planLater(child)
+          hasInitialState, skipEmittingInitialStateKeys, planLater(initialState), planLater(child)
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
           dataAttributes, statefulProcessor, timeMode, outputMode, keyEncoder,
@@ -962,6 +976,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           keyEncoder, outputObjAttr, planLater(child), hasInitialState,
           initialStateGroupingAttrs, initialStateDataAttrs,
           initialStateDeserializer, planLater(initialState)) :: Nil
+      case t @ TransformWithStateInPandas(
+        func, _, outputAttrs, outputMode, timeMode, child,
+        hasInitialState, initialState, _, initialStateSchema) =>
+        TransformWithStateInPandasExec.generateSparkPlanForBatchQueries(func,
+          t.leftAttributes, outputAttrs, outputMode, timeMode, planLater(child), hasInitialState,
+          planLater(initialState), t.rightAttributes, initialStateSchema) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
@@ -978,7 +998,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
-      case logical.Sort(sortExprs, global, child) =>
+      case logical.Sort(sortExprs, global, child, _) =>
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.ProjectExec(projectList, planLater(child)) :: Nil

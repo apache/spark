@@ -146,8 +146,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
       },
-      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
     )
 
     checkAnswer(
@@ -251,8 +251,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwrite(lit(true))
       },
-      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
     )
 
     checkAnswer(
@@ -356,8 +356,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwritePartitions()
       },
-      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      parameters = Map("tableName" -> "`testcat`.`table_name`", "extraColumns" -> "`d`")
     )
 
     checkAnswer(
@@ -838,5 +838,31 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       },
       condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`writeTo`"))
+  }
+
+  test("SPARK-51281: DataFrameWriterV2 should respect the path option") {
+    def checkResults(df: DataFrame): Unit = {
+      checkAnswer(df, spark.range(10).toDF())
+    }
+
+    Seq(true, false).foreach { ignorePath =>
+      withSQLConf(SQLConf.LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION.key -> ignorePath.toString) {
+        withTable("t1", "t2") {
+          spark.range(10).writeTo("t1").using("json").create()
+          checkResults(spark.table("t1"))
+
+          withTempPath { p =>
+            val path = p.getCanonicalPath
+            spark.range(10).writeTo("t2").using("json").option("path", path).create()
+            checkResults(spark.table("t2"))
+            if (ignorePath) {
+              assert(!p.exists())
+            } else {
+              checkResults(spark.read.json(path))
+            }
+          }
+        }
+      }
+    }
   }
 }

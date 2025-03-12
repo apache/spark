@@ -32,6 +32,8 @@ from pyspark.ml.util import (
     MLReader,
     JavaMLReadable,
     JavaMLWritable,
+    try_remote_read,
+    try_remote_write,
 )
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.common import inherit_doc
@@ -164,6 +166,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         return that.setStages(stages)
 
     @since("2.0.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.getStages())
@@ -173,6 +176,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
 
     @classmethod
     @since("2.0.0")
+    @try_remote_read
     def read(cls) -> "PipelineReader":
         """Returns an MLReader instance for this class."""
         return PipelineReader(cls)
@@ -207,7 +211,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
 
-        cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
+        cls = getattr(SparkContext._jvm, "org.apache.spark.ml.PipelineStage")
         java_stages = gateway.new_array(cls, len(self.getStages()))
         for idx, stage in enumerate(self.getStages()):
             java_stages[idx] = cast(JavaParams, stage)._to_java()
@@ -322,6 +326,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
         return PipelineModel(stages)
 
     @since("2.0.0")
+    @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
         allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(
@@ -333,6 +338,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
 
     @classmethod
     @since("2.0.0")
+    @try_remote_read
     def read(cls) -> PipelineModelReader:
         """Returns an MLReader instance for this class."""
         return PipelineModelReader(cls)
@@ -361,7 +367,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
 
-        cls = SparkContext._jvm.org.apache.spark.ml.Transformer
+        cls = getattr(SparkContext._jvm, "org.apache.spark.ml.Transformer")
         java_stages = gateway.new_array(cls, len(self.stages))
         for idx, stage in enumerate(self.stages):
             java_stages[idx] = cast(JavaParams, stage)._to_java()
@@ -414,10 +420,11 @@ class PipelineSharedReadWrite:
         """
         stageUids = [stage.uid for stage in stages]
         jsonParams = {"stageUids": stageUids, "language": "Python"}
-        DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap=jsonParams)
+        spark = cast(SparkSession, sc) if hasattr(sc, "createDataFrame") else SparkSession.active()
+        DefaultParamsWriter.saveMetadata(instance, path, spark, paramMap=jsonParams)
         stagesDir = os.path.join(path, "stages")
         for index, stage in enumerate(stages):
-            cast(MLWritable, stage).write().save(
+            cast(MLWritable, stage).write().session(spark).save(
                 PipelineSharedReadWrite.getStagePath(stage.uid, index, len(stages), stagesDir)
             )
 
@@ -437,12 +444,13 @@ class PipelineSharedReadWrite:
         """
         stagesDir = os.path.join(path, "stages")
         stageUids = metadata["paramMap"]["stageUids"]
+        spark = cast(SparkSession, sc) if hasattr(sc, "createDataFrame") else SparkSession.active()
         stages = []
         for index, stageUid in enumerate(stageUids):
             stagePath = PipelineSharedReadWrite.getStagePath(
                 stageUid, index, len(stageUids), stagesDir
             )
-            stage: "PipelineStage" = DefaultParamsReader.loadParamsInstance(stagePath, sc)
+            stage: "PipelineStage" = DefaultParamsReader.loadParamsInstance(stagePath, spark)
             stages.append(stage)
         return (metadata["uid"], stages)
 

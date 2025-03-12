@@ -17,36 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.File
-import java.io.FileNotFoundException
-import java.nio.file.NoSuchFileException
-
-import scala.util.control.NonFatal
-
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType}
+import org.apache.spark.sql.types.{BinaryType, MapType, NullType, StringType, StructType}
+import org.apache.spark.sql.util.ProtobufUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
-object ProtobufHelper {
-  def readDescriptorFileContent(filePath: String): Array[Byte] = {
-    try {
-      FileUtils.readFileToByteArray(new File(filePath))
-    } catch {
-      case ex: FileNotFoundException =>
-        throw new RuntimeException(s"Cannot find descriptor file at path: $filePath", ex)
-      case ex: NoSuchFileException =>
-        throw new RuntimeException(s"Cannot find descriptor file at path: $filePath", ex)
-      case NonFatal(ex) =>
-        throw new RuntimeException(s"Failed to read the descriptor file: $filePath", ex)
-    }
-  }
-}
 
 /**
  * Converts a binary column of Protobuf format into its corresponding catalyst value.
@@ -163,7 +142,7 @@ case class FromProtobuf(
     }
     val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
       case s: UTF8String if s.toString.isEmpty => None
-      case s: UTF8String => Some(ProtobufHelper.readDescriptorFileContent(s.toString))
+      case s: UTF8String => Some(ProtobufUtils.readDescriptorFileContent(s.toString))
       case bytes: Array[Byte] if bytes.isEmpty => None
       case bytes: Array[Byte] => Some(bytes)
       case null => None
@@ -260,6 +239,18 @@ case class ToProtobuf(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    val colTypeCheck = first.dataType match {
+      case _: StructType => None
+      case _ =>
+        Some(
+          TypeCheckResult.DataTypeMismatch(
+            errorSubClass = "NON_STRUCT_TYPE",
+            messageParameters = Map(
+              "inputName" -> "data",
+              "inputType" -> toSQLType(first.dataType)))
+        )
+    }
+
     val messageNameCheck = messageName.dataType match {
       case _: StringType if messageName.foldable => None
       case _ =>
@@ -284,10 +275,11 @@ case class ToProtobuf(
             "strings to strings containing the options to use for converting the value to " +
             "Protobuf format"))
     }
-
-    messageNameCheck.getOrElse(
-      descFilePathCheck.getOrElse(
-        optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+    colTypeCheck.getOrElse(
+      messageNameCheck.getOrElse(
+        descFilePathCheck.getOrElse(
+         optionsCheck.getOrElse(TypeCheckResult.TypeCheckSuccess)
+        )
       )
     )
   }
@@ -300,7 +292,7 @@ case class ToProtobuf(
         s.toString
     }
     val descFilePathValue: Option[Array[Byte]] = descFilePath.eval() match {
-      case s: UTF8String => Some(ProtobufHelper.readDescriptorFileContent(s.toString))
+      case s: UTF8String => Some(ProtobufUtils.readDescriptorFileContent(s.toString))
       case bytes: Array[Byte] => Some(bytes)
       case null => None
     }

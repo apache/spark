@@ -29,6 +29,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
@@ -1423,6 +1424,52 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(conf)
     sc.stop()
   }
+
+  test("SPARK-50247: BLOCK_MANAGER_REREGISTRATION_FAILED should be counted as network failure") {
+    // This test case follows the test structure of HEARTBEAT_FAILURE error code (SPARK-39957)
+    val conf = new SparkConf().set(TASK_MAX_FAILURES, 1)
+    val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code", conf)
+    val result = sc.parallelize(1 to 10, 1).map { x =>
+      val context = org.apache.spark.TaskContext.get()
+      if (context.taskAttemptId() == 0) {
+        System.exit(ExecutorExitCode.BLOCK_MANAGER_REREGISTRATION_FAILED)
+      } else {
+        x
+      }
+    }.count()
+    assert(result == 10L)
+    sc.stop()
+  }
+
+  test("SPARK-50247: BLOCK_MANAGER_REREGISTRATION_FAILED will be counted as task failure when " +
+    "EXECUTOR_REMOVE_DELAY is disabled") {
+    // This test case follows the test structure of HEARTBEAT_FAILURE error code (SPARK-39957)
+    val conf = new SparkConf().set(TASK_MAX_FAILURES, 1).set(EXECUTOR_REMOVE_DELAY.key, "0s")
+    val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code", conf)
+    eventually(timeout(30.seconds), interval(1.seconds)) {
+      val e = intercept[SparkException] {
+        sc.parallelize(1 to 10, 1).map { x =>
+          val context = org.apache.spark.TaskContext.get()
+          if (context.taskAttemptId() == 0) {
+            System.exit(ExecutorExitCode.BLOCK_MANAGER_REREGISTRATION_FAILED)
+          } else {
+            x
+          }
+        }.count()
+      }
+      assert(e.getMessage.contains("Remote RPC client disassociated"))
+    }
+    sc.stop()
+  }
+
+  test("SPARK-51095: Test caller context initialization") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    sc = new SparkContext(conf)
+    val hadoopCallerContext = HadoopCallerContext.getCurrent()
+    assert(hadoopCallerContext.getContext().startsWith("SPARK_DRIVER"))
+    sc.stop()
+  }
+
 }
 
 object SparkContextSuite {

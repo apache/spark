@@ -2632,7 +2632,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                    'mask': ['red', 'purple'],
         ...                    'weapon': ['sai', 'bo staff']},
         ...                   columns=['name', 'mask', 'weapon'])
-        >>> print(df.to_latex(index=False)) # doctest: +NORMALIZE_WHITESPACE
+        >>> print(df.to_latex(index=False))  # doctest: +SKIP
         \begin{tabular}{lll}
         \toprule
               name &    mask &    weapon \\
@@ -7292,8 +7292,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string
-
         include_list: List[str]
         if not is_list_like(include):
             include_list = [cast(str, include)] if include is not None else []
@@ -7320,14 +7318,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         include_spark_type = []
         for inc in include_list:
             try:
-                include_spark_type.append(_parse_datatype_string(inc))
+                include_spark_type.append(self._internal.spark_frame._session._parse_ddl(inc))
             except BaseException:
                 pass
 
         exclude_spark_type = []
         for exc in exclude_list:
             try:
-                exclude_spark_type.append(_parse_datatype_string(exc))
+                exclude_spark_type.append(self._internal.spark_frame._session._parse_ddl(exc))
             except BaseException:
                 pass
 
@@ -7686,7 +7684,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        # Mapper: Get a spark colum
+        # Mapper: Get a spark column
         # n function for (ascending, na_position) combination
         mapper = {
             (True, "first"): PySparkColumn.asc_nulls_first,
@@ -9808,7 +9806,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if is_all_string_type:
             # Handling string type columns
-            # We will retrive the `count`, `unique`, `top` and `freq`.
+            # We will retrieve the `count`, `unique`, `top` and `freq`.
             internal = self._internal.resolved_copy
             exprs_string = [
                 internal.spark_column_for(psser._column_label) for psser in psser_string

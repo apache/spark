@@ -1930,7 +1930,7 @@ class XmlSuite
     }
 
     checkXmlOptionErrorMessage(Map.empty,
-      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading files in XML format.",
+      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading/writing files in XML format.",
       QueryCompilationErrors.xmlRowTagRequiredError(XmlOptions.ROW_TAG).getCause)
     checkXmlOptionErrorMessage(Map("rowTag" -> ""),
       "'rowTag' option should not be an empty string.")
@@ -1949,6 +1949,20 @@ class XmlSuite
       .option("rowTag", "ROW")
       .schema(schema)
       .xml(spark.createDataset(Seq(xmlString)))
+  }
+
+  test("SPARK-50688: rowTag requirement for write") {
+    withTempDir { dir =>
+      dir.delete()
+      val e = intercept[AnalysisException] {
+        spark.range(1).write.xml(dir.getCanonicalPath)
+      }
+      checkError(
+        exception = e,
+        condition = "XML_ROW_TAG_MISSING",
+        parameters = Map("rowTag" -> "`rowTag`")
+      )
+    }
   }
 
   test("Primitive field casting") {

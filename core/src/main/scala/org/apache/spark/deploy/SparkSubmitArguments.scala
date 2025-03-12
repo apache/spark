@@ -253,8 +253,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (args.length == 0) {
       printUsageAndExit(-1)
     }
-    if (!sparkProperties.contains("spark.local.connect") &&
-        maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
+    if (maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
       error("Remote cannot be specified with master and/or deploy mode.")
     }
     if (primaryResource == null) {
@@ -568,8 +567,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         | Spark Connect only:
         |   --remote CONNECT_URL       URL to connect to the server for Spark Connect, e.g.,
         |                              sc://host:port. --master and --deploy-mode cannot be set
-        |                              together with this option. This option is experimental, and
-        |                              might change between minor releases.
+        |                              together with this option.
         |
         | Cluster deploy mode only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode

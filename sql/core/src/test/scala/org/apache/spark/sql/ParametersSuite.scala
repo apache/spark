@@ -21,13 +21,12 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
+class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("bind named parameters") {
     val sqlText =
@@ -740,5 +739,65 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         spark.sql("SHOW COLUMNS FROM IDENTIFIER(?)", args = Array(cacheName)),
         Row("c1"))
     }
+  }
+
+  test("SPARK-50322: parameterized identifier in a sub-query") {
+    withTable("tt1") {
+      sql("CREATE TABLE tt1 (c1 INT)")
+      sql("INSERT INTO tt1 VALUES (1)")
+      def query(p: String): String = {
+        s"""
+          |WITH v1 AS (
+          |  SELECT * FROM tt1
+          |  WHERE 1 = (SELECT * FROM IDENTIFIER($p))
+          |) SELECT * FROM v1""".stripMargin
+      }
+
+      checkAnswer(spark.sql(query(":tab"), args = Map("tab" -> "tt1")), Row(1))
+      checkAnswer(spark.sql(query("?"), args = Array("tt1")), Row(1))
+    }
+  }
+
+  test("SPARK-50441: parameterized identifier referencing a CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH t1 AS (SELECT 1)
+         |SELECT * FROM IDENTIFIER($p)""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")), Row(1))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
+  }
+
+  test("SPARK-50403: parameterized execute immediate") {
+    checkAnswer(spark.sql("execute immediate 'select ?' using ?", Array(1)), Row(1))
+    checkAnswer(spark.sql("execute immediate 'select ?, ?' using ?, 2", Array(1)), Row(1, 2))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("execute immediate 'select ?, ?' using 1", Array(2))
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "_10"),
+      context = ExpectedContext("?", 10, 10))
+
+    checkAnswer(spark.sql("execute immediate 'select ?' using 1", Map("param1" -> "1")), Row(1))
+    checkAnswer(spark.sql("execute immediate 'select :param1' using :param2 as param1",
+      Map("param2" -> 42)), Row(42))
+    checkAnswer(spark.sql(
+      "execute immediate 'select :param1, :param2' using :param2 as param1, 43 as param2",
+      Map("param2" -> 42)), Row(42, 43))
+    checkAnswer(spark.sql("execute immediate 'select :param' using 0 as param",
+      Map("param" -> 42)), Row(0))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("execute immediate 'select :param1, :param2' using 1 as param1",
+          Map("param2" -> 2))
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "param2"),
+      context = ExpectedContext(":param2", 16, 22))
+
+    checkAnswer(spark.sql("execute immediate 'select ?' using :param", Map("param" -> 2)), Row(2))
+    checkAnswer(spark.sql("execute immediate 'select :param' using ? as param", Array(3)), Row(3))
   }
 }

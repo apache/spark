@@ -20,20 +20,14 @@ import unittest
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 
-torch_requirement_message = None
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
-    torch_requirement_message = "torch is required"
-
 if not is_remote_only():
     from pyspark.ml.torch.tests.test_data_loader import TorchDistributorDataLoaderUnitTests
 
-    @unittest.skipIf(
-        not have_torch or is_remote_only(), torch_requirement_message or "Requires JVM access"
-    )
+    # @unittest.skipIf(
+    #     not have_torch or is_remote_only(), torch_requirement_message or "Requires JVM access"
+    # )
+    # TODO(SPARK-50864): Re-enable this test after fixing the slowness
+    @unittest.skip("Disabled due to slowness")
     class TorchDistributorBaselineUnitTestsOnConnect(TorchDistributorDataLoaderUnitTests):
         def setUp(self) -> None:
             self.spark = (

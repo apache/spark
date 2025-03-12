@@ -20,6 +20,8 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
+
+import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.loose_version import LooseVersion
 from pyspark.serializers import (
@@ -31,6 +33,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
+    is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
     _create_converter_to_pandas,
@@ -387,9 +390,16 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         import pyarrow as pa
+        import pandas as pd
 
         for batch in batches:
-            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
+            pandas_batches = [
+                self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()
+            ]
+            if len(pandas_batches) == 0:
+                yield [pd.Series([pyspark._NoValue] * batch.num_rows)]
+            else:
+                yield pandas_batches
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
@@ -420,7 +430,14 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
 
-        if self._df_for_struct and types.is_struct(arrow_column.type):
+        # If the arrow type is struct, return a pandas dataframe where the fields of the struct
+        # correspond to columns in the DataFrame. However, if the arrow struct is actually a
+        # Variant, which is an atomic type, treat it as a non-struct arrow type.
+        if (
+            self._df_for_struct
+            and types.is_struct(arrow_column.type)
+            and not is_variant(arrow_column.type)
+        ):
             import pandas as pd
 
             series = [
@@ -505,7 +522,15 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, t in series:
-            if self._struct_in_pandas == "dict" and t is not None and pa.types.is_struct(t):
+            # Variants are represented in arrow as structs with additional metadata (checked by
+            # is_variant). If the data type is Variant, return a VariantVal atomic type instead of
+            # a dict of two binary values.
+            if (
+                self._struct_in_pandas == "dict"
+                and t is not None
+                and pa.types.is_struct(t)
+                and not is_variant(t)
+            ):
                 # A pandas UDF should return pd.DataFrame when the return type is a struct type.
                 # If it returns a pd.Series, it should throw an error.
                 if not isinstance(s, pd.DataFrame):
@@ -776,6 +801,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         assign_cols_by_name,
         state_object_schema,
         arrow_max_records_per_batch,
+        prefers_large_var_types,
     ):
         super(ApplyInPandasWithStateSerializer, self).__init__(
             timezone, safecheck, assign_cols_by_name
@@ -791,7 +817,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             ]
         )
 
-        self.result_count_pdf_arrow_type = to_arrow_type(self.result_count_df_type)
+        self.result_count_pdf_arrow_type = to_arrow_type(
+            self.result_count_df_type, prefers_large_types=prefers_large_var_types
+        )
 
         self.result_state_df_type = StructType(
             [
@@ -802,7 +830,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             ]
         )
 
-        self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
+        self.result_state_pdf_arrow_type = to_arrow_type(
+            self.result_state_df_type, prefers_large_types=prefers_large_var_types
+        )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
 
     def load_stream(self, stream):
@@ -1158,6 +1188,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         this function works in overall.
         """
         import pyarrow as pa
+        from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 
         def generate_data_batches(batches):
             """
@@ -1181,15 +1212,28 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
 
     def dump_stream(self, iterator, stream):
         """
         Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
         RecordBatches, and write batches to stream.
         """
-        result = [(b, t) for x in iterator for y, t in x for b in y]
-        super().dump_stream(result, stream)
+
+        def flatten_iterator():
+            # iterator: iter[list[(iter[pandas.DataFrame], pdf_type)]]
+            for packed in iterator:
+                iter_pdf_with_type = packed[0]
+                iter_pdf = iter_pdf_with_type[0]
+                pdf_type = iter_pdf_with_type[1]
+                for pdf in iter_pdf:
+                    yield (pdf, pdf_type)
+
+        super().dump_stream(flatten_iterator(), stream)
 
 
 class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSerializer):
@@ -1209,6 +1253,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
     def load_stream(self, stream):
         import pyarrow as pa
+        from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 
         def generate_data_batches(batches):
             """
@@ -1265,4 +1310,8 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)

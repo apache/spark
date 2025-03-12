@@ -28,7 +28,7 @@ import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneOffset}
 import java.util
 import java.util.Objects
 
@@ -40,14 +40,16 @@ import scala.util.Try
 import org.apache.commons.codec.binary.{Hex => ApacheHex}
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, FunctionIdentifier, InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localTimeToMicros}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -87,6 +89,7 @@ object Literal {
     case l: LocalDateTime => Literal(DateTimeUtils.localDateTimeToMicros(l), TimestampNTZType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
+    case lt: LocalTime => Literal(localTimeToMicros(lt), TimeType())
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType())
     case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
@@ -166,6 +169,8 @@ object Literal {
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: ObjectType => Literal(v, dataType)
+      case CharType(_) | VarcharType(_) if SQLConf.get.preserveCharVarcharTypeInfo =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
     }
   }
@@ -196,6 +201,12 @@ object Literal {
     case TimestampNTZType => create(0L, TimestampNTZType)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
+    case CharType(length) =>
+      create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), length),
+        dataType)
+    case VarcharType(length) =>
+      create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), length),
+        dataType)
     case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
@@ -257,6 +268,22 @@ object Literal {
       s"Literal must have a corresponding value to ${dataType.catalogString}, " +
       s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
+
+  /**
+   * Inverse of [[Literal.sql]]
+   */
+  def fromSQL(sql: String): Expression = {
+    CatalystSqlParser.parseExpression(sql).transformUp {
+      case u: UnresolvedFunction =>
+        assert(u.nameParts.length == 1)
+        assert(!u.isDistinct)
+        assert(u.filter.isEmpty)
+        assert(!u.ignoreNulls)
+        assert(u.orderingWithinGroup.isEmpty)
+        assert(!u.isInternal)
+        FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
+    }
+  }
 }
 
 /**
@@ -304,6 +331,26 @@ object DoubleLiteral {
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Short literals.
+ */
+object ShortLiteral {
+  def unapply(a: Any): Option[Short] = a match {
+    case Literal(a: Short, ShortType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Byte literals.
+ */
+object ByteLiteral {
+  def unapply(a: Any): Option[Byte] = a match {
+    case Literal(a: Byte, ByteType) => Some(a)
     case _ => None
   }
 }
@@ -441,53 +488,47 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    def gen(ctx: CodegenContext, ev: ExprCode, dataType: DataType): ExprCode = {
-      val javaType = CodeGenerator.javaType(dataType)
-      if (value == null) {
-        ExprCode.forNullValue(dataType)
-      } else {
-        def toExprCode(code: String): ExprCode = {
-          ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
-        }
-
-        dataType match {
-          case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
-            toExprCode(value.toString)
-          case FloatType =>
-            value.asInstanceOf[Float] match {
-              case v if v.isNaN =>
-                toExprCode("Float.NaN")
-              case Float.PositiveInfinity =>
-                toExprCode("Float.POSITIVE_INFINITY")
-              case Float.NegativeInfinity =>
-                toExprCode("Float.NEGATIVE_INFINITY")
-              case _ =>
-                toExprCode(s"${value}F")
-            }
-          case DoubleType =>
-            value.asInstanceOf[Double] match {
-              case v if v.isNaN =>
-                toExprCode("Double.NaN")
-              case Double.PositiveInfinity =>
-                toExprCode("Double.POSITIVE_INFINITY")
-              case Double.NegativeInfinity =>
-                toExprCode("Double.NEGATIVE_INFINITY")
-              case _ =>
-                toExprCode(s"${value}D")
-            }
-          case ByteType | ShortType =>
-            ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-          case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
-            toExprCode(s"${value}L")
-          case udt: UserDefinedType[_] =>
-            gen(ctx, ev, udt.sqlType)
-          case _ =>
-            val constRef = ctx.addReferenceObj("literal", value, javaType)
-            ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
-        }
+    val javaType = CodeGenerator.javaType(dataType)
+    if (value == null) {
+      ExprCode.forNullValue(dataType)
+    } else {
+      def toExprCode(code: String): ExprCode = {
+        ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
+      }
+      dataType match {
+        case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
+          toExprCode(value.toString)
+        case FloatType =>
+          value.asInstanceOf[Float] match {
+            case v if v.isNaN =>
+              toExprCode("Float.NaN")
+            case Float.PositiveInfinity =>
+              toExprCode("Float.POSITIVE_INFINITY")
+            case Float.NegativeInfinity =>
+              toExprCode("Float.NEGATIVE_INFINITY")
+            case _ =>
+              toExprCode(s"${value}F")
+          }
+        case DoubleType =>
+          value.asInstanceOf[Double] match {
+            case v if v.isNaN =>
+              toExprCode("Double.NaN")
+            case Double.PositiveInfinity =>
+              toExprCode("Double.POSITIVE_INFINITY")
+            case Double.NegativeInfinity =>
+              toExprCode("Double.NEGATIVE_INFINITY")
+            case _ =>
+              toExprCode(s"${value}D")
+          }
+        case ByteType | ShortType =>
+          ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
+        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType | _: TimeType =>
+          toExprCode(s"${value}L")
+        case _ =>
+          val constRef = ctx.addReferenceObj("literal", value, javaType)
+          ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
       }
     }
-    gen(ctx, ev, dataType)
   }
 
   override def sql: String = (value, dataType) match {

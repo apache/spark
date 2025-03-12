@@ -83,6 +83,8 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v._2) :: results
       }
+    } else if (row.action == "clear") {
+      mapState.clear()
     }
 
     results.iterator
@@ -308,7 +310,6 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         AddData(inputStream, MapInputEvent("k1", "", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
-          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 123000),
           MapOutputEvent("k1", "key3", -1, isTTLValue = true, 126000),
           MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
           MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)

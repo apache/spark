@@ -631,6 +631,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(cols: Column*): Column = Column.fn("grouping_id", cols: _*)
 
   /**
@@ -646,6 +647,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(colName: String, colNames: String*): Column = {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)): _*)
   }
@@ -1146,6 +1148,77 @@ object functions {
    * @since 3.2.0
    */
   def sum_distinct(e: Column): Column = Column.fn("sum", isDistinct = true, e)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(e: Column): Column = Column.fn("listagg", e)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values, separated by the
+   * delimiter.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(e: Column, delimiter: Column): Column = Column.fn("listagg", e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(e: Column): Column = Column.fn("listagg", isDistinct = true, e)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values, separated by
+   * the delimiter.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(e: Column, delimiter: Column): Column =
+    Column.fn("listagg", isDistinct = true, e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg(e: Column): Column = Column.fn("string_agg", e)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values, separated by the
+   * delimiter. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg(e: Column, delimiter: Column): Column = Column.fn("string_agg", e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values. Alias for
+   * `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg_distinct(e: Column): Column = Column.fn("string_agg", isDistinct = true, e)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values, separated by
+   * the delimiter. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg_distinct(e: Column, delimiter: Column): Column =
+    Column.fn("string_agg", isDistinct = true, e, delimiter)
 
   /**
    * Aggregate function: alias for `var_samp`.
@@ -1671,6 +1744,7 @@ object functions {
    * @group struct_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def named_struct(cols: Column*): Column = Column.fn("named_struct", cols: _*)
 
   /**
@@ -1723,7 +1797,7 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast[DS[U] <: api.Dataset[U]](df: DS[_]): df.type = {
+  def broadcast[U](df: Dataset[U]): df.type = {
     df.hint("broadcast").asInstanceOf[df.type]
   }
 
@@ -3713,6 +3787,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def reflect(cols: Column*): Column = Column.fn("reflect", cols: _*)
 
   /**
@@ -3721,6 +3796,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
 
   /**
@@ -3730,6 +3806,7 @@ object functions {
    * @group misc_funcs
    * @since 4.0.0
    */
+  @scala.annotation.varargs
   def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
 
   /**
@@ -3756,6 +3833,7 @@ object functions {
    * @group generator_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
 
   /**
@@ -4747,6 +4825,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def printf(format: Column, arguments: Column*): Column =
     Column.fn("printf", (format +: arguments): _*)
 
@@ -5002,6 +5081,15 @@ object functions {
    * @since 3.5.0
    */
   def right(str: Column, len: Column): Column = Column.fn("right", str, len)
+
+  /**
+   * Returns `str` enclosed by single quotes and each instance of single quote in it is preceded
+   * by a backslash.
+   *
+   * @group string_funcs
+   * @since 4.1.0
+   */
+  def quote(str: Column): Column = Column.fn("quote", str)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
@@ -6822,7 +6910,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = {
-    from_json(e, lit(schema.json), options.iterator)
+    from_json(e, lit(schema.sql), options.iterator)
   }
 
   // scalastyle:off line.size.limit
@@ -7044,7 +7132,7 @@ object functions {
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
   /**
-   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *
    * @param v
@@ -7061,7 +7149,25 @@ object functions {
     Column.fn("variant_get", v, lit(path), lit(targetType))
 
   /**
-   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * Extracts a sub-variant from `v` according to `path` column, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def variant_get(v: Column, path: Column, targetType: String): Column =
+    Column.fn("variant_get", v, path, lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist or the cast fails..
    *
    * @param v
@@ -7075,6 +7181,24 @@ object functions {
    * @since 4.0.0
    */
   def try_variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("try_variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path` column, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist or the cast fails..
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
 
   /**
@@ -7658,7 +7782,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(schema.json), options.asScala.iterator)
+    from_xml(e, lit(schema.sql), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -8006,6 +8130,23 @@ object functions {
     Column.fn("make_dt_interval")
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
    * Make interval from years, months, weeks, days, hours, mins and secs.
    *
    * @group datetime_funcs
@@ -8020,6 +8161,22 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins)
 
   /**
    * Make interval from years, months, weeks, days, hours and mins.
@@ -8037,6 +8194,21 @@ object functions {
     Column.fn("make_interval", years, months, weeks, days, hours, mins)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours)
+
+  /**
    * Make interval from years, months, weeks, days and hours.
    *
    * @group datetime_funcs
@@ -8051,6 +8223,16 @@ object functions {
     Column.fn("make_interval", years, months, weeks, days, hours)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days)
+
+  /**
    * Make interval from years, months, weeks and days.
    *
    * @group datetime_funcs
@@ -8058,6 +8240,16 @@ object functions {
    */
   def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
     Column.fn("make_interval", years, months, weeks, days)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column, weeks: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks)
 
   /**
    * Make interval from years, months and weeks.
@@ -8069,6 +8261,16 @@ object functions {
     Column.fn("make_interval", years, months, weeks)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column): Column =
+    Column.fn("try_make_interval", years, months)
+
+  /**
    * Make interval from years and months.
    *
    * @group datetime_funcs
@@ -8076,6 +8278,16 @@ object functions {
    */
   def make_interval(years: Column, months: Column): Column =
     Column.fn("make_interval", years, months)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column): Column =
+    Column.fn("try_make_interval", years)
 
   /**
    * Make interval from years.

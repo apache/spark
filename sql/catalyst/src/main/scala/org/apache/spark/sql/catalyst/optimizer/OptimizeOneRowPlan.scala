@@ -46,9 +46,9 @@ object OptimizeOneRowPlan extends Rule[LogicalPlan] {
     val enableForStreaming = conf.getConf(SQLConf.STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED)
 
     plan.transformUpWithPruning(_.containsAnyPattern(SORT, AGGREGATE), ruleId) {
-      case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) &&
+      case Sort(_, _, child, _) if child.maxRows.exists(_ <= 1L) &&
         isChildEligible(child, enableForStreaming) => child
-      case Sort(_, false, child) if child.maxRowsPerPartition.exists(_ <= 1L) &&
+      case Sort(_, false, child, _) if child.maxRowsPerPartition.exists(_ <= 1L) &&
         isChildEligible(child, enableForStreaming) => child
       case agg @ Aggregate(_, _, child, _) if agg.groupOnly && child.maxRows.exists(_ <= 1L) &&
         isChildEligible(child, enableForStreaming) =>

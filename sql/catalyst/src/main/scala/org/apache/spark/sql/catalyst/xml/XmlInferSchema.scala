@@ -30,6 +30,9 @@ import scala.util.control.Exception._
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
+import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -157,6 +160,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         logWarning("Skipped missing file", e)
         Some(StructType(Nil))
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
+      case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
       case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))

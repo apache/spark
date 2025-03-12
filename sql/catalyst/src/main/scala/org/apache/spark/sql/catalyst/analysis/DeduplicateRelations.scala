@@ -22,9 +22,12 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
+  val PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION =
+    TreeNodeTag[Unit]("project_for_expression_id_deduplication")
 
   type ExprIdMap = mutable.HashMap[Class[_], mutable.HashSet[Long]]
 
@@ -67,7 +70,9 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
               val projectList = child.output.map { attr =>
                 Alias(attr, attr.name)()
               }
-              Project(projectList, child)
+              val project = Project(projectList, child)
+              project.setTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION, ())
+              project
           }
         }
         u.copy(children = newChildren)
@@ -132,8 +137,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         _.output.map(_.exprId.id),
         newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
 
+    case f: FlatMapGroupsInArrow =>
+      deduplicateAndRenew[FlatMapGroupsInArrow](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
     case f: FlatMapCoGroupsInPandas =>
       deduplicateAndRenew[FlatMapCoGroupsInPandas](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
+    case f: FlatMapCoGroupsInArrow =>
+      deduplicateAndRenew[FlatMapCoGroupsInArrow](
         existingRelations,
         f,
         _.output.map(_.exprId.id),
@@ -378,7 +397,19 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
+      case oldVersion @ FlatMapGroupsInArrow(_, _, output, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
       case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion @ FlatMapCoGroupsInArrow(_, _, _, output, _, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
@@ -423,7 +454,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ Window(windowExpressions, _, _, child)
+      case oldVersion @ Window(windowExpressions, _, _, child, _)
           if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
           .nonEmpty =>
         val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))

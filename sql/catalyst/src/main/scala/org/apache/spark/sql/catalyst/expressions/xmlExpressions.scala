@@ -21,7 +21,9 @@ import java.io.CharArrayWriter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.xml.XmlExpressionEvalUtils
 import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, FailureSafeParser, PermissiveMode}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
@@ -59,7 +61,6 @@ case class XmlToStructs(
   extends UnaryExpression
   with TimeZoneAwareExpression
   with ExpectsInputTypes
-  with NullIntolerant
   with QueryErrorsBase {
 
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -70,6 +71,7 @@ case class XmlToStructs(
       timeZoneId = None)
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   // The XML input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
@@ -124,7 +126,8 @@ case class XmlToStructs(
     defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def prettyName: String = "from_xml"
 
@@ -149,15 +152,16 @@ case class XmlToStructs(
 case class SchemaOfXml(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
   def this(child: Expression, options: Expression) = this(
     child = child,
     options = ExprUtils.convertToMapData(options))
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
@@ -192,26 +196,20 @@ case class SchemaOfXml(
     }
   }
 
-  override def eval(v: InternalRow): Any = {
-    val dataType = xmlInferSchema.infer(xml.toString).get match {
-      case st: StructType =>
-        xmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
-      case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-        xmlInferSchema
-          .canonicalizeType(at.elementType)
-          .map(ArrayType(_, containsNull = at.containsNull))
-          .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
-      case other: DataType =>
-        xmlInferSchema.canonicalizeType(other).getOrElse(SQLConf.get.defaultStringType)
-    }
-
-    UTF8String.fromString(dataType.sql)
-  }
-
   override def prettyName: String = "schema_of_xml"
 
   override protected def withNewChildInternal(newChild: Expression): SchemaOfXml =
     copy(child = newChild)
+
+  @transient private lazy val xmlInferSchemaObjectType = ObjectType(classOf[XmlInferSchema])
+
+  override def replacement: Expression = StaticInvoke(
+    XmlExpressionEvalUtils.getClass,
+    dataType,
+    "schemaOfXml",
+    Seq(Literal(xmlInferSchema, xmlInferSchemaObjectType), child),
+    Seq(xmlInferSchemaObjectType, child.dataType),
+    returnNullable = false)
 }
 
 /**
@@ -241,9 +239,10 @@ case class StructsToXml(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with ExpectsInputTypes
-  with NullIntolerant {
+  with DefaultStringProducingExpression
+  with ExpectsInputTypes {
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
 
@@ -294,8 +293,6 @@ case class StructsToXml(
       gen.write(row.asInstanceOf[InternalRow])
       getAndReset()
   }
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

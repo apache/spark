@@ -21,6 +21,7 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.InSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -151,5 +152,15 @@ class OptimizerLoggingSuite extends PlanTest {
       SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
       verifyLog(Level.INFO, Seq("Batch Has No Effect"))
     }
+  }
+
+  test("SPARK-50329: toString for InSet should be valid for unresolved plan") {
+    val input = LocalRelation($"a".int, $"b".string, $"c".double)
+    val inSetPredicate = InSet($"a", Set(1, 2))
+    val query = input.select($"a", $"b").where(inSetPredicate)
+    val analyzed = query.analyze
+
+    assert(query.toString.contains("'a INSET (values with unresolved data types)"))
+    assert(analyzed.toString.contains("INSET 1, 2"))
   }
 }

@@ -27,6 +27,7 @@ import threading
 import traceback
 import typing
 import socket
+import warnings
 from types import TracebackType
 from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
 
@@ -366,7 +367,8 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
 
-    If you're using Spark Connect, you should explicitly provide Spark session as follows:
+    If you're using Spark Connect or if you want to inherit the tags properly,
+    you should explicitly provide Spark session as follows:
 
     >>> @inheritable_thread_target(session)  # doctest: +SKIP
     ... def target_func():
@@ -382,31 +384,64 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         assert session is not None, "Spark Connect session must be provided."
 
         def outer(ff: Callable) -> Callable:
+            thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
                 for (
                     attr,
                     value,
-                ) in session.client.thread_local.__dict__.items()  # type: ignore[union-attr]
+                ) in thread_local.__dict__.items()
             ]
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
-                    setattr(session.client.thread_local, attr, value)  # type: ignore[union-attr]
+                    setattr(
+                        session.client.thread_local,  # type: ignore[union-attr, operator]
+                        attr,
+                        value,
+                    )
                 return ff(*args, **kwargs)
 
             return inner
 
         return outer
 
-    # Non Spark Connect
+    # Non Spark Connect with SparkSession or Callable
+    from pyspark.sql import SparkSession
     from pyspark import SparkContext
     from py4j.clientserver import ClientServer
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+
+        if isinstance(f, SparkSession):
+            session = f
+            assert session is not None
+            tags = set(session.getTags())
+            # Local properties are copied when wrapping the function.
+            assert SparkContext._active_spark_context is not None
+            properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+
+            def outer(ff: Callable) -> Callable:
+                @functools.wraps(ff)
+                def wrapped(*args: Any, **kwargs: Any) -> Any:
+                    # Apply properties and tags in the child thread.
+                    assert SparkContext._active_spark_context is not None
+                    SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
+                    for tag in tags:
+                        session.addTag(tag)  # type: ignore[union-attr]
+                    return ff(*args, **kwargs)
+
+                return wrapped
+
+            return outer
+
+        warnings.warn(
+            "Spark session is not provided. Tags will not be inherited.",
+            UserWarning,
+        )
 
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
         # copies local properties when the thread starts but `inheritable_thread_target`
@@ -427,22 +462,40 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         return f  # type: ignore[return-value]
 
 
-def handle_worker_exception(e: BaseException, outfile: IO) -> None:
+def handle_worker_exception(
+    e: BaseException, outfile: IO, hide_traceback: Optional[bool] = None
+) -> None:
     """
     Handles exception for Python worker which writes SpecialLengths.PYTHON_EXCEPTION_THROWN (-2)
     and exception traceback info to outfile. JVM could then read from the outfile and perform
     exception handling there.
+
+    Parameters
+    ----------
+    e : BaseException
+        Exception handled
+    outfile : IO
+        IO object to write the exception info
+    hide_traceback : bool, optional
+        Whether to hide the traceback in the output.
+        By default, hides the traceback if environment variable SPARK_HIDE_TRACEBACK is set.
     """
-    try:
-        exc_info = None
+
+    if hide_traceback is None:
+        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
+
+    def format_exception() -> str:
+        if hide_traceback:
+            return "".join(traceback.format_exception_only(type(e), e))
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
             tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
             if tb is not None:
                 e.__cause__ = None
-                exc_info = "".join(traceback.format_exception(type(e), e, tb))
-        if exc_info is None:
-            exc_info = traceback.format_exc()
+                return "".join(traceback.format_exception(type(e), e, tb))
+        return traceback.format_exc()
 
+    try:
+        exc_info = format_exception()
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
         write_with_length(exc_info.encode("utf-8"), outfile)
     except IOError:
@@ -489,7 +542,8 @@ class InheritableThread(threading.Thread):
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # Set tags in child thread.
                 assert hasattr(self, "_tags")
-                session.client.thread_local.tags = self._tags  # type: ignore[union-attr, has-type]
+                thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
+                thread_local.tags = self._tags  # type: ignore[has-type]
                 return target(*a, **k)
 
             super(InheritableThread, self).__init__(
@@ -500,11 +554,15 @@ class InheritableThread(threading.Thread):
             from pyspark import SparkContext
             from py4j.clientserver import ClientServer
 
+            self._session = session  # type: ignore[assignment]
             if isinstance(SparkContext._gateway, ClientServer):
                 # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
                 def copy_local_properties(*a: Any, **k: Any) -> Any:
                     # self._props is set before starting the thread to match the behavior with JVM.
                     assert hasattr(self, "_props")
+                    if hasattr(self, "_tags"):
+                        for tag in self._tags:  # type: ignore[has-type]
+                            self._session.addTag(tag)
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
                     return target(*a, **k)
@@ -523,9 +581,10 @@ class InheritableThread(threading.Thread):
         if is_remote():
             # Spark Connect
             assert hasattr(self, "_session")
-            if not hasattr(self._session.client.thread_local, "tags"):
-                self._session.client.thread_local.tags = set()
-            self._tags = set(self._session.client.thread_local.tags)
+            thread_local = self._session.client.thread_local  # type: ignore[union-attr, operator]
+            if not hasattr(thread_local, "tags"):
+                thread_local.tags = set()
+            self._tags = set(thread_local.tags)
         else:
             # Non Spark Connect
             from pyspark import SparkContext
@@ -539,6 +598,9 @@ class InheritableThread(threading.Thread):
                 self._props = (
                     SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
                 )
+                if self._session is not None:
+                    self._tags = self._session.getTags()
+
         return super(InheritableThread, self).start()
 
 
@@ -735,7 +797,7 @@ _is_remote_only = None
 def is_remote_only() -> bool:
     """
     Returns if the current running environment is only for Spark Connect.
-    If users install pyspark-connect alone, RDD API does not exist.
+    If users install pyspark-client alone, RDD API does not exist.
 
     .. versionadded:: 4.0.0
 
@@ -771,6 +833,34 @@ def is_remote_only() -> bool:
     except ImportError:
         _is_remote_only = True
         return _is_remote_only
+
+
+# This function will be called in `pyspark` script as well,
+# so this should be available without a running Spark.
+# If move or rename, please update the script too.
+def spark_connect_mode() -> str:
+    """
+    Return the env var SPARK_CONNECT_MODE; otherwise "1" if `pyspark_connect` is available.
+    """
+    connect_by_default = os.environ.get("SPARK_CONNECT_MODE")
+    if connect_by_default is not None:
+        return connect_by_default
+    try:
+        import pyspark_connect  # noqa: F401
+
+        return "1"
+    except ImportError:
+        return "0"
+
+
+def default_api_mode() -> str:
+    """
+    Return the default API mode.
+    """
+    if spark_connect_mode() == "1":
+        return "connect"
+    else:
+        return "classic"
 
 
 if __name__ == "__main__":
