@@ -126,7 +126,7 @@ object ArrowPythonRunner {
       conf.arrowUseLargeVarTypes.toString)
     val legacyPandasConversion = Seq(
       SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
-      conf.arrowUseLargeVarTypes.toString)
+      conf.legacyPandasConversion.toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++ legacyPandasConversion: _*)
   }
