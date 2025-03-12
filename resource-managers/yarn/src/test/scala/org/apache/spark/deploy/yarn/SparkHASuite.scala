@@ -38,7 +38,7 @@ import org.apache.spark.tags.ExtendedYarnTest
 
 
 @ExtendedYarnTest
-class Spark51016Suite extends BaseYarnClusterSuite {
+class SparkHASuite extends BaseYarnClusterSuite {
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
   ignore("bug SPARK-51016 and SPARK-51272: Indeterminate stage retry giving wrong results") {
     testBasicYarnApp(
@@ -64,7 +64,7 @@ class Spark51016Suite extends BaseYarnClusterSuite {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(
       clientMode = true,
-      mainClassName(Spark51016Suite.getClass),
+      mainClassName(SparkHASuite.getClass),
       appArgs = Seq(result.getAbsolutePath),
       extraConf = conf,
       testTimeOut = 30,
@@ -73,7 +73,7 @@ class Spark51016Suite extends BaseYarnClusterSuite {
   }
 }
 
-private object Spark51016Suite extends Logging {
+private object SparkHASuite extends Logging {
 
   object Counter {
     var counter = 0
