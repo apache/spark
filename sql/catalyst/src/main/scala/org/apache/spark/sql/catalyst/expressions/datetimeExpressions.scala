@@ -2598,7 +2598,6 @@ case class MakeTime(
     // TODO do I need to have special handling for postgres compat?
 
     try {
-      // TODO special error handling for decimal with scale != 6?
       val lt = LocalTime.of(
         hours.asInstanceOf[Int],
         minutes.asInstanceOf[Int],
@@ -2614,18 +2613,23 @@ case class MakeTime(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val d = Decimal.getClass.getName.stripSuffix("$")
+
     val failOnErrorBranch = if (failOnError) {
       "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
       s"${ev.isNull} = true;"
     }
-    nullSafeCodeGen(ctx, ev, (hour, min, sec) => {
+    nullSafeCodeGen(ctx, ev, (hour, min, secAndNanos) => {
       s"""
       try {
-        int wholeSecs = (int) $sec;
-        int nanoSecs = (int) (($sec - wholeSecs) * 1_000_000_000);
+        $d secFloor = $secAndNanos.floor();
+        $d nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
+        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
+        int secs = secFloor.toInt();
+
         ${ev.value} =
-            $dtu.localTimeToMicros(java.time.LocalTime.of($hour, $min, wholeSecs, nanoSecs));
+            $dtu.localTimeToMicros(java.time.LocalTime.of($hour, $min, secs, nanos));
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""
