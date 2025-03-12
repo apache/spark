@@ -301,7 +301,8 @@ private[ui] class ExecutionPagedTable(
       ("Description", true, None),
       ("Submitted", true, None),
       ("Duration", true, Some("Time from query submission to completion (or if still executing," +
-        " time since submission)"))) ++ {
+        " time since submission)")),
+      ("SQL Script ID", true, None)) ++ {
       if (showRunningJobs && showSucceededJobs && showFailedJobs) {
         Seq(
           ("Running Job IDs", true, None),
@@ -381,6 +382,9 @@ private[ui] class ExecutionPagedTable(
         <td sorttable_customkey={duration.toString}>
           {UIUtils.formatDuration(duration)}
         </td>
+        <td sorttable_customkey={executionUIData.sqlScriptId.getOrElse("")}>
+          {executionUIData.sqlScriptId.getOrElse("")}
+        </td>
         {if (showRunningJobs) {
           <td>
             {jobLinks(executionTableRow.runningJobData)}
@@ -436,6 +440,9 @@ private[ui] class ExecutionPagedTable(
                     </td>
                     <td sorttable_customkey={duration.toString}>
                       {UIUtils.formatDuration(duration)}
+                    </td>
+                    <td sorttable_customkey={executionUIData.sqlScriptId.getOrElse("")}>
+                      {executionUIData.sqlScriptId.getOrElse("")}
                     </td>
                     {if (showRunningJobs) {
                       <td>
@@ -569,6 +576,7 @@ private[ui] class ExecutionDataSource(
       case "Description" => Ordering.by(_.executionUIData.description)
       case "Submitted" => Ordering.by(_.executionUIData.submissionTime)
       case "Duration" => Ordering.by(_.duration)
+      case "SQL Script ID" => Ordering.by(_.executionUIData.sqlScriptId)
       case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
       case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
       case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)

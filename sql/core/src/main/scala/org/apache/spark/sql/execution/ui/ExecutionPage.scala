@@ -71,9 +71,13 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <li>
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
-            <li>
-              <Strong>Script ID: </Strong>{executionUIData.sqlScriptId.getOrElse("No script ID")}
-            </li>
+            {
+              if (executionUIData.sqlScriptId.isDefined) {
+                <li>
+                  <Strong>SQL Script ID: </Strong>{executionUIData.sqlScriptId.get}
+                </li>
+              }
+            }
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
