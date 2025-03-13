@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.collation
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
