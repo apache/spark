@@ -52,8 +52,7 @@ class PythonDataSourceV2 extends TableProvider {
     dataSourceInPython
   }
 
-  def setDataSourceInPython(
-      dataSourceInPython: PythonDataSourceCreationResult): Unit = {
+  def setDataSourceInPython(dataSourceInPython: PythonDataSourceCreationResult): Unit = {
     this.dataSourceInPython = dataSourceInPython
   }
 
