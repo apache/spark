@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
+import java.util.{Locale, UUID}
 
 import scala.jdk.CollectionConverters._
 
@@ -125,7 +125,14 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     // for DataFrame API cases, same options are carried by both Command and DataSourceV2Relation
     // for DataFrameV2 API cases, options are only carried by Command
     // for SQL cases, options are only carried by DataSourceV2Relation
-    assert(commandOptions == dsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
+    // Since both options are CaseInsensitiveStringMap, change the key values to lower
+    // before comparison.
+    val lowerCaseCommandOptions =
+      commandOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT)) }
+    val lowerCaseDsOptions =
+      dsOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT)) }
+    assert(lowerCaseCommandOptions ==
+      lowerCaseDsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
     commandOptions ++ dsOptions
   }
 
