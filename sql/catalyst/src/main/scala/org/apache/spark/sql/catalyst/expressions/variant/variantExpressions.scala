@@ -436,26 +436,6 @@ case object VariantGet {
     }
     val variantType = v.getType
     if (variantType == Type.NULL) return null
-    // For types with no native Spark type, we only allow cast to string.
-    variantType match {
-      case Type.UUID | Type.TIMESTAMP_NANOS | Type.TIMESTAMP_NANOS_NTZ =>
-        if (dataType.isInstanceOf[StringType]) {
-          val result: String = variantType match {
-            case Type.UUID => v.getUuid.toString
-            case Type.TIMESTAMP_NANOS =>
-              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
-              TimestampFormatter.getFractionFormatter(castArgs.zoneId).format(instant)
-            case Type.TIMESTAMP_NANOS_NTZ =>
-              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
-              TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(instant)
-            case _ => ""
-          }
-          return UTF8String.fromString(result)
-        } else {
-          return invalidCast()
-        }
-      case _ =>
-    }
     dataType match {
       case _: AtomicType =>
         val input = variantType match {
@@ -478,6 +458,31 @@ case object VariantGet {
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
+          // Types that don't have a corresponding Spark type need more specific handling
+          case Type.UUID =>
+            return if (dataType.isInstanceOf[StringType]) {
+              UTF8String.fromString(v.getUuid.toString)
+            } else {
+              invalidCast()
+            }
+          case Type.TIMESTAMP_NANOS =>
+            // Cast to string should retain nanosecond precision. For all other casts, it should be
+            // fine to convert to microseconds and treat it as a normal timestamp.
+            if (dataType.isInstanceOf[StringType]) {
+              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
+              val result = TimestampFormatter.getFractionFormatter(castArgs.zoneId).format(instant)
+              return UTF8String.fromString(result)
+            } else {
+              Literal(v.getLong / 1000, TimestampType)
+            }
+          case Type.TIMESTAMP_NANOS_NTZ =>
+            if (dataType.isInstanceOf[StringType]) {
+              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
+              val result = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(instant)
+              return UTF8String.fromString(result)
+            } else {
+              Literal(v.getLong / 1000, TimestampNTZType)
+            }
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
           case _ => throw new SparkRuntimeException(

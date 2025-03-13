@@ -868,14 +868,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         ("2100-12-31T23:59:59.00100-08:00", "2100-12-31 23:59:59.001",
          "2100-12-31 23:59:59.001-08:00")
     )
-    timestamps.foreach { case (in, cast, to_json) =>
+    timestamps.foreach { case (in, cast, toJson) =>
       val instant = Instant.from(ISO_DATE_TIME.parse(in))
       val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
       val builder = new VariantBuilder(false)
       builder.appendTimestampNanos(nanos)
       val bytes = builder.result().getValue()
-      checkToJson(bytes, "\"" + to_json + "\"")
+      checkToJson(bytes, "\"" + toJson + "\"")
       checkCast(bytes, StringType, cast)
+      checkCast(bytes, TimestampType, nanos / NANOS_PER_MICROS)
     }
 
     // TimestampNanosNtz
@@ -886,14 +887,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         ("2100-12-31T23:59:59.00100Z", "2100-12-31 23:59:59.001",
          "2100-12-31 23:59:59.001")
     )
-    timestamps_ntz.foreach { case (in, cast, to_json) =>
+    timestamps_ntz.foreach { case (in, cast, toJson) =>
       val instant = Instant.from(ISO_DATE_TIME.parse(in))
       val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
       val builder = new VariantBuilder(false)
       builder.appendTimestampNanosNtz(nanos)
       val bytes = builder.result().getValue()
-      checkToJson(bytes, "\"" + to_json + "\"")
+      checkToJson(bytes, "\"" + toJson + "\"")
       checkCast(bytes, StringType, cast)
+      checkCast(bytes, TimestampNTZType, nanos / NANOS_PER_MICROS)
     }
   }
 
