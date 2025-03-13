@@ -1846,6 +1846,33 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
+  test("for statement - mixed case variable names") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE sum INT = 0;
+        |  FOR LoopCursor AS (SELECT * FROM VALUES (1), (2), (3) AS tbl(RowValue)) DO
+        |    SET sum = sum + LoopCursor.RowValue;
+        |  END FOR;
+        |  SELECT sum;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare sum
+      Seq.empty[Row], // declare RowValue
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
+      Seq.empty[Row], // declare RowValue
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
+      Seq.empty[Row], // declare RowValue
+      Seq.empty[Row], // set RowValue
+      Seq.empty[Row], // set sum
+      Seq(Row(6)) // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   test("for statement - enters body once") {
     withTable("t") {
       val sqlScript =

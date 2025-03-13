@@ -75,8 +75,6 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``compute.ops_on_diff_frames`` is on by default. To restore the previous behavior, set ``compute.ops_on_diff_frames`` to ``false``.
 * In Spark 4.0, the data type ``YearMonthIntervalType`` in ``DataFrame.collect`` no longer returns the underlying integers. To restore the previous behavior, set ``PYSPARK_YM_INTERVAL_LEGACY`` environment variable to ``1``.
 * In Spark 4.0, items other than functions (e.g. ``DataFrame``, ``Column``, ``StructType``) have been removed from the wildcard import ``from pyspark.sql.functions import *``, you should import these items from proper modules (e.g. ``from pyspark.sql import DataFrame, Column``, ``from pyspark.sql.types import StructType``).
-* In Spark 4.0, ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled by default. If users have PyArrow and pandas installed in their local and Spark Cluster, it automatically optimizes the regular Python UDFs with Arrow. To turn off the Arrow optimization, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to ``false``.
-* In Spark 4.0, ``spark.sql.execution.arrow.pyspark.enabled`` is enabled by default. If users have PyArrow and pandas installed in their local and Spark Cluster, it automatically makes use of Apache Arrow for columnar data transfers in PySpark. This optimization applies to ``pyspark.sql.DataFrame.toPandas`` and ``pyspark.sql.SparkSession.createDataFrame`` when its input is a Pandas DataFrame or a NumPy ndarray. To turn off the Arrow optimization, set ``spark.sql.execution.arrow.pyspark.enabled`` to ``false``.
 
 
 Upgrading from PySpark 3.3 to 3.4

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, FileInputStream, InputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -36,7 +35,7 @@ import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -178,40 +177,50 @@ class RocksDBFileManager(
       checkpointUniqueId: Option[String] = None,
       stateStoreCheckpointIdLineage: Option[Array[LineageItem]] = None
     ): StateStoreChangelogWriter = {
-    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
-    if (!rootDirChecked) {
-      val rootDir = new Path(dfsRootDir)
-      if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
-      rootDirChecked = true
+    try {
+      val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
+      if (!rootDirChecked) {
+        val rootDir = new Path(dfsRootDir)
+        if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+        rootDirChecked = true
+      }
+
+      val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
+      val changelogVersion = getChangelogWriterVersion(
+        useColumnFamilies, enableStateStoreCheckpointIds)
+
+      val changelogWriter = changelogVersion match {
+        case 1 =>
+          new StateStoreChangelogWriterV1(fm, changelogFile, codec)
+        case 2 =>
+          new StateStoreChangelogWriterV2(fm, changelogFile, codec)
+        case 3 =>
+          assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
+            "StateStoreChangelogWriterV3 should only be initialized when " +
+              "state store checkpoint unique id is enabled")
+          new StateStoreChangelogWriterV3(fm, changelogFile, codec,
+            stateStoreCheckpointIdLineage.get)
+        case 4 =>
+          assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
+            "StateStoreChangelogWriterV4 should only be initialized when " +
+              "state store checkpoint unique id is enabled")
+          new StateStoreChangelogWriterV4(fm, changelogFile, codec,
+            stateStoreCheckpointIdLineage.get)
+        case _ =>
+          throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
+      }
+
+      logInfo(log"Loaded change log reader version " +
+        log"${MDC(LogKeys.FILE_VERSION, changelogWriter.version)}")
+
+      changelogWriter
+    } catch {
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
+          throw e
+      case e: Throwable =>
+        throw StateStoreErrors.failedToGetChangelogWriter(version, e)
     }
-
-    val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
-    val changelogVersion = getChangelogWriterVersion(
-      useColumnFamilies, enableStateStoreCheckpointIds)
-
-    val changelogWriter = changelogVersion match {
-      case 1 =>
-        new StateStoreChangelogWriterV1(fm, changelogFile, codec)
-      case 2 =>
-        new StateStoreChangelogWriterV2(fm, changelogFile, codec)
-      case 3 =>
-        assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
-          "StateStoreChangelogWriterV3 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogWriterV3(fm, changelogFile, codec, stateStoreCheckpointIdLineage.get)
-      case 4 =>
-        assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
-          "StateStoreChangelogWriterV4 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogWriterV4(fm, changelogFile, codec, stateStoreCheckpointIdLineage.get)
-      case _ =>
-        throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
-    }
-
-    logInfo(log"Loaded change log reader version " +
-      log"${MDC(LogKeys.FILE_VERSION, changelogWriter.version)}")
-
-    changelogWriter
   }
 
   // Get the changelog file at version
@@ -858,12 +867,6 @@ class RocksDBFileManager(
     }
     logInfo(msg + log" - ${MDC(LogKeys.NUM_FILES, files.length)} files\n\t" +
       log"${MDC(LogKeys.FILE_NAME, files.mkString("\n\t"))}")
-  }
-
-  private def newDFSFileName(localFileName: String): String = {
-    val baseName = FilenameUtils.getBaseName(localFileName)
-    val extension = FilenameUtils.getExtension(localFileName)
-    s"$baseName-${UUID.randomUUID}.$extension"
   }
 
   def newDFSFileName(localFileName: String, dfsFileSuffix: String): String = {

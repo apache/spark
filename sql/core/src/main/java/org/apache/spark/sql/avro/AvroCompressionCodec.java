@@ -18,33 +18,31 @@
 package org.apache.spark.sql.avro;
 
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.apache.avro.file.*;
+import org.apache.avro.file.DataFileConstants;
 
 /**
  * A mapper class from Spark supported avro compression codecs to avro compression codecs.
  */
 public enum AvroCompressionCodec {
-  UNCOMPRESSED(DataFileConstants.NULL_CODEC, false, -1),
-  DEFLATE(DataFileConstants.DEFLATE_CODEC, true, CodecFactory.DEFAULT_DEFLATE_LEVEL),
-  SNAPPY(DataFileConstants.SNAPPY_CODEC, false, -1),
-  BZIP2(DataFileConstants.BZIP2_CODEC, false, -1),
-  XZ(DataFileConstants.XZ_CODEC, true, CodecFactory.DEFAULT_XZ_LEVEL),
-  ZSTANDARD(DataFileConstants.ZSTANDARD_CODEC, true, CodecFactory.DEFAULT_ZSTANDARD_LEVEL);
+  UNCOMPRESSED(DataFileConstants.NULL_CODEC, false),
+  DEFLATE(DataFileConstants.DEFLATE_CODEC, true),
+  SNAPPY(DataFileConstants.SNAPPY_CODEC, false),
+  BZIP2(DataFileConstants.BZIP2_CODEC, false),
+  XZ(DataFileConstants.XZ_CODEC, true),
+  ZSTANDARD(DataFileConstants.ZSTANDARD_CODEC, true);
 
   private final String codecName;
   private final boolean supportCompressionLevel;
-  private final int defaultCompressionLevel;
 
   AvroCompressionCodec(
       String codecName,
-      boolean supportCompressionLevel, int defaultCompressionLevel) {
+      boolean supportCompressionLevel) {
     this.codecName = codecName;
     this.supportCompressionLevel = supportCompressionLevel;
-    this.defaultCompressionLevel = defaultCompressionLevel;
   }
 
   public String getCodecName() {
@@ -55,19 +53,19 @@ public enum AvroCompressionCodec {
     return this.supportCompressionLevel;
   }
 
-  public int getDefaultCompressionLevel() {
-    return this.defaultCompressionLevel;
-  }
-
-  private static final Map<String, String> codecNameMap =
-    Arrays.stream(AvroCompressionCodec.values()).collect(
-      Collectors.toMap(codec -> codec.name(), codec -> codec.name().toLowerCase(Locale.ROOT)));
-
-  public String lowerCaseName() {
-    return codecNameMap.get(this.name());
-  }
-
   public static AvroCompressionCodec fromString(String s) {
     return AvroCompressionCodec.valueOf(s.toUpperCase(Locale.ROOT));
+  }
+
+  private static final EnumMap<AvroCompressionCodec, String> codecNameMap =
+    Arrays.stream(AvroCompressionCodec.values()).collect(
+      Collectors.toMap(
+        codec -> codec,
+        codec -> codec.name().toLowerCase(Locale.ROOT),
+        (oldValue, newValue) -> oldValue,
+        () -> new EnumMap<>(AvroCompressionCodec.class)));
+
+  public String lowerCaseName() {
+    return codecNameMap.get(this);
   }
 }
