@@ -21,7 +21,7 @@ import java.time.DateTimeException
 
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalTime
@@ -48,7 +48,9 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("time strings do not match to the pattern") {
     def assertError(str: String, expectedMsg: String): Unit = {
-      val e = intercept[DateTimeException](TimeFormatter().parse(str))
+      val e = intercept[DateTimeException] {
+        TimeFormatter(format = "HH:mm:ss", isParsing = true).parse(str)
+      }
       assert(e.getMessage.contains(expectedMsg))
     }
 
@@ -76,7 +78,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("micros are out of supported range") {
     def assertError(micros: Long, expectedMsg: String): Unit = {
-      val e = intercept[DateTimeException](TimeFormatter().format(micros))
+      val e = intercept[DateTimeException](TimeFormatter(isParsing = false).format(micros))
       assert(e.getMessage.contains(expectedMsg))
     }
 
@@ -102,7 +104,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     val data = Seq.tabulate(10) { _ => Random.between(0, 24 * 60 * 60 * 1000000L) }
     val pattern = "HH:mm:ss.SSSSSS"
     val (formatter, parser) =
-      (TimeFormatter(pattern), TimeFormatter(pattern, isParsing = true))
+      (TimeFormatter(pattern, isParsing = false), TimeFormatter(pattern, isParsing = true))
     data.foreach { micros =>
       val str = formatter.format(micros)
       assert(parser.parse(str) === micros, s"micros = $micros")
@@ -145,5 +147,30 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     assert(t4 === localTime(12))
     val t5 = f3.parse("AM")
     assert(t5 === localTime())
+  }
+
+  test("default parsing w/o pattern") {
+    val formatter = new DefaultTimeFormatter(
+      locale = DateFormatter.defaultLocale,
+      isParsing = true)
+    Seq(
+      "00:00:00" -> localTime(),
+      "00:00:00.000001" -> localTime(micros = 1),
+      "01:02:03" -> localTime(1, 2, 3),
+      "1:2:3.999999" -> localTime(1, 2, 3, 999999),
+      "23:59:59.1" -> localTime(23, 59, 59, 100000)
+    ).foreach { case (inputStr, micros) =>
+      assert(formatter.parse(inputStr) === micros)
+    }
+
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        formatter.parse("x123")
+      },
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'x123'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"TIME(6)\""))
   }
 }
