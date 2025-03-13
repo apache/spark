@@ -48,7 +48,9 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("time strings do not match to the pattern") {
     def assertError(str: String, expectedMsg: String): Unit = {
-      val e = intercept[DateTimeException](TimeFormatter(isParsing = true).parse(str))
+      val e = intercept[DateTimeException] {
+        TimeFormatter(format = "HH:mm:ss", isParsing = true).parse(str)
+      }
       assert(e.getMessage.contains(expectedMsg))
     }
 
