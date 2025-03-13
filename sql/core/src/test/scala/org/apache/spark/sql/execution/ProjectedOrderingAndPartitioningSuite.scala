@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
+import org.apache.spark.sql.functions.{col, floor, isnull, rand, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{LongType, StringType}
 
 class ProjectedOrderingAndPartitioningSuite
   extends SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -209,6 +212,37 @@ class ProjectedOrderingAndPartitioningSuite
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.child.asInstanceOf[Attribute].name == "a")
     assert(outputOrdering.head.sameOrderExpressions.size == 0)
+  }
+
+  test("SPARK-51016: ShuffleRDD using indeterministic join keys should be INDETERMINATE") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val leftDfBase = spark.createDataset(
+        Seq((1L, "aa"), (null, "aa"), (2L, "bb"), (null, "bb"), (3L, "cc"), (null, "cc")))(
+        Encoders.tupleEncoder(Encoders.LONG, Encoders.STRING)).toDF("pkLeftt", "strleft")
+
+      val rightDf = spark.createDataset(
+        Seq((1L, "11"), (2L, "22"), (3L, "33")))(
+        Encoders.tupleEncoder(Encoders.LONG, Encoders.STRING)).toDF("pkRight", "strright")
+
+      val leftDf = leftDfBase.select(
+        col("strleft"), when(isnull(col("pkLeftt")), floor(rand() * Literal(10000000L)).
+          cast(LongType)).
+          otherwise(col("pkLeftt")).as("pkLeft"))
+
+      val join = leftDf.hint("shuffle_hash").
+        join(rightDf, col("pkLeft") === col("pkRight"), "inner")
+
+      join.collect()
+      val finalPlan = join.queryExecution.executedPlan
+      val shuffleHJExec = finalPlan.children(0).asInstanceOf[ShuffledHashJoinExec]
+      assert(shuffleHJExec.left.asInstanceOf[InputAdapter].execute().outputDeterministicLevel ==
+        DeterministicLevel.INDETERMINATE)
+
+      assert(shuffleHJExec.right.asInstanceOf[InputAdapter].execute().outputDeterministicLevel ==
+        DeterministicLevel.UNORDERED)
+
+      assert(shuffleHJExec.execute().outputDeterministicLevel == DeterministicLevel.INDETERMINATE)
+    }
   }
 }
 

@@ -79,12 +79,24 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient private val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
-    val serializer: Serializer = SparkEnv.get.serializer,
-    val keyOrdering: Option[Ordering[K]] = None,
-    val aggregator: Option[Aggregator[K, V, C]] = None,
-    val mapSideCombine: Boolean = false,
-    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor)
+    val serializer: Serializer,
+    val keyOrdering: Option[Ordering[K]],
+    val aggregator: Option[Aggregator[K, V, C]],
+    val mapSideCombine: Boolean,
+    val shuffleWriterProcessor: ShuffleWriteProcessor,
+    val isInDeterministic: Boolean)
   extends Dependency[Product2[K, V]] with Logging {
+
+  def this (
+    rdd: RDD[_ <: Product2[K, V]],
+    partitioner: Partitioner,
+    serializer: Serializer = SparkEnv.get.serializer,
+    keyOrdering: Option[Ordering[K]] = None,
+    aggregator: Option[Aggregator[K, V, C]] = None,
+    mapSideCombine: Boolean = false,
+    shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor
+  ) = this(rdd, partitioner, serializer, keyOrdering, aggregator, mapSideCombine,
+    shuffleWriterProcessor, false)
 
   if (mapSideCombine) {
     require(aggregator.isDefined, "Map-side combine without Aggregator specified!")
