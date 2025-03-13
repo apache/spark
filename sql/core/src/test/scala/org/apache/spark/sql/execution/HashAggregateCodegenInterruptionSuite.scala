@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, TaskEndReason, TaskKilled}
-import org.apache.spark.scheduler.{SparkListenerJobEnd, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{SparkListenerJobEnd, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions.sum
 import org.apache.spark.sql.internal.SQLConf
@@ -44,9 +44,10 @@ class HashAggregateCodegenInterruptionSuite extends QueryTest with SharedSparkSe
     withSQLConf(
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> true.toString,
       SQLConf.INTERRUPT_ON_CANCEL.key -> false.toString) {
+      var jobId = -1
       var taskId = -1L
       var isJobEnded = false
-      var taskEndReasons = new mutable.ArrayBuffer[TaskEndReason]
+      val taskEndReasons = new mutable.ArrayBuffer[TaskEndReason]
       spark.sparkContext.addSparkListener(new org.apache.spark.scheduler.SparkListener {
         override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
           taskId = taskStart.taskInfo.taskId
@@ -56,6 +57,10 @@ class HashAggregateCodegenInterruptionSuite extends QueryTest with SharedSparkSe
           taskEndReasons += taskEnd.reason
         }
 
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobId = jobStart.jobId
+        }
+
         override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
           isJobEnded = true
         }
@@ -63,7 +68,6 @@ class HashAggregateCodegenInterruptionSuite extends QueryTest with SharedSparkSe
 
       val logAppender = new LogAppender("")
       withLogAppender(logAppender, level = Some(Level.INFO)) {
-        spark.sparkContext.setJobGroup("SPARK-50806", "SPARK-50806", false)
         // The dataset is set to 100k as we are monitoring interruptions for every 1k rows. Two
         // tasks (50 seconds each, totaling 100k / 2) exceed `spark.task.reaper.killTimeout` (10s),
         // which should provide a proper test for the interruption behavior.
@@ -87,7 +91,10 @@ class HashAggregateCodegenInterruptionSuite extends QueryTest with SharedSparkSe
         }(global)
         // Leave some time for the query to start running
         Thread.sleep(5000)
-        spark.sparkContext.cancelJobGroup("SPARK-50806")
+        eventually(timeout(10.seconds)) {
+          assert(jobId != -1)
+        }
+        spark.sparkContext.cancelJob(jobId)
         eventually(timeout(1.minute)) {
           assert(isJobEnded)
           assert(taskEndReasons.length  === 2)
