@@ -2595,19 +2595,31 @@ case class MakeTime(
 
   override protected def nullSafeEval(hours: Any, minutes: Any, seconds: Any): Any = {
     val (secs, nanos) = toSecondsAndNanos(seconds.asInstanceOf[Decimal])
-    // TODO do I need to have special handling for postgres compat?
 
     try {
-      val lt = LocalTime.of(
-        hours.asInstanceOf[Int],
-        minutes.asInstanceOf[Int],
-        secs,
-        nanos
-      )
+      val lt = if (seconds == 60) {
+        if (nanos == 0) {
+          // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
+          LocalTime.of(hours.asInstanceOf[Int], minutes.asInstanceOf[Int], 0, 0).plusMinutes(1)
+        } else {
+          throw QueryExecutionErrors.invalidFractionOfSecondError(
+            seconds.asInstanceOf[Decimal].toDouble)
+        }
+      } else {
+        LocalTime.of(
+          hours.asInstanceOf[Int],
+          minutes.asInstanceOf[Int],
+          secs,
+          nanos
+        )
+      }
+
       localTimeToMicros(lt)
     } catch {
-      case e: java.time.DateTimeException =>
-        if (failOnError) throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e) else null
+      case e: SparkDateTimeException if failOnError => throw e
+      case e: DateTimeException if failOnError =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
+      case _: DateTimeException => null
     }
   }
 
