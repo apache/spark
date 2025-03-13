@@ -2256,7 +2256,7 @@ object SQLConf {
         "The multiplier used to determine the minimum time threshold between the single " +
         "state store instance and the most recent version across all state store instances " +
         "to log a warning message. The threshold is calculated as the maintenance interval, " +
-        "multiplied by this multiplier."
+        "multiplied by this value."
       )
       .version("4.0.0")
       .intConf
@@ -2267,8 +2267,8 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.coordinatorReportUpload.enabled")
       .internal()
       .doc(
-        "When true, the state store instances will send messages to the state store " +
-        "coordinator to report upload events whenever it finishes uploading a snapshot."
+        "If enabled, state store instances will send a message to the state store " +
+        "coordinator whenever they complete a snapshot upload."
       )
       .version("4.0.0")
       .booleanConf
@@ -2278,10 +2278,10 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.snapshotLagReportInterval")
       .internal()
       .doc(
-        "The minimum amount of time between the state store coordinator's full report on " +
-        "state store instances falling behind in snapshot uploads. The reports are not " +
-        "guaranteed to be separated by this interval, because the coordinator only checks " +
-        "for lagging instances when it receives a new snapshot upload message."
+        "The minimum amount of time between the state store coordinator's report on " +
+        "state store instances lagging in snapshot uploads. The reports may be delayed " +
+        "as the coordinator only checks for lagging instances upon receiving a new " +
+        "snapshot upload message."
       )
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)

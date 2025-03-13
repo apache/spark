@@ -1468,7 +1468,7 @@ class RocksDB(
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
-      // Report to coordinator that the snapshot has been uploaded when
+      // Only report to the coordinator that the snapshot has been uploaded when
       // changelog checkpointing is enabled, since that is when stores can lag behind.
       if (enableChangelogCheckpointing) {
         providerListener.foreach(_.reportSnapshotUploaded(snapshot.version))

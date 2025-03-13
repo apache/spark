@@ -647,9 +647,10 @@ private[sql] class RocksDBStateStoreProvider
     }
   }
 
-  /** Callback function from RocksDB to report events to the coordinator.
-   *  Additional information such as state store ID and query run ID are populated here
-   *  to report back to the coordinator.
+  /**
+   * Callback function from RocksDB to report events to the coordinator.
+   * Additional information such as the state store ID and the query run ID are
+   * attached here to report back to the coordinator.
    *
    * @param version The snapshot version that was just uploaded from RocksDB
    */
