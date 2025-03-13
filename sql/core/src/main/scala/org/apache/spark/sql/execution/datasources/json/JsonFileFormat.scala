@@ -56,7 +56,14 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     parsedOptions.singleVariantColumn match {
-      case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
+      case Some(singleVariantColumn) =>
+        parsedOptions.corruptRecordColumnWithSingleVariantColumn match {
+          case Some(corruptRecordColumn) =>
+            Some(StructType(Array(StructField(singleVariantColumn, VariantType),
+              StructField(corruptRecordColumn, StringType))))
+          case _ =>
+            Some(StructType(Array(StructField(singleVariantColumn, VariantType))))
+        }
       case None => JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
     }
   }
