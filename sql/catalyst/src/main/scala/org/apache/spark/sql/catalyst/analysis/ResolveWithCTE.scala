@@ -188,22 +188,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   }
 
   /**
-   * Checks if there is any self-reference within subqueries and throws an error
-   * if that is the case.
-   */
-  def checkForSelfReferenceInSubquery(plan: LogicalPlan): Unit = {
-    plan.subqueriesAll.foreach { subquery =>
-      subquery.foreach {
-        case r: CTERelationRef if r.recursive =>
-          throw new AnalysisException(
-            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-            messageParameters = Map.empty)
-        case _ =>
-      }
-    }
-  }
-
-  /**
    * Counts number of self-references in a recursive CTE definition and throws an error
    * if that number is bigger than 1.
    */

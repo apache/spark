@@ -80,7 +80,7 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Cast cast) {
       return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
     } else if (expr instanceof Extract extract) {
-      return visitExtract(extract.field(), build(extract.source()));
+      return visitExtract(extract);
     } else if (expr instanceof SortOrder sortOrder) {
       return visitSortOrder(
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
@@ -331,6 +331,10 @@ public class V2ExpressionSQLBuilder {
     } else {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
+  }
+
+  protected String visitExtract(Extract extract) {
+    return visitExtract(extract.field(), build(extract.source()));
   }
 
   protected String visitExtract(String field, String source) {

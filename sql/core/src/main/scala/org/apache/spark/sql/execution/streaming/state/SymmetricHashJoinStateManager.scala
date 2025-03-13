@@ -447,9 +447,7 @@ class SymmetricHashJoinStateManager(
       keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
       keyWithIndexToValueMetrics.customMetrics.map {
         case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
-      },
-      // We want to collect instance metrics from both state stores
-      keyWithIndexToValueMetrics.instanceMetrics ++ keyToNumValuesMetrics.instanceMetrics
+      }
     )
   }
 

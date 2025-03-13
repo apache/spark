@@ -119,6 +119,9 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
   /** @since 3.0.0 */
   implicit def newInstantEncoder: Encoder[java.time.Instant] = Encoders.INSTANT
 
+  /** @since 4.1.0 */
+  implicit def newLocalTimeEncoder: Encoder[java.time.LocalTime] = Encoders.LOCALTIME
+
   /** @since 3.2.0 */
   implicit def newDurationEncoder: Encoder[java.time.Duration] = Encoders.DURATION
 

@@ -29,12 +29,14 @@ object Connect {
 
   val CONNECT_GRPC_BINDING_ADDRESS =
     buildStaticConf("spark.connect.grpc.binding.address")
+      .doc("The address for Spark Connect server to bind.")
       .version("4.0.0")
       .stringConf
       .createOptional
 
   val CONNECT_GRPC_BINDING_PORT =
     buildStaticConf("spark.connect.grpc.binding.port")
+      .doc("The port for Spark Connect server to bind.")
       .version("3.4.0")
       .intConf
       .createWithDefault(ConnectCommon.CONNECT_GRPC_BINDING_PORT)
