@@ -859,6 +859,7 @@ class BlockManagerMasterEndpoint(
          location
            .flatMap(blockStatusByShuffleService.get(_).flatMap(_.get(blockId)))
            .zip(location)
+           .headOption
        } else {
          None
        })
@@ -877,7 +878,11 @@ class BlockManagerMasterEndpoint(
         .orElse {
           // if the block cannot be found in the same host search it in all the executors
           val location = allLocations.headOption
-          location.flatMap(blockManagerInfo.get(_)).flatMap(_.getStatus(blockId)).zip(location)
+          location
+            .flatMap(blockManagerInfo.get(_))
+            .flatMap(_.getStatus(blockId))
+            .zip(location)
+            .headOption
         }
     logDebug(s"Identified block: $blockStatusWithBlockManagerId")
     blockStatusWithBlockManagerId
