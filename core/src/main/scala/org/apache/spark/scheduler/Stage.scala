@@ -63,6 +63,9 @@ private[scheduler] abstract class Stage(
     val resourceProfileId: Int)
   extends Logging {
 
+  @volatile
+  private var attemptIdAllPartitionsMissing: Int = -1
+
   val numPartitions = rdd.partitions.length
 
   /** Set of jobs that this stage belongs to. */
@@ -106,6 +109,8 @@ private[scheduler] abstract class Stage(
       this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
       resourceProfileId = resourceProfileId)
     nextAttemptId += 1
+    // clear the attemptId set in the attemptIdAllPartitionsMissing
+    attemptIdAllPartitionsMissing = -1
   }
 
   /** Forward the nextAttemptId if skipped and get visited for the first time. */
@@ -131,4 +136,10 @@ private[scheduler] abstract class Stage(
   def isIndeterminate: Boolean = {
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
   }
+
+  def areAllPartitionsMissing(attemptId: Int): Boolean =
+    this.attemptIdAllPartitionsMissing >= attemptId
+
+  def markAllPartitionsMissing(): Unit =
+    this.attemptIdAllPartitionsMissing = this.latestInfo.attemptNumber()
 }
