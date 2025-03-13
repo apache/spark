@@ -115,7 +115,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   test("multiple references have same underlying coordinator") {
     withCoordinatorRef(sc) { coordRef1 =>
-      val coordRef2 = StateStoreCoordinatorRef.forDriver(sc.env, new SQLConf)
+      val coordRef2 = StateStoreCoordinatorRef.forDriver(sc.env)
 
       val id = StateStoreProviderId(StateStoreId("x", 0, 0), UUID.randomUUID)
 
@@ -222,12 +222,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2",
       SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
+        // Set directly to SparkConf
+        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "2")
 
         // Start a query and run some data to force snapshot uploads
         val inputData = MemoryStream[Int]
@@ -256,6 +257,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         // Verify that we should not have any state stores lagging behind
         assert(coordRef.getLaggingStoresForTesting().isEmpty)
         query.stop()
+
+        // Manually unset the custom SparkConf configs
+        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 
@@ -271,12 +275,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2",
       SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
+        // Set directly to SparkConf
+        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "2")
 
         // Start a query and run some data to force snapshot uploads
         val inputData = MemoryStream[Int]
@@ -312,6 +317,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         assert(laggingStores.size == 2)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
         query.stop()
+
+        // Manually unset the custom SparkConf configs
+        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 
@@ -325,16 +333,17 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     withCoordinatorAndSQLConf(
       sc,
       SQLConf.SHUFFLE_PARTITIONS.key -> "3",
-      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "50",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4",
       SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
+        // Set directly to SparkConf
+        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "3")
 
         // Start a join query and run some data to force snapshot uploads
         val input1 = MemoryStream[Int]
@@ -371,6 +380,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         // Verify that we should not have any state stores lagging behind
         assert(coordRef.getLaggingStoresForTesting().isEmpty)
         query.stop()
+
+        // Manually unset the custom SparkConf configs
+        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 
@@ -381,17 +393,18 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     withCoordinatorAndSQLConf(
       sc,
       SQLConf.SHUFFLE_PARTITIONS.key -> "3",
-      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "50",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4",
       SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
+        // Set directly to SparkConf
+        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "3")
 
         // Start a join query and run some data to force snapshot uploads
         val input1 = MemoryStream[Int]
@@ -436,6 +449,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         val laggingStores = coordRef.getLaggingStoresForTesting()
         assert(laggingStores.size == 2 * 4)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
+
+        // Manually unset the custom SparkConf configs
+        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 }
@@ -444,7 +460,7 @@ object StateStoreCoordinatorSuite {
   def withCoordinatorRef(sc: SparkContext)(body: StateStoreCoordinatorRef => Unit): Unit = {
     var coordinatorRef: StateStoreCoordinatorRef = null
     try {
-      coordinatorRef = StateStoreCoordinatorRef.forDriver(sc.env, new SQLConf)
+      coordinatorRef = StateStoreCoordinatorRef.forDriver(sc.env)
       body(coordinatorRef)
     } finally {
       if (coordinatorRef != null) coordinatorRef.stop()

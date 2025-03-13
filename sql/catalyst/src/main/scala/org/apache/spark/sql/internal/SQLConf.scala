@@ -2249,19 +2249,18 @@ object SQLConf {
       .checkValue(k => k >= 1, "Must be greater than or equal to 1")
       .createWithDefault(30)
 
-  val STATE_STORE_COORDINATOR_MAINTENANCE_MULTIPLIER_FOR_MIN_TIME_DELTA_TO_LOG =
-    buildConf("spark.sql.streaming.stateStore.maintenanceMultiplierForMinTimeDeltaToLog")
+  val STATE_STORE_COORDINATOR_MIN_SNAPSHOT_TIME_DELTA_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.minSnapshotTimeDeltaToLog")
       .internal()
       .doc(
-        "The multiplier used to determine the minimum time threshold between the single " +
-        "state store instance and the most recent version across all state store instances " +
-        "to log a warning message. The threshold is calculated as the maintenance interval, " +
-        "multiplied by this value."
+        "Minimum time between the timestamps of the most recent uploaded snapshot of a single " +
+        "state store instance and the most recent snapsnot upload's timestamp across all " +
+        "state store instances to log a warning message. It is recommended for this value to be " +
+        "longer than the maintenance interval."
       )
       .version("4.0.0")
-      .intConf
-      .checkValue(k => k >= 1, "Must be greater than or equal to 1")
-      .createWithDefault(20)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(30))
 
   val STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED =
     buildConf("spark.sql.streaming.stateStore.coordinatorReportUpload.enabled")

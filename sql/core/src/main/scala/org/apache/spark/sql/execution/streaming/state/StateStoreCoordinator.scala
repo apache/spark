@@ -21,7 +21,7 @@ import java.util.UUID
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -93,9 +93,9 @@ object StateStoreCoordinatorRef extends Logging {
   /**
    * Create a reference to a [[StateStoreCoordinator]]
    */
-  def forDriver(env: SparkEnv, conf: SQLConf): StateStoreCoordinatorRef = synchronized {
+  def forDriver(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
     try {
-      val coordinator = new StateStoreCoordinator(env.rpcEnv, conf)
+      val coordinator = new StateStoreCoordinator(env.rpcEnv, env.conf)
       val coordinatorRef = env.rpcEnv.setupEndpoint(endpointName, coordinator)
       logInfo("Registered StateStoreCoordinator endpoint")
       new StateStoreCoordinatorRef(coordinatorRef)
@@ -183,7 +183,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
  */
 private class StateStoreCoordinator(
     override val rpcEnv: RpcEnv,
-    val sqlConf: SQLConf)
+    conf: SparkConf)
   extends ThreadSafeRpcEndpoint
   with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
@@ -192,6 +192,13 @@ private class StateStoreCoordinator(
   private val stateStoreLatestUploadedSnapshot =
     new mutable.HashMap[StateStoreProviderId, SnapshotUploadEvent]
 
+  // Determine alert thresholds from configurations for both time and version differences.
+  private val minTimeDeltaForLogging =
+    conf.get(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_TIME_DELTA_TO_LOG)
+  private val minVersionDeltaForLogging =
+    conf.get(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
+
+  // Default snapshot upload event to use when a provider has never uploaded a snapshot
   private val defaultSnapshotUploadEvent = SnapshotUploadEvent(-1, 0)
 
   // Stores the last timestamp in milliseconds where the coordinator did a full report on
@@ -255,8 +262,8 @@ private class StateStoreCoordinator(
           lastFullSnapshotLagReport = System.currentTimeMillis()
           logWarning(
             log"StateStoreCoordinator Snapshot Lag Detected - " +
-              log"Number of state stores falling behind: " +
-              log"${MDC(LogKeys.NUM_LAGGING_STORES, laggingStores.size)}"
+            log"Number of state stores falling behind: " +
+            log"${MDC(LogKeys.NUM_LAGGING_STORES, laggingStores.size)}"
           )
           laggingStores.foreach { storeProviderId =>
             val latestSnapshot = latestSnapshotPerQuery(storeProviderId.queryRunId)
@@ -307,25 +314,18 @@ private class StateStoreCoordinator(
       val versionDelta = latest.version - version
       val timeDelta = latest.timestamp - timestamp
 
-      // Determine alert thresholds from configurations for both time and version differences.
-      // Use a multiple of the maintenance interval as the minimum time delta for logging.
-      val maintenanceMultiplierForThreshold =
-        SQLConf.get.getConf(
-          SQLConf.STATE_STORE_COORDINATOR_MAINTENANCE_MULTIPLIER_FOR_MIN_TIME_DELTA_TO_LOG
-        )
-      val minTimeDeltaForLogging =
-        maintenanceMultiplierForThreshold * SQLConf.get.getConf(
-          SQLConf.STREAMING_MAINTENANCE_INTERVAL
-        )
-      val minVersionDeltaForLogging =
-        SQLConf.get.getConf(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
-
       versionDelta >= minVersionDeltaForLogging ||
         (version >= 0 && timeDelta > minTimeDeltaForLogging)
     }
 
-    override def compare(that: SnapshotUploadEvent): Int = {
-      this.version.compare(that.version)
+    override def compare(otherEvent: SnapshotUploadEvent): Int = {
+      // Compare by version first, then by timestamp as tiebreaker
+      val versionCompare = this.version.compare(otherEvent.version)
+      if (versionCompare == 0) {
+        this.timestamp.compare(otherEvent.timestamp)
+      } else {
+        versionCompare
+      }
     }
 
     override def toString(): String = {
