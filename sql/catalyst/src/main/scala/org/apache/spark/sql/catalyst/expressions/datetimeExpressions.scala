@@ -2631,6 +2631,7 @@ case class MakeTime(
     } else {
       s"${ev.isNull} = true;"
     }
+    val failOnSparkErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
 
     val secs = "seconds"
     val nanos = "nanos"
@@ -2640,8 +2641,20 @@ case class MakeTime(
       try {
         ${toSecAndNanosCodeGen(secAndNanos, secs, nanos)}
 
-        ${ev.value} =
-            $dtu.localTimeToMicros(java.time.LocalTime.of($hour, $min, $secs, $nanos));
+        java.time.LocalTime lt;
+        if ($secs == 60) {
+          if ($nanos == 0) {
+            lt = java.time.LocalTime.of($hour, $min, 0, 0).plusMinutes(1);
+          } else {
+            throw QueryExecutionErrors.invalidFractionOfSecondError($secAndNanos.toDouble());
+          }
+        } else {
+          lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
+        }
+
+        ${ev.value} = $dtu.localTimeToMicros(lt);
+      } catch (org.apache.spark.SparkDateTimeException e) {
+        $failOnSparkErrorBranch
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""
@@ -2984,7 +2997,6 @@ case class MakeTimestamp(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val d = Decimal.getClass.getName.stripSuffix("$")
     val failOnErrorBranch = if (failOnError) {
       "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
@@ -3010,15 +3022,15 @@ case class MakeTimestamp(
         ${toSecAndNanosCodeGen(secAndNanos, secs, nanos)}
 
         java.time.LocalDateTime ldt;
-        if (seconds == 60) {
-          if (nanos == 0) {
+        if ($secs == 60) {
+          if ($nanos == 0) {
             ldt = java.time.LocalDateTime.of(
               $year, $month, $day, $hour, $min, 0, 0).plusMinutes(1);
           } else {
             throw QueryExecutionErrors.invalidFractionOfSecondError($secAndNanos.toDouble());
           }
         } else {
-          ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
+          ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, $secs, $nanos);
         }
         $toMicrosCode
       } catch (org.apache.spark.SparkDateTimeException e) {
