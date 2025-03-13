@@ -1200,26 +1200,26 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   test("SPARK-51402: Test TimeType in UDF") {
     // Mocks
     val mockTimeStr = "00:00:00.000000"
-    val input = Seq(java.time.LocalTime.parse(mockTimeStr)).toDF("currentTime")
+    val input = Seq(LocalTime.parse(mockTimeStr)).toDF("currentTime")
     // Regular case
-    val plusHour = udf((l: java.time.LocalTime) => l.plusHours(1))
+    val plusHour = udf((l: LocalTime) => l.plusHours(1))
     val result = input.select(plusHour($"currentTime").as("newTime"))
-    checkAnswer(result, Row(java.time.LocalTime.parse("01:00:00.000000")) :: Nil)
+    checkAnswer(result, Row(LocalTime.parse("01:00:00.000000")) :: Nil)
     assert(result.schema === new StructType().add("newTime", TimeType()))
     // UDF produces `null`
-    val nullFunc = udf((_: java.time.LocalTime) => null.asInstanceOf[java.time.LocalTime])
+    val nullFunc = udf((_: LocalTime) => null.asInstanceOf[LocalTime])
     val nullResult = input.select(nullFunc($"currentTime").as("nullTime"))
     checkAnswer(nullResult, Row(null) :: Nil)
     assert(nullResult.schema === new StructType().add("nullTime", TimeType()))
     // Input parameter of UDF is null
-    val nullInput = Seq(null.asInstanceOf[java.time.LocalTime]).toDF("nullTime")
-    val constTime = udf((_: java.time.LocalTime) =>
-      java.time.LocalTime.parse(mockTimeStr))
+    val nullInput = Seq(null.asInstanceOf[LocalTime]).toDF("nullTime")
+    val constTime = udf((_: LocalTime) =>
+      LocalTime.parse(mockTimeStr))
     val constResult = nullInput.select(constTime($"nullTime").as("zeroHour"))
-    checkAnswer(constResult, Row(java.time.LocalTime.parse(mockTimeStr)) :: Nil)
+    checkAnswer(constResult, Row(LocalTime.parse(mockTimeStr)) :: Nil)
     assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
     // Error in the conversion of UDF result to the internal representation of time
-    val invalidFunc = udf((l: java.time.LocalTime) => "Zero".toLong)
+    val invalidFunc = udf((l: LocalTime) => "Zero".toLong)
     val e = intercept[SparkException] {
       input.select(invalidFunc($"currentTime")).collect()
     }
