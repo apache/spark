@@ -31,6 +31,18 @@ import org.apache.spark.sql.functions.{count, expr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
+// SkipMaintenanceOnCertainPartitionsProvider is a test-only provider that skips running
+// maintenance for partitions 0 and 1 (these are arbitrary choices). This is used to test
+// snapshot upload lag can be observed through StreamingQueryProgress metrics.
+class SkipMaintenanceOnCertainPartitionsProvider extends RocksDBStateStoreProvider {
+  override def doMaintenance(): Unit = {
+    if (stateStoreId.partitionId == 0 || stateStoreId.partitionId == 1) {
+      return
+    }
+    super.doMaintenance()
+  }
+}
+
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   import StateStoreCoordinatorSuite._
