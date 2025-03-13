@@ -19,10 +19,13 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+
 import scala.concurrent.duration._
+
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
+
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
