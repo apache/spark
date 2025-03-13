@@ -19,17 +19,14 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-
 import scala.concurrent.duration._
-
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_INSTANCES, EXECUTOR_MEMORY}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageSubmitted}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -54,8 +51,7 @@ class SparkHASuite extends BaseYarnClusterSuite {
         EXECUTOR_CORES.key -> "1",
         EXECUTOR_MEMORY.key -> "512m",
         EXECUTOR_INSTANCES.key -> "2",
-        "spark.ui.port" -> "4040",
-        "spark.ui.enabled" -> "true",
+        "spark.ui.enabled" -> "false",
         "spark.yarn.max.executor.failures" -> "100000"
       ))
   }
@@ -151,7 +147,11 @@ private object SparkHASuite extends Logging {
       val outerjoin: DataFrame = getOuterJoinDF(spark)
       val correctRows = outerjoin.collect()
       JobListener.inKillMode = true
-      for (i <- 0 until 50) {
+      JobListener.killWhen = KillPosition.KILL_IN_STAGE_SUBMISSION
+      for (i <- 0 until 100) {
+        if (i > 49) {
+          JobListener.killWhen = KillPosition.KILL_IN_STAGE_COMPLETION
+        }
         try {
           eventually(timeout(3.minutes), interval(100.milliseconds)) {
             assert(sc.getExecutorIds().size == 2)
@@ -238,7 +238,18 @@ private[spark] class JobListener extends SparkListener with Logging {
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-    if (stageSubmitted.stageInfo.shuffleDepId.isEmpty && pidToKill.nonEmpty) {
+    if (stageSubmitted.stageInfo.shuffleDepId.isEmpty && pidToKill.nonEmpty &&
+      JobListener.killWhen == KillPosition.KILL_IN_STAGE_SUBMISSION) {
+      val pid = pidToKill.get
+      pidToKill = None
+      logInfo(s"killing executor for pid = $pid")
+      PIDGetter.killExecutor(pid)
+    }
+  }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    if (stageCompleted.stageInfo.shuffleDepId.exists(_ % 2 == count % 2) && pidToKill.nonEmpty &&
+      JobListener.killWhen == KillPosition.KILL_IN_STAGE_COMPLETION) {
       val pid = pidToKill.get
       pidToKill = None
       logInfo(s"killing executor for pid = $pid")
@@ -247,7 +258,16 @@ private[spark] class JobListener extends SparkListener with Logging {
   }
 }
 
+object KillPosition extends Enumeration {
+  type KillPosition = Value
+  val KILL_IN_STAGE_SUBMISSION, KILL_IN_STAGE_COMPLETION, NONE = Value
+}
+
 object JobListener {
   @volatile
   var inKillMode: Boolean = false
+
+  import KillPosition._
+  @volatile
+  var killWhen: KillPosition = NONE
 }
