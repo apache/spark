@@ -2593,17 +2593,17 @@ case class MakeTime(
   override def dataType: DataType = TimeType(TimeType.MAX_PRECISION)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
-  override protected def nullSafeEval(hours: Any, minutes: Any, seconds: Any): Any = {
-    val (secs, nanos) = toSecondsAndNanos(seconds.asInstanceOf[Decimal])
+  override protected def nullSafeEval(hours: Any, minutes: Any, secAndMicros: Any): Any = {
+    val (secs, nanos) = toSecondsAndNanos(secAndMicros.asInstanceOf[Decimal])
 
     try {
-      val lt = if (seconds == 60) {
+      val lt = if (secs == 60) {
         if (nanos == 0) {
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
           LocalTime.of(hours.asInstanceOf[Int], minutes.asInstanceOf[Int], 0, 0).plusMinutes(1)
         } else {
           throw QueryExecutionErrors.invalidFractionOfSecondError(
-            seconds.asInstanceOf[Decimal].toDouble)
+            secAndMicros.asInstanceOf[Decimal].toDouble)
         }
       } else {
         LocalTime.of(
@@ -2636,17 +2636,17 @@ case class MakeTime(
     val secs = "seconds"
     val nanos = "nanos"
 
-    nullSafeCodeGen(ctx, ev, (hour, min, secAndNanos) => {
+    nullSafeCodeGen(ctx, ev, (hour, min, secAndMicros) => {
       s"""
       try {
-        ${toSecAndNanosCodeGen(secAndNanos, secs, nanos)}
+        ${toSecAndNanosCodeGen(secAndMicros, secs, nanos)}
 
         java.time.LocalTime lt;
         if ($secs == 60) {
           if ($nanos == 0) {
             lt = java.time.LocalTime.of($hour, $min, 0, 0).plusMinutes(1);
           } else {
-            throw QueryExecutionErrors.invalidFractionOfSecondError($secAndNanos.toDouble());
+            throw QueryExecutionErrors.invalidFractionOfSecondError($secAndMicros.toDouble());
           }
         } else {
           lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
@@ -3688,13 +3688,13 @@ trait SecAndNanosExtractor {
     (seconds, nanos)
   }
 
-  def toSecAndNanosCodeGen(secAndNanos: String, secs: String, nanos: String): String = {
+  def toSecAndNanosCodeGen(secAndMicros: String, secs: String, nanos: String): String = {
     val d = Decimal.getClass.getName.stripSuffix("$")
 
     s"""
-    $d secFloor = $secAndNanos.floor();
+    $d secFloor = $secAndMicros.floor();
     $d nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-    int $nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
+    int $nanos = (($secAndMicros.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
     int $secs = secFloor.toInt();
     """
   }
