@@ -167,7 +167,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false"
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false",
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
@@ -195,7 +196,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
           val providerId =
             StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
-          assert(coordRef.getLatestSnapshotVersion(providerId).isEmpty)
+          assert(coordRef.getLatestSnapshotVersionForTesting(providerId).isEmpty)
         }
         query.stop()
     }
@@ -209,7 +210,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2",
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
@@ -237,10 +239,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
           val providerId =
             StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
-          assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+          assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
         }
         // Verify that we should not have any state stores lagging behind
-        assert(coordRef.getLaggingStores().isEmpty)
+        assert(coordRef.getLaggingStoresForTesting().isEmpty)
         query.stop()
     }
   }
@@ -257,7 +259,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2"
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "2",
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
@@ -286,14 +289,14 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
             StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
           if (partitionId <= 1) {
             // Verify state stores in partition 0 and 1 are lagging and did not upload anything
-            assert(coordRef.getLatestSnapshotVersion(providerId).isEmpty)
+            assert(coordRef.getLatestSnapshotVersionForTesting(providerId).isEmpty)
           } else {
             // Verify other stores have uploaded a snapshot and it's logged by the coordinator
-            assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+            assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
           }
         }
         // We should have two state stores (id 0 and 1) that are lagging behind at this point
-        val laggingStores = coordRef.getLaggingStores()
+        val laggingStores = coordRef.getLaggingStoresForTesting()
         assert(laggingStores.size == 2)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
         query.stop()
@@ -314,7 +317,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4"
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4",
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
@@ -349,11 +353,11 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
                 StateStoreId(stateCheckpointDir, 0, partitionId, storeName),
                 query.runId
               )
-            assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+            assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
           }
         }
         // Verify that we should not have any state stores lagging behind
-        assert(coordRef.getLaggingStores().isEmpty)
+        assert(coordRef.getLaggingStoresForTesting().isEmpty)
         query.stop()
     }
   }
@@ -370,7 +374,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4"
+      SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key -> "4",
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
@@ -407,16 +412,16 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               )
             if (partitionId <= 1) {
               // Verify state stores in partition 0 and 1 are lagging and did not upload anything
-              assert(coordRef.getLatestSnapshotVersion(providerId).isEmpty)
+              assert(coordRef.getLatestSnapshotVersionForTesting(providerId).isEmpty)
             } else {
               // Verify other stores have uploaded a snapshot and it's logged by the coordinator
-              assert(coordRef.getLatestSnapshotVersion(providerId).get >= 0)
+              assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
             }
           }
         }
         // Verify that only stores from partition id 0 and 1 are lagging behind.
         // Each partition has 4 stores for join queries, so there are 2 * 4 = 8 lagging stores.
-        val laggingStores = coordRef.getLaggingStores()
+        val laggingStores = coordRef.getLaggingStoresForTesting()
         assert(laggingStores.size == 2 * 4)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
     }

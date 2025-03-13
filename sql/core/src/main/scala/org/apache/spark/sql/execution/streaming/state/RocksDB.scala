@@ -65,7 +65,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
- * @param providerListener A reference to the state store provider for event callback reporting
+ * @param providerListener The parent RocksDBStateStoreProvider object used for event reports
  */
 class RocksDB(
     dfsRootDir: String,

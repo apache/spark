@@ -93,6 +93,13 @@ class StateStoreConf(
     StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
 
   /**
+   * Whether to report snapshot uploaded messages from the internal RocksDB instance
+   * to the state store coordinator.
+   */
+  val stateStoreCoordinatorReportUploadEnabled: Boolean =
+    sqlConf.stateStoreCoordinatorReportUploadEnabled
+
+  /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.`
    */

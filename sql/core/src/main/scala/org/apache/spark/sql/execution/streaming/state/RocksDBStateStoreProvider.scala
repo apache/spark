@@ -41,9 +41,8 @@ import org.apache.spark.util.{NonFateSharingCache, Utils}
 /**
  * Trait representing events reported from a RocksDB instance.
  *
- * The internal RocksDB instance can use a provider with a `RocksDBEventListener` reference to
- * report specific events like snapshot uploads. This should only be used to report back to the
- * coordinator for metrics and monitoring purposes.
+ * We pass this into the internal RocksDB instance to report specific events like snapshot uploads.
+ * This should only be used to report back to the coordinator for metrics and monitoring purposes.
  */
 trait RocksDBEventListener {
   def reportSnapshotUploaded(version: Long): Unit
@@ -655,6 +654,9 @@ private[sql] class RocksDBStateStoreProvider
    * @param version The snapshot version that was just uploaded from RocksDB
    */
   def reportSnapshotUploaded(version: Long): Unit = {
+    if (!storeConf.stateStoreCoordinatorReportUploadEnabled) {
+      return
+    }
     // Collect the state store ID and query run ID to report back to the coordinator
     StateStore.reportSnapshotUploaded(
       StateStoreProviderId(
