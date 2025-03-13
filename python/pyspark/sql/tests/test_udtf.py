@@ -3135,7 +3135,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
             "x: array<int>",
         ]:
             with self.subTest(ret_type=ret_type):
-                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
 
@@ -3381,6 +3381,20 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
         ]:
             with self.subTest(ret_type=ret_type):
                 self._check_result_or_exception(TestUDTF, ret_type, expected)
+
+    def test_inconsistent_output_types(self):
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+                yield [1, 2],
+
+        for ret_type in [
+            "x: int",
+            "x: array<int>",
+        ]:
+            with self.subTest(ret_type=ret_type):
+                with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+                    udtf(TestUDTF, returnType=ret_type)().collect()
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
