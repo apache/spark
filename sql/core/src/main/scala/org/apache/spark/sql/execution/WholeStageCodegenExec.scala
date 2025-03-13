@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -461,13 +462,49 @@ trait InputRDDCodegen extends CodegenSupport {
     inputRDD :: Nil
   }
 
+  private[sql] var isInputInterruptible = false
+
   override def doProduce(ctx: CodegenContext): String = {
     // Inline mutable state since an InputRDDCodegen is used once in a task for WholeStageCodegen
     val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
       forceInline = true)
     val row = ctx.freshName("row")
-    val numOutputRows = ctx.freshName("numOutputRows")
-    val taskInterrupted = ctx.freshName("taskInterrupted")
+    val shouldInterruptOnCancel = {
+      !isInputInterruptible &&
+        SQLConf.get.getConf(SQLConf.INPUT_CODEGEN_RDD_INTERRUPT_ON_CANCEL) &&
+        // Short-circuit the check if the descendant is already interruptible
+        !WholeStageCodegenExec.isInterruptible(this)
+    }
+    isInputInterruptible = shouldInterruptOnCancel
+
+    val (interruptFieldDeclaration, interruptCondition, interruptCheck) =
+      if (shouldInterruptOnCancel) {
+        val numOutputRows = ctx.freshName("numOutputRows")
+        val taskInterrupted = ctx.freshName("taskInterrupted")
+
+        val interruptFieldDeclaration =
+          s"""
+             | long $numOutputRows = 0;
+             | boolean $taskInterrupted = false;
+             |""".stripMargin
+
+        val interruptCondition = s"!$taskInterrupted &&"
+
+        val interruptCheck =
+          s"""
+             | $numOutputRows++;
+             | if ($numOutputRows % 1000 == 0) {
+             |   if (org.apache.spark.TaskContext.get() != null) {
+             |     $taskInterrupted = org.apache.spark.TaskContext.get().isInterrupted();
+             |   }
+             | }
+             |""".stripMargin
+
+        (interruptFieldDeclaration, interruptCondition, interruptCheck)
+      } else {
+        ("", "", "")
+      }
+
 
     val outputVars = if (createUnsafeProjection) {
       // creating the vars will make the parent consume add an unsafe projection.
@@ -487,16 +524,10 @@ trait InputRDDCodegen extends CodegenSupport {
       ""
     }
     s"""
-       | long $numOutputRows = 0;
-       | boolean $taskInterrupted = false;
-       | while ($limitNotReachedCond !$taskInterrupted && $input.hasNext()) {
+       | $interruptFieldDeclaration
+       | while ($limitNotReachedCond $interruptCondition $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
-       |   $numOutputRows++;
-       |   if ($numOutputRows % 1000 == 0) {
-       |     if (org.apache.spark.TaskContext.get() != null) {
-       |       $taskInterrupted = org.apache.spark.TaskContext.get().isInterrupted();
-       |     }
-       |   }
+       |   $interruptCheck
        |   ${updateNumOutputRowsMetrics}
        |   ${consume(ctx, outputVars, if (createUnsafeProjection) null else row).trim}
        |   ${shouldStopCheckCode}
@@ -589,6 +620,17 @@ object WholeStageCodegenExec {
 
   def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
+  }
+
+  def isInterruptible(p: SparkPlan): Boolean = p match {
+    case s: ShuffledHashJoinExec => isInterruptible(s.streamedPlan)
+    case s: SortMergeJoinExec => isInterruptible(s.left) || isInterruptible(s.right)
+    case _: InputAdapter | _: WholeStageCodegenExec | _: ColumnarToRowExec | _: ProjectExec |
+         _: FilterExec =>
+      isInterruptible(p.children.head)
+    case _: RangeExec | _: FileSourceScanExec | _: Exchange | _: ReusedExchangeExec => true
+    case i: InputRDDCodegen if i.isInputInterruptible => true
+    case _ => false
   }
 
   // The whole-stage codegen generates Java code on the driver side and sends it to the Executors
