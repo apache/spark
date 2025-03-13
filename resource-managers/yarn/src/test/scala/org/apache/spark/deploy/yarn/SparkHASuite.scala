@@ -40,7 +40,7 @@ import org.apache.spark.tags.ExtendedYarnTest
 @ExtendedYarnTest
 class SparkHASuite extends BaseYarnClusterSuite {
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
-  ignore("bug SPARK-51016 and SPARK-51272: Indeterminate stage retry giving wrong results") {
+  test("bug SPARK-51016 and SPARK-51272: Indeterminate stage retry giving wrong results") {
     testBasicYarnApp(
       Map(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
