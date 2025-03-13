@@ -473,7 +473,7 @@ case object VariantGet {
               val result = TimestampFormatter.getFractionFormatter(castArgs.zoneId).format(instant)
               return UTF8String.fromString(result)
             } else {
-              Literal(v.getLong / 1000, TimestampType)
+              Literal(v.getLong / NANOS_PER_MICROS, TimestampType)
             }
           case Type.TIMESTAMP_NANOS_NTZ =>
             if (dataType.isInstanceOf[StringType]) {
@@ -481,7 +481,7 @@ case object VariantGet {
               val result = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(instant)
               return UTF8String.fromString(result)
             } else {
-              Literal(v.getLong / 1000, TimestampNTZType)
+              Literal(v.getLong / NANOS_PER_MICROS, TimestampNTZType)
             }
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
