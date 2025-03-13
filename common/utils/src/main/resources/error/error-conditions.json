@@ -3837,13 +3837,7 @@
     },
     "sqlState" : "22023"
   },
-  "MALFORMED_VARIANT" : {
-    "message" : [
-      "Variant binary is malformed. Please check the data source is valid."
-    ],
-    "sqlState" : "22023"
-  },
-  "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE" :  {
+  "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE" : {
     "message" : [
       "Malformed state in RatePerMicroBatch source."
     ],
@@ -3861,6 +3855,12 @@
       }
     },
     "sqlState" : "22000"
+  },
+  "MALFORMED_VARIANT" : {
+    "message" : [
+      "Variant binary is malformed. Please check the data source is valid."
+    ],
+    "sqlState" : "22023"
   },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
