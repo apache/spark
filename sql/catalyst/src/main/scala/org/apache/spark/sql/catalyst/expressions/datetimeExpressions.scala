@@ -3675,9 +3675,16 @@ case class TimestampDiff(
 }
 
 /**
- * A mixin containing methods to parse seconds and nanoseconds represented as a decimal type
+ * A mixin trait with methods to extract whole and fractional seconds from a decimal
+ * representing seconds with microsecond precision.
  */
 trait SecAndNanosExtractor {
+  /**
+   * Extracts out the whole and fractional seconds from a decimal object representing seconds with
+   * microsecond precision
+   * @param secAndMicros
+   * @return A tuple containing the whole seconds and fractional second represented as nanoseconds
+   */
   def toSecondsAndNanos(secAndMicros: Decimal): (Int, Int) = {
     assert(secAndMicros.scale == 6,
       s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
@@ -3688,6 +3695,18 @@ trait SecAndNanosExtractor {
     (seconds, nanos)
   }
 
+  /**
+   * Geneates code to extracts out the whole and fractional seconds from a decimal object
+   * representing seconds with microsecond precision. It will create new variables that contain
+   * the extracted results.
+   * @param secAndMicros The name of the variable containing the decimal object representing
+   *                     seconds with microsecond precision
+   * @param secs The name of the variable that the while seconds will be set to. It will use this
+   *             variable name to create a new int variable.
+   * @param nanos The name of the variable that the fractional seconds will be set to as
+   *              nanoseconds. It will use this variable name to create a new int variable.
+   * @return The code to extra whole and fractional seconds
+   */
   def toSecAndNanosCodeGen(secAndMicros: String, secs: String, nanos: String): String = {
     val d = Decimal.getClass.getName.stripSuffix("$")
 
