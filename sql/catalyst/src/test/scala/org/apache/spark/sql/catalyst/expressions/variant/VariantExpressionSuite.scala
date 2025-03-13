@@ -1032,12 +1032,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val variantNull = Literal(new VariantVal(Array(primitiveHeader(NULL)), emptyMetadata))
       val array = Cast(CreateArray(Seq(v, variantNull)), VariantType)
       checkEvaluation(SchemaOfVariant(array), s"ARRAY<$typeString>")
-      // Merge with another type results in VARIANT.
+      // Merge with non-nanos timestamp type results in VARIANT.
       val variantString = Literal(new VariantVal(
             Array(primitiveHeader(TIMESTAMP)) ++ Array.fill(8)(0.toByte), emptyMetadata))
-      val array2 = Cast(CreateArray(Seq(uuid, variantString)), VariantType)
+      val array2 = Cast(CreateArray(Seq(v, variantString)), VariantType)
+      checkEvaluation(SchemaOfVariant(array2), s"ARRAY<VARIANT>")
     }
-
   }
 
   test("schema_of_variant - schema merge") {

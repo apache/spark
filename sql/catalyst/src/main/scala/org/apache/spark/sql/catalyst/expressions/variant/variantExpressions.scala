@@ -857,12 +857,12 @@ object SchemaOfVariant {
     private[spark] override def asNullable: TimestampNanosType = this
   }
   private case object TimestampNanosType extends TimestampNanosType
-  private class TimestampNanosNtzType extends DataType {
+  private class TimestampNanosNTZType extends DataType {
     override def defaultSize: Int = 16
     override def typeName: String = "timestamp_nanos_ntz"
-    private[spark] override def asNullable: TimestampNanosNtzType = this
+    private[spark] override def asNullable: TimestampNanosNTZType = this
   }
-  private case object TimestampNanosNtzType extends TimestampNanosNtzType
+  private case object TimestampNanosNTZType extends TimestampNanosNTZType
 
   /**
    * Return the schema of a variant. Struct fields are guaranteed to be sorted alphabetically.
@@ -904,7 +904,7 @@ object SchemaOfVariant {
     case Type.BINARY => BinaryType
     case Type.UUID => UuidType
     case Type.TIMESTAMP_NANOS => TimestampNanosType
-    case Type.TIMESTAMP_NANOS_NTZ => TimestampNanosNtzType
+    case Type.TIMESTAMP_NANOS_NTZ => TimestampNanosNTZType
   }
 
   /**
