@@ -1883,7 +1883,6 @@ private[spark] class DAGScheduler(
       case _ => false
     }
 
-
     outputCommitCoordinator.taskCompleted(
       stageId,
       task.stageAttemptId,
