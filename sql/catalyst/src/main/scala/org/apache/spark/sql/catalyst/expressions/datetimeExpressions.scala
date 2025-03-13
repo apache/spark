@@ -2580,7 +2580,7 @@ case class MakeTime(
     minutes: Expression,
     seconds: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with SecAndNanosExtractor {
   override def nullIntolerant: Boolean = true
 
   def this(hours: Expression, minutes: Expression, seconds: Expression) =
@@ -2613,23 +2613,23 @@ case class MakeTime(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val d = Decimal.getClass.getName.stripSuffix("$")
 
     val failOnErrorBranch = if (failOnError) {
       "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
       s"${ev.isNull} = true;"
     }
+
+    val secs = "seconds"
+    val nanos = "nanos"
+
     nullSafeCodeGen(ctx, ev, (hour, min, secAndNanos) => {
       s"""
       try {
-        $d secFloor = $secAndNanos.floor();
-        $d nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
-        int secs = secFloor.toInt();
+        ${toSecAndNanosCodeGen(secAndNanos, secs, nanos)}
 
         ${ev.value} =
-            $dtu.localTimeToMicros(java.time.LocalTime.of($hour, $min, secs, nanos));
+            $dtu.localTimeToMicros(java.time.LocalTime.of($hour, $min, $secs, $nanos));
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""
@@ -2876,7 +2876,8 @@ case class MakeTimestamp(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled,
     override val dataType: DataType = SQLConf.get.timestampType)
-  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with SecAndNanosExtractor {
   override def nullIntolerant: Boolean = true
 
   def this(
@@ -2988,12 +2989,14 @@ case class MakeTimestamp(
       } else {
         s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
       }
+
+      val secs = "seconds"
+      val nanos = "nanos"
+
       s"""
       try {
-        org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
-        org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
-        int seconds = secFloor.toInt();
+        ${toSecAndNanosCodeGen(secAndNanos, secs, nanos)}
+
         java.time.LocalDateTime ldt;
         if (seconds == 60) {
           if (nanos == 0) {
@@ -3644,5 +3647,31 @@ case class TimestampDiff(
       newLeft: Expression,
       newRight: Expression): TimestampDiff = {
     copy(startTimestamp = newLeft, endTimestamp = newRight)
+  }
+}
+
+/**
+ * A mixin containing methods to parse seconds and nanoseconds represented as a decimal type
+ */
+trait SecAndNanosExtractor {
+  def toSecondsAndNanos(secAndMicros: Decimal): (Int, Int) = {
+    assert(secAndMicros.scale == 6,
+      s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
+    val unscaledSecFrac = secAndMicros.toUnscaledLong
+    val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
+    val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
+    val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
+    (seconds, nanos)
+  }
+
+  def toSecAndNanosCodeGen(secAndNanos: String, secs: String, nanos: String): String = {
+    val d = Decimal.getClass.getName.stripSuffix("$")
+
+    s"""
+    $d secFloor = $secAndNanos.floor();
+    $d nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
+    int $nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
+    int $secs = secFloor.toInt();
+    """
   }
 }
