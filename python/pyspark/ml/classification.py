@@ -1584,6 +1584,7 @@ class LogisticRegressionModel(
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
+            s: LogisticRegressionTrainingSummary
             if self.numClasses <= 2:
                 s = BinaryLogisticRegressionTrainingSummary(
                     super(LogisticRegressionModel, self).summary
@@ -1612,6 +1613,7 @@ class LogisticRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
+        s: LogisticRegressionSummary
         if self.numClasses <= 2:
             s = BinaryLogisticRegressionSummary(java_blr_summary)
         else:
@@ -2314,6 +2316,7 @@ class RandomForestClassificationModel(
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
+            s: RandomForestClassificationTrainingSummary
             if self.numClasses <= 2:
                 s = BinaryRandomForestClassificationTrainingSummary(
                     super(RandomForestClassificationModel, self).summary
@@ -2330,9 +2333,7 @@ class RandomForestClassificationModel(
                 "No training summary available for this %s" % self.__class__.__name__
             )
 
-    def evaluate(
-        self, dataset: DataFrame
-    ) -> Union["BinaryRandomForestClassificationSummary", "RandomForestClassificationSummary"]:
+    def evaluate(self, dataset: DataFrame) -> "RandomForestClassificationSummary":
         """
         Evaluates the model on a test dataset.
 
@@ -2346,6 +2347,7 @@ class RandomForestClassificationModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_rf_summary = self._call_java("evaluate", dataset)
+        s: RandomForestClassificationSummary
         if self.numClasses <= 2:
             s = BinaryRandomForestClassificationSummary(java_rf_summary)
         else:
@@ -2379,7 +2381,10 @@ class RandomForestClassificationTrainingSummary(
 
 
 @inherit_doc
-class BinaryRandomForestClassificationSummary(_BinaryClassificationSummary):
+class BinaryRandomForestClassificationSummary(
+    _BinaryClassificationSummary,
+    RandomForestClassificationSummary,
+):
     """
     BinaryRandomForestClassification results for a given model.
 
