@@ -2241,7 +2241,7 @@ object SQLConf {
         "per stateful operator. Instance metrics are selected based on metric-specific ordering " +
         "to minimize noise in the progress report."
       )
-      .version("4.0.0")
+      .version("4.1.0")
       .intConf
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
       .createWithDefault(5)
