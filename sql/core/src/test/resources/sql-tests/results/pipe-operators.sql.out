@@ -3629,6 +3629,48 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+from t
+| select x, y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+from t
+| select x | 8
+| select 1 | 8
+-- !query schema
+struct<(1 | 8):int>
+-- !query output
+9
+9
+
+
+-- !query
+from t
+| select x | (select 8)
+-- !query schema
+struct<(x | scalarsubquery()):int>
+-- !query output
+8
+9
+
+
+-- !query
+from t
+| select x
+| select 8
+-- !query schema
+struct<8:int>
+-- !query output
+8
+8
+
+
+-- !query
 with customer_total_return as
 (select
     sr_customer_sk as ctr_customer_sk,

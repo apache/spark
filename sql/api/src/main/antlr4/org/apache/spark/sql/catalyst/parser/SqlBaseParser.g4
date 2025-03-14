@@ -40,6 +40,13 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, double quoted literals are identifiers rather than STRINGs.
    */
   public boolean double_quoted_identifiers = false;
+
+  /**
+   * When true, the single character operator pipe token is enabled. This allows the use of a single
+   * '|' character as the operator pipe token, which is a shorthand for the full two-character token
+   * '|>'."
+   */
+  public boolean single_character_pipe_operator_token_enabled = false;
 }
 
 compoundOrSingleStatement
@@ -663,6 +670,8 @@ queryTerm
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
+    | left=queryTerm PIPE {single_character_pipe_operator_token_enabled}?
+        operatorPipeRightSide                                                            #operatorPipeStatement
     ;
 
 queryPrimary

@@ -1251,6 +1251,24 @@ table windowTestData
 |> select cate, val, sum(val) over w as sum_val
    window w as (order by val);
 
+-- Exercise the use of '|' as an alternative to '|>' for the pipe operator token.
+-- Note that '|' is also a valid token for performing bit operations between integers in SQL
+-- expressions, so we exercise a combination of both cases here. In general, the parser should
+-- prefer the case that matches first when proceeding through the rules of the grammar.
+from t
+| select x, y;
+
+from t
+| select x | 8
+| select 1 | 8;
+
+from t
+| select x | (select 8);
+
+from t
+| select x
+| select 8;
+
 -- Exercise SQL compilation using a subset of TPC-DS table schemas.
 -------------------------------------------------------------------
 

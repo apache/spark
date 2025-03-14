@@ -5352,6 +5352,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SINGLE_CHARACTER_OPERATOR_PIPE_TOKEN_ENABLED =
+    buildConf("spark.sql.singleCharacterOperatorPipeTokenEnabled")
+      .internal()
+      .doc("When set to true, and 'spark.sql.operatorPipeSyntaxEnabled' is also true, the " +
+        "single character operator pipe token is enabled. This allows the use of a single " +
+        "'|' character as the operator pipe token, which is a shorthand for the full " +
+        "two-character token '|>'.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
@@ -6584,6 +6595,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyCodingErrorAction: Boolean = getConf(SQLConf.LEGACY_CODING_ERROR_ACTION)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
+
+  override def singleCharacterOperatorPipeTokenEnabled: Boolean =
+    getConf(SQLConf.SINGLE_CHARACTER_OPERATOR_PIPE_TOKEN_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -1007,5 +1007,18 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
           start = 0,
           stop = sql.length - 1))
     }
+    // Check usage of the '|' token as an alternative to the '|>' token.
+    checkPipeSelect("TABLE t | SELECT 1 AS X")
+    checkPipeSelect("TABLE t | SELECT 1 AS X, 2 AS Y | SELECT X + Y AS Z")
+    withSQLConf(SQLConf.SINGLE_CHARACTER_OPERATOR_PIPE_TOKEN_ENABLED.key -> "false") {
+      val sql = "TABLE t | SELECT 1 AS X"
+      checkError(
+        exception = parseException(sql),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map(
+          "error" ->
+            "rule queryTerm failed predicate: {single_character_pipe_operator_token_enabled}?",
+          "hint" -> ""))
+    }
   }
 }
