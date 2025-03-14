@@ -1775,9 +1775,6 @@ class TTLStatefulProcessor(StatefulProcessor):
             }
         )
 
-    def close(self) -> None:
-        pass
-
 
 class InvalidSimpleStatefulProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
@@ -1792,9 +1789,6 @@ class InvalidSimpleStatefulProcessor(StatefulProcessor):
         assert self.num_violations_state.get() is None
         self.num_violations_state.clear()
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
-
-    def close(self) -> None:
-        pass
 
 
 class ListStateProcessor(StatefulProcessor):
