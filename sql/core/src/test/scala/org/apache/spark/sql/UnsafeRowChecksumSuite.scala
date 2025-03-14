@@ -23,7 +23,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 
 class UnsafeRowChecksumSuite extends SparkFunSuite {
   private val schema = new StructType().add("value", IntegerType)
