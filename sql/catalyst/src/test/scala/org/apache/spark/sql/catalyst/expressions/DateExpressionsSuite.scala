@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -2161,7 +2161,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
         // basic case
-        // TODO
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(2, IntegerType),
+            Literal(Decimal(BigDecimal(23.5), 16, 6))),
+          LocalTime.of(13, 2, 23, 500000000))
         
         // Postgres compatibility
         // TODO
