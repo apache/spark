@@ -140,6 +140,10 @@ private[scheduler] abstract class Stage(
   def areAllPartitionsMissing(attemptId: Int): Boolean =
     this.attemptIdAllPartitionsMissing >= attemptId
 
-  def markAllPartitionsMissing(): Unit =
+  def markAllPartitionsMissing(): Unit = {
     this.attemptIdAllPartitionsMissing = this.latestInfo.attemptNumber()
+    this.basicMarkAllPartitionsMissing()
+  }
+
+  protected def basicMarkAllPartitionsMissing(): Unit
 }

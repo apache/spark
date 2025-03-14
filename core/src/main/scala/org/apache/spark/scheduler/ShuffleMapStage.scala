@@ -90,12 +90,13 @@ private[spark] class ShuffleMapStage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   override def findMissingPartitions(): Seq[Int] = {
-    if (this.areAllPartitionsMissing(this.latestInfo.attemptNumber())) {
-      0 until numPartitions
-    } else {
-      mapOutputTrackerMaster
-        .findMissingPartitions(shuffleDep.shuffleId).getOrElse(0 until numPartitions)
-    }
+    mapOutputTrackerMaster
+      .findMissingPartitions(shuffleDep.shuffleId)
+      .getOrElse(0 until numPartitions)
+  }
+
+  override protected def basicMarkAllPartitionsMissing(): Unit = {
+    mapOutputTrackerMaster.unregisterAllMapAndMergeOutput(this.shuffleDep.shuffleId)
   }
 
   override def isIndeterminate: Boolean = this.shuffleDep.isInDeterministic || super.isIndeterminate

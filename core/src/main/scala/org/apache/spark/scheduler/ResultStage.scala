@@ -61,11 +61,13 @@ private[spark] class ResultStage(
    */
   override def findMissingPartitions(): Seq[Int] = {
     val job = activeJob.get
-    val allPartitions = (0 until job.numPartitions)
-    if (this.areAllPartitionsMissing(this.latestInfo.attemptNumber())) {
-      allPartitions
-    } else {
-      allPartitions.filter(id => !job.finished(id))
+    (0 until job.numPartitions).filter(id => !job.finished(id))
+  }
+
+  override protected def basicMarkAllPartitionsMissing(): Unit = {
+    val job = activeJob.get
+    for(id <- 0 until job.numPartitions) {
+      job.finished(id) = false
     }
   }
 
