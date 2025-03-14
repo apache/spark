@@ -1038,6 +1038,14 @@ object StateStore extends Logging {
     }
   }
 
+  private[state] def reportSnapshotUploaded(
+      storeProviderId: StateStoreProviderId,
+      snapshotVersion: Long): Unit = {
+    // Attach the current timestamp of uploaded snapshot and send the message to the coordinator
+    val currentTime = System.currentTimeMillis()
+    coordinatorRef.foreach(_.snapshotUploaded(storeProviderId, snapshotVersion, currentTime))
+  }
+
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {

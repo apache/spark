@@ -2243,6 +2243,56 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.minSnapshotVersionDeltaToLog")
+      .internal()
+      .doc(
+        "Minimum number of versions between the most recent uploaded snapshot version of a " +
+        "single state store instance and the most recent version across all state store " +
+        "instances to log a warning message."
+      )
+      .version("4.0.0")
+      .intConf
+      .checkValue(k => k >= 1, "Must be greater than or equal to 1")
+      .createWithDefault(30)
+
+  val STATE_STORE_COORDINATOR_MIN_SNAPSHOT_TIME_DELTA_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.minSnapshotTimeDeltaToLog")
+      .internal()
+      .doc(
+        "Minimum time between the timestamps of the most recent uploaded snapshot of a single " +
+        "state store instance and the most recent snapsnot upload's timestamp across all " +
+        "state store instances to log a warning message. It is recommended for this value to be " +
+        "longer than the maintenance interval."
+      )
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(30))
+
+  val STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.coordinatorReportUpload.enabled")
+      .internal()
+      .doc(
+        "If enabled, state store instances will send a message to the state store " +
+        "coordinator whenever they complete a snapshot upload."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL =
+    buildConf("spark.sql.streaming.stateStore.snapshotLagReportInterval")
+      .internal()
+      .doc(
+        "The minimum amount of time between the state store coordinator's report on " +
+        "state store instances lagging in snapshot uploads. The reports may be delayed " +
+        "as the coordinator only checks for lagging instances upon receiving a new " +
+        "snapshot upload message."
+      )
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(5))
+
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()
@@ -5783,6 +5833,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
     getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
+
+  def stateStoreCoordinatorReportUploadEnabled: Boolean =
+    getConf(STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

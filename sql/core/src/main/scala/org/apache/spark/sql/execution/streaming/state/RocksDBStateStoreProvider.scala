@@ -38,9 +38,19 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
+/**
+ * Trait representing events reported from a RocksDB instance.
+ *
+ * We pass this into the internal RocksDB instance to report specific events like snapshot uploads.
+ * This should only be used to report back to the coordinator for metrics and monitoring purposes.
+ */
+trait RocksDBEventListener {
+  def reportSnapshotUploaded(version: Long): Unit
+}
+
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
-  with SupportsFineGrainedReplay {
+  with SupportsFineGrainedReplay with RocksDBEventListener {
   import RocksDBStateStoreProvider._
 
   class RocksDBStateStore(lastVersion: Long) extends StateStore {
@@ -517,7 +527,7 @@ private[sql] class RocksDBStateStoreProvider
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, Some(this))
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -635,6 +645,27 @@ private[sql] class RocksDBStateStoreProvider
     if (!isInternal && colFamilyName.charAt(0) == '$') {
       throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
     }
+  }
+
+  /**
+   * Callback function from RocksDB to report events to the coordinator.
+   * Additional information such as the state store ID and the query run ID are
+   * attached here to report back to the coordinator.
+   *
+   * @param version The snapshot version that was just uploaded from RocksDB
+   */
+  def reportSnapshotUploaded(version: Long): Unit = {
+    if (!storeConf.stateStoreCoordinatorReportUploadEnabled) {
+      return
+    }
+    // Collect the state store ID and query run ID to report back to the coordinator
+    StateStore.reportSnapshotUploaded(
+      StateStoreProviderId(
+        stateStoreId,
+        UUID.fromString(getRunId(hadoopConf))
+      ),
+      version
+    )
   }
 }
 
