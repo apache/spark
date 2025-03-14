@@ -71,7 +71,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         (SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10"),
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
         (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
-        (SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "0"),
         (SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
         val inputData = MemoryStream[Int]
 
@@ -109,7 +108,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
               "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumInternalColFamiliesKeys",
-              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies"))
+              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies",
+              "SnapshotLastUploaded.partition_0_default"))
           }
         } finally {
           query.stop()

@@ -43,6 +43,7 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import (
         AnalysisException,
         SparkConnectException,
+        SparkConnectGrpcException,
         SparkUpgradeException,
     )
 
@@ -237,7 +238,13 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         class CustomChannelBuilder(ChannelBuilder):
             def toChannel(self):
-                return self._insecure_channel(endpoint)
+                creds = grpc.local_channel_credentials()
+
+                if self.token is not None:
+                    creds = grpc.composite_channel_credentials(
+                        creds, grpc.access_token_call_credentials(self.token)
+                    )
+                return self._secure_channel(endpoint, creds)
 
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
         session.sql("select 1 + 1")
@@ -289,6 +296,15 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         )
         self.assertEqual(session.range(1).first()[0], 0)
         self.assertIsInstance(session, RemoteSparkSession)
+
+    def test_authentication(self):
+        # All servers start with a default token of "deadbeef", so supply in invalid one
+        session = RemoteSparkSession.builder.remote("sc://localhost/;token=invalid").create()
+
+        with self.assertRaises(SparkConnectGrpcException) as e:
+            session.range(3).collect()
+
+        self.assertTrue("Invalid authentication token" in str(e.exception))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

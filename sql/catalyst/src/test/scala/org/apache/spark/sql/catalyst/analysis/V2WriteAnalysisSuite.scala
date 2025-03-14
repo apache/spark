@@ -333,6 +333,37 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       hasTransform = true)
   }
 
+  test("SPARK-48922: Avoid redundant array transform of identical expression for map type") {
+    def assertMapField(fromType: MapType, toType: MapType, transformNum: Int): Unit = {
+      val table = TestRelation(Seq($"a".int, Symbol("map").map(toType)))
+      val query = TestRelation(Seq(Symbol("map").map(fromType), $"a".int))
+
+      val writePlan = byName(table, query).analyze
+
+      assertResolved(writePlan)
+      checkAnalysis(writePlan, writePlan)
+
+      val transforms = writePlan.children.head.expressions.flatMap { e =>
+        e.flatMap {
+          case t: ArrayTransform => Some(t)
+          case _ => None
+        }
+      }
+      assert(transforms.size == transformNum)
+    }
+
+    assertMapField(MapType(LongType, StringType), MapType(LongType, StringType), 0)
+    assertMapField(
+      MapType(LongType, new StructType().add("x", "int").add("y", "int")),
+      MapType(LongType, new StructType().add("y", "int").add("x", "byte")),
+      1)
+    assertMapField(MapType(LongType, LongType), MapType(IntegerType, LongType), 1)
+    assertMapField(
+      MapType(LongType, new StructType().add("x", "int").add("y", "int")),
+      MapType(IntegerType, new StructType().add("y", "int").add("x", "byte")),
+      2)
+  }
+
   test("SPARK-33136: output resolved on complex types for V2 write commands") {
     def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {
       val table = TestRelation(StructType(Seq(StructField("a", toType))))
@@ -420,12 +451,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorCondition(
-      parsedPlan,
-      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: case sensitive column resolution") {
@@ -435,12 +468,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorCondition(
-      parsedPlan,
-      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: case insensitive column resolution") {
@@ -513,12 +548,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertNotResolved(parsedPlan)
-    assertAnalysisErrorCondition(
-      parsedPlan,
-      expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      assertNotResolved(parsedPlan)
+      assertAnalysisErrorCondition(
+        parsedPlan,
+        expectedErrorCondition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+      )
+    }
   }
 
   test("byName: insert safe cast") {

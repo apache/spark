@@ -412,6 +412,8 @@ object SparkBuild extends PomBuild {
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
+  enable(HiveThriftServer.settings)(hiveThriftServer)
+
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
@@ -1003,7 +1005,7 @@ object KubernetesIntegrationTests {
           rDockerFile = ""
         }
         val extraOptions = if (javaImageTag.isDefined) {
-          Seq("-b", s"java_image_tag=$javaImageTag")
+          Seq("-b", s"java_image_tag=${javaImageTag.get}")
         } else {
           Seq("-f", s"$dockerFile")
         }
@@ -1200,6 +1202,14 @@ object Hive {
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
     (Test / fullClasspath) := (Test / fullClasspath).value.filterNot { f => f.toString.contains("jcl-over") }
+  )
+}
+
+object HiveThriftServer {
+  lazy val settings = Seq(
+    excludeDependencies ++= Seq(
+      ExclusionRule("org.apache.hive", "hive-llap-common"),
+      ExclusionRule("org.apache.hive", "hive-llap-client"))
   )
 }
 

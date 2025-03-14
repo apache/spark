@@ -394,7 +394,9 @@ org.apache.spark.SparkDateTimeException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "to_timestamp(1)"
   } ]
 }
 

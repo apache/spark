@@ -29,8 +29,6 @@ import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure
 class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog with ProcedureCatalog {
   protected val functions: util.Map[Identifier, UnboundFunction] =
     new ConcurrentHashMap[Identifier, UnboundFunction]()
-  protected val procedures: util.Map[Identifier, UnboundProcedure] =
-    new ConcurrentHashMap[Identifier, UnboundProcedure]()
 
   override protected def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++
@@ -65,12 +63,6 @@ class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog with Pro
 
   def clearFunctions(): Unit = {
     functions.clear()
-  }
-
-  override def loadProcedure(ident: Identifier): UnboundProcedure = {
-    val procedure = procedures.get(ident)
-    if (procedure == null) throw new RuntimeException("Procedure not found: " + ident)
-    procedure
   }
 
   def createProcedure(ident: Identifier, procedure: UnboundProcedure): UnboundProcedure = {

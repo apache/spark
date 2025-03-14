@@ -21,8 +21,8 @@ import scala.language.existentials
 
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper.expressionWithNullSafety
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, Codec, JavaSerializationCodec, KryoSerializationCodec}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLeafEncoder, BoxedLongEncoder, BoxedShortEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveLeafEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, AgnosticExpressionPathEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLeafEncoder, BoxedLongEncoder, BoxedShortEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, OptionEncoder, PrimitiveLeafEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder, lenientExternalDataTypeFor}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, CheckOverflow, CreateNamedStruct, Expression, IsNull, KnownNotNull, Literal, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -95,6 +95,15 @@ object SerializerBuildHelper {
       DateTimeUtils.getClass,
       TimestampType,
       "instantToMicros",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
+  def createSerializerForLocalTime(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      TimeType(),
+      "localTimeToMicros",
       inputObject :: Nil,
       returnNullable = false)
   }
@@ -306,6 +315,7 @@ object SerializerBuildHelper {
    * by encoder `enc`.
    */
   private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression = enc match {
+    case ae: AgnosticExpressionPathEncoder[_] => ae.toCatalyst(input)
     case _ if isNativeEncoder(enc) => input
     case BoxedBooleanEncoder => createSerializerForBoolean(input)
     case BoxedByteEncoder => createSerializerForByte(input)
@@ -333,6 +343,7 @@ object SerializerBuildHelper {
     case TimestampEncoder(false) => createSerializerForSqlTimestamp(input)
     case InstantEncoder(false) => createSerializerForJavaInstant(input)
     case LocalDateTimeEncoder => createSerializerForLocalDateTime(input)
+    case LocalTimeEncoder => createSerializerForLocalTime(input)
     case UDTEncoder(udt, udtClass) => createSerializerForUserDefinedType(input, udt, udtClass)
     case OptionEncoder(valueEnc) =>
       createSerializer(valueEnc, UnwrapOption(externalDataTypeFor(valueEnc), input))
@@ -418,18 +429,21 @@ object SerializerBuildHelper {
       }
       createSerializerForObject(input, serializedFields)
 
-    case TransformingEncoder(_, _, codec) if codec == JavaSerializationCodec =>
+    case TransformingEncoder(_, _, codec, _) if codec == JavaSerializationCodec =>
       EncodeUsingSerializer(input, kryo = false)
 
-    case TransformingEncoder(_, _, codec) if codec == KryoSerializationCodec =>
+    case TransformingEncoder(_, _, codec, _) if codec == KryoSerializationCodec =>
       EncodeUsingSerializer(input, kryo = true)
 
-    case TransformingEncoder(_, encoder, codecProvider) =>
+    case TransformingEncoder(_, encoder, codecProvider, _) =>
       val encoded = Invoke(
         Literal(codecProvider(), ObjectType(classOf[Codec[_, _]])),
         "encode",
         externalDataTypeFor(encoder),
-        input :: Nil)
+        input :: Nil,
+        propagateNull = input.nullable,
+        returnNullable = input.nullable
+      )
       createSerializer(encoder, encoded)
   }
 
@@ -486,6 +500,7 @@ object SerializerBuildHelper {
       nullable: Boolean): Expression => Expression = { input =>
     val expected = enc match {
       case OptionEncoder(_) => lenientExternalDataTypeFor(enc)
+      case TransformingEncoder(_, transformed, _, _) => lenientExternalDataTypeFor(transformed)
       case _ => enc.dataType
     }
 

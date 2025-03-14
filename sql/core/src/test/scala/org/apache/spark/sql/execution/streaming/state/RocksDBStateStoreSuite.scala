@@ -77,6 +77,20 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // Verify the version encoded in first byte of the key and value byte arrays
       assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
       assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+
+      // The test verifies that the actual key-value pair (kv) matches these expected byte patterns
+      // exactly using sameElements, which ensures the serialization format remains consistent and
+      // backward compatible. This is particularly important for state storage where the format
+      // needs to be stable across Spark versions.
+      val (expectedKey, expectedValue) = if (conf.stateStoreEncodingFormat == "avro") {
+        (Array(0, 0, 0, 2, 2, 97, 2, 0), Array(0, 0, 0, 2, 2))
+      } else {
+        (Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0,
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 0, 0, 0, 0, 0, 0, 0),
+          Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0))
+      }
+      assert(kv.key.sameElements(expectedKey))
+      assert(kv.value.sameElements(expectedValue))
     }
   }
 

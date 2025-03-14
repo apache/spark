@@ -264,4 +264,11 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_1189",
       messageParameters = Map("operation" -> operation))
   }
+
+  def unsupportedTimePrecisionError(precision: Int): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_TIME_PRECISION",
+      messageParameters = Map("precision" -> precision.toString),
+      cause = null)
+  }
 }

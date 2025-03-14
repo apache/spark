@@ -482,8 +482,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       meq(Map.empty))
   }
 
-  private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
-
   test("check foreach() catches null writers") {
     val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")

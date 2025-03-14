@@ -310,8 +310,8 @@ GROUP BY lower(test_missing_target.c)
 ORDER BY lower(test_missing_target.c)
 -- !query analysis
 Project [count(c)#xL]
-+- Sort [lower(c#x)#x ASC NULLS FIRST], true
-   +- Aggregate [lower(c#x)], [count(c#x) AS count(c)#xL, lower(c#x) AS lower(c#x)#x]
++- Sort [lower(c)#x ASC NULLS FIRST], true
+   +- Aggregate [lower(c#x)], [count(c#x) AS count(c)#xL, lower(c#x) AS lower(c)#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
@@ -341,8 +341,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT count(b) FROM test_missing_target GROUP BY b/2 ORDER BY b/2
 -- !query analysis
 Project [count(b)#xL]
-+- Sort [(cast(b#x as double) / cast(2 as double))#x ASC NULLS FIRST], true
-   +- Aggregate [(cast(b#x as double) / cast(2 as double))], [count(b#x) AS count(b)#xL, (cast(b#x as double) / cast(2 as double)) AS (cast(b#x as double) / cast(2 as double))#x]
++- Sort [(b / 2)#x ASC NULLS FIRST], true
+   +- Aggregate [(cast(b#x as double) / cast(2 as double))], [count(b#x) AS count(b)#xL, (cast(b#x as double) / cast(2 as double)) AS (b / 2)#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
@@ -372,8 +372,8 @@ SELECT count(b) FROM test_missing_target
 	GROUP BY (b + 1) / 2 ORDER BY (b + 1) / 2 desc
 -- !query analysis
 Project [count(b)#xL]
-+- Sort [(cast((b#x + 1) as double) / cast(2 as double))#x DESC NULLS LAST], true
-   +- Aggregate [(cast((b#x + 1) as double) / cast(2 as double))], [count(b#x) AS count(b)#xL, (cast((b#x + 1) as double) / cast(2 as double)) AS (cast((b#x + 1) as double) / cast(2 as double))#x]
++- Sort [((b + 1) / 2)#x DESC NULLS LAST], true
+   +- Aggregate [(cast((b#x + 1) as double) / cast(2 as double))], [count(b#x) AS count(b)#xL, (cast((b#x + 1) as double) / cast(2 as double)) AS ((b + 1) / 2)#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
