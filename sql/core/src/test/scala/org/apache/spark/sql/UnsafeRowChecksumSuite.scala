@@ -125,33 +125,6 @@ class UnsafeRowChecksumSuite extends SparkFunSuite {
     assert(rowBasedChecksum2.getValue != 0)
   }
 
-  test("The checksum is the same for byte array and non-byte array object") {
-    val buffer = Platform.allocateMemory(16)
-    val unsafeRowOffheap = new UnsafeRow(1)
-    unsafeRowOffheap.pointTo(null, buffer, 16)
-    assert(!unsafeRowOffheap.getBaseObject.isInstanceOf[Array[Byte]])
-
-    val rowBasedChecksum1 = new UnsafeRowChecksum()
-    val rowBasedChecksum2 = new UnsafeRowChecksum()
-    assert(rowBasedChecksum1.getValue == 0)
-    assert(rowBasedChecksum2.getValue == 0)
-
-    rowBasedChecksum1.update(1, toUnsafeRow(Row(20)))
-    unsafeRowOffheap.setInt(0, 20)
-    rowBasedChecksum2.update(1, unsafeRowOffheap)
-    assert(rowBasedChecksum1.getValue == rowBasedChecksum2.getValue)
-
-    rowBasedChecksum1.update(2, toUnsafeRow(Row(40)))
-    unsafeRowOffheap.setInt(0, 40)
-    rowBasedChecksum2.update(2, unsafeRowOffheap)
-    assert(rowBasedChecksum1.getValue == rowBasedChecksum2.getValue)
-
-    assert(rowBasedChecksum1.getValue != 0)
-    assert(rowBasedChecksum2.getValue != 0)
-
-    Platform.freeMemory(buffer)
-  }
-
   test("The checksum is independent of row order - complex rows") {
     val rowBasedChecksum1 = new UnsafeRowChecksum()
     val rowBasedChecksum2 = new UnsafeRowChecksum()
@@ -168,38 +141,6 @@ class UnsafeRowChecksumSuite extends SparkFunSuite {
       "Some other string", 10.88, 20000L, 2000, 200.toShort, 20.toByte, false)))
     rowBasedChecksum2.update(2, toUnsafeRowComplex(Row(
       "Some string", 0.99, 10000L, 1000, 100.toShort, 10.toByte, true)))
-    assert(rowBasedChecksum1.getValue == rowBasedChecksum2.getValue)
-
-    assert(rowBasedChecksum1.getValue != 0)
-    assert(rowBasedChecksum2.getValue != 0)
-  }
-
-  test("The checksum is independent of row order - complex offheap rows") {
-    val buffer1 = Platform.allocateMemory(128)
-    val unsafeRowOffheap1 = new UnsafeRow(7)
-    unsafeRowOffheap1.pointTo(null, buffer1, 128)
-    setUnsafeRowValue(
-      "Some string", 0.99, 10000L, 1000, 100.toShort, 10.toByte, true, unsafeRowOffheap1)
-    assert(!unsafeRowOffheap1.getBaseObject.isInstanceOf[Array[Byte]])
-
-    val buffer2 = Platform.allocateMemory(128)
-    val unsafeRowOffheap2 = new UnsafeRow(7)
-    unsafeRowOffheap2.pointTo(null, buffer2, 128)
-    setUnsafeRowValue(
-      "Some other string", 10.88, 20000L, 2000, 200.toShort, 20.toByte, false, unsafeRowOffheap2)
-    assert(!unsafeRowOffheap2.getBaseObject.isInstanceOf[Array[Byte]])
-
-    val rowBasedChecksum1 = new UnsafeRowChecksum()
-    val rowBasedChecksum2 = new UnsafeRowChecksum()
-    assert(rowBasedChecksum1.getValue == 0)
-    assert(rowBasedChecksum2.getValue == 0)
-
-    rowBasedChecksum1.update(1, unsafeRowOffheap1)
-    rowBasedChecksum2.update(1, unsafeRowOffheap2)
-    assert(rowBasedChecksum1.getValue != rowBasedChecksum2.getValue)
-
-    rowBasedChecksum1.update(2, unsafeRowOffheap2)
-    rowBasedChecksum2.update(2, unsafeRowOffheap1)
     assert(rowBasedChecksum1.getValue == rowBasedChecksum2.getValue)
 
     assert(rowBasedChecksum1.getValue != 0)

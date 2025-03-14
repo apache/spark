@@ -5585,9 +5585,9 @@ object SQLConf {
         "partition produce different output data or not (same set of keyValue pairs). In case " +
         "the output data has changed across retries, Spark will need to retry all tasks of the " +
         "consumer stages to avoid correctness issues.")
-      .version("3.4.0")
+      .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
