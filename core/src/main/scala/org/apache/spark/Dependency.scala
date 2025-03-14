@@ -75,6 +75,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
  * @param shuffleWriterProcessor the processor to control the write behavior in ShuffleMapTask
+ * @param rowBasedChecksums the row-based checksums for each shuffle partition
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -87,6 +88,26 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
     val rowBasedChecksums: Array[RowBasedChecksum] = Array.empty)
   extends Dependency[Product2[K, V]] with Logging {
+
+  def this(
+      rdd: RDD[_ <: Product2[K, V]],
+      partitioner: Partitioner,
+      serializer: Serializer,
+      keyOrdering: Option[Ordering[K]],
+      aggregator: Option[Aggregator[K, V, C]],
+      mapSideCombine: Boolean,
+      shuffleWriterProcessor: ShuffleWriteProcessor) = {
+    this(
+      rdd,
+      partitioner,
+      serializer,
+      keyOrdering,
+      aggregator,
+      mapSideCombine,
+      shuffleWriterProcessor,
+      Array.empty
+    )
+  }
 
   if (mapSideCombine) {
     require(aggregator.isDefined, "Map-side combine without Aggregator specified!")
