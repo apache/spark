@@ -400,6 +400,10 @@ object ValidateSubqueryExpression
             && SQLConf.get.getConf(SQLConf.DECORRELATE_SET_OPS_ENABLED))
           p.children.foreach(child => checkPlan(child, aggregated, childCanContainOuter))
 
+        // SQLFunctionNode serves as a container for the underlying SQL function plan.
+        case s: SQLFunctionNode =>
+          s.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
+
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
         // so long as they do not host outer references in the operators.
