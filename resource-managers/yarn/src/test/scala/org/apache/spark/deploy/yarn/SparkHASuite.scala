@@ -66,8 +66,7 @@ class SparkHASuite extends BaseYarnClusterSuite {
       mainClassName(SparkHASuite.getClass),
       appArgs = Seq(result.getAbsolutePath),
       extraConf = conf,
-      testTimeOut = 30,
-      timeOutIntervalCheck = 30)
+      testTimeOutParams = TimeoutParams(30.minutes, 30.seconds))
     checkResult(finalState, result)
   }
 }

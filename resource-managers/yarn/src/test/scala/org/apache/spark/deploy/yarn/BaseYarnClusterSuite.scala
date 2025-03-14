@@ -168,8 +168,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       extraConf: Map[String, String] = Map(),
       extraEnv: Map[String, String] = Map(),
       outFile: Option[File] = None,
-      testTimeOut: Int = 3, // minutes
-      timeOutIntervalCheck: Int = 1 // seconds
+      testTimeOutParams: TimeoutParams = TimeoutParams.DEFAULT
   ): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
@@ -215,7 +214,8 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(testTimeOut.minutes), interval(timeOutIntervalCheck.second)) {
+      eventually(timeout(testTimeOutParams.testTimeOut),
+        interval(testTimeOutParams.timeOutIntervalCheck)) {
         assert(handle.getState().isFinal())
       }
     } finally {
@@ -299,4 +299,10 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     propsFile.getAbsolutePath()
   }
 
+}
+
+case class TimeoutParams(testTimeOut: Duration, timeOutIntervalCheck: Duration)
+
+object TimeoutParams {
+  val DEFAULT = TimeoutParams(3.minutes, 1.seconds)
 }
