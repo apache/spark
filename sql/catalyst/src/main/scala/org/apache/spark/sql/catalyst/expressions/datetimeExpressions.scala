@@ -2576,19 +2576,19 @@ case class MakeDate(
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class MakeTime(
-    hours: Expression,
-    minutes: Expression,
-    seconds: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+                     hours: Expression,
+                     minutes: Expression,
+                     secAndMicros: Expression,
+                     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression with ImplicitCastInputTypes with SecAndNanosExtractor {
   override def nullIntolerant: Boolean = true
 
-  def this(hours: Expression, minutes: Expression, seconds: Expression) =
-    this(hours, minutes, seconds, SQLConf.get.ansiEnabled)
+  def this(hours: Expression, minutes: Expression, secAndMicros: Expression) =
+    this(hours, minutes, secAndMicros, SQLConf.get.ansiEnabled)
 
   override def first: Expression = hours
   override def second: Expression = minutes
-  override def third: Expression = seconds
+  override def third: Expression = secAndMicros
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
   override def dataType: DataType = TimeType(TimeType.MAX_PRECISION)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
@@ -2665,7 +2665,7 @@ case class MakeTime(
 
   override protected def withNewChildrenInternal(
     newFirst: Expression, newSecond: Expression, newThird: Expression): MakeTime =
-    copy(hours = newFirst, minutes = newSecond, seconds = newThird)
+    copy(hours = newFirst, minutes = newSecond, secAndMicros = newThird)
 }
 
 // scalastyle:off line.size.limit
