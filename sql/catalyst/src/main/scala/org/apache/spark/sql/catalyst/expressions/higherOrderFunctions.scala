@@ -472,7 +472,7 @@ case class ArrayTransform(
           i, copy, isNull = resultNull)
 
         s"""
-            |final int $numElements = ${arg}.numElements();
+            |final int $numElements = $arg.numElements();
             |$initialization
             |for (int $i = 0; $i < $numElements; $i++) {
             |  $varAssignments
@@ -775,7 +775,6 @@ case class ArrayFilter(
 
         val functionCode = function.genCode(ctx)
 
-        val elementAtomic = ctx.addReferenceObj(elementVar.name, elementVar.value)
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
         val indexAssignment = indexCode.map(c => assignIndex(ctx, c, indexVar.get, i))
         val varAssignments = (Seq(elementAssignment) ++ indexAssignment).mkString("\n")
@@ -787,8 +786,14 @@ case class ArrayFilter(
         val copy = CodeGenerator.createArrayAssignment(arrayData, arrayType.elementType, arg,
           j, i, arrayType.containsNull)
 
+        // This takes a two passes to avoid evaluating the predicate multiple times
+        // The first pass evaluates each element in the array, tracks how many elements
+        // returned true, and tracks the result of each element in a boolean array `arrayTracker`.
+        // The second pass copies elements from the original array to the new array created
+        // based on the number of elements matching the first pass.
+
         s"""
-            |final int $numElements = ${arg}.numElements();
+            |final int $numElements = $arg.numElements();
             |$trackerInit
             |int $count = 0;
             |for (int $i = 0; $i < $numElements; $i++) {
@@ -1191,17 +1196,21 @@ case class ArrayAggregate(
 
   protected def assignVar(
       varCode: ExprCode,
+      atomicVar: String,
       value: String,
       isNull: String,
       nullable: Boolean): String = {
+    val atomicAssign = assignAtomic(atomicVar, value, isNull, nullable)
     if (nullable) {
       s"""
         ${varCode.value} = $value;
         ${varCode.isNull} = $isNull;
+        $atomicAssign
       """
     } else {
       s"""
         ${varCode.value} = $value;
+        $atomicAssign
       """
     }
   }
@@ -1240,36 +1249,27 @@ case class ArrayAggregate(
           ""
         }
 
-        val initialAssignment = assignVar(accForMergeCode, zeroCode.value, zeroCode.isNull,
-          zero.nullable)
-        val initialAtomic = assignAtomic(mergeAtomic, accForMergeCode.value,
-          accForMergeCode.isNull, merge.nullable)
+        val initialAssignment = assignVar(accForMergeCode, mergeAtomic, zeroCode.value,
+          zeroCode.isNull, zero.nullable)
 
-        val mergeAssignment = assignVar(accForMergeCode, mergeCopy,
+        val mergeAssignment = assignVar(accForMergeCode, mergeAtomic, mergeCopy,
           mergeCode.isNull, merge.nullable)
-        val mergeAtomicAssignment = assignAtomic(mergeAtomic, accForMergeCode.value,
-          accForMergeCode.isNull, merge.nullable)
 
-        val finishAssignment = assignVar(accForFinishCode, accForMergeCode.value,
+        val finishAssignment = assignVar(accForFinishCode, finishAtomic, accForMergeCode.value,
           accForMergeCode.isNull, merge.nullable)
-        val finishAtomicAssignment = assignAtomic(finishAtomic, accForFinishCode.value,
-          accForFinishCode.isNull, merge.nullable)
 
         s"""
             |final int $numElements = ${arg}.numElements();
             |${zeroCode.code}
             |$initialAssignment
-            |$initialAtomic
             |
             |for (int $i = 0; $i < $numElements; $i++) {
             |  $elementAssignment
             |  ${mergeCode.code}
             |  $mergeAssignment
-            |  $mergeAtomicAssignment
             |}
             |
             |$finishAssignment
-            |$finishAtomicAssignment
             |${finishCode.code}
             |${ev.value} = ${finishCode.value};
             |$nullCheck
