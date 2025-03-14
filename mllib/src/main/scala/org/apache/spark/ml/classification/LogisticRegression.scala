@@ -1054,8 +1054,6 @@ class LogisticRegression @Since("1.2.0") (
       size += Matrices.getDenseSize(numFeatures, 1) // coefficientMatrix
       size += Vectors.getDenseSize(1) // interceptVector
     }
-    size += java.lang.Integer.BYTES // numClasses
-    size += 1 // isMultinomial
     size
   }
 
@@ -1274,8 +1272,6 @@ class LogisticRegressionModel private[spark] (
     if (this.interceptVector != null) {
       size += this.interceptVector.getSizeInBytes
     }
-    size += java.lang.Integer.BYTES // numClasses
-    size += 1 // isMultinomial
     size
   }
 

@@ -356,7 +356,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
     var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numFeatures) // coefficients
-    size += java.lang.Double.BYTES * 2 // intercept, scale
     size
   }
 }
@@ -483,7 +482,6 @@ class AFTSurvivalRegressionModel private[ml] (
     if (this.coefficients != null) {
       size += this.coefficients.getSizeInBytes
     }
-    size += java.lang.Double.BYTES * 2 // intercept, scale
     size
   }
 

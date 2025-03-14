@@ -655,7 +655,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numFeatures) // coefficients
-    size += java.lang.Double.BYTES * 2 // intercept, scale
     size
   }
 }
@@ -767,7 +766,6 @@ class LinearRegressionModel private[ml] (
     if (this.coefficients != null) {
       size += this.coefficients.getSizeInBytes
     }
-    size += java.lang.Double.BYTES * 2 // intercept, scale
     size
   }
 

@@ -242,7 +242,6 @@ class FMClassifier @Since("3.0.0") (
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
     var size = this.estimateMatadataSize
-    size += java.lang.Double.BYTES // intercept
     size += Vectors.getDenseSize(numFeatures) // linear
     size += Matrices.getDenseSize(numFeatures, $(factorSize)) // factors
     size
@@ -324,7 +323,6 @@ class FMClassificationModel private[classification] (
 
   override def estimatedSize: Long = {
     var size = this.estimateMatadataSize
-    size += java.lang.Double.BYTES // intercept
     if (this.linear != null) {
       size += this.linear.getSizeInBytes
     }

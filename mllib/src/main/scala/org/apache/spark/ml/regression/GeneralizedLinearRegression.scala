@@ -451,7 +451,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numFeatures) // coefficients
-    size += java.lang.Double.BYTES // intercept
     size
   }
 }
@@ -1119,7 +1118,6 @@ class GeneralizedLinearRegressionModel private[ml] (
     if (this.coefficients != null) {
       size += this.coefficients.getSizeInBytes
     }
-    size += java.lang.Double.BYTES // intercept
     size
   }
 

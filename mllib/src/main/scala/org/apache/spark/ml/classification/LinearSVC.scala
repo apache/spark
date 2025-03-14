@@ -172,7 +172,6 @@ class LinearSVC @Since("2.2.0") (
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
     var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numFeatures) // coefficients
-    size += java.lang.Double.BYTES // intercept
     size
   }
 
@@ -434,7 +433,6 @@ class LinearSVCModel private[classification] (
     if (this.coefficients != null) {
       size += this.coefficients.getSizeInBytes
     }
-    size += java.lang.Double.BYTES // intercept
     size
   }
 
