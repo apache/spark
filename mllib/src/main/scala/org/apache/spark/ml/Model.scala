@@ -18,13 +18,14 @@
 package org.apache.spark.ml
 
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
  *
  * @tparam M model type
  */
-abstract class Model[M <: Model[M]] extends Transformer {
+abstract class Model[M <: Model[M]] extends Transformer { self =>
   /**
    * The parent estimator that produced this model.
    * @note For ensembles' component Models, this value can be null.
@@ -51,15 +52,10 @@ abstract class Model[M <: Model[M]] extends Transformer {
    * 1, Only driver side memory usage is counted, distributed objects (like DataFrame,
    * RDD, Graph, Summary) are ignored.
    * 2, Lazy vals are not counted, e.g., an auxiliary object used in prediction.
-   * 3, Using SizeEstimator to estimate the driver memory usage of distributed objects
-   * is not accurate, because the size of SparkSession/SparkContext is also included, e.g.
-   *    val df = spark.range(1)
-   *    SizeEstimator.estimate(df)                   -> 3310984
-   *    SizeEstimator.estimate(df.rdd)               -> 3331352
-   *    SizeEstimator.estimate(df.sparkSession)      -> 3249464
-   *    SizeEstimator.estimate(df.rdd.sparkContext)  -> 3249744
+   * 3, The default implementation uses `org.apache.spark.util.SizeEstimator.estimate`,
+   *    some models override the default implementation to achieve more precise estimation.
    * 4, For 3-rd extension, if external languages are used, it is recommended to override
    * this method and return a proper size.
    */
-  private[spark] def estimatedSize: Long = throw new NotImplementedError
+  private[spark] def estimatedSize: Long = SizeEstimator.estimate(self)
 }

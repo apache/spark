@@ -96,6 +96,10 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    *      though the actual fitted model might be sparse (by L1 penalty).
    *    - Given a tree model, assume all underlying trees are complete binary trees, even
    *      though some branches might be pruned or truncated.
+   * 4, For some model such as tree model, estimating model size before training is hard,
+   *    the `estimateModelSize` method is not supported.
    */
-  private[spark] def estimateModelSize(dataset: Dataset[_]): Long = throw new NotImplementedError
+  private[spark] def estimateModelSize(dataset: Dataset[_]): Long = {
+    throw new UnsupportedOperationException
+  }
 }
