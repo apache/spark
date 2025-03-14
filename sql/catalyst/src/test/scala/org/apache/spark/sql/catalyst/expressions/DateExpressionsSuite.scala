@@ -2207,16 +2207,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-//            checkExceptionInExpression[DateTimeException](MakeTime(Literal(24), Literal(2),
-      //            Literal(3)),
-//              "Invalid hour")
-//            checkExceptionInExpression[DateTimeException](MakeTime(Literal(1), Literal(61),
-      //            Literal(3)),
-//              "Invalid minute")
-//            checkExceptionInExpression[DateTimeException](MakeTime(Literal(0), Literal(0),
-      //            Literal(-1)),
-//              "Invalid second")
-      // TODO postgres sec=60 w/ fractional seconds
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        "Invalid value for HourOfDay")
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(23), Literal(-1), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        "Invalid value for MinuteOfHour")
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
+        "Invalid value for SecondOfMinute")
+      
+      // Invalid Postgres compatability case where seconds=60 and has a fractional second
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(60.5), 16, 6))),
+        "[INVALID_FRACTION_OF_SECOND] Valid range for seconds is [0, 60]")
     }
   }
 }
