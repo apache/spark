@@ -134,7 +134,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       external = false)
   }
 
-  /** @inheritdoc */
   override def replace(): Unit = {
     internalReplace(orCreate = false)
   }
