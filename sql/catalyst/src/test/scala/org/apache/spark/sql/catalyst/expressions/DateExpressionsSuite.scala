@@ -2156,13 +2156,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 //      LocalTime.now())
     
     // Literal(Decimal(BigDecimal(23.5), 16, 6))
+    // TODO change secs literal to decimal
 
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
-//        checkEvaluation(MakeTime(Literal.create(null, IntegerType), Literal(18), Literal(2.456)),
-//          null)
-//        checkEvaluation(MakeTime(Literal(13), Literal.create(null, IntegerType), Literal(2.456)),
-//          null)
+        // basic case
+        // TODO
+        
+        // Postgres compatibility
+        // TODO
+        
+        // null cases
+        checkEvaluation(
+          MakeTime(Literal.create(null, IntegerType), Literal(18),
+            Literal(Decimal(BigDecimal(23.5), 16, 6))),
+          null)
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(null, IntegerType),
+            Literal(Decimal(BigDecimal(23.5), 16, 6))),
+          null)
         checkEvaluation(MakeTime(Literal(13), Literal(18),
           Literal.create(null, DecimalType(16, 6))), null)
       }
