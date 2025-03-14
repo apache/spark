@@ -2190,12 +2190,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-//    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-//      checkExceptionInExpression[DateTimeException](MakeTime(Literal(24), Literal(2), Literal(3)),
-//        "Invalid hour")
-//      checkExceptionInExpression[DateTimeException](MakeTime(Literal(1), Literal(61), Literal(3)),
-//        "Invalid minute")
-//      checkExceptionInExpression[DateTimeException](MakeTime(Literal(0), Literal(0), Literal(-1)),
-//        "Invalid second")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      // Invalid times return null
+      checkEvaluation(
+        MakeTime(Literal(Int.MaxValue), Literal(18),
+          Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        null)
+      checkEvaluation(
+        MakeTime(Literal(13), Literal(Int.MinValue),
+          Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        null)
+      checkEvaluation(MakeTime(Literal(13), Literal(18),
+        Literal(Decimal(BigDecimal(65.1), 16, 6))), null)
+      checkEvaluation(MakeTime(Literal(13), Literal(18),
+        Literal(Decimal(BigDecimal(60.1), 16, 6))), null)
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+//            checkExceptionInExpression[DateTimeException](MakeTime(Literal(24), Literal(2),
+      //            Literal(3)),
+//              "Invalid hour")
+//            checkExceptionInExpression[DateTimeException](MakeTime(Literal(1), Literal(61),
+      //            Literal(3)),
+//              "Invalid minute")
+//            checkExceptionInExpression[DateTimeException](MakeTime(Literal(0), Literal(0),
+      //            Literal(-1)),
+//              "Invalid second")
+      // TODO postgres sec=60 w/ fractional seconds
+    }
   }
 }
