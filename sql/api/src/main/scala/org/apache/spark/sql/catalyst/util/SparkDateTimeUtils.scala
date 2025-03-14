@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
 import java.time.temporal.ChronoField.MICRO_OF_DAY
@@ -32,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulia
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.SparkClassUtils
 
 trait SparkDateTimeUtils {
 
@@ -217,21 +215,10 @@ trait SparkDateTimeUtils {
    *   The number of days since the epoch in Proleptic Gregorian calendar.
    */
   def fromJavaDate(date: Date): Int = {
-    val millisUtc = date.getTime
-    val millisLocal = millisUtc + TimeZone.getDefault.getOffset(millisUtc)
-    val julianDays = Math.toIntExact(Math.floorDiv(millisLocal, MILLIS_PER_DAY))
+    val localDate = date.toLocalDate
+    val julianDays = Math.toIntExact(localDate.toEpochDay)
     rebaseJulianToGregorianDays(julianDays)
   }
-
-  private val zoneInfoClassName = "sun.util.calendar.ZoneInfo"
-  private lazy val getOffsetsByWallHandle = {
-    val lookup = MethodHandles.lookup()
-    val classType = SparkClassUtils.classForName(zoneInfoClassName)
-    val methodName = "getOffsetsByWall"
-    val methodType = MethodType.methodType(classOf[Int], classOf[Long], classOf[Array[Int]])
-    lookup.findVirtual(classType, methodName, methodType)
-  }
-
   /**
    * Converts days since the epoch 1970-01-01 in Proleptic Gregorian calendar to a local date at
    * the default JVM time zone in the hybrid calendar (Julian + Gregorian). It rebases the given
@@ -250,14 +237,8 @@ trait SparkDateTimeUtils {
    */
   def toJavaDate(days: Int): Date = {
     val rebasedDays = rebaseGregorianToJulianDays(days)
-    val localMillis = Math.multiplyExact(rebasedDays, MILLIS_PER_DAY)
-    val timeZoneOffset = TimeZone.getDefault match {
-      case zoneInfo: TimeZone if zoneInfo.getClass.getName == zoneInfoClassName =>
-        getOffsetsByWallHandle.invoke(zoneInfo, localMillis, null).asInstanceOf[Int]
-      case timeZone: TimeZone =>
-        timeZone.getOffset(localMillis - timeZone.getRawOffset)
-    }
-    new Date(localMillis - timeZoneOffset)
+    val localDate = LocalDate.ofEpochDay(rebasedDays.toLong)
+    Date.valueOf(localDate)
   }
 
   /**
