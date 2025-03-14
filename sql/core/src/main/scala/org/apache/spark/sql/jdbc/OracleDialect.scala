@@ -65,10 +65,10 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {
-        case (lhs: Literal[_], rhs: Expression) if lhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
-        case (lhs: Expression, rhs: Literal[_]) if rhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
+        case (lit: Literal[_], _) if lit.dataType == BinaryType =>
+          compareBlob(lit, name, re)
+        case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
+          compareBlob(le, name, lit)
         case _ =>
           super.visitBinaryComparison(name, le, re);
       }
