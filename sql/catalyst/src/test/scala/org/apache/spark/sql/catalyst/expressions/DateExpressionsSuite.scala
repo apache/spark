@@ -2150,4 +2150,27 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
+  
+  test("creating values of TimeType via make_time") {
+//    checkEvaluation(MakeTime(Literal(13), Literal(18), Literal(2.456)),
+//      LocalTime.now())
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(MakeTime(Literal.create(null, IntegerType), Literal(18), Literal(2.456)),
+        null)
+      checkEvaluation(MakeTime(Literal(13), Literal.create(null, IntegerType), Literal(2.456)),
+        null)
+      checkEvaluation(MakeTime(Literal(13), Literal(18), Literal.create(null, DecimalType(16, 6))),
+        null)
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[DateTimeException](MakeTime(Literal(24), Literal(2), Literal(3)),
+        "Invalid hour")
+      checkExceptionInExpression[DateTimeException](MakeTime(Literal(1), Literal(61), Literal(3)),
+        "Invalid minute")
+      checkExceptionInExpression[DateTimeException](MakeTime(Literal(0), Literal(0), Literal(-1)),
+        "Invalid second")
+    }
+  }
 }
