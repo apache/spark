@@ -2167,7 +2167,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           LocalTime.of(13, 2, 23, 500000000))
         
         // Postgres compatibility
-        // TODO
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(2, IntegerType),
+            Literal(Decimal(BigDecimal(60), 16, 6))),
+          LocalTime.of(13, 3, 0, 0))
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(59, IntegerType),
+            Literal(Decimal(BigDecimal(60), 16, 6))),
+          LocalTime.of(14, 0, 0, 0))
         
         // null cases
         checkEvaluation(
