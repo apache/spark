@@ -46,6 +46,10 @@ import org.apache.spark.sql.types.DataType
  *             relation or as a more complex logical plan in the event of a table subquery.
  * @param outerAttrs outer references of this subquery plan, generally empty since these table
  *                   arguments do not allow correlated references currently
+ * @param outerScopeAttrs outer references of the subquery plan that cannot be resolved by the
+ *                        direct containing query of the subquery. They have to be the subset of
+ *                        outerAttrs and are generally empty since these table arguments do not
+ *                        allow correlated references currently
  * @param exprId expression ID of this subquery expression, generally generated afresh each time
  * @param partitionByExpressions if non-empty, the TABLE argument included the PARTITION BY clause
  *                               to indicate that the input relation should be repartitioned by the
@@ -67,30 +71,53 @@ import org.apache.spark.sql.types.DataType
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
+    outerScopeAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     partitionByExpressions: Seq[Expression] = Seq.empty,
     withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty,
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
+  extends SubqueryExpression(
+      plan,
+      outerAttrs,
+      outerScopeAttrs,
+      exprId,
+      Seq.empty,
+      None
+    ) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
     "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
 
   override def dataType: DataType = plan.schema
+
   override def nullable: Boolean = false
+
   override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =
     copy(plan = plan)
+
   override def withNewOuterAttrs(outerAttrs: Seq[Expression])
   : FunctionTableSubqueryArgumentExpression = copy(outerAttrs = outerAttrs)
+
   override def hint: Option[HintInfo] = None
+
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
+
+  override def withNewOuterScopeAttrs(
+    outerScopeAttrs: Seq[Expression]
+  ): FunctionTableSubqueryArgumentExpression = {
+    validateOuterScopeAttrs()
+    copy(outerScopeAttrs = outerScopeAttrs)
+  }
+
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
+
   override lazy val canonicalized: Expression = {
     FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
+      outerScopeAttrs.map(_.canonicalized),
       ExprId(0),
       partitionByExpressions,
       withSinglePartition,

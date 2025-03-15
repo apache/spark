@@ -129,7 +129,7 @@ object ValidateSubqueryExpression
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,

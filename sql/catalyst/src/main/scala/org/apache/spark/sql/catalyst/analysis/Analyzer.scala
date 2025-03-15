@@ -2345,18 +2345,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(e, outer)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
+        case s @ ScalarSubquery(sub, _, _, exprId, _, _, _, _) if !sub.resolved =>
+          resolveSubQuery(s, outer)(ScalarSubquery(_, _, Seq.empty, exprId))
+        case e @ Exists(sub, _, _, exprId, _, _) if !sub.resolved =>
+          resolveSubQuery(e, outer)(Exists(_, _, Seq.empty, exprId))
+        case InSubquery(values, l @ ListQuery(_, _, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
-            ListQuery(plan, exprs, exprId, plan.output.length)
+            ListQuery(plan, exprs, Seq.empty, exprId, plan.output.length)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
+        case s @ LateralSubquery(sub, _, _, exprId, _, _) if !sub.resolved =>
+          resolveSubQuery(s, outer)(LateralSubquery(_, _, Seq.empty, exprId))
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))

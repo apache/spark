@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
@@ -29,6 +30,8 @@ trait DynamicPruning extends Predicate
  * The DynamicPruningSubquery expression is only used in join operations to prune one side of the
  * join with a filter from the other side of the join. It is inserted in cases where partition
  * pruning can be applied.
+ * The DynamicPruningSubquery expression should only have a single outer
+ * attribute which is the pruning key and should not have any outer scope attributes.
  *
  * @param pruningKey the filtering key of the plan to be pruned.
  * @param buildQuery the build side of the join.
@@ -47,7 +50,7 @@ case class DynamicPruningSubquery(
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), Seq.empty, exprId, Seq.empty, hint)
   with DynamicPruning
   with Unevaluable
   with UnaryLike[Expression] {
@@ -65,6 +68,16 @@ case class DynamicPruningSubquery(
     // pruningKey and return a copy without any changes.
     assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
     copy()
+  }
+
+  override def withNewOuterScopeAttrs(
+    outerScopeAttrs: Seq[Expression]
+  ): DynamicPruningSubquery = {
+    if (outerScopeAttrs.nonEmpty) {
+      throw SparkException.internalError(
+        "DynamicPruningSubquery should not have outer scope attributes.")
+    }
+    this
   }
 
   override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)

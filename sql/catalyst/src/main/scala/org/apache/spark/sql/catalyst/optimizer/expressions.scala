@@ -91,7 +91,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       }
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
-    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
+    case s @ ScalarSubquery(_, _, _, _, _, _, mayHaveCountBug, _)
       if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
         mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
       s
@@ -892,7 +892,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       case InSubquery(Seq(Literal(null, _)), _)
         if SQLConf.get.legacyNullInEmptyBehavior =>
         Literal.create(null, BooleanType)
-      case InSubquery(Seq(Literal(null, _)), ListQuery(sub, _, _, _, conditions, _))
+      case InSubquery(Seq(Literal(null, _)), ListQuery(sub, _, _, _, _, conditions, _))
         if !SQLConf.get.legacyNullInEmptyBehavior
         && conditions.isEmpty =>
         If(Exists(sub), Literal(null, BooleanType), FalseLiteral)
