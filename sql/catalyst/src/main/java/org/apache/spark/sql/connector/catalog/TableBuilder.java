@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import static org.apache.spark.sql.connector.catalog.TableCatalog.TableBuilder;
-
 import com.google.common.collect.Maps;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
@@ -27,48 +25,66 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import java.util.Map;
 
 /**
- * Default implementation of {@link TableBuilder}.
+ * Builder for creating tables. Spark gets the builder from the {@link TableCatalog},
+ * calls the `withXXX` methods to set up the fields and calls the `create` method.
  */
-class TableBuilderImpl implements TableBuilder {
-  private final TableCatalog catalog;
+public class TableBuilder {
+  protected final TableCatalog catalog;
 
-  private final Identifier identifier;
+  protected final Identifier identifier;
 
-  private final Column[] columns;
+  protected final Column[] columns;
 
-  private final Map<String, String> properties = Maps.newHashMap();
+  protected final Map<String, String> properties = Maps.newHashMap();
 
-  private Transform[] partitions = new Transform[0];
+  protected Transform[] partitions = new Transform[0];
 
   /**
-   * Constructor for TableBuilderImpl.
+   * Constructor for TableBuilder.
    *
    * @param catalog catalog where table needs to be created.
    * @param identifier identifier for the table.
    * @param columns the columns of the new table.
    */
-  public TableBuilderImpl(TableCatalog catalog,
-                          Identifier identifier,
-                          Column[] columns) {
+  public TableBuilder(TableCatalog catalog, Identifier identifier, Column[] columns) {
     this.catalog = catalog;
     this.identifier = identifier;
     this.columns = columns;
   }
 
-  @Override
-  public TableCatalog.TableBuilder withPartitions(Transform[] partitions) {
+  /**
+   * Sets the partitions for the table.
+   *
+   * @param partitions Partitions for the table.
+   * @return this for method chaining
+   */
+  public TableBuilder withPartitions(Transform[] partitions) {
     this.partitions = partitions;
     return this;
   }
 
-  @Override
-  public TableCatalog.TableBuilder withProperties(Map<String, String> properties) {
+  /**
+   * Sets the key/value properties to the table.
+   *
+   * @param properties key/value properties
+   * @return this for method chaining
+   */
+  public TableBuilder withProperties(Map<String, String> properties) {
     this.properties.clear();
     this.properties.putAll(properties);
     return this;
   }
 
-  @Override
+  /**
+   * Creates the table.
+   *
+   * @return metadata for the new table. This can be null if getting the metadata for the new
+   * table is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *
+   * @throws TableAlreadyExistsException   If a table or view already exists for the identifier
+   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws NoSuchNamespaceException      If the identifier namespace does not exist (optional)
+   */
   public Table create() throws TableAlreadyExistsException, NoSuchNamespaceException {
     return catalog.createTable(identifier, columns, partitions, properties);
   }
