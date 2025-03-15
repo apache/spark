@@ -34,4 +34,9 @@ public interface ProcedureCatalog extends CatalogPlugin {
    * @return the loaded unbound procedure
    */
   UnboundProcedure loadProcedure(Identifier ident);
+
+  /**
+   * List all procedures in the specified database.
+   */
+  Identifier[] listProcedures(String[] namespace);
 }
