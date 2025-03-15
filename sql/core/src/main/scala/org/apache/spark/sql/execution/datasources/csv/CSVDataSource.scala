@@ -93,6 +93,18 @@ object CSVDataSource extends Logging {
       TextInputCSVDataSource
     }
   }
+
+  def readHeaderForSingleVariantColumn(
+      conf: Configuration,
+      file: PartitionedFile,
+      parser: UnivocityParser): Unit = {
+    if (parser.options.needHeaderForSingleVariantColumn) {
+      parser.headerColumnNames =
+        CSVUtils.readHeaderLine(file.toPath, parser.options, conf).map { line =>
+          new CsvParser(parser.options.asParserSettings).parseLine(line)
+        }
+    }
+  }
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
@@ -114,6 +126,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       }
     }
 
+    CSVDataSource.readHeaderForSingleVariantColumn(conf, file, parser)
     UnivocityParser.parseIterator(lines, parser, headerChecker, requiredSchema)
   }
 
@@ -191,6 +204,7 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       parser: UnivocityParser,
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
+    CSVDataSource.readHeaderForSingleVariantColumn(conf, file, parser)
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
       parser,

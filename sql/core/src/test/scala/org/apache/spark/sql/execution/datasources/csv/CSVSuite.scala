@@ -3516,17 +3516,17 @@ abstract class CSVSuite
         """{"_c0":"field 1","_c1":"field2"}""",
         """{"_c0":1.1,"_c1":"1e9"}""",
         """{"_c0":null,"_c1":"hello"}""",
-        """{"_c0":"world\"","_c1":"true"}""")
+        """{"_c0":"world\"","_c1":true}""")
 
       checkSingleVariant(Map("header" -> "true"),
         """{"field 1":1.1,"field2":"1e9"}""",
         """{"field 1":null,"field2":"hello"}""",
-        """{"field 1":"world\"","field2":"true"}""")
+        """{"field 1":"world\"","field2":true}""")
 
       checkSingleVariant(Map("multiLine" -> "true"),
         """{"_c0":"field 1","_c1":"field2"}""",
         """{"_c0":1.1,"_c1":"1e9"}""",
-        """{"_c0":null,"_c1":"hello\nworld","_c2":"true"}""")
+        """{"_c0":null,"_c1":"hello\nworld","_c2":true}""")
 
       checkSingleVariant(Map("multiLine" -> "true", "header" -> "true"),
         """{"field 1":1.1,"field2":"1e9"}""",

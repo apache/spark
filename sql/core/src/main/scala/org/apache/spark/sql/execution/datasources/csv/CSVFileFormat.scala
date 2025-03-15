@@ -48,7 +48,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val csvDataSource = CSVDataSource(parsedOptions)
-    !parsedOptions.needHeaderForSingleVariantColumn &&
     csvDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
