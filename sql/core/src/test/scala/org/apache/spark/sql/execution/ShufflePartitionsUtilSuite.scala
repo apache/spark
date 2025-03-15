@@ -197,7 +197,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("ziqi-test1 enforce minimal number of coalesced partitions") {
+  test("enforce minimal number of coalesced partitions") {
     val targetSize = 100
     val minNumPartitions = 2
 
