@@ -88,7 +88,7 @@ case class FunctionTableSubqueryArgumentExpression(
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
   override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): FunctionTableSubqueryArgumentExpression = {
-    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+    assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
       s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }

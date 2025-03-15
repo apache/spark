@@ -2323,7 +2323,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, Seq.empty, exprId))
         case e @ Exists(sub, _, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(e, outer)(Exists(_, _, Seq.empty, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, _, exprId, _, _))
+        case InSubquery(values, l @ ListQuery(_, _, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, Seq.empty, exprId, plan.output.length)
@@ -2333,7 +2333,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           resolveSubQuery(s, outer)(LateralSubquery(_, _, Seq.empty, exprId))
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
-            (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs, unresolvedOuterAttrs = Seq.empty))
+            (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
       }
     }
 

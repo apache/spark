@@ -421,7 +421,7 @@ case class ScalarSubquery(
   override def withNewUnresolvedOuterAttrs(
       unresolvedOuterAttrs: Seq[Expression]
   ): ScalarSubquery = {
-    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+    assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
       s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
@@ -499,7 +499,7 @@ case class LateralSubquery(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery = copy(
     outerAttrs = outerAttrs)
   override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): LateralSubquery = {
-    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+    assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
       s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
@@ -566,7 +566,7 @@ case class ListQuery(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery = copy(
     outerAttrs = outerAttrs)
   override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): ListQuery = {
-    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+    assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
       s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
@@ -631,7 +631,7 @@ case class Exists(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists = copy(
     outerAttrs = outerAttrs)
   override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): Exists = {
-    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+    assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
       s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }

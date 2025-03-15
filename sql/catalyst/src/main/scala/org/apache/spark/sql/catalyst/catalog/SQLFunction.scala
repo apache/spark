@@ -85,7 +85,7 @@ case class SQLFunction(
       case (None, Some(Project(expr :: Nil, _: OneRowRelation)))
         if !isTableFunc =>
         (Some(expr), None)
-      case (Some(ScalarSubquery(Project(expr :: Nil, _: OneRowRelation), _, _, _, _, _, _)), None)
+      case (Some(ScalarSubquery(Project(expr :: Nil, _: OneRowRelation), _, _, _, _, _, _, _)), None)
         if !isTableFunc =>
         (Some(expr), None)
       case (_, _) =>
