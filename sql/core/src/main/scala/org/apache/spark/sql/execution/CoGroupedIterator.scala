@@ -27,65 +27,48 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
  * Note: we assume the output of each [[GroupedIterator]] is ordered by the grouping key.
  */
 class CoGroupedIterator(
-    left: Iterator[(InternalRow, Iterator[InternalRow])],
-    right: Iterator[(InternalRow, Iterator[InternalRow])],
+    groupedIterators: Seq[Iterator[(InternalRow, Iterator[InternalRow])]],
     groupingSchema: Seq[Attribute])
-  extends Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] {
+    extends Iterator[(InternalRow, Seq[Iterator[InternalRow]])] {
 
   private val keyOrdering =
     GenerateOrdering.generate(groupingSchema.map(SortOrder(_, Ascending)), groupingSchema)
 
-  private var currentLeftData: (InternalRow, Iterator[InternalRow]) = _
-  private var currentRightData: (InternalRow, Iterator[InternalRow]) = _
+  private var currentData: Seq[(InternalRow, Iterator[InternalRow])] =
+    Seq.fill(groupedIterators.length)(null)
 
   override def hasNext: Boolean = {
-    if (currentLeftData == null && left.hasNext) {
-      currentLeftData = left.next()
-    }
-    if (currentRightData == null && right.hasNext) {
-      currentRightData = right.next()
-    }
-
-    currentLeftData != null || currentRightData != null
-  }
-
-  override def next(): (InternalRow, Iterator[InternalRow], Iterator[InternalRow]) = {
-    assert(hasNext)
-
-    if (currentLeftData.eq(null)) {
-      // left is null, right is not null, consume the right data.
-      rightOnly()
-    } else if (currentRightData.eq(null)) {
-      // left is not null, right is null, consume the left data.
-      leftOnly()
-    } else if (currentLeftData._1 == currentRightData._1) {
-      // left and right have the same grouping key, consume both of them.
-      val result = (currentLeftData._1, currentLeftData._2, currentRightData._2)
-      currentLeftData = null
-      currentRightData = null
-      result
-    } else {
-      val compare = keyOrdering.compare(currentLeftData._1, currentRightData._1)
-      assert(compare != 0)
-      if (compare < 0) {
-        // the grouping key of left is smaller, consume the left data.
-        leftOnly()
+    currentData = currentData.zip(groupedIterators).map { case (currentDatum, groupedIterator) =>
+      if (currentDatum == null && groupedIterator.hasNext) {
+        groupedIterator.next()
       } else {
-        // the grouping key of right is smaller, consume the right data.
-        rightOnly()
+        currentDatum
       }
     }
+
+    currentData.exists(_ != null)
   }
 
-  private def leftOnly(): (InternalRow, Iterator[InternalRow], Iterator[InternalRow]) = {
-    val result = (currentLeftData._1, currentLeftData._2, Iterator.empty)
-    currentLeftData = null
-    result
+  override def next(): (InternalRow, Seq[Iterator[InternalRow]]) = {
+    assert(hasNext)
+
+    val minGroup = currentData.filter(_ != null).map(_._1).min(keyOrdering)
+    val minGroupData = currentDataInMinGroup(minGroup)
+
+    (minGroup, minGroupData)
   }
 
-  private def rightOnly(): (InternalRow, Iterator[InternalRow], Iterator[InternalRow]) = {
-    val result = (currentRightData._1, Iterator.empty, currentRightData._2)
-    currentRightData = null
-    result
+  private def currentDataInMinGroup(minGroup: InternalRow): Seq[Iterator[InternalRow]] = {
+    val (currentDataInMinGroup, currentDataWithoutMinGroup) = currentData.map { currentDatum =>
+      if (currentDatum != null && currentDatum._1 == minGroup) {
+        (currentDatum._2, null)
+      } else {
+        (Iterator.empty, currentDatum)
+      }
+    }.unzip
+
+    currentData = currentDataWithoutMinGroup
+
+    currentDataInMinGroup
   }
 }

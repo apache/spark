@@ -75,6 +75,19 @@ public class JavaDatasetSuite implements Serializable {
     return new Tuple2<>(t1, t2);
   }
 
+  private static <T> Iterator<String> cogroupFunction(T key, List<Iterator<T>> iterators) {
+    StringBuilder sb = new StringBuilder();
+    sb.append(key);
+    sb.append(":");
+    for (Iterator<T> iterator : iterators) {
+      while (iterator.hasNext()) {
+        sb.append(iterator.next());
+      }
+      sb.append("#");
+    }
+    return Collections.singletonList(sb.toString()).iterator();
+  }
+
   @Test
   public void testCollect() {
     List<String> data = Arrays.asList("hello", "world");
@@ -446,48 +459,254 @@ public class JavaDatasetSuite implements Serializable {
       asSet(tuple2(1, "a"), tuple2(3, "foobar")),
       toSet(reduced.collectAsList()));
 
-    List<Integer> data2 = Arrays.asList(2, 6, 7, 10);
-    Dataset<Integer> ds2 = spark.createDataset(data2, Encoders.INT());
-    KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(
-        (MapFunction<Integer, Integer>) v -> v / 2,
-      Encoders.INT());
+    Dataset<Long> ds1 = spark.range(10);
+    KeyValueGroupedDataset<Long, Long> grouped1 = ds1.groupByKey(
+      (MapFunction<Long, Long>) v -> v / 2, Encoders.LONG());
 
-    Dataset<String> cogrouped = grouped.cogroup(
+    Dataset<Long> ds2 = spark.range(10);
+    KeyValueGroupedDataset<Long, Long> grouped2 = ds2.groupByKey(
+      (MapFunction<Long, Long>) v -> v % 2, Encoders.LONG());
+
+    Dataset<Long> ds3 = spark.range(10);
+    KeyValueGroupedDataset<Long, Long> grouped3 = ds3.groupByKey(
+      (MapFunction<Long, Long>) v -> v / 3, Encoders.LONG());
+
+    Dataset<Long> ds4 = spark.range(10);
+    KeyValueGroupedDataset<Long, Long> grouped4 = ds4.groupByKey(
+      (MapFunction<Long, Long>) v -> v % 3, Encoders.LONG());
+
+    Dataset<Long> ds5 = spark.range(10);
+    KeyValueGroupedDataset<Long, Long> grouped5 = ds5.groupByKey(
+      (MapFunction<Long, Long>) v -> v / 4, Encoders.LONG());
+
+    Dataset<Long> ds6 = spark.range(10);
+    KeyValueGroupedDataset<Long, Long> grouped6 = ds6.groupByKey(
+      (MapFunction<Long, Long>) v -> v % 4, Encoders.LONG());
+
+    Dataset<Long> ds7 = spark.range(10);
+    KeyValueGroupedDataset<Long, Long> grouped7 = ds7.groupByKey(
+      (MapFunction<Long, Long>) v -> v / 5, Encoders.LONG());
+
+    Dataset<String> cogrouped2 = grouped1.cogroup(
       grouped2,
-      (CoGroupFunction<Integer, String, Integer, String>) (key, left, right) -> {
-        StringBuilder sb = new StringBuilder(key.toString());
-        while (left.hasNext()) {
-          sb.append(left.next());
-        }
-        sb.append("#");
-        while (right.hasNext()) {
-          sb.append(right.next());
-        }
-        return Collections.singletonList(sb.toString()).iterator();
-      },
-      Encoders.STRING());
-
-    Assertions.assertEquals(asSet("1a#2", "3foobar#67", "5#10"), toSet(cogrouped.collectAsList()));
-
-    Dataset<String> cogroupSorted = grouped.cogroupSorted(
-      grouped2,
-      new Column[] { ds.col("value") },
-      new Column[] { ds2.col("value").desc() },
-      (CoGroupFunction<Integer, String, Integer, String>) (key, left, right) -> {
-        StringBuilder sb = new StringBuilder(key.toString());
-        while (left.hasNext()) {
-          sb.append(left.next());
-        }
-        sb.append("#");
-        while (right.hasNext()) {
-          sb.append(right.next());
-        }
-        return Collections.singletonList(sb.toString()).iterator();
-      },
+      (CoGroupFunction<Long, Long, Long, String>) (key, left, right) ->
+        cogroupFunction(key, Arrays.asList(left, right)),
       Encoders.STRING());
 
     Assertions.assertEquals(
-      asSet("1a#2", "3barfoo#76", "5#10"),toSet(cogroupSorted.collectAsList()));
+      asSet("0:01#02468#", "1:23#13579#", "2:45##", "3:67##", "4:89##"),
+      toSet(cogrouped2.collectAsList()));
+
+    Dataset<String> cogroupSorted2 = grouped1.cogroupSorted(
+      grouped2,
+      new Column[] { ds1.col("id") },
+      new Column[] { ds2.col("id").desc() },
+      (CoGroupFunction<Long, Long, Long, String>) (key, left, right) ->
+        cogroupFunction(key, Arrays.asList(left, right)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet("0:01#86420#", "1:23#97531#", "2:45##", "3:67##", "4:89##"),
+      toSet(cogroupSorted2.collectAsList()));
+
+    Dataset<String> cogrouped3 = grouped1.cogroup(
+      grouped2,
+      grouped3,
+      (CoGroupFunction3<Long, Long, Long, Long, String>) (k, v1, v2, v3) ->
+        cogroupFunction(k, Arrays.asList(v1, v2, v3)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet("0:01#02468#012#", "1:23#13579#345#", "2:45##678#", "3:67##9#", "4:89###"),
+      toSet(cogrouped3.collectAsList()));
+
+    Dataset<String> cogroupSorted3 = grouped1.cogroupSorted(
+      grouped2,
+      grouped3,
+      new Column[] { ds1.col("id") },
+      new Column[] { ds2.col("id").desc() },
+      new Column[] { ds3.col("id").desc() },
+      (CoGroupFunction3<Long, Long, Long, Long, String>) (k, v1, v2, v3) ->
+        cogroupFunction(k, Arrays.asList(v1, v2, v3)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet("0:01#86420#210#", "1:23#97531#543#", "2:45##876#", "3:67##9#", "4:89###"),
+      toSet(cogroupSorted3.collectAsList()));
+
+    Dataset<String> cogrouped4 = grouped1.cogroup(
+      grouped2,
+      grouped3,
+      grouped4,
+      (CoGroupFunction4<Long, Long, Long, Long, Long, String>) (k, v1, v2, v3, v4) ->
+        cogroupFunction(k, Arrays.asList(v1, v2, v3, v4)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#02468#012#0369#",
+        "1:23#13579#345#147#",
+        "2:45##678#258#",
+        "3:67##9##",
+        "4:89####"),
+      toSet(cogrouped4.collectAsList()));
+
+    Dataset<String> cogroupSorted4 = grouped1.cogroupSorted(
+      grouped2,
+      grouped3,
+      grouped4,
+      new Column[] { ds1.col("id") },
+      new Column[] { ds2.col("id").desc() },
+      new Column[] { ds3.col("id").desc() },
+      new Column[] { ds4.col("id") },
+      (CoGroupFunction4<Long, Long, Long, Long, Long, String>) (k, v1, v2, v3, v4) ->
+        cogroupFunction(k, Arrays.asList(v1, v2, v3, v4)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#86420#210#0369#",
+        "1:23#97531#543#147#",
+        "2:45##876#258#",
+        "3:67##9##",
+        "4:89####"),
+      toSet(cogroupSorted4.collectAsList()));
+
+    Dataset<String> cogrouped5 = grouped1.cogroup(
+      grouped2,
+      grouped3,
+      grouped4,
+      grouped5,
+      (CoGroupFunction5<Long, Long, Long, Long, Long, Long, String>) (k, v1, v2, v3, v4, v5) ->
+        cogroupFunction(k, Arrays.asList(v1, v2, v3, v4, v5)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#02468#012#0369#0123#",
+        "1:23#13579#345#147#4567#",
+        "2:45##678#258#89#",
+        "3:67##9###",
+        "4:89#####"),
+      toSet(cogrouped5.collectAsList()));
+
+    Dataset<String> cogroupSorted5 = grouped1.cogroupSorted(
+      grouped2,
+      grouped3,
+      grouped4,
+      grouped5,
+      new Column[] { ds1.col("id") },
+      new Column[] { ds2.col("id").desc() },
+      new Column[] { ds3.col("id").desc() },
+      new Column[] { ds4.col("id") },
+      new Column[] { ds5.col("id") },
+      (CoGroupFunction5<Long, Long, Long, Long, Long, Long, String>) (k, v1, v2, v3, v4, v5) ->
+        cogroupFunction(k, Arrays.asList(v1, v2, v3, v4, v5)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#86420#210#0369#0123#",
+        "1:23#97531#543#147#4567#",
+        "2:45##876#258#89#",
+        "3:67##9###",
+        "4:89#####"),
+      toSet(cogroupSorted5.collectAsList()));
+
+    Dataset<String> cogrouped6 = grouped1.cogroup(
+      grouped2,
+      grouped3,
+      grouped4,
+      grouped5,
+      grouped6,
+      (CoGroupFunction6<Long, Long, Long, Long, Long, Long, Long, String>)
+        (k, v1, v2, v3, v4, v5, v6) ->
+          cogroupFunction(k, Arrays.asList(v1, v2, v3, v4, v5, v6)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#02468#012#0369#0123#048#",
+        "1:23#13579#345#147#4567#159#",
+        "2:45##678#258#89#26#",
+        "3:67##9###37#",
+        "4:89######"),
+      toSet(cogrouped6.collectAsList()));
+
+    Dataset<String> cogroupSorted6 = grouped1.cogroupSorted(
+      grouped2,
+      grouped3,
+      grouped4,
+      grouped5,
+      grouped6,
+      new Column[] { ds1.col("id") },
+      new Column[] { ds2.col("id").desc() },
+      new Column[] { ds3.col("id").desc() },
+      new Column[] { ds4.col("id") },
+      new Column[] { ds5.col("id") },
+      new Column[] { ds6.col("id").desc() },
+      (CoGroupFunction6<Long, Long, Long, Long, Long, Long, Long, String>)
+        (k, v1, v2, v3, v4, v5, v6) ->
+          cogroupFunction(k, Arrays.asList(v1, v2, v3, v4, v5, v6)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#86420#210#0369#0123#840#",
+        "1:23#97531#543#147#4567#951#",
+        "2:45##876#258#89#62#",
+        "3:67##9###73#",
+        "4:89######"),
+      toSet(cogroupSorted6.collectAsList()));
+
+    Dataset<String> cogrouped7 = grouped1.cogroup(
+      grouped2,
+      grouped3,
+      grouped4,
+      grouped5,
+      grouped6,
+      grouped7,
+      (CoGroupFunction7<Long, Long, Long, Long, Long, Long, Long, Long, String>)
+        (k, v1, v2, v3, v4, v5, v6, v7) ->
+          cogroupFunction(k, Arrays.asList(v1, v2, v3, v4, v5, v6, v7)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#02468#012#0369#0123#048#01234#",
+        "1:23#13579#345#147#4567#159#56789#",
+        "2:45##678#258#89#26##",
+        "3:67##9###37##",
+        "4:89#######"),
+      toSet(cogrouped7.collectAsList()));
+
+    Dataset<String> cogroupSorted7 = grouped1.cogroupSorted(
+      grouped2,
+      grouped3,
+      grouped4,
+      grouped5,
+      grouped6,
+      grouped7,
+      new Column[] { ds1.col("id") },
+      new Column[] { ds2.col("id").desc() },
+      new Column[] { ds3.col("id").desc() },
+      new Column[] { ds4.col("id") },
+      new Column[] { ds5.col("id") },
+      new Column[] { ds6.col("id").desc() },
+      new Column[] { ds7.col("id").desc() },
+      (CoGroupFunction7<Long, Long, Long, Long, Long, Long, Long, Long, String>)
+        (k, v1, v2, v3, v4, v5, v6, v7) ->
+          cogroupFunction(k, Arrays.asList(v1, v2, v3, v4, v5, v6, v7)),
+      Encoders.STRING());
+
+    Assertions.assertEquals(
+      asSet(
+        "0:01#86420#210#0369#0123#840#43210#",
+        "1:23#97531#543#147#4567#951#98765#",
+        "2:45##876#258#89#62##",
+        "3:67##9###73##",
+        "4:89#######"),
+      toSet(cogroupSorted7.collectAsList()));
   }
 
   @Test
