@@ -54,7 +54,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // Some bytes per partition are 0 and total size is less than the target size.
       // 1 coalesced partition is expected.
       val bytesByPartitionId = Array[Long](10, 0, 20, 0, 0)
-      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5, 30))
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5, Some(30), 3))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs :: Nil, targetSize)
     }
 
@@ -62,7 +62,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // 2 coalesced partitions are expected.
       val bytesByPartitionId = Array[Long](10, 0, 90, 20, 0)
       val expectedPartitionSpecs =
-        Seq(CoalescedPartitionSpec(0, 3, 100), CoalescedPartitionSpec(3, 5, 20))
+        Seq(CoalescedPartitionSpec(0, 3, Some(100), 1), CoalescedPartitionSpec(3, 5, Some(20), 1))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs :: Nil, targetSize)
     }
 
@@ -70,10 +70,10 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // There are a few large shuffle partitions.
       val bytesByPartitionId = Array[Long](110, 10, 100, 110, 0)
       val expectedPartitionSpecs = Seq(
-        CoalescedPartitionSpec(0, 1, 110),
-        CoalescedPartitionSpec(1, 2, 10),
-        CoalescedPartitionSpec(2, 3, 100),
-        CoalescedPartitionSpec(3, 4, 110))
+        CoalescedPartitionSpec(0, 1, Some(110), 0),
+        CoalescedPartitionSpec(1, 2, Some(10), 0),
+        CoalescedPartitionSpec(2, 3, Some(100), 0),
+        CoalescedPartitionSpec(3, 4, Some(110), 1))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs :: Nil, targetSize)
     }
 
@@ -88,7 +88,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // The last shuffle partition is in a single coalesced partition.
       val bytesByPartitionId = Array[Long](30, 30, 0, 40, 110)
       val expectedPartitionSpecs =
-        Seq(CoalescedPartitionSpec(0, 4, 100), CoalescedPartitionSpec(4, 5, 110))
+        Seq(CoalescedPartitionSpec(0, 4, Some(100), 1), CoalescedPartitionSpec(4, 5, Some(110), 0))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs :: Nil, targetSize)
     }
   }
@@ -207,8 +207,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
       // Create at least one partition spec
-      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, 0))
-      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, 0))
+      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
+      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2), targetSize, minNumPartitions)
@@ -219,8 +219,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // there are too many 0-size partitions.
       val bytesByPartitionId1 = Array[Long](200, 0, 0)
       val bytesByPartitionId2 = Array[Long](100, 0, 0)
-      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 1, 200))
-      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 1, 100))
+      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 1, Some(200), 2))
+      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 1, Some(100), 2))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2),
@@ -269,7 +269,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
     {
       // 1 shuffle: All bytes per partition are 0, 1 empty partition spec created.
       val bytesByPartitionId = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5, 0))
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs :: Nil, targetSize)
     }
 
@@ -277,8 +277,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // 2 shuffles: All bytes per partition are 0, 1 empty partition spec created.
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, 0))
-      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, 0))
+      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
+      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2),
@@ -290,11 +290,11 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val bytesByPartitionId1 = Array[Long](200, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](100, 0, 300, 0, 0)
       val expectedPartitionSpecs1 = Seq(
-        CoalescedPartitionSpec(0, 1, 200),
-        CoalescedPartitionSpec(2, 3, 0))
+        CoalescedPartitionSpec(0, 1, Some(200), 1),
+        CoalescedPartitionSpec(2, 3, Some(0), 2))
       val expectedPartitionSpecs2 = Seq(
-        CoalescedPartitionSpec(0, 1, 100),
-        CoalescedPartitionSpec(2, 3, 300))
+        CoalescedPartitionSpec(0, 1, Some(100), 1),
+        CoalescedPartitionSpec(2, 3, Some(300), 2))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2),

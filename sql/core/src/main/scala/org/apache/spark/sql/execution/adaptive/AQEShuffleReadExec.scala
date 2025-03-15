@@ -77,7 +77,7 @@ case class AQEShuffleReadExec private(
       child.outputPartitioning match {
         case h: HashPartitioning =>
           val partitions = partitionSpecs.map {
-            case CoalescedPartitionSpec(start, end, _) => CoalescedBoundary(start, end)
+            case CoalescedPartitionSpec(start, end, _, _) => CoalescedBoundary(start, end)
             // Can not happend due to isCoalescedRead
             case unexpected =>
               throw SparkException.internalError(s"Unexpected ShufflePartitionSpec: $unexpected")
@@ -122,7 +122,7 @@ case class AQEShuffleReadExec private(
    * Returns true iff some partitions were actually combined
    */
   private def isCoalescedSpec(spec: ShufflePartitionSpec) = spec match {
-    case CoalescedPartitionSpec(0, 0, _) => true
+    case CoalescedPartitionSpec(0, 0, _, _) => true
     case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
     case _ => false
   }
@@ -195,12 +195,17 @@ case class AQEShuffleReadExec private(
       skewedSplits.set(numSplits)
       driverAccumUpdates += (skewedSplits.id -> numSplits)
     }
-
     if (hasCoalescedPartition) {
       val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
-      val x = partitionSpecs.count(isCoalescedSpec)
+      val coalescedSpecs = partitionSpecs.filter(isCoalescedSpec)
+        .map(_.asInstanceOf[CoalescedPartitionSpec])
+      val x = coalescedSpecs.length
       numCoalescedPartitionsMetric.set(x)
-      driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
+      val numEmptyPartitionsMetric = metrics("numEmptyPartitions")
+      val y = coalescedSpecs.map(_.numEmptyPartitions).sum
+      numEmptyPartitionsMetric.set(y)
+      driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x,
+        numEmptyPartitionsMetric.id -> y)
     }
 
     partitionDataSizes.foreach { dataSizes =>
@@ -236,7 +241,9 @@ case class AQEShuffleReadExec private(
       } ++ {
         if (hasCoalescedPartition) {
           Map("numCoalescedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
+            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"),
+            "numEmptyPartitions" ->
+              SQLMetrics.createMetric(sparkContext, "number of empty partitions"))
         } else {
           Map.empty
         }
