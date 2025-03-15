@@ -243,12 +243,15 @@ object ShufflePartitionsUtil extends Logging {
     var latestPartitionSize = 0L
     var emptyPartitionsNum = 0
 
-    def createPartitionSpec(forceCreate: Boolean = false): Unit = {
+    def createPartitionSpec(forceCreate: Boolean = false): Boolean = {
       // Skip empty inputs, as it is a waste to launch an empty task.
+      var created = false
       if (coalescedSize > 0 || forceCreate) {
         partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i, None, emptyPartitionsNum)
+        created = true
       }
       emptyPartitionsNum = 0
+      created
     }
 
     while (i < end) {
@@ -300,8 +303,16 @@ object ShufflePartitionsUtil extends Logging {
       partitionSpecs(partitionSpecs.length - 1) =
         CoalescedPartitionSpec(partitionSpecs.last.startReducerIndex, end, None, emptyPartitionsNum)
     } else {
+      val remainingEmptyPartitions = emptyPartitionsNum
       // If do not allowReturnEmpty, create at least one partition if all partitions are empty.
-      createPartitionSpec(!allowReturnEmpty && partitionSpecs.isEmpty)
+      if (!createPartitionSpec(!allowReturnEmpty && partitionSpecs.isEmpty)) {
+        // pack emptyPartitionNum to last spec
+        if (partitionSpecs.nonEmpty) {
+          partitionSpecs(partitionSpecs.length - 1) =
+            partitionSpecs.last.copy(numEmptyPartitions = partitionSpecs.last.numEmptyPartitions +
+              remainingEmptyPartitions)
+        }
+      }
     }
     partitionSpecs.toSeq
   }

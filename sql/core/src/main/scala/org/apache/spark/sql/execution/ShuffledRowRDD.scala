@@ -34,7 +34,7 @@ case class CoalescedPartitionSpec(
     startReducerIndex: Int,
     endReducerIndex: Int,
     @transient dataSize: Option[Long] = None,
-    @transient emptyPartitionsNum: Int = 0) extends ShufflePartitionSpec
+    @transient numEmptyPartitions: Int = 0) extends ShufflePartitionSpec
 
 object CoalescedPartitionSpec {
   def apply(startReducerIndex: Int,

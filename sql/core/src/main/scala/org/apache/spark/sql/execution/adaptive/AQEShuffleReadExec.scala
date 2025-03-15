@@ -202,7 +202,7 @@ case class AQEShuffleReadExec private(
       val x = coalescedSpecs.length
       numCoalescedPartitionsMetric.set(x)
       val numEmptyPartitionsMetric = metrics("numEmptyPartitions")
-      val y = coalescedSpecs.map(_.emptyPartitionsNum).sum
+      val y = coalescedSpecs.map(_.numEmptyPartitions).sum
       numEmptyPartitionsMetric.set(y)
       driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x,
         numEmptyPartitionsMetric.id -> y)

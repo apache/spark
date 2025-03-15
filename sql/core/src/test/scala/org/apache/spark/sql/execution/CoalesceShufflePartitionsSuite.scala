@@ -505,7 +505,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
       }.get
       val emptyPartitionNum = coalesce.partitionSpecs.collect {
         case p: CoalescedPartitionSpec => p
-      }.map(_.emptyPartitionsNum).sum
+      }.map(_.numEmptyPartitions).sum
       assert(emptyPartitionNum > 0)
       assert(coalesce.metrics("numEmptyPartitions").value > 0)
     }

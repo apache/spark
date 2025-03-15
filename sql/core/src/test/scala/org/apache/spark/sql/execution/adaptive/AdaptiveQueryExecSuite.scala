@@ -1099,8 +1099,8 @@ class AdaptiveQueryExecSuite
       assert(!read.isLocalRead)
       assert(!read.hasSkewedPartition)
       assert(read.hasCoalescedPartition)
-      assert(read.metrics.keys.toSeq.sorted == Seq(
-        "numEmptyPartitions", "numCoalescedPartitions", "numPartitions", "partitionDataSize"))
+      assert(read.metrics.keys.toSeq.sorted == Seq("numCoalescedPartitions", "numEmptyPartitions",
+        "numPartitions", "partitionDataSize"))
       assert(read.metrics("numCoalescedPartitions").value == 1)
       assert(read.metrics("numPartitions").value == read.partitionSpecs.length)
       assert(read.metrics("partitionDataSize").value > 0)

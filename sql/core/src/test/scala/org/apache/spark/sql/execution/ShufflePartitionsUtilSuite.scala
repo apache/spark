@@ -62,7 +62,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // 2 coalesced partitions are expected.
       val bytesByPartitionId = Array[Long](10, 0, 90, 20, 0)
       val expectedPartitionSpecs =
-        Seq(CoalescedPartitionSpec(0, 3, 100), CoalescedPartitionSpec(3, 5, Some(20), 2))
+        Seq(CoalescedPartitionSpec(0, 3, Some(100), 1), CoalescedPartitionSpec(3, 5, Some(20), 1))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs :: Nil, targetSize)
     }
 
@@ -197,7 +197,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("enforce minimal number of coalesced partitions") {
+  test("ziqi-test1 enforce minimal number of coalesced partitions") {
     val targetSize = 100
     val minNumPartitions = 2
 
@@ -207,8 +207,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
       // Create at least one partition spec
-      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, 0))
-      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, 0))
+      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
+      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2), targetSize, minNumPartitions)
@@ -219,8 +219,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // there are too many 0-size partitions.
       val bytesByPartitionId1 = Array[Long](200, 0, 0)
       val bytesByPartitionId2 = Array[Long](100, 0, 0)
-      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 1, 200))
-      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 1, 100))
+      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 1, Some(200), 2))
+      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 1, Some(100), 2))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2),
@@ -269,7 +269,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
     {
       // 1 shuffle: All bytes per partition are 0, 1 empty partition spec created.
       val bytesByPartitionId = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5, 0))
+      val expectedPartitionSpecs = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
       checkEstimation(Array(bytesByPartitionId), expectedPartitionSpecs :: Nil, targetSize)
     }
 
@@ -277,8 +277,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       // 2 shuffles: All bytes per partition are 0, 1 empty partition spec created.
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, 0))
-      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, 0))
+      val expectedPartitionSpecs1 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
+      val expectedPartitionSpecs2 = Seq(CoalescedPartitionSpec(0, 5, Some(0), 5))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2),
@@ -290,11 +290,11 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val bytesByPartitionId1 = Array[Long](200, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](100, 0, 300, 0, 0)
       val expectedPartitionSpecs1 = Seq(
-        CoalescedPartitionSpec(0, 1, 200),
-        CoalescedPartitionSpec(2, 3, 0))
+        CoalescedPartitionSpec(0, 1, Some(200), 1),
+        CoalescedPartitionSpec(2, 3, Some(0), 2))
       val expectedPartitionSpecs2 = Seq(
-        CoalescedPartitionSpec(0, 1, 100),
-        CoalescedPartitionSpec(2, 3, 300))
+        CoalescedPartitionSpec(0, 1, Some(100), 1),
+        CoalescedPartitionSpec(2, 3, Some(300), 2))
       checkEstimation(
         Array(bytesByPartitionId1, bytesByPartitionId2),
         Seq(expectedPartitionSpecs1, expectedPartitionSpecs2),
