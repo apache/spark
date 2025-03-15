@@ -311,4 +311,15 @@ public interface TableCatalog extends CatalogPlugin {
    */
   void renameTable(Identifier oldIdent, Identifier newIdent)
       throws NoSuchTableException, TableAlreadyExistsException;
+
+  /**
+   * Instantiate a builder to create a table in the catalog.
+   *
+   * @param ident a table identifier.
+   * @param columns the columns of the new table.
+   * @return the TableBuilder to create a table.
+   */
+  default TableBuilder buildTable(Identifier ident, Column[] columns) {
+    return new TableBuilder(this, ident, columns);
+  }
 }
