@@ -47,7 +47,7 @@ case class DynamicPruningSubquery(
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), Seq.empty, exprId, Seq.empty, hint)
   with DynamicPruning
   with Unevaluable
   with UnaryLike[Expression] {
@@ -64,6 +64,12 @@ case class DynamicPruningSubquery(
     // Updating outer attrs of DynamicPruningSubquery is unsupported; assert that they match
     // pruningKey and return a copy without any changes.
     assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
+    copy()
+  }
+
+  override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): DynamicPruningSubquery = {
+    // DynamicPruningSubquery should not have unresolved outer attrs
+    assert(unresolvedOuterAttrs.isEmpty)
     copy()
   }
 

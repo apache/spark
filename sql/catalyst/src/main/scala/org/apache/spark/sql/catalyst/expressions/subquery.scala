@@ -67,6 +67,8 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
  *
  * @param plan: the subquery plan
  * @param outerAttrs: the outer references in the subquery plan
+ * @param unresolvedOuterAttrs: the outer references in the subquery plan that cannot be resolved
+ *                              in its immediate parent plan
  * @param exprId: ID of the expression
  * @param joinCond: the join conditions with the outer query. It contains both inner and outer
  *                  query references.
@@ -76,6 +78,7 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
 abstract class SubqueryExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression],
+    unresolvedOuterAttrs: Seq[Expression],
     exprId: ExprId,
     joinCond: Seq[Expression],
     hint: Option[HintInfo]) extends PlanExpression[LogicalPlan] {
@@ -85,6 +88,10 @@ abstract class SubqueryExpression(
   override def children: Seq[Expression] = outerAttrs ++ joinCond
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
   def withNewOuterAttrs(outerAttrs: Seq[Expression]): SubqueryExpression
+  def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): SubqueryExpression
+  def getUnresolvedOuterAttrs: Seq[Expression] = unresolvedOuterAttrs
+  def getOuterAttrs: Seq[Expression] = outerAttrs
+  def getJoinCond: Seq[Expression] = joinCond
   def isCorrelated: Boolean = outerAttrs.nonEmpty
   def hint: Option[HintInfo]
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
@@ -395,12 +402,13 @@ object SubExprUtils extends PredicateHelper {
 case class ScalarSubquery(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
+    unresolvedOuterAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
     needSingleJoin: Option[Boolean] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
       throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(plan.schema.fields.length,
@@ -410,14 +418,20 @@ case class ScalarSubquery(
   }
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
-  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
-    outerAttrs = outerAttrs)
+  override def withNewUnresolvedOuterAttrs(
+      unresolvedOuterAttrs: Seq[Expression]
+  ): ScalarSubquery = {
+    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+    copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
+  }
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     ScalarSubquery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
+      unresolvedOuterAttrs.map(_.canonicalized),
       ExprId(0),
       joinCond.map(_.canonicalized))
   }
@@ -474,21 +488,28 @@ case class UnresolvedTableArgPlanId(
 case class LateralSubquery(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
+    unresolvedOuterAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = plan.output.toStructType
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery = copy(
     outerAttrs = outerAttrs)
+  override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): LateralSubquery = {
+    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+    copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
+  }
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     LateralSubquery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
+      unresolvedOuterAttrs.map(_.canonicalized),
       ExprId(0),
       joinCond.map(_.canonicalized))
   }
@@ -517,13 +538,14 @@ case class LateralSubquery(
 case class ListQuery(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
+    unresolvedOuterAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     // The plan of list query may have more columns after de-correlation, and we need to track the
     // number of the columns of the original plan, to report the data type properly.
     numCols: Int = -1,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
   def childOutputs: Seq[Attribute] = plan.output.take(numCols)
   override def dataType: DataType = if (numCols > 1) {
     childOutputs.toStructType
@@ -543,12 +565,18 @@ case class ListQuery(
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery = copy(
     outerAttrs = outerAttrs)
+  override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): ListQuery = {
+    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+    copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
+  }
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
   override def toString: String = s"list#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     ListQuery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
+      unresolvedOuterAttrs.map(_.canonicalized),
       ExprId(0),
       numCols,
       joinCond.map(_.canonicalized))
@@ -591,22 +619,29 @@ case class ListQuery(
 case class Exists(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
+    unresolvedOuterAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
+  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint)
   with Predicate
   with Unevaluable {
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists = copy(
     outerAttrs = outerAttrs)
+  override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): Exists = {
+    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+    copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
+  }
   override def withNewHint(hint: Option[HintInfo]): Exists = copy(hint = hint)
   override def toString: String = s"exists#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     Exists(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
+      unresolvedOuterAttrs.map(_.canonicalized),
       ExprId(0),
       joinCond.map(_.canonicalized))
   }

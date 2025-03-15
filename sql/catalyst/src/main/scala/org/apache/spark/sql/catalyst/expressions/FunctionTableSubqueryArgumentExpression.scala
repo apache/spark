@@ -67,12 +67,13 @@ import org.apache.spark.sql.types.DataType
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
+    unresolvedOuterAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     partitionByExpressions: Seq[Expression] = Seq.empty,
     withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty,
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
+  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
     "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
@@ -86,11 +87,17 @@ case class FunctionTableSubqueryArgumentExpression(
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
+  override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): FunctionTableSubqueryArgumentExpression = {
+    assert(unresolvedOuterAttrs.subsetOf(outerAttrs),
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+    copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
+  }
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
+      unresolvedOuterAttrs.map(_.canonicalized),
       ExprId(0),
       partitionByExpressions,
       withSinglePartition,
