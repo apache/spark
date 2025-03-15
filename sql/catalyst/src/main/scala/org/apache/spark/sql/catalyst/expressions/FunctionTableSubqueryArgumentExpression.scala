@@ -73,7 +73,8 @@ case class FunctionTableSubqueryArgumentExpression(
     withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty,
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
-  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, Seq.empty, None) with Unevaluable {
+  extends SubqueryExpression(
+    plan, outerAttrs, unresolvedOuterAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
     "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
@@ -87,9 +88,12 @@ case class FunctionTableSubqueryArgumentExpression(
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
-  override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): FunctionTableSubqueryArgumentExpression = {
+  override def withNewUnresolvedOuterAttrs(
+    unresolvedOuterAttrs: Seq[Expression]
+  ): FunctionTableSubqueryArgumentExpression = {
     assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, " +
+        s"but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
   override def toString: String = s"table-argument#${exprId.id} $conditionString"

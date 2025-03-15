@@ -408,7 +408,8 @@ case class ScalarSubquery(
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
     needSingleJoin: Option[Boolean] = None)
-  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
+  extends SubqueryExpression(
+    plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
       throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(plan.schema.fields.length,
@@ -424,7 +425,8 @@ case class ScalarSubquery(
       unresolvedOuterAttrs: Seq[Expression]
   ): ScalarSubquery = {
     assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, " +
+        s"but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
@@ -494,15 +496,19 @@ case class LateralSubquery(
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
+  extends SubqueryExpression(
+    plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = plan.output.toStructType
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery = copy(
     outerAttrs = outerAttrs)
-  override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): LateralSubquery = {
+  override def withNewUnresolvedOuterAttrs(
+    unresolvedOuterAttrs: Seq[Expression]
+  ): LateralSubquery = {
     assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, " +
+        s"but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
@@ -547,7 +553,8 @@ case class ListQuery(
     numCols: Int = -1,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
+  extends SubqueryExpression(
+    plan, outerAttrs, unresolvedOuterAttrs, exprId, joinCond, hint) with Unevaluable {
   def childOutputs: Seq[Attribute] = plan.output.take(numCols)
   override def dataType: DataType = if (numCols > 1) {
     childOutputs.toStructType
@@ -569,7 +576,8 @@ case class ListQuery(
     outerAttrs = outerAttrs)
   override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): ListQuery = {
     assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, " +
+        s"but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
@@ -634,7 +642,8 @@ case class Exists(
     outerAttrs = outerAttrs)
   override def withNewUnresolvedOuterAttrs(unresolvedOuterAttrs: Seq[Expression]): Exists = {
     assert(unresolvedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"unresolvedOuterAttrs must be a subset of outerAttrs, but got ${unresolvedOuterAttrs.mkString(", ")}")
+      s"unresolvedOuterAttrs must be a subset of outerAttrs, " +
+        s"but got ${unresolvedOuterAttrs.mkString(", ")}")
     copy(unresolvedOuterAttrs = unresolvedOuterAttrs)
   }
   override def withNewHint(hint: Option[HintInfo]): Exists = copy(hint = hint)
