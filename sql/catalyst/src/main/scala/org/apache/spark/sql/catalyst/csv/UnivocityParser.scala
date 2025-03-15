@@ -34,7 +34,7 @@ import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
@@ -136,7 +136,9 @@ class UnivocityParser(
           options.dateFormatOption.isEmpty
       }
 
-  private[csv] var headerColumnNames: Option[Array[String]] = None
+  // When `options.needHeaderForSingleVariantColumn` is true, it will be set to the header column
+  // names by `CSVDataSource.readHeaderForSingleVariantColumn`.
+  var headerColumnNames: Option[Array[String]] = None
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -473,10 +475,7 @@ private[sql] object UnivocityParser {
       parser.options.columnNameOfCorruptRecord)
 
     val handleHeader: () => Unit =
-      () => {
-        headerChecker.checkHeaderColumnNames(tokenizer)
-        parser.headerColumnNames = headerChecker.headerColumnNames
-      }
+      () => headerChecker.checkHeaderColumnNames(tokenizer)
 
     convertStream(inputStream, tokenizer, handleHeader, parser.options.charset) { tokens =>
       safeParser.parse(tokens)
@@ -517,7 +516,6 @@ private[sql] object UnivocityParser {
       headerChecker: CSVHeaderChecker,
       schema: StructType): Iterator[InternalRow] = {
     headerChecker.checkHeaderColumnNames(lines, parser.tokenizer)
-    parser.headerColumnNames = headerChecker.headerColumnNames
 
     val options = parser.options
 
@@ -531,25 +529,60 @@ private[sql] object UnivocityParser {
     filteredLines.flatMap(safeParser.parse)
   }
 
+  private def tryParseNumeric(builder: VariantBuilder, s: String): Boolean = {
+    // Use while-loop because this can be performance-critical.
+    var hasDot = false
+    val length = s.length
+    var i = 0
+    while (i < length) {
+      val ch = s.charAt(i)
+      if (ch != '-' && ch != '.' && !(ch >= '0' && ch <= '9')) return false
+      if (ch == '.') hasDot = true
+      i += 1
+    }
+    if (!hasDot) {
+      try {
+        builder.appendLong(s.toLong)
+        return true
+      } catch {
+        case NonFatal(_) =>
+      }
+    }
+    try {
+      val d = new java.math.BigDecimal(s)
+      if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+        d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+        builder.appendDecimal(d)
+        return true
+      }
+    } catch {
+      case NonFatal(_) =>
+    }
+    try {
+      builder.appendDouble(s.toDouble)
+      return true
+    } catch {
+      case NonFatal(_) =>
+    }
+    false
+  }
+
   /**
    * Convert a CSV value `s` into a variant value and append the result to `builder`.
-   * The result can only be one of a variant integer/decimal/string. Anything that cannot be
-   * precisely represented by a variant integer/decimal will be represented by a variant string.
+   * The result can only be one of a variant boolean/numeric/string. Anything that cannot be
+   * precisely represented by a variant boolean/numeric will be represented by a variant string.
    */
   def appendCsvColumnToVariant(builder: VariantBuilder, s: String, nullValue: String): Unit = {
-    if (s == null || s == nullValue) {
-      builder.appendNull()
-      return
-    }
-    scala.util.Try(s.toLong) match {
-      case scala.util.Success(l) if l.toString == s =>
-        builder.appendLong(l)
-        return
+    s match {
+      case null => builder.appendNull()
+      case "true" => builder.appendBoolean(true)
+      case "false" => builder.appendBoolean(false)
       case _ =>
+        if (s == nullValue) {
+          builder.appendNull()
+        } else if (!tryParseNumeric(builder, s)) {
+          builder.appendString(s)
+        }
     }
-    if (builder.tryParseDecimal(s)) {
-      return
-    }
-    builder.appendString(s)
   }
 }

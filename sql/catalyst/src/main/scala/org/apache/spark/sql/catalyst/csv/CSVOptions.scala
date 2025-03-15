@@ -415,5 +415,5 @@ object CSVOptions extends DataSourceOptions {
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
-  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
 }
