@@ -390,11 +390,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_multiply`",
     "message" : "long overflow"
   },
   "queryContext" : [ {
@@ -909,11 +908,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_multiply`",
     "message" : "long overflow"
   },
   "queryContext" : [ {
@@ -949,11 +947,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_multiply`",
     "message" : "long overflow"
   },
   "queryContext" : [ {
@@ -989,11 +986,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "errorClass" : "ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
-    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
+    "functionName" : "`try_multiply`",
     "message" : "long overflow"
   },
   "queryContext" : [ {
