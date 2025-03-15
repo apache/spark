@@ -94,8 +94,4 @@ private[spark] class ShuffleMapStage(
       .findMissingPartitions(shuffleDep.shuffleId)
       .getOrElse(0 until numPartitions)
   }
-
-  override protected def basicMarkAllPartitionsMissing(): Unit = {
-    mapOutputTrackerMaster.unregisterAllMapAndMergeOutput(this.shuffleDep.shuffleId)
-  }
 }

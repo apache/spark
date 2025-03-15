@@ -68,6 +68,7 @@ class DAGSchedulerEventProcessLoopTester(
       // buffer events for sequent processing later instead of processing them recursively.
       dagSchedulerInterceptorOpt.foreach(_.beforeAddingDagEventToQueue(event))
       eventQueue += event
+      dagSchedulerInterceptorOpt.foreach(_.afterAddingDagEventToQueue(event))
     } else {
       try {
         isProcessing = true
@@ -181,6 +182,7 @@ class DAGSchedulerSuiteDummyException extends Exception
 
 trait DagSchedulerInterceptor {
   def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {}
+  def afterAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {}
   def afterDirectProcessingOfDagEvent(event: DAGSchedulerEvent): Unit = {}
 }
 
@@ -3200,45 +3202,18 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       "Spark can only do this while using the new shuffle block fetching protocol"))
   }
 
+
+
   test("SPARK-51272: retry all the partitions of result stage, if the first result task" +
     " has failed and failing ShuffleMap stage is inDeterminate") {
-    val latch = new CountDownLatch(1)
-    this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
-      override def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
-        event match {
-          case ResubmitFailedStages =>
-              // Before the ResubmitFailedStages is added to the queue, add the successful
-              // partition task completion.
-              runEvent(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
-              latch.countDown()
-
-          case _ =>
-        }
-      }
-
-      override def afterDirectProcessingOfDagEvent(event: DAGSchedulerEvent): Unit = {
-        event match {
-          case CompletionEvent(_, reason, _, _, _, _) =>
-            reason match {
-              case FetchFailed(_, _, _, _, _, _) =>
-                // Do not allow this thread to exit, till the ResubmitFailedStages
-                // in callback is received. This is to ensure that this thread
-                // does not exit and process the ResubmitFailedStage event, before
-                // the queue gets successful partition task completion
-                latch.await(50, TimeUnit.SECONDS)
-
-              case _ =>
-            }
-
-          case _ =>
-        }
-      }
-    }
+    this.dagSchedulerInterceptor = createDagInterceptorForSpark51272(
+      () => taskSets(2).tasks(1), "RELEASE_LATCH")
 
     val numPartitions = 2
     // The first shuffle stage is completed by the below function itself which creates two
     // indeterminate stages.
-    val (shuffleId1, shuffleId2) = constructTwoIndeterminateStage()
+    val (shuffleId1, shuffleId2) = constructTwoStages(
+      stage1InDeterminate = false, stage2InDeterminate = true)
     completeShuffleMapStageSuccessfully(shuffleId2, 0, numPartitions)
     val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
     val activeJob = resultStage.activeJob
@@ -3273,45 +3248,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       resultStage.latestInfo.attemptNumber() should equal(1)
     }
-    org.scalatest.Assertions.assert(resultStage.latestInfo.numTasks == 2)
-    org.scalatest.Assertions.assert(resultStage.findMissingPartitions().size == 2)
+    org.scalatest.Assertions.assert(resultStage.latestInfo.numTasks == numPartitions)
+    org.scalatest.Assertions.assert(resultStage.findMissingPartitions().size == numPartitions)
   }
 
   test("SPARK-51272: retry all the partitions of result stage, if the first result task" +
     " has failed with failing ShuffleStage determinate but result stage has another ShuffleStage" +
     " which is indeterminate") {
-    val latch = new CountDownLatch(1)
-    this.dagSchedulerInterceptor = new DagSchedulerInterceptor {
-      override def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
-        event match {
-          case ResubmitFailedStages =>
-            // Before the ResubmitFailedStages is added to the queue, add the successful
-            // partition task completion.
-            runEvent(makeCompletionEvent(taskSets(2).tasks(1), Success, 11))
-            latch.countDown()
-
-          case _ =>
-        }
-      }
-
-      override def afterDirectProcessingOfDagEvent(event: DAGSchedulerEvent): Unit = {
-        event match {
-          case CompletionEvent(_, reason, _, _, _, _) =>
-            reason match {
-              case FetchFailed(_, _, _, _, _, _) =>
-                // Do not allow this thread to exit, till the ResubmitFailedStages
-                // in callback is received. This is to ensure that this thread
-                // does not exit and process the ResubmitFailedStage event, before
-                // the queue gets successful partition task completion
-                latch.await(50, TimeUnit.SECONDS)
-
-              case _ =>
-            }
-
-          case _ =>
-        }
-      }
-    }
+    this.dagSchedulerInterceptor = createDagInterceptorForSpark51272(
+      () => taskSets(2).tasks(1), "RELEASE_LATCH")
 
     val numPartitions = 2
     // The first shuffle stage is completed by the below function itself which creates two
@@ -3325,6 +3270,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(activeJob.isDefined)
     // The result stage is still waiting for its 2 tasks to complete
     assert(resultStage.findMissingPartitions() == Seq.tabulate(numPartitions)(i => i))
+
 
     // The below event will cause the first task of result stage to fail.
     // Below scenario should happen if behaving correctly:
@@ -3366,7 +3312,41 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       resultStage.latestInfo.attemptNumber() should equal(1)
     }
-    org.scalatest.Assertions.assert(resultStage.latestInfo.numTasks == 2)
+    org.scalatest.Assertions.assert(resultStage.latestInfo.numTasks == numPartitions)
+  }
+
+  test("SPARK-51272: retry all the partitions of Shuffle stage, if any task of ShuffleStage " +
+    " has failed and failing ShuffleMap stage is inDeterminate") {
+    val numPartitions = 2
+    this.dagSchedulerInterceptor = createDagInterceptorForSpark51272(
+      () => taskSets(1).tasks(1), makeMapStatus(host = "hostZZZ", reduces = numPartitions))
+    // The first shuffle stage is completed by the below function itself which creates two
+    // indeterminate stages.
+    val (shuffleId1, shuffleId2) = constructTwoStages(
+      stage1InDeterminate = false, stage2InDeterminate = true)
+    // This will trigger the resubmit failed stage and in before adding resubmit message to the
+    // queue, a successful partition completion event will arrive.
+
+    runEvent(
+      makeCompletionEvent(
+        taskSets(1).tasks(0),
+        FetchFailed(makeBlockManagerId("hostA"), shuffleId2, 0L, 0, 0, "ignored"),
+        null))
+
+    // run completion task for first stage as the Fetch Failed for second shuffle stage is sharing
+    // the block Id
+    completeShuffleMapStageSuccessfully(0, 1, numPartitions)
+
+    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+
+    import org.scalatest.concurrent.Eventually._
+    import org.scalatest.matchers.should.Matchers._
+    import org.scalatest.time.SpanSugar._
+
+    eventually(timeout(3.minutes), interval(500.milliseconds)) {
+      shuffleStage2.latestInfo.attemptNumber() should equal(1)
+    }
+    org.scalatest.Assertions.assert(shuffleStage2.findMissingPartitions().size == numPartitions)
   }
 
   test("SPARK-25341: retry all the succeeding stages when the map stage is indeterminate") {
@@ -5320,6 +5300,54 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       case _ => Seq.empty
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, metricPeaks, taskInfo)
+  }
+
+  private def createDagInterceptorForSpark51272(latchReleaseTask: () => Task[_], taskResult: Any):
+  DagSchedulerInterceptor = {
+    new DagSchedulerInterceptor {
+      val latch = new CountDownLatch(1)
+      override def beforeAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
+        event match {
+          case ResubmitFailedStages =>
+            // Before the ResubmitFailedStages is added to the queue, add the successful
+            // partition task completion.
+            runEvent(makeCompletionEvent(latchReleaseTask(), Success, taskResult))
+
+          case _ =>
+        }
+      }
+
+      override def afterAddingDagEventToQueue(event: DAGSchedulerEvent): Unit = {
+        event match {
+          case CompletionEvent(_, reason, result, _, _, _) =>
+            reason match {
+              case Success if result == taskResult => latch.countDown()
+
+              case _ =>
+            }
+
+          case _ =>
+        }
+      }
+
+      override def afterDirectProcessingOfDagEvent(event: DAGSchedulerEvent): Unit = {
+        event match {
+          case CompletionEvent(_, reason, _, _, _, _) =>
+            reason match {
+              case FetchFailed(_, _, _, _, _, _) =>
+                // Do not allow this thread to exit, till spurious sucessfull task
+                // ( latchRelease task gets in the queue). This would ensure that
+                // ResubmitFailedStages task will always be processed after the spurious task
+                // is processed.
+                latch.await(50, TimeUnit.SECONDS)
+
+              case _ =>
+            }
+
+          case _ =>
+        }
+      }
+    }
   }
 }
 

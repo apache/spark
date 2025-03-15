@@ -1878,7 +1878,7 @@ private[spark] class DAGScheduler(
       case Success if stageOption.isDefined =>
         val stage = stageOption.get
         (task.stageAttemptId < stage.latestInfo.attemptNumber()
-          && stage.isIndeterminate) || stage.areAllPartitionsMissing (task.stageAttemptId)
+          && stage.isIndeterminate) || stage.shouldDiscardResult(task.stageAttemptId)
 
       case _ => false
     }
@@ -2188,10 +2188,12 @@ private[spark] class DAGScheduler(
                         abortStage(mapStage, reason, None)
                       } else {
                         rollingBackStages += mapStage
-                        mapStage.markAllPartitionsMissing()
+                        mapOutputTracker.unregisterAllMapAndMergeOutput(
+                          mapStage.shuffleDep.shuffleId)
                       }
                     } else {
-                      mapStage.markAllPartitionsMissing()
+                      mapOutputTracker.unregisterAllMapAndMergeOutput(
+                        mapStage.shuffleDep.shuffleId)
                     }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>
