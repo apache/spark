@@ -169,8 +169,8 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAn
     assertContains("Array[java.lang.Long] = Array(0L, 2L, 4L, 6L, 8L)", output)
   }
 
-  test("Client-side JAR") {
-    // scalastyle:off classforname line.size.limit
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: Client-side JAR") {
     val sparkHome = IntegrationTestUtils.sparkHome
     val testJar = Paths
       .get(s"$sparkHome/sql/connect/client/jvm/src/test/resources/TestHelloV2_$scalaVersion.jar")

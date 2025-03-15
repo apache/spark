@@ -3884,7 +3884,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     })
   }
 
-  test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
     withTempDir { dir =>
