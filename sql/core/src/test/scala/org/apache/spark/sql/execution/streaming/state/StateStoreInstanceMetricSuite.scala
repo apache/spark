@@ -72,6 +72,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
+          SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
         ) {
@@ -133,6 +134,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
+          SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
         ) {
@@ -205,6 +207,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
+          SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
         ) {
@@ -275,6 +278,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
+          SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
         ) {
@@ -326,6 +330,51 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                       .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2 * 4
                   )
                 }
+              },
+              StopStream
+            )
+          }
+        }
+      }
+  }
+
+  Seq(
+    ("SPARK-51097", "RocksDBStateStoreProvider", classOf[RocksDBStateStoreProvider].getName),
+    ("SPARK-51252", "HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider].getName)
+  ).foreach {
+    case (ticketPrefix, providerName, providerClassName) =>
+      testWithChangelogCheckpointingEnabled(
+        s"$ticketPrefix: Verify instance metrics for $providerName are not collected " +
+        s"in execution plan"
+      ) {
+        withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName) {
+          withTempDir { checkpointDir =>
+            val input1 = MemoryStream[Int]
+            val input2 = MemoryStream[Int]
+
+            val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+            val df2 = input2
+              .toDF()
+              .select($"value" as "rightKey", ($"value" * 3) as "rightValue")
+            val joined = df1.join(df2, expr("leftKey = rightKey"))
+
+            testStream(joined)(
+              StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+              AddData(input1, 1, 5),
+              ProcessAllAvailable(),
+              AddData(input2, 1, 5, 10),
+              ProcessAllAvailable(),
+              CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+              AssertOnQuery { q =>
+                // Go through all elements in the execution plan and verify none of the metrics
+                // are generated from RocksDB's snapshot lag instance metrics.
+                q.lastExecution.executedPlan
+                  .collect {
+                    case node => node.metrics
+                  }
+                  .forall { nodeMetrics =>
+                    nodeMetrics.forall(metric => !metric._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
+                  }
               },
               StopStream
             )
