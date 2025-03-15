@@ -415,12 +415,11 @@ SELECT udf('') AS `xxx`, udf(i) AS i, udf(j), udf(t) AS t, udf(k)
   FROM J1_TBL INNER JOIN J2_TBL USING (i)
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS i#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS t#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join Inner, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -428,12 +427,11 @@ SELECT udf(udf('')) AS `xxx`, udf(i), udf(j) AS j, udf(t), udf(k) AS k
   FROM J1_TBL JOIN J2_TBL USING (i)
 -- !query analysis
 Project [cast(udf(cast(cast(udf(cast( as string)) as string) as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS j#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS k#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join Inner, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -460,12 +458,11 @@ SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL NATURAL JOIN J2_TBL
 -- !query analysis
 Project [cast(udf(cast(cast(udf(cast( as string)) as string) as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join Inner, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -473,16 +470,15 @@ SELECT udf('') AS `xxx`, udf(udf(udf(a))) AS a, udf(b), udf(c), udf(d)
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d)
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(cast(udf(cast(cast(udf(cast(a#x as string)) as int) as string)) as int) as string)) as int) AS a#x, cast(udf(cast(b#x as string)) as int) AS udf(b)#x, cast(udf(cast(c#x as string)) as string) AS udf(c)#x, cast(udf(cast(d#x as string)) as int) AS udf(d)#x]
-+- Project [a#x, b#x, c#x, d#x]
-   +- Join Inner, (a#x = a#x)
-      :- SubqueryAlias t1
-      :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
-      :     +- SubqueryAlias spark_catalog.default.j1_tbl
-      :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias t2
-         +- Project [i#x AS a#x, k#x AS d#x]
-            +- SubqueryAlias spark_catalog.default.j2_tbl
-               +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias t1
+   :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
+   :     +- SubqueryAlias spark_catalog.default.j1_tbl
+   :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias t2
+      +- Project [i#x AS a#x, k#x AS d#x]
+         +- SubqueryAlias spark_catalog.default.j2_tbl
+            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -490,16 +486,15 @@ SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)) AS c, udf(udf(udf
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a)
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(cast(udf(cast(a#x as string)) as int) as string)) as int) AS udf(udf(a))#x, cast(udf(cast(cast(udf(cast(b#x as string)) as int) as string)) as int) AS udf(udf(b))#x, cast(udf(cast(cast(udf(cast(c#x as string)) as string) as string)) as string) AS c#x, cast(udf(cast(cast(udf(cast(cast(udf(cast(d#x as string)) as int) as string)) as int) as string)) as int) AS d#x]
-+- Project [a#x, b#x, c#x, d#x]
-   +- Join Inner, (a#x = a#x)
-      :- SubqueryAlias t1
-      :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
-      :     +- SubqueryAlias spark_catalog.default.j1_tbl
-      :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias t2
-         +- Project [i#x AS d#x, k#x AS a#x]
-            +- SubqueryAlias spark_catalog.default.j2_tbl
-               +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias t1
+   :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
+   :     +- SubqueryAlias spark_catalog.default.j1_tbl
+   :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias t2
+      +- Project [i#x AS d#x, k#x AS a#x]
+         +- SubqueryAlias spark_catalog.default.j2_tbl
+            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -575,12 +570,11 @@ SELECT udf('') AS `xxx`, udf(udf(i)), udf(j), udf(t), udf(k)
   FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i)
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(cast(udf(cast(i#x as string)) as int) as string)) as int) AS udf(udf(i))#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join RightOuter, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join RightOuter, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -588,12 +582,11 @@ SELECT udf('') AS `xxx`, udf(i), udf(udf(j)), udf(t), udf(k)
   FROM J1_TBL RIGHT JOIN J2_TBL USING (i)
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(cast(udf(cast(j#x as string)) as int) as string)) as int) AS udf(udf(j))#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join RightOuter, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join RightOuter, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -634,12 +627,11 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(udf(k))
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as int) AS udf(udf(k))#x]
 +- Filter (cast(udf(cast(k#x as string)) as int) = 1)
-   +- Project [i#x, j#x, t#x, k#x]
-      +- Join LeftOuter, (i#x = i#x)
-         :- SubqueryAlias spark_catalog.default.j1_tbl
-         :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-         +- SubqueryAlias spark_catalog.default.j2_tbl
-            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
+   +- Join LeftOuter, (i#x = i#x)
+      :- SubqueryAlias spark_catalog.default.j1_tbl
+      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+      +- SubqueryAlias spark_catalog.default.j2_tbl
+         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -648,12 +640,11 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x]
 +- Filter (cast(udf(cast(cast(udf(cast(i#x as string)) as int) as string)) as int) = cast(udf(cast(1 as string)) as int))
-   +- Project [i#x, j#x, t#x, k#x]
-      +- Join LeftOuter, (i#x = i#x)
-         :- SubqueryAlias spark_catalog.default.j1_tbl
-         :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-         +- SubqueryAlias spark_catalog.default.j2_tbl
-            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
+   +- Join LeftOuter, (i#x = i#x)
+      :- SubqueryAlias spark_catalog.default.j1_tbl
+      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+      +- SubqueryAlias spark_catalog.default.j2_tbl
+         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -733,17 +724,16 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name)
 -- !query analysis
-Project [name#x, n#x, n#x, n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x, n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
-      :  +- Join FullOuter, (name#x = name#x)
-      :     :- SubqueryAlias spark_catalog.default.t1
-      :     :  +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias spark_catalog.default.t3
-         +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, n#x, n#x, n#x]
++- Join FullOuter, (name#x = name#x)
+   :- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
+   :  +- Join FullOuter, (name#x = name#x)
+   :     :- SubqueryAlias spark_catalog.default.t1
+   :     :  +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias spark_catalog.default.t3
+      +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -754,16 +744,15 @@ INNER JOIN
 USING (name)
 -- !query analysis
 Project [name#x, n#x, n#x]
-+- Project [name#x, n#x, n#x]
-   +- Join Inner, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, n#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, n#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join Inner, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, n#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, n#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -774,16 +763,15 @@ LEFT JOIN
 USING (name)
 -- !query analysis
 Project [name#x, n#x, n#x]
-+- Project [name#x, n#x, n#x]
-   +- Join LeftOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, n#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, n#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join LeftOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, n#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, n#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -793,17 +781,16 @@ FULL JOIN
 (SELECT * FROM t3) s3
 USING (name)
 -- !query analysis
-Project [cast(udf(cast(name#x as string)) as string) AS udf(name)#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS udf(udf(n))#x, cast(udf(cast(n#x as string)) as int) AS udf(n)#x]
-+- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [name#x, n#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [cast(udf(cast(coalesce(name#x, name#x) as string)) as string) AS udf(name)#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS udf(udf(n))#x, cast(udf(cast(n#x as string)) as int) AS udf(n)#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [name#x, n#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -813,16 +800,15 @@ NATURAL INNER JOIN
 (SELECT udf(name) as name, udf(udf(n)) as s3_n, udf(3) as s3_2 FROM t3) s3
 -- !query analysis
 Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join Inner, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x, cast(udf(cast(2 as string)) as int) AS s2_2#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s3_n#x, cast(udf(cast(3 as string)) as int) AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join Inner, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x, cast(udf(cast(2 as string)) as int) AS s2_2#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s3_n#x, cast(udf(cast(3 as string)) as int) AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -832,16 +818,15 @@ NATURAL LEFT JOIN
 (SELECT udf(udf(name)) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
 Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join LeftOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, 2 AS s2_2#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join LeftOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, 2 AS s2_2#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -850,17 +835,16 @@ SELECT * FROM
 NATURAL FULL JOIN
 (SELECT udf(udf(name)) as name, udf(udf(n)) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
-Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x, 2 AS s2_2#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x, 2 AS s2_2#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -872,22 +856,21 @@ NATURAL INNER JOIN
 (SELECT udf(udf(udf(name))) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
 Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join Inner, (name#x = name#x)
-      :- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
-      :  +- Join Inner, (name#x = name#x)
-      :     :- SubqueryAlias s1
-      :     :  +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s1_n#x, 1 AS s1_1#x]
-      :     :     +- SubqueryAlias spark_catalog.default.t1
-      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias s2
-      :        +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x, 2 AS s2_2#x]
-      :           +- SubqueryAlias spark_catalog.default.t2
-      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join Inner, (name#x = name#x)
+   :- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
+   :  +- Join Inner, (name#x = name#x)
+   :     :- SubqueryAlias s1
+   :     :  +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s1_n#x, 1 AS s1_1#x]
+   :     :     +- SubqueryAlias spark_catalog.default.t1
+   :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   :     +- SubqueryAlias s2
+   :        +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x, 2 AS s2_2#x]
+   :           +- SubqueryAlias spark_catalog.default.t2
+   :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [cast(udf(cast(cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -898,23 +881,22 @@ NATURAL FULL JOIN
 NATURAL FULL JOIN
 (SELECT udf(udf(name)) as name, udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3
 -- !query analysis
-Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
-      :  +- Join FullOuter, (name#x = name#x)
-      :     :- SubqueryAlias s1
-      :     :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s1_n#x, cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS s1_1#x]
-      :     :     +- SubqueryAlias spark_catalog.default.t1
-      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias s2
-      :        +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, cast(udf(cast(2 as string)) as int) AS s2_2#x]
-      :           +- SubqueryAlias spark_catalog.default.t2
-      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, cast(udf(cast(3 as string)) as int) AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
++- Join FullOuter, (name#x = name#x)
+   :- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
+   :  +- Join FullOuter, (name#x = name#x)
+   :     :- SubqueryAlias s1
+   :     :  +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s1_n#x, cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS s1_1#x]
+   :     :     +- SubqueryAlias spark_catalog.default.t1
+   :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   :     +- SubqueryAlias s2
+   :        +- Project [cast(udf(cast(name#x as string)) as string) AS name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, cast(udf(cast(2 as string)) as int) AS s2_2#x]
+   :           +- SubqueryAlias spark_catalog.default.t2
+   :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [cast(udf(cast(cast(udf(cast(name#x as string)) as string) as string)) as string) AS name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x, cast(udf(cast(3 as string)) as int) AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -927,25 +909,24 @@ NATURAL FULL JOIN
     (SELECT name, udf(udf(n)) as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-Project [name#x, cast(udf(cast(cast(udf(cast(s1_n#x as string)) as int) as string)) as int) AS udf(udf(s1_n))#x, cast(udf(cast(s2_n#x as string)) as int) AS udf(s2_n)#x, cast(udf(cast(s3_n#x as string)) as int) AS udf(s3_n)#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s3_n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s1
-      :  +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s1_n#x]
-      :     +- SubqueryAlias spark_catalog.default.t1
-      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      +- SubqueryAlias ss2
-         +- Project [name#x, s2_n#x, s3_n#x]
-            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s3_n#x]
-               +- Join FullOuter, (name#x = name#x)
-                  :- SubqueryAlias s2
-                  :  +- Project [name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x]
-                  :     +- SubqueryAlias spark_catalog.default.t2
-                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-                  +- SubqueryAlias s3
-                     +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s3_n#x]
-                        +- SubqueryAlias spark_catalog.default.t3
-                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, cast(udf(cast(cast(udf(cast(s1_n#x as string)) as int) as string)) as int) AS udf(udf(s1_n))#x, cast(udf(cast(s2_n#x as string)) as int) AS udf(s2_n)#x, cast(udf(cast(s3_n#x as string)) as int) AS udf(s3_n)#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s1
+   :  +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s1_n#x]
+   :     +- SubqueryAlias spark_catalog.default.t1
+   :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   +- SubqueryAlias ss2
+      +- Project [name#x, s2_n#x, s3_n#x]
+         +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s3_n#x]
+            +- Join FullOuter, (name#x = name#x)
+               :- SubqueryAlias s2
+               :  +- Project [name#x, cast(udf(cast(n#x as string)) as int) AS s2_n#x]
+               :     +- SubqueryAlias spark_catalog.default.t2
+               :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+               +- SubqueryAlias s3
+                  +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s3_n#x]
+                     +- SubqueryAlias spark_catalog.default.t3
+                        +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -958,25 +939,24 @@ NATURAL FULL JOIN
     (SELECT name, udf(n) as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-Project [name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s1
-      :  +- Project [name#x, n#x AS s1_n#x]
-      :     +- SubqueryAlias spark_catalog.default.t1
-      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      +- SubqueryAlias ss2
-         +- Project [name#x, s2_n#x, s2_2#x, s3_n#x]
-            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x]
-               +- Join FullOuter, (name#x = name#x)
-                  :- SubqueryAlias s2
-                  :  +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, 2 AS s2_2#x]
-                  :     +- SubqueryAlias spark_catalog.default.t2
-                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-                  +- SubqueryAlias s3
-                     +- Project [name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x]
-                        +- SubqueryAlias spark_catalog.default.t3
-                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s1
+   :  +- Project [name#x, n#x AS s1_n#x]
+   :     +- SubqueryAlias spark_catalog.default.t1
+   :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   +- SubqueryAlias ss2
+      +- Project [name#x, s2_n#x, s2_2#x, s3_n#x]
+         +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x]
+            +- Join FullOuter, (name#x = name#x)
+               :- SubqueryAlias s2
+               :  +- Project [name#x, cast(udf(cast(cast(udf(cast(n#x as string)) as int) as string)) as int) AS s2_n#x, 2 AS s2_2#x]
+               :     +- SubqueryAlias spark_catalog.default.t2
+               :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+               +- SubqueryAlias s3
+                  +- Project [name#x, cast(udf(cast(n#x as string)) as int) AS s3_n#x]
+                     +- SubqueryAlias spark_catalog.default.t3
+                        +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
