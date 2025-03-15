@@ -47,6 +47,7 @@ private[sql] trait SqlApiConf {
   def stackTracesInDataFrameContext: Int
   def dataFrameQueryContextEnabled: Boolean
   def legacyAllowUntypedScalaUDFs: Boolean
+  def singleCharacterOperatorPipeTokenEnabled: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -88,4 +89,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def stackTracesInDataFrameContext: Int = 1
   override def dataFrameQueryContextEnabled: Boolean = true
   override def legacyAllowUntypedScalaUDFs: Boolean = false
+  override def singleCharacterOperatorPipeTokenEnabled: Boolean = true
 }

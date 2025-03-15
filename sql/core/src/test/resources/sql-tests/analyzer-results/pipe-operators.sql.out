@@ -3977,6 +3977,48 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+from t
+| select x, y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+from t
+| select x | 8
+| select 1 | 8
+-- !query analysis
+Project [(1 | 8) AS (1 | 8)#x]
++- Project [(x#x | 8) AS (x | 8)#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+from t
+| select x | (select 8)
+-- !query analysis
+Project [(x#x | scalar-subquery#x []) AS (x | scalarsubquery())#x]
+:  +- Project [8 AS 8#x]
+:     +- OneRowRelation
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+from t
+| select x
+| select 8
+-- !query analysis
+Project [8 AS 8#x]
++- Project [x#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 with customer_total_return as
 (select
     sr_customer_sk as ctr_customer_sk,
