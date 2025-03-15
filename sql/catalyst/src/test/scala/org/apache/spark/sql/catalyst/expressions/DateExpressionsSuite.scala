@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -2149,5 +2149,72 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
+  }
+
+  test("creating values of TimeType via make_time") {
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // basic case
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(2, IntegerType),
+            Literal(Decimal(BigDecimal(23.5), 16, 6))),
+          LocalTime.of(13, 2, 23, 500000000))
+
+        // Postgres compatibility
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(2, IntegerType),
+            Literal(Decimal(BigDecimal(60), 16, 6))),
+          LocalTime.of(13, 3, 0, 0))
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(59, IntegerType),
+            Literal(Decimal(BigDecimal(60), 16, 6))),
+          LocalTime.of(14, 0, 0, 0))
+
+        // null cases
+        checkEvaluation(
+          MakeTime(Literal.create(null, IntegerType), Literal(18),
+            Literal(Decimal(BigDecimal(23.5), 16, 6))),
+          null)
+        checkEvaluation(
+          MakeTime(Literal(13), Literal.create(null, IntegerType),
+            Literal(Decimal(BigDecimal(23.5), 16, 6))),
+          null)
+        checkEvaluation(MakeTime(Literal(13), Literal(18),
+          Literal.create(null, DecimalType(16, 6))), null)
+      }
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      // Invalid times return null
+      checkEvaluation(
+        MakeTime(Literal(Int.MaxValue), Literal(18),
+          Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        null)
+      checkEvaluation(
+        MakeTime(Literal(13), Literal(Int.MinValue),
+          Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        null)
+      checkEvaluation(MakeTime(Literal(13), Literal(18),
+        Literal(Decimal(BigDecimal(65.1), 16, 6))), null)
+      checkEvaluation(MakeTime(Literal(13), Literal(18),
+        Literal(Decimal(BigDecimal(60.1), 16, 6))), null)
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        "Invalid value for HourOfDay")
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(23), Literal(-1), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+        "Invalid value for MinuteOfHour")
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
+        "Invalid value for SecondOfMinute")
+
+      // Invalid Postgres compatability case where seconds=60 and has a fractional second
+      checkExceptionInExpression[DateTimeException](
+        MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(60.5), 16, 6))),
+        "[INVALID_FRACTION_OF_SECOND] Valid range for seconds is [0, 60]")
+    }
   }
 }

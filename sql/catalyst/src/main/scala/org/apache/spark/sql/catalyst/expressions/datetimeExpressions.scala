@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.ParseException
-import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
@@ -2558,6 +2558,118 @@ case class MakeDate(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_(hour, minute, second) - Create time from hour, minute and second fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
+  arguments = """
+    Arguments:
+      * hour - the hour to represent, from 0 to 23
+      * minute - the minute to represent, from 0 to 59
+      * second - the second to represent, from 0 to 59.999999
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(6, 30, 45.887);
+       06:30:45.887
+      > SELECT _FUNC_(NULL, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class MakeTime(
+                     hours: Expression,
+                     minutes: Expression,
+                     secAndMicros: Expression,
+                     failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends TernaryExpression with ImplicitCastInputTypes with SecAndNanosExtractor {
+  override def nullIntolerant: Boolean = true
+
+  def this(hours: Expression, minutes: Expression, secAndMicros: Expression) =
+    this(hours, minutes, secAndMicros, SQLConf.get.ansiEnabled)
+
+  override def first: Expression = hours
+  override def second: Expression = minutes
+  override def third: Expression = secAndMicros
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
+  override def dataType: DataType = TimeType(TimeType.MAX_PRECISION)
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
+
+  override protected def nullSafeEval(hours: Any, minutes: Any, secAndMicros: Any): Any = {
+    val (secs, nanos) = toSecondsAndNanos(secAndMicros.asInstanceOf[Decimal])
+
+    try {
+      val lt = if (secs == 60) {
+        if (nanos == 0) {
+          // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
+          LocalTime.of(hours.asInstanceOf[Int], minutes.asInstanceOf[Int], 0, 0).plusMinutes(1)
+        } else {
+          throw QueryExecutionErrors.invalidFractionOfSecondError(
+            secAndMicros.asInstanceOf[Decimal].toDouble)
+        }
+      } else {
+        LocalTime.of(
+          hours.asInstanceOf[Int],
+          minutes.asInstanceOf[Int],
+          secs,
+          nanos
+        )
+      }
+
+      localTimeToMicros(lt)
+    } catch {
+      case e: SparkDateTimeException if failOnError => throw e
+      case e: DateTimeException if failOnError =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
+      case _: DateTimeException => null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
+    val failOnErrorBranch = if (failOnError) {
+      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
+    } else {
+      s"${ev.isNull} = true;"
+    }
+    val failOnSparkErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+
+    val secs = "seconds"
+    val nanos = "nanos"
+
+    nullSafeCodeGen(ctx, ev, (hour, min, secAndMicros) => {
+      s"""
+      try {
+        ${toSecAndNanosCodeGen(secAndMicros, secs, nanos)}
+
+        java.time.LocalTime lt;
+        if ($secs == 60) {
+          if ($nanos == 0) {
+            lt = java.time.LocalTime.of($hour, $min, 0, 0).plusMinutes(1);
+          } else {
+            throw QueryExecutionErrors.invalidFractionOfSecondError($secAndMicros.toDouble());
+          }
+        } else {
+          lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
+        }
+
+        ${ev.value} = $dtu.localTimeToMicros(lt);
+      } catch (org.apache.spark.SparkDateTimeException e) {
+        $failOnSparkErrorBranch
+      } catch (java.time.DateTimeException e) {
+        $failOnErrorBranch
+      }"""
+    })
+  }
+
+  override def prettyName: String = "make_time"
+
+  override protected def withNewChildrenInternal(
+    newFirst: Expression, newSecond: Expression, newThird: Expression): MakeTime =
+    copy(hours = newFirst, minutes = newSecond, secAndMicros = newThird)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
   arguments = """
     Arguments:
@@ -2789,7 +2901,8 @@ case class MakeTimestamp(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled,
     override val dataType: DataType = SQLConf.get.timestampType)
-  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with SecAndNanosExtractor {
   override def nullIntolerant: Boolean = true
 
   def this(
@@ -2836,12 +2949,7 @@ case class MakeTimestamp(
       secAndMicros: Decimal,
       zoneId: ZoneId): Any = {
     try {
-      assert(secAndMicros.scale == 6,
-        s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
-      val unscaledSecFrac = secAndMicros.toUnscaledLong
-      val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
-      val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
-      val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
+      val (seconds, nanos) = toSecondsAndNanos(secAndMicros)
       val ldt = if (seconds == 60) {
         if (nanos == 0) {
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
@@ -2889,7 +2997,6 @@ case class MakeTimestamp(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val d = Decimal.getClass.getName.stripSuffix("$")
     val failOnErrorBranch = if (failOnError) {
       "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
@@ -2906,22 +3013,24 @@ case class MakeTimestamp(
       } else {
         s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
       }
+
+      val secs = "seconds"
+      val nanos = "nanos"
+
       s"""
       try {
-        org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
-        org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
-        int seconds = secFloor.toInt();
+        ${toSecAndNanosCodeGen(secAndNanos, secs, nanos)}
+
         java.time.LocalDateTime ldt;
-        if (seconds == 60) {
-          if (nanos == 0) {
+        if ($secs == 60) {
+          if ($nanos == 0) {
             ldt = java.time.LocalDateTime.of(
               $year, $month, $day, $hour, $min, 0, 0).plusMinutes(1);
           } else {
             throw QueryExecutionErrors.invalidFractionOfSecondError($secAndNanos.toDouble());
           }
         } else {
-          ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
+          ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, $secs, $nanos);
         }
         $toMicrosCode
       } catch (org.apache.spark.SparkDateTimeException e) {
@@ -3562,5 +3671,50 @@ case class TimestampDiff(
       newLeft: Expression,
       newRight: Expression): TimestampDiff = {
     copy(startTimestamp = newLeft, endTimestamp = newRight)
+  }
+}
+
+/**
+ * A mixin trait with methods to extract whole and fractional seconds from a decimal
+ * representing seconds with microsecond precision.
+ */
+trait SecAndNanosExtractor {
+  /**
+   * Extracts out the whole and fractional seconds from a decimal object representing seconds with
+   * microsecond precision
+   * @param secAndMicros
+   * @return A tuple containing the whole seconds and fractional second represented as nanoseconds
+   */
+  def toSecondsAndNanos(secAndMicros: Decimal): (Int, Int) = {
+    assert(secAndMicros.scale == 6,
+      s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
+    val unscaledSecFrac = secAndMicros.toUnscaledLong
+    val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
+    val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
+    val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
+    (seconds, nanos)
+  }
+
+  /**
+   * Geneates code to extracts out the whole and fractional seconds from a decimal object
+   * representing seconds with microsecond precision. It will create new variables that contain
+   * the extracted results.
+   * @param secAndMicros The name of the variable containing the decimal object representing
+   *                     seconds with microsecond precision
+   * @param secs The name of the variable that the while seconds will be set to. It will use this
+   *             variable name to create a new int variable.
+   * @param nanos The name of the variable that the fractional seconds will be set to as
+   *              nanoseconds. It will use this variable name to create a new int variable.
+   * @return The code to extra whole and fractional seconds
+   */
+  def toSecAndNanosCodeGen(secAndMicros: String, secs: String, nanos: String): String = {
+    val d = Decimal.getClass.getName.stripSuffix("$")
+
+    s"""
+    $d secFloor = $secAndMicros.floor();
+    $d nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
+    int $nanos = (($secAndMicros.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
+    int $secs = secFloor.toInt();
+    """
   }
 }
