@@ -22,7 +22,7 @@ import scala.collection.mutable.{ArrayBuffer, Growable}
 import scala.util.{Left, Right}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
@@ -330,8 +330,14 @@ case class ListAgg(
 
   override def isDistinctSupported: Boolean = true
 
-  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction =
+  override def withOrderingWithinGroup(
+      orderingWithinGroup: Seq[SortOrder], u: UnresolvedFunction): AggregateFunction = {
+    if (u.isDistinct && !isOrderCompatible(orderingWithinGroup)) {
+      throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+        prettyName, child, orderingWithinGroup)
+    }
     copy(orderExpressions = orderingWithinGroup)
+  }
 
   override protected lazy val bufferElementType: DataType = {
     if (!needSaveOrderValue) {
