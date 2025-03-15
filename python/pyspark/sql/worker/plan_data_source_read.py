@@ -250,6 +250,7 @@ def main(infile: IO, outfile: IO) -> None:
             "The maximum arrow batch size should be greater than 0, but got "
             f"'{max_arrow_batch_size}'"
         )
+        enable_pushdown = read_bool(infile)
 
         is_streaming = read_bool(infile)
 
@@ -267,6 +268,19 @@ def main(infile: IO, outfile: IO) -> None:
                     messageParameters={
                         "expected": "an instance of DataSourceReader",
                         "actual": f"'{type(reader).__name__}'",
+                    },
+                )
+            is_pushdown_implemented = (
+                getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
+            )
+            if is_pushdown_implemented and not enable_pushdown:
+                # Do not silently ignore pushFilters when pushdown is disabled.
+                # Raise an error to ask the user to enable pushdown.
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
+                    messageParameters={
+                        "type": type(reader).__name__,
+                        "conf": "spark.sql.python.filterPushdown.enabled",
                     },
                 )
 
