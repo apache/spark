@@ -2150,7 +2150,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
-  
+
   test("creating values of TimeType via make_time") {
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
@@ -2159,7 +2159,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           MakeTime(Literal(13), Literal.create(2, IntegerType),
             Literal(Decimal(BigDecimal(23.5), 16, 6))),
           LocalTime.of(13, 2, 23, 500000000))
-        
+
         // Postgres compatibility
         checkEvaluation(
           MakeTime(Literal(13), Literal.create(2, IntegerType),
@@ -2169,7 +2169,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           MakeTime(Literal(13), Literal.create(59, IntegerType),
             Literal(Decimal(BigDecimal(60), 16, 6))),
           LocalTime.of(14, 0, 0, 0))
-        
+
         // null cases
         checkEvaluation(
           MakeTime(Literal.create(null, IntegerType), Literal(18),
@@ -2210,7 +2210,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[DateTimeException](
         MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
         "Invalid value for SecondOfMinute")
-      
+
       // Invalid Postgres compatability case where seconds=60 and has a fractional second
       checkExceptionInExpression[DateTimeException](
         MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(60.5), 16, 6))),
