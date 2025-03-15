@@ -221,7 +221,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
       val instanceMetrics = Map(
         instanceMetricSnapshotLastUpload.withNewId(
-          stateStoreId.partitionId, stateStoreId.storeName) -> lastSnapshotUploadedVersion.get()
+          stateStoreId.partitionId, stateStoreId.storeName) -> lastUploadedSnapshotVersion.get()
       )
 
       StateStoreMetrics(
@@ -434,7 +434,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   // This is updated when the maintenance task writes the snapshot file and read by the task
   // thread. -1 represents no version has ever been uploaded.
-  private val lastSnapshotUploadedVersion: AtomicLong = new AtomicLong(-1L)
+  private val lastUploadedSnapshotVersion: AtomicLong = new AtomicLong(-1L)
 
   private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
     StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
@@ -697,7 +697,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     logInfo(log"Written snapshot file for version ${MDC(LogKeys.FILE_VERSION, version)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, this)} at ${MDC(LogKeys.FILE_NAME, targetFile)} " +
       log"for ${MDC(LogKeys.OP_TYPE, opType)}")
-    lastSnapshotUploadedVersion.set(version)
+    // Compare and update with the version that was just uploaded.
+    lastUploadedSnapshotVersion.updateAndGet(v => Math.max(version, v))
   }
 
   /**
