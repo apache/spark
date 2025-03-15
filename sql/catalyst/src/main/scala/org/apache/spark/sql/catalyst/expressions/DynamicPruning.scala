@@ -30,6 +30,8 @@ trait DynamicPruning extends Predicate
  * The DynamicPruningSubquery expression is only used in join operations to prune one side of the
  * join with a filter from the other side of the join. It is inserted in cases where partition
  * pruning can be applied.
+ * The DynamicPruningSubquery expression should only have a single outer
+ * attribute which is the pruning key and should not have any outer scope attributes.
  *
  * @param pruningKey the filtering key of the plan to be pruned.
  * @param buildQuery the build side of the join.
