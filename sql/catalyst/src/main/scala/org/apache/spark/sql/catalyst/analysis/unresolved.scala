@@ -776,6 +776,8 @@ case class UnresolvedStarWithColumns(
 
     replacedAndExistingColumns ++ newColumns
   }
+
+  override def toString: String = super[Expression].toString
 }
 
 /**
@@ -812,6 +814,8 @@ case class UnresolvedStarWithColumnsRenames(
         )
     }
   }
+
+  override def toString: String = super[LeafExpression].toString
 }
 
 /**
