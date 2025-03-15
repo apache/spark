@@ -88,7 +88,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
     parquetSchema: String): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = false,
-      outputTimestampType = SQLConf.ParquetOutputTimestampType.INT96,
+      outputTimestampType = SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS,
       useFieldId = true)
 
     test(s"sql => parquet: $testName") {
