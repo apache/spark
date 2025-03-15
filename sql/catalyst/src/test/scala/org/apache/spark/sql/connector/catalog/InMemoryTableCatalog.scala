@@ -26,7 +26,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.TableCatalog.TableBuilder
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
@@ -301,31 +300,15 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   case class Result(readSchema: StructType, rows: Array[InternalRow]) extends LocalScan
 
   override def buildTable(ident: Identifier, columns: Array[Column]): TableBuilder = {
-    new BasicInMemoryTableBuilder(ident, columns)
+    new BasicInMemoryTableBuilder(this, ident, columns)
   }
 
   private class BasicInMemoryTableBuilder(
+      catalog: TableCatalog,
       ident: Identifier,
-      columns: Array[Column],
-      properties: util.Map[String, String] = new util.HashMap(),
-      var partitions: Array[Transform] = Array.empty)
-    extends TableBuilder {
+      columns: Array[Column])
+    extends TableBuilder(catalog, ident, columns) {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    override def withPartitions(partitions: Array[Transform]): TableBuilder = {
-      if (partitions != null && partitions.nonEmpty) {
-        this.partitions = partitions
-      }
-      this
-    }
-
-    override def withProperties(properties: util.Map[String, String]): TableBuilder = {
-      if (properties != null) {
-        this.properties.clear();
-        this.properties.putAll(properties)
-      }
-      this
-    }
 
     override def create(): Table = {
       if (tables.containsKey(ident)) {
