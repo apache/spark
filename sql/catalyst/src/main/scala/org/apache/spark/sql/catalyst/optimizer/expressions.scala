@@ -891,7 +891,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       case InSubquery(Seq(Literal(null, _)), _)
         if SQLConf.get.legacyNullInEmptyBehavior =>
         Literal.create(null, BooleanType)
-      case InSubquery(Seq(Literal(null, _)), ListQuery(sub, _, _, _, conditions, _))
+      case InSubquery(Seq(Literal(null, _)), ListQuery(sub, _, _, _, _, conditions, _))
         if !SQLConf.get.legacyNullInEmptyBehavior
         && conditions.isEmpty =>
         If(Exists(sub), Literal(null, BooleanType), FalseLiteral)
