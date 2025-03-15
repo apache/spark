@@ -418,6 +418,8 @@ case class ScalarSubquery(
   }
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
+    outerAttrs = outerAttrs)
   override def withNewUnresolvedOuterAttrs(
       unresolvedOuterAttrs: Seq[Expression]
   ): ScalarSubquery = {
