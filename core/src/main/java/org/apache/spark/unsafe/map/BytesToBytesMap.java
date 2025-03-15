@@ -964,8 +964,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     updatePeakMemoryUsed();
     numKeys = 0;
     numValues = 0;
-    freeArray(longArray);
-    longArray = null;
+    freeInternalArray();
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
@@ -974,6 +973,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
     canGrowArray = true;
     currentPage = null;
     pageCursor = 0;
+  }
+
+  /**
+   * Free array memory to reduce the memory footprint in case of a fallback
+   * from a hash-based aggregation to the sort-based one.
+   */
+  public void freeInternalArray() {
+    if (longArray != null) {
+      freeArray(longArray);
+      longArray = null;
+    }
   }
 
   /**
