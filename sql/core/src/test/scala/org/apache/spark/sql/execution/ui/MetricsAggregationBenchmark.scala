@@ -61,7 +61,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
     val store = new SQLAppStatusStore(kvstore, Some(listener))
 
     val metrics = (0 until numMetrics).map { i =>
-      new SQLMetricInfo(s"metric$i", i.toLong, "average")
+      new SQLMetricInfo(s"metric$i", i.toLong, "average", 0L)
     }
 
     val planInfo = new SparkPlanInfo(
