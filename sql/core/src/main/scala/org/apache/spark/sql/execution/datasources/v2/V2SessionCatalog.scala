@@ -87,46 +87,41 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadTable(ident: Identifier): Table = {
-    try {
-      val table = catalog.getTableMetadata(ident.asTableIdentifier)
-      // The custom session catalog may extend `DelegatingCatalogExtension` and rely on the returned
-      // table here. To avoid breaking it we do not resolve the table provider and still return
-      // `V1Table` if the custom session catalog is present.
-      if (table.provider.isDefined && !hasCustomSessionCatalog) {
-        val qualifiedTableName = QualifiedTableName(
-          table.identifier.catalog.get, table.database, table.identifier.table)
-        // Check if the table is in the v1 table cache to skip the v2 table lookup.
-        if (catalog.getCachedTable(qualifiedTableName) != null) {
-          return V1Table(table)
-        }
-        DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
-          case Some(provider) =>
-            // Get the table properties during creation and append the path option
-            // to the properties.
-            val dsOptions = getDataSourceOptions(table.properties, table.storage)
-            // If the source accepts external table metadata, we can pass the schema and
-            // partitioning information stored in Hive to `getTable` to avoid expensive
-            // schema/partitioning inference.
-            if (provider.supportsExternalMetadata()) {
-              provider.getTable(
-                table.schema,
-                getV2Partitioning(table),
-                dsOptions.asCaseSensitiveMap())
-            } else {
-              provider.getTable(
-                provider.inferSchema(dsOptions),
-                provider.inferPartitioning(dsOptions),
-                dsOptions.asCaseSensitiveMap())
-            }
-          case _ =>
-            V1Table(table)
-        }
-      } else {
-        V1Table(table)
+    val table = catalog.getTableMetadata(ident.asTableIdentifier)
+    // The custom session catalog may extend `DelegatingCatalogExtension` and rely on the returned
+    // table here. To avoid breaking it we do not resolve the table provider and still return
+    // `V1Table` if the custom session catalog is present.
+    if (table.provider.isDefined && !hasCustomSessionCatalog) {
+      val qualifiedTableName = QualifiedTableName(
+        table.identifier.catalog.get, table.database, table.identifier.table)
+      // Check if the table is in the v1 table cache to skip the v2 table lookup.
+      if (catalog.getCachedTable(qualifiedTableName) != null) {
+        return V1Table(table)
       }
-    } catch {
-      case _: NoSuchNamespaceException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+      DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
+        case Some(provider) =>
+          // Get the table properties during creation and append the path option
+          // to the properties.
+          val dsOptions = getDataSourceOptions(table.properties, table.storage)
+          // If the source accepts external table metadata, we can pass the schema and
+          // partitioning information stored in Hive to `getTable` to avoid expensive
+          // schema/partitioning inference.
+          if (provider.supportsExternalMetadata()) {
+            provider.getTable(
+              table.schema,
+              getV2Partitioning(table),
+              dsOptions.asCaseSensitiveMap())
+          } else {
+            provider.getTable(
+              provider.inferSchema(dsOptions),
+              provider.inferPartitioning(dsOptions),
+              dsOptions.asCaseSensitiveMap())
+          }
+        case _ =>
+          V1Table(table)
+      }
+    } else {
+      V1Table(table)
     }
   }
 
