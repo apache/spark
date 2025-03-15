@@ -2152,12 +2152,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
   
   test("creating values of TimeType via make_time") {
-//    checkEvaluation(MakeTime(Literal(13), Literal(18), Literal(2.456)),
-//      LocalTime.now())
-    
-    // Literal(Decimal(BigDecimal(23.5), 16, 6))
-    // TODO change secs literal to decimal
-
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
         // basic case
