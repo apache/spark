@@ -889,7 +889,10 @@ class LinearSVCModel(
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            return LinearSVCTrainingSummary(super(LinearSVCModel, self).summary)
+            s = LinearSVCTrainingSummary(super(LinearSVCModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -909,7 +912,10 @@ class LinearSVCModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lsvc_summary = self._call_java("evaluate", dataset)
-        return LinearSVCSummary(java_lsvc_summary)
+        s = LinearSVCSummary(java_lsvc_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class LinearSVCSummary(_BinaryClassificationSummary):
@@ -1578,14 +1584,16 @@ class LogisticRegressionModel(
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
+            s: LogisticRegressionTrainingSummary
             if self.numClasses <= 2:
-                return BinaryLogisticRegressionTrainingSummary(
+                s = BinaryLogisticRegressionTrainingSummary(
                     super(LogisticRegressionModel, self).summary
                 )
             else:
-                return LogisticRegressionTrainingSummary(
-                    super(LogisticRegressionModel, self).summary
-                )
+                s = LogisticRegressionTrainingSummary(super(LogisticRegressionModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -1605,10 +1613,14 @@ class LogisticRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
+        s: LogisticRegressionSummary
         if self.numClasses <= 2:
-            return BinaryLogisticRegressionSummary(java_blr_summary)
+            s = BinaryLogisticRegressionSummary(java_blr_summary)
         else:
-            return LogisticRegressionSummary(java_blr_summary)
+            s = LogisticRegressionSummary(java_blr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class LogisticRegressionSummary(_ClassificationSummary):
@@ -2304,22 +2316,24 @@ class RandomForestClassificationModel(
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
+            s: RandomForestClassificationTrainingSummary
             if self.numClasses <= 2:
-                return BinaryRandomForestClassificationTrainingSummary(
+                s = BinaryRandomForestClassificationTrainingSummary(
                     super(RandomForestClassificationModel, self).summary
                 )
             else:
-                return RandomForestClassificationTrainingSummary(
+                s = RandomForestClassificationTrainingSummary(
                     super(RandomForestClassificationModel, self).summary
                 )
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
             )
 
-    def evaluate(
-        self, dataset: DataFrame
-    ) -> Union["BinaryRandomForestClassificationSummary", "RandomForestClassificationSummary"]:
+    def evaluate(self, dataset: DataFrame) -> "RandomForestClassificationSummary":
         """
         Evaluates the model on a test dataset.
 
@@ -2333,10 +2347,14 @@ class RandomForestClassificationModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_rf_summary = self._call_java("evaluate", dataset)
+        s: RandomForestClassificationSummary
         if self.numClasses <= 2:
-            return BinaryRandomForestClassificationSummary(java_rf_summary)
+            s = BinaryRandomForestClassificationSummary(java_rf_summary)
         else:
-            return RandomForestClassificationSummary(java_rf_summary)
+            s = RandomForestClassificationSummary(java_rf_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class RandomForestClassificationSummary(_ClassificationSummary):
@@ -2363,7 +2381,10 @@ class RandomForestClassificationTrainingSummary(
 
 
 @inherit_doc
-class BinaryRandomForestClassificationSummary(_BinaryClassificationSummary):
+class BinaryRandomForestClassificationSummary(
+    _BinaryClassificationSummary,
+    RandomForestClassificationSummary,
+):
     """
     BinaryRandomForestClassification results for a given model.
 
@@ -3341,9 +3362,12 @@ class MultilayerPerceptronClassificationModel(
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            return MultilayerPerceptronClassificationTrainingSummary(
+            s = MultilayerPerceptronClassificationTrainingSummary(
                 super(MultilayerPerceptronClassificationModel, self).summary
             )
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -3363,7 +3387,10 @@ class MultilayerPerceptronClassificationModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_mlp_summary = self._call_java("evaluate", dataset)
-        return MultilayerPerceptronClassificationSummary(java_mlp_summary)
+        s = MultilayerPerceptronClassificationSummary(java_mlp_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class MultilayerPerceptronClassificationSummary(_ClassificationSummary):
@@ -4290,7 +4317,10 @@ class FMClassificationModel(
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            return FMClassificationTrainingSummary(super(FMClassificationModel, self).summary)
+            s = FMClassificationTrainingSummary(super(FMClassificationModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -4310,7 +4340,10 @@ class FMClassificationModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_fm_summary = self._call_java("evaluate", dataset)
-        return FMClassificationSummary(java_fm_summary)
+        s = FMClassificationSummary(java_fm_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class FMClassificationSummary(_BinaryClassificationSummary):

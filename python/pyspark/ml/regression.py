@@ -487,7 +487,10 @@ class LinearRegressionModel(
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
+            s = LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -508,7 +511,10 @@ class LinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
-        return LinearRegressionSummary(java_lr_summary)
+        s = LinearRegressionSummary(java_lr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class LinearRegressionSummary(JavaWrapper):
@@ -2766,9 +2772,12 @@ class GeneralizedLinearRegressionModel(
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            return GeneralizedLinearRegressionTrainingSummary(
+            s = GeneralizedLinearRegressionTrainingSummary(
                 super(GeneralizedLinearRegressionModel, self).summary
             )
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -2789,7 +2798,10 @@ class GeneralizedLinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_glr_summary = self._call_java("evaluate", dataset)
-        return GeneralizedLinearRegressionSummary(java_glr_summary)
+        s = GeneralizedLinearRegressionSummary(java_glr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):
