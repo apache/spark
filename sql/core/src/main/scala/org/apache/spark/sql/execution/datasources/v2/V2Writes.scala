@@ -128,9 +128,9 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     // Since both options are CaseInsensitiveStringMap, change the key values to lower
     // before comparison.
     val lowerCaseCommandOptions =
-      commandOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT)) }
+      commandOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val lowerCaseDsOptions =
-      dsOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT)) }
+      dsOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     assert(lowerCaseCommandOptions ==
       lowerCaseDsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
     commandOptions ++ dsOptions
