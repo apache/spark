@@ -246,6 +246,7 @@
 | org.apache.spark.sql.catalyst.expressions.Or | or | SELECT true or false | struct<(true OR false):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Overlay | overlay | SELECT overlay('Spark SQL' PLACING '_' FROM 6) | struct<overlay(Spark SQL, _, 6, -1):string> |
 | org.apache.spark.sql.catalyst.expressions.ParseToDate | to_date | SELECT to_date('2009-07-30 04:17:52') | struct<to_date(2009-07-30 04:17:52):date> |
+| org.apache.spark.sql.catalyst.expressions.ParseToTime | to_time | SELECT to_time('00:12:00') | struct<to_time(00:12:00):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestamp | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampLTZExpressionBuilder | to_timestamp_ltz | SELECT to_timestamp_ltz('2016-12-31 00:12:00') | struct<to_timestamp_ltz(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampNTZExpressionBuilder | to_timestamp_ntz | SELECT to_timestamp_ntz('2016-12-31 00:12:00') | struct<to_timestamp_ntz(2016-12-31 00:12:00):timestamp_ntz> |
