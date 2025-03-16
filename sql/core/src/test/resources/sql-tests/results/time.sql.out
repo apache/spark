@@ -44,5 +44,11 @@ select to_time("13-60", "HH-mm")
 -- !query schema
 struct<>
 -- !query output
-java.time.format.DateTimeParseException
-Text '13-60' could not be parsed: Invalid value for MinuteOfHour (valid values 0 - 59): 60
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIME",
+  "sqlState" : "22010",
+  "messageParameters" : {
+    "message" : "Text '13-60' could not be parsed: Invalid value for MinuteOfHour (valid values 0 - 59): 60"
+  }
+}

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.time.format.DateTimeParseException
+
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util.TimeFormatter
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, ObjectType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -64,20 +67,20 @@ case class ParseToTime(
 
   override lazy val replacement: Expression = format match {
     case None => Invoke(
-      targetObject = Literal.create(DefaultTimeParser(), ObjectType(classOf[DefaultTimeParser])),
+      targetObject = Literal.create(new ToTimeParser(), ObjectType(classOf[ToTimeParser])),
       functionName = "parse",
       dataType = TimeType(),
       arguments = Seq(left),
       methodInputTypes = Seq(left.dataType))
     case Some(expr) if expr.foldable => Invoke(
       targetObject = Literal.create(
-        TimeParserByFormat(expr.eval().toString), ObjectType(classOf[TimeParserByFormat])),
+        ToTimeParser(Some(expr.eval().toString)), ObjectType(classOf[ToTimeParser])),
       functionName = "parse",
       dataType = TimeType(),
       arguments = Seq(left),
       methodInputTypes = Seq(left.dataType))
     case _ => Invoke(
-      targetObject = Literal.create(TimeParser(), ObjectType(classOf[TimeParser])),
+      targetObject = Literal.create(new ToTimeParser(), ObjectType(classOf[ToTimeParser])),
       functionName = "parse",
       dataType = TimeType(),
       arguments = children,
@@ -104,18 +107,20 @@ case class ParseToTime(
   }
 }
 
-case class DefaultTimeParser() {
-  private val formatter = TimeFormatter(isParsing = true)
-  def parse(s: UTF8String): Long = formatter.parse(s.toString)
-}
+case class ToTimeParser(fmt: Option[String]) {
+  private lazy val formatter = TimeFormatter(fmt, isParsing = true)
 
-case class TimeParserByFormat(fmt: String) {
-  private val formatter = TimeFormatter(format = fmt, isParsing = true)
-  def parse(s: UTF8String): Long = formatter.parse(s.toString)
-}
+  def this() = this(None)
+  private def withErrorCondition(f: => Long): Long = {
+    try f
+    catch {
+      case e: DateTimeParseException => throw QueryExecutionErrors.timeParseError(e)
+    }
+  }
 
-case class TimeParser() {
+  def parse(s: UTF8String): Long = withErrorCondition(formatter.parse(s.toString))
+
   def parse(s: UTF8String, fmt: UTF8String): Long = {
-    TimeFormatter(fmt.toString, isParsing = true).parse(s.toString)
+    withErrorCondition(TimeFormatter(fmt.toString, isParsing = true).parse(s.toString))
   }
 }

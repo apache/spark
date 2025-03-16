@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -36,5 +36,17 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         NonFoldableLiteral("12 hours 123 millis"),
         NonFoldableLiteral("HH 'hours' SSS 'millis'")),
       localTime(12, 0, 0, 123000))
+
+    checkErrorInExpression[SparkDateTimeException](
+      expression = new ParseToTime(Literal("100:50")),
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'100:50'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"TIME(6)\""))
+    checkErrorInExpression[SparkDateTimeException](
+      expression = new ParseToTime(Literal("100:50"), Literal("mm:HH")),
+      condition = "CANNOT_PARSE_TIME",
+      parameters = Map("message" -> "Text '100:50' could not be parsed at index 2"))
   }
 }
