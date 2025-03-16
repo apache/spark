@@ -32,15 +32,15 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(time_str[, fmt]) - Parses the `time_str` expression with the `fmt` expression to
+    _FUNC_(str[, format]) - Parses the `str` expression with the `format` expression to
       a time. Returns null with invalid input. By default, it follows casting rules to a time if
-      the `fmt` is omitted.
+      the `format` is omitted.
   """,
   arguments = """
     Arguments:
-      * time_str - A string to be parsed to time.
-      * fmt - Time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
-              time format patterns.
+      * str - A string to be parsed to time.
+      * format - Time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+                 time format patterns.
   """,
   examples = """
     Examples:
@@ -52,44 +52,28 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "datetime_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
-case class ParseToTime(
-    left: Expression,
-    format: Option[Expression])
+case class ParseToTime(str: Expression, format: Option[Expression])
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
-  def this(left: Expression, format: Expression) = {
-    this(left, Option(format))
-  }
+  def this(str: Expression, format: Expression) = this(str, Option(format))
+  def this(str: Expression) = this(str, None)
 
-  def this(left: Expression) = {
-    this(left, None)
+  private def invokeParser(
+      fmt: Option[String] = None,
+      arguments: Seq[Expression] = children): Expression = {
+    Invoke(
+      targetObject = Literal.create(ToTimeParser(fmt), ObjectType(classOf[ToTimeParser])),
+      functionName = "parse",
+      dataType = TimeType(),
+      arguments = arguments,
+      methodInputTypes = arguments.map(_.dataType))
   }
 
   override lazy val replacement: Expression = format match {
-    case None => Invoke(
-      targetObject = Literal.create(new ToTimeParser(), ObjectType(classOf[ToTimeParser])),
-      functionName = "parse",
-      dataType = TimeType(),
-      arguments = Seq(left),
-      methodInputTypes = Seq(left.dataType))
-    case Some(expr) if expr.foldable => Invoke(
-      targetObject = Literal.create(
-        ToTimeParser(Some(expr.eval().toString)), ObjectType(classOf[ToTimeParser])),
-      functionName = "parse",
-      dataType = TimeType(),
-      arguments = Seq(left),
-      methodInputTypes = Seq(left.dataType))
-    case _ => Invoke(
-      targetObject = Literal.create(new ToTimeParser(), ObjectType(classOf[ToTimeParser])),
-      functionName = "parse",
-      dataType = TimeType(),
-      arguments = children,
-      methodInputTypes = children.map(_.dataType))
+    case None => invokeParser()
+    case Some(expr) if expr.foldable => invokeParser(Some(expr.eval().toString), Seq(str))
+    case _ => invokeParser()
   }
-
-  override def prettyName: String = "to_time"
-
-  override def children: Seq[Expression] = left +: format.toSeq
 
   override def inputTypes: Seq[AbstractDataType] = {
     TypeCollection(
@@ -97,12 +81,16 @@ case class ParseToTime(
       format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
   }
 
+  override def prettyName: String = "to_time"
+
+  override def children: Seq[Expression] = str +: format.toSeq
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
     if (format.isDefined) {
-      copy(left = newChildren.head, format = Some(newChildren.last))
+      copy(str = newChildren.head, format = Some(newChildren.last))
     } else {
-      copy(left = newChildren.head)
+      copy(str = newChildren.head)
     }
   }
 }
@@ -111,6 +99,7 @@ case class ToTimeParser(fmt: Option[String]) {
   private lazy val formatter = TimeFormatter(fmt, isParsing = true)
 
   def this() = this(None)
+
   private def withErrorCondition(f: => Long): Long = {
     try f
     catch {
