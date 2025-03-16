@@ -52,7 +52,7 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "datetime_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
-case class ParseToTime(str: Expression, format: Option[Expression])
+case class ToTime(str: Expression, format: Option[Expression])
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   def this(str: Expression, format: Expression) = this(str, Option(format))

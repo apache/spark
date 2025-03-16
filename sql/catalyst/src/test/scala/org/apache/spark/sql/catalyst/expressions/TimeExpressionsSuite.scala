@@ -22,30 +22,30 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {
-    checkEvaluation(new ParseToTime(Literal("00:00:00")), localTime())
-    checkEvaluation(new ParseToTime(Literal("23-59-00.000999"), Literal("HH-mm-ss.SSSSSS")),
+    checkEvaluation(new ToTime(Literal("00:00:00")), localTime())
+    checkEvaluation(new ToTime(Literal("23-59-00.000999"), Literal("HH-mm-ss.SSSSSS")),
       localTime(23, 59, 0, 999))
     checkEvaluation(
-      new ParseToTime(Literal("12.00.59.90909"), NonFoldableLiteral("HH.mm.ss.SSSSS")),
+      new ToTime(Literal("12.00.59.90909"), NonFoldableLiteral("HH.mm.ss.SSSSS")),
       localTime(12, 0, 59, 909090))
     checkEvaluation(
-      new ParseToTime(NonFoldableLiteral(" 12:00.909 "), Literal(" HH:mm.SSS ")),
+      new ToTime(NonFoldableLiteral(" 12:00.909 "), Literal(" HH:mm.SSS ")),
       localTime(12, 0, 0, 909000))
     checkEvaluation(
-      new ParseToTime(
+      new ToTime(
         NonFoldableLiteral("12 hours 123 millis"),
         NonFoldableLiteral("HH 'hours' SSS 'millis'")),
       localTime(12, 0, 0, 123000))
 
     checkErrorInExpression[SparkDateTimeException](
-      expression = new ParseToTime(Literal("100:50")),
+      expression = new ToTime(Literal("100:50")),
       condition = "CAST_INVALID_INPUT",
       parameters = Map(
         "expression" -> "'100:50'",
         "sourceType" -> "\"STRING\"",
         "targetType" -> "\"TIME(6)\""))
     checkErrorInExpression[SparkDateTimeException](
-      expression = new ParseToTime(Literal("100:50"), Literal("mm:HH")),
+      expression = new ToTime(Literal("100:50"), Literal("mm:HH")),
       condition = "CANNOT_PARSE_TIME",
       parameters = Map("message" -> "Text '100:50' could not be parsed at index 2"))
   }
