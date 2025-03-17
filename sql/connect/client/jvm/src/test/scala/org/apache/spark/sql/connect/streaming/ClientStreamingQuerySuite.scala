@@ -104,9 +104,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
             "loadedMapCacheHitCount",
             "loadedMapCacheMissCount",
             "stateOnCurrentVersionSizeBytes",
-            "SnapshotLastUploaded.partition_0_default"
-          )
-        )
+            "SnapshotLastUploaded.partition_0_default"))
         assert(lastProgress.sources.nonEmpty)
         assert(lastProgress.sink.description == "MemorySink")
         assert(lastProgress.observedMetrics.isEmpty)
