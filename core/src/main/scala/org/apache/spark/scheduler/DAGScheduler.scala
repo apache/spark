@@ -1555,11 +1555,6 @@ private[spark] class DAGScheduler(
         mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
         sms.shuffleDep.newShuffleMergeState()
 
-      case rs: ResultStage if rs.isIndeterminate
-        && rs.numPartitions != rs.findMissingPartitions().size =>
-        abortStage(rs, "There exists a race condition, which has resulted in a result task" +
-          " getting committed, which should have been discarded", None)
-
       case _ =>
     }
 
