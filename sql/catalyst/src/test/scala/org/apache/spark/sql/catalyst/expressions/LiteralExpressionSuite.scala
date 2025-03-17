@@ -26,7 +26,6 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -53,6 +52,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, BinaryType), null)
     checkEvaluation(Literal.create(null, DecimalType.USER_DEFAULT), null)
     checkEvaluation(Literal.create(null, DateType), null)
+    checkEvaluation(Literal.create(null, TimeType()), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
     checkEvaluation(Literal.create(null, YearMonthIntervalType()), null)
@@ -83,6 +83,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
+    checkEvaluation(Literal.default(TimeType()), LocalTime.MIDNIGHT)
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
     checkEvaluation(Literal.default(YearMonthIntervalType()), 0)
     checkEvaluation(Literal.default(DayTimeIntervalType()), 0L)
@@ -544,5 +545,18 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal(immArraySeq), expected)
     checkEvaluation(Literal.create(immArraySeq), expected)
     checkEvaluation(Literal.create(immArraySeq, ArrayType(DoubleType)), expected)
+  }
+
+  test("TimeType toString and sql") {
+    Seq(
+      Literal.default(TimeType()) -> "00:00:00",
+      Literal(LocalTime.NOON) -> "12:00:00",
+      Literal(LocalTime.of(23, 59, 59, 100 * 1000 * 1000)) -> "23:59:59.1",
+      Literal(LocalTime.of(23, 59, 59, 10000)) -> "23:59:59.00001",
+      Literal(LocalTime.of(23, 59, 59, 999999000)) -> "23:59:59.999999"
+    ).foreach { case (lit, str) =>
+      assert(lit.toString === str)
+      assert(lit.sql === s"TIME '$str'")
+    }
   }
 }

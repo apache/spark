@@ -200,6 +200,7 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
+    case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
     case CharType(length) =>
@@ -434,6 +435,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       dataType match {
         case DateType =>
           DateFormatter().format(value.asInstanceOf[Int])
+        case _: TimeType =>
+          new FractionTimeFormatter().format(value.asInstanceOf[Long])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case TimestampNTZType =>
@@ -480,7 +483,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(toString)
-      case (l: Long, TimestampType) => JString(toString)
+      case (l: Long, TimestampType | _: TimeType) => JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -564,6 +567,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
+    case (_: Long, _: TimeType) =>
+      s"TIME '$toString'"
     case (v: Long, TimestampType) =>
       s"TIMESTAMP '$toString'"
     case (v: Long, TimestampNTZType) =>
