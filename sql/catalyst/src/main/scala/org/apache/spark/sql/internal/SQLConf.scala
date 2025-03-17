@@ -363,35 +363,27 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
-  private val VALIED_LOG_LEVELS: Array[String] = Level.values.map(_.toString)
+  private val VALID_LOG_LEVELS: Array[String] = Level.values.map(_.toString)
 
   private def isValidLogLevel(level: String): Boolean =
-    VALIED_LOG_LEVELS.contains(level.toUpperCase(Locale.ROOT))
+    VALID_LOG_LEVELS.contains(level.toUpperCase(Locale.ROOT))
 
   private def toLogLevel(upperCaseValidLevel: String): Level = {
-    require(VALIED_LOG_LEVELS.contains(upperCaseValidLevel))
-    upperCaseValidLevel match {
-      case "TRACE" => Level.TRACE
-      case "DEBUG" => Level.DEBUG
-      case "INFO" => Level.INFO
-      case "WARN" => Level.WARN
-      case "ERROR" => Level.ERROR
-      case illegal => // unreachable code
-        throw new IllegalArgumentException(s"Illegal log level: $illegal")
-    }
+    require(VALID_LOG_LEVELS.contains(upperCaseValidLevel))
+    Level.valueOf(upperCaseValidLevel)
   }
 
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
       s"plan after a rule or batch is applied. The value can be " +
-      s"${VALIED_LOG_LEVELS.mkString(", ")}.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.planChangeLog.level'. Valid values are " +
-        s"${VALIED_LOG_LEVELS.mkString(", ")}.")
+        s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("trace")
 
   val PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.planChangeLog.rules")
@@ -422,13 +414,13 @@ object SQLConf {
     .internal()
     .doc("Configures the log level for logging the change from the unresolved expression tree to " +
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
-      s"${VALIED_LOG_LEVELS.mkString(", ")}.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.expressionTreeChangeLog.level'. Valid values are " +
-        s"${VALIED_LOG_LEVELS.mkString(", ")}.")
+        s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("trace")
 
   val LIGHTWEIGHT_PLAN_CHANGE_VALIDATION = buildConf("spark.sql.lightweightPlanChangeValidation")
@@ -799,13 +791,13 @@ object SQLConf {
   val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
     .internal()
     .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
-      s"can be ${VALIED_LOG_LEVELS.mkString(", ")}.")
+      s"can be ${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.adaptive.logLevel'. Valid values are " +
-      s"${VALIED_LOG_LEVELS.mkString(", ")}.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("debug")
 
   val ADVISORY_PARTITION_SIZE_IN_BYTES =
@@ -1835,7 +1827,7 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.dataframeCache.logLevel'. Valid values are " +
-      s"${VALIED_LOG_LEVELS.mkString(", ")}.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("trace")
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
@@ -2038,13 +2030,13 @@ object SQLConf {
   val CODEGEN_LOG_LEVEL = buildConf("spark.sql.codegen.logLevel")
     .internal()
     .doc("Configures the log level for logging of codegen. " +
-      s"The value can be ${VALIED_LOG_LEVELS.mkString(", ")}.")
+      s"The value can be ${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.codegen.logLevel'. Valid values are " +
-       s"${VALIED_LOG_LEVELS.mkString(", ")}.")
+       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("DEBUG")
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
