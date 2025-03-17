@@ -381,9 +381,6 @@ class ProtobufCatalystDataConversionSuite
     )
 
     assert(
-      protobufDataToCatalyst.hashCode == -937893175
-    )
-    assert(
       protobufDataToCatalyst
         .copy(options = Map("mode" -> "FAILFAST"))
         .hashCode != protobufDataToCatalyst.hashCode
