@@ -20,7 +20,7 @@ import java.io.{BufferedReader, CharConversionException, FileNotFoundException, 
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util.Locale
-import javax.xml.stream.{XMLEventReader, XMLStreamException}
+import javax.xml.stream.{XMLEventReader, XMLStreamConstants, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
@@ -45,7 +45,9 @@ import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.types.variant.{Variant, VariantBuilder}
+import org.apache.spark.types.variant.VariantBuilder.FieldEntry
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class StaxXmlParser(
     schema: StructType,
@@ -138,11 +140,17 @@ class StaxXmlParser(
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
-      val parser = StaxXmlParserUtils.filteredReader(xml)
-      val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      val result = Some(convertObject(parser, schema, rootAttributes))
-      parser.close()
-      result
+      options.singleVariantColumn match {
+        case Some(_) =>
+          val v = StaxXmlParser.parseVariant(xml, options)
+          Some(InternalRow(v))
+        case _ =>
+          val parser = StaxXmlParserUtils.filteredReader(xml)
+          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+          val result = Some(convertObject(parser, schema, rootAttributes))
+          parser.close()
+          result
+      }
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
@@ -378,6 +386,10 @@ class StaxXmlParser(
                     convertField(parser, dt, field)
                 }
                 row(index) = values :+ newValue
+
+              case VariantType =>
+                val v = StaxXmlParser.convertVariant(parser, field, attributes, options)
+                row(index) = new VariantVal(v.getValue, v.getMetadata)
 
               case dt: DataType =>
                 row(index) = convertField(parser, dt, field, attributes)
@@ -896,5 +908,161 @@ object StaxXmlParser {
       nextRecord = xmlTokenizer.next()
       curRecord
     }
+  }
+
+  def parseVariant(xml: String, options: XmlOptions): VariantVal = {
+    val parser = StaxXmlParserUtils.filteredReader(xml)
+    val rootEvent =
+      StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    val rootAttributes =
+      rootEvent.asStartElement.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+    val rootStartElementName =
+      StaxXmlParserUtils.getName(rootEvent.asStartElement().getName, options)
+    val variant = convertVariant(parser, rootAttributes, options)
+    val v = new VariantVal(variant.getValue, variant.getMetadata)
+    parser.close()
+    v
+  }
+
+  def convertVariant(
+      parser: XMLEventReader,
+      attributes: Array[Attribute],
+      options: XmlOptions): Variant = {
+    // The variant builder for the root startElement
+    val rootBuilder = new VariantBuilder(false)
+    val start = rootBuilder.getWritePos
+
+    // Map to store the variants of all child fields
+    // Each field could have multiple entries, which means it's an array
+    val fieldToVariants = collection.mutable.Map.empty[String, java.util.ArrayList[Variant]]
+
+    // Handle attributes first
+    StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options).foreach {
+      case (f, v) =>
+        val variants = fieldToVariants.getOrElseUpdate(f, new java.util.ArrayList[Variant]())
+        val builder = new VariantBuilder(false)
+        appendXMLColumnToVariant(builder, v, options)
+        variants.add(builder.result())
+    }
+
+    var shouldStop = false
+    while (!shouldStop) {
+      parser.nextEvent() match {
+        case s: StartElement =>
+          // For each nested field, convert it to a variant and track it in the fieldsToVariants map
+          val attributes = s.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+          val field = StaxXmlParserUtils.getName(s.asStartElement.getName, options)
+          val variants = fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
+          variants.add(convertVariant(parser, field, attributes, options))
+
+        case c: Characters if !c.isWhiteSpace =>
+          if (fieldToVariants.nonEmpty) {
+            // If there are other nested fields in the root element, we need to treat the CDATA
+            // as a value field, where we use the [[XMLOptions.valueTag]] as the field key
+            val builder = new VariantBuilder(false)
+            appendXMLColumnToVariant(builder, c.getData, options)
+            val variants =
+              fieldToVariants.getOrElseUpdate(options.valueTag, new java.util.ArrayList[Variant]())
+            variants.add(builder.result())
+          } else {
+            // If there is no nested fields in the root element, add the CDATA to the root builder
+            // directly
+            appendXMLColumnToVariant(rootBuilder, c.getData, options)
+          }
+
+        case e: EndElement =>
+          if (fieldToVariants.nonEmpty) {
+            // If there are more than one nested fields under the root element, we need to add all
+            // fields to the root builder as a variant object
+            val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
+
+            fieldToVariants.foreach {
+              case (field, variants) =>
+                // Add the field to the variant metadata
+                val fieldId = rootBuilder.addKey(field)
+                rootFieldEntries.add(
+                  new FieldEntry(field, fieldId, rootBuilder.getWritePos - start)
+                )
+
+                if (variants.size() > 1) {
+                  // If the field has more than one entry, it's an array. Thus, we will add all
+                  // variants to the root builder as an array
+                  rootBuilder.appendVariantArray(variants)
+                } else {
+                  // Otherwise, we will add the field to the root builder as a single variant
+                  rootBuilder.appendVariant(variants.get(0))
+                }
+            }
+
+            // Finish writing the root element as an object if it has more than one nested fields
+            rootBuilder.finishWritingObject(start, rootFieldEntries)
+          }
+          shouldStop = true
+
+        case _: EndDocument => shouldStop = true
+
+        case _ => // do nothing
+      }
+    }
+
+    // If the element is empty, we treat it as a null field
+    if (rootBuilder.getWritePos == start) {
+      if (options.nullValue == null) {
+        rootBuilder.appendNull()
+      } else {
+        rootBuilder.appendString(options.nullValue)
+      }
+    }
+
+    rootBuilder.result()
+  }
+
+  /**
+   * Convert a XML value `s` into a variant value and append the result to `builder`.
+   * The result can only be one of a variant integer/decimal/string. Anything that cannot be
+   * precisely represented by a variant integer/decimal will be represented by a variant string.
+   */
+  private def appendXMLColumnToVariant(
+      builder: VariantBuilder,
+      s: String,
+      options: XmlOptions): Unit = {
+    val value = if (s != null && options.ignoreSurroundingSpaces) {
+      s.trim()
+    } else {
+      s
+    }
+
+    if (value == null || value == options.nullValue) {
+      builder.appendNull()
+      return
+    }
+
+    // Try to parse the value as a long first
+    scala.util.Try(value.toLong) match {
+      case scala.util.Success(l) if l.toString == value =>
+        builder.appendLong(l)
+        return
+      case _ =>
+    }
+
+    // If the value is not a long, try to parse it as a decimal
+    try {
+      if (builder.tryParseDecimal(value)) {
+        return
+      }
+    } catch {
+      case _: NumberFormatException =>
+      // Ignore the exception and treat it as a string
+    }
+
+    // If the value is not a decimal, try to parse it as a double
+    val double = XmlInferSchema.tryParseDouble(value)
+    if (double.isDefined) {
+      builder.appendDouble(double.get)
+      return
+    }
+
+    // Otherwise, treat it as a string
+    builder.appendString(value)
   }
 }

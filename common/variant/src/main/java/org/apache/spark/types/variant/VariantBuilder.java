@@ -431,6 +431,19 @@ public class VariantBuilder {
     }
   }
 
+  /**
+   * Create a variant array from multiple variants.
+   */
+  public void appendVariantArray(ArrayList<Variant> variants) {
+    ArrayList<Integer> offsets = new ArrayList<>();
+    int start = writePos;
+    for (Variant variant : variants) {
+      offsets.add(writePos - start);
+      appendVariant(variant);
+    }
+    finishWritingArray(start, offsets);
+  }
+
   // Append the variant value without rewriting or creating any metadata. This is used when
   // building an object during shredding, where there is a fixed pre-existing metadata that
   // all shredded values will refer to.
@@ -559,7 +572,7 @@ public class VariantBuilder {
   // Try to parse a JSON number as a decimal. Return whether the parsing succeeds. The input must
   // only use the decimal format (an integer value with an optional '.' in it) and must not use
   // scientific notation. It also must fit into the precision limitation of decimal types.
-  private boolean tryParseDecimal(String input) {
+  public boolean tryParseDecimal(String input) {
     for (int i = 0; i < input.length(); ++i) {
       char ch = input.charAt(i);
       if (ch != '-' && ch != '.' && !(ch >= '0' && ch <= '9')) {
