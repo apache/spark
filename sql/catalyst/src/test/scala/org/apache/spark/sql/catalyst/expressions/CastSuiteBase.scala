@@ -1469,4 +1469,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Cast(Literal(time), StringType), expectedStr)
     }
   }
+
+  test("cast string to time") {
+    checkEvaluation(cast(Literal.create("0:0:0"), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(" 01:2:3.01   "), TimeType(2)), localTime(1, 2, 3, 10000))
+    checkEvaluation(cast(Literal.create(" 12:13:14.999"),
+      TimeType(3)), localTime(12, 13, 14, 999 * 1000))
+    checkEvaluation(cast(Literal.create("23:0:59.0001 "), TimeType(4)), localTime(23, 0, 59, 100))
+    checkEvaluation(cast(Literal.create("23:59:0.99999"),
+      TimeType(5)), localTime(23, 59, 0, 999990))
+    checkEvaluation(cast(Literal.create("23:59:59.000001     "),
+      TimeType(6)), localTime(23, 59, 59, 1))
+  }
 }

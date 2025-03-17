@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, FileInputStream, InputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -868,12 +867,6 @@ class RocksDBFileManager(
     }
     logInfo(msg + log" - ${MDC(LogKeys.NUM_FILES, files.length)} files\n\t" +
       log"${MDC(LogKeys.FILE_NAME, files.mkString("\n\t"))}")
-  }
-
-  private def newDFSFileName(localFileName: String): String = {
-    val baseName = FilenameUtils.getBaseName(localFileName)
-    val extension = FilenameUtils.getExtension(localFileName)
-    s"$baseName-${UUID.randomUUID}.$extension"
   }
 
   def newDFSFileName(localFileName: String, dfsFileSuffix: String): String = {
