@@ -2618,7 +2618,6 @@ case class MakeTime(
     } else {
       s"${ev.isNull} = true;"
     }
-    val failOnSparkErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
 
     val secs = "seconds"
     val nanos = "nanos"
