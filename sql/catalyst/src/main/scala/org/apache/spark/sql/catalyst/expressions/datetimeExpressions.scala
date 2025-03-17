@@ -2597,23 +2597,11 @@ case class MakeTime(
     val (secs, nanos) = toSecondsAndNanos(secAndMicros.asInstanceOf[Decimal])
 
     try {
-      val lt = if (secs == 60) {
-        if (nanos == 0) {
-          // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
-          LocalTime.of(hours.asInstanceOf[Int], minutes.asInstanceOf[Int], 0, 0).plusMinutes(1)
-        } else {
-          throw QueryExecutionErrors.invalidFractionOfSecondError(
-            secAndMicros.asInstanceOf[Decimal].toDouble)
-        }
-      } else {
-        LocalTime.of(
-          hours.asInstanceOf[Int],
-          minutes.asInstanceOf[Int],
-          secs,
-          nanos
-        )
-      }
-
+      val lt = LocalTime.of(
+        hours.asInstanceOf[Int],
+        minutes.asInstanceOf[Int],
+        secs,
+        nanos)
       localTimeToMicros(lt)
     } catch {
       case e: SparkDateTimeException if failOnError => throw e
@@ -2640,18 +2628,7 @@ case class MakeTime(
       s"""
       try {
         ${toSecAndNanosCodeGen(secAndMicros, secs, nanos)}
-
-        java.time.LocalTime lt;
-        if ($secs == 60) {
-          if ($nanos == 0) {
-            lt = java.time.LocalTime.of($hour, $min, 0, 0).plusMinutes(1);
-          } else {
-            throw QueryExecutionErrors.invalidFractionOfSecondError($secAndMicros.toDouble());
-          }
-        } else {
-          lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
-        }
-
+        java.time.LocalTime lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
         ${ev.value} = $dtu.localTimeToMicros(lt);
       } catch (org.apache.spark.SparkDateTimeException e) {
         $failOnSparkErrorBranch
