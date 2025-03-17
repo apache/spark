@@ -32,9 +32,9 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str[, format]) - Parses the `str` expression with the `format` expression to
-      a time. Returns null with invalid input. By default, it follows casting rules to a time if
-      the `format` is omitted.
+    _FUNC_(str[, format]) - Parses the `str` expression with the `format` expression to a time.
+    If `format` is malformed or its application does not result in a well formed time, the function
+    raises an error. By default, it follows casting rules to a time if the `format` is omitted.
   """,
   arguments = """
     Arguments:
