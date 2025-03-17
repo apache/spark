@@ -276,12 +276,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def timeParseError(e: Exception): SparkDateTimeException = {
+  def timeParseError(input: String, fmt: Option[String], e: Throwable): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "CANNOT_PARSE_TIME",
-      messageParameters = Map("message" -> e.getMessage),
+      messageParameters = Map(
+        "input" -> toSQLValue(input, StringType),
+        "format" -> toSQLValue(
+          fmt.getOrElse("[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]"),
+          StringType)),
       context = Array.empty,
-      summary = "")
+      summary = "",
+      cause = Some(e))
   }
 
   def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {

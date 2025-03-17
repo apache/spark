@@ -49,6 +49,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIME",
   "sqlState" : "22010",
   "messageParameters" : {
-    "message" : "Text '13-60' could not be parsed: Invalid value for MinuteOfHour (valid values 0 - 59): 60"
+    "format" : "'HH-mm'",
+    "input" : "'13-60'"
   }
 }

@@ -407,7 +407,7 @@
   },
   "CANNOT_PARSE_TIME" : {
     "message" : [
-      "<message>."
+      "The input string <input> cannot be parsed to a TIME value because it does not match to the datetime format <format>."
     ],
     "sqlState" : "22010"
   },

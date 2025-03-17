@@ -71,8 +71,10 @@ case class ToTime(str: Expression, format: Option[Expression])
 
   override lazy val replacement: Expression = format match {
     case None => invokeParser()
-    case Some(expr) if expr.foldable => invokeParser(Some(expr.eval().toString), Seq(str))
-    case _ => invokeParser()
+    case Some(expr) if expr.foldable =>
+      invokeParser(Some(expr.eval().toString), Seq(str))
+    case _ =>
+      invokeParser()
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -100,16 +102,21 @@ case class ToTimeParser(fmt: Option[String]) {
 
   def this() = this(None)
 
-  private def withErrorCondition(f: => Long): Long = {
+  private def withErrorCondition(input: => UTF8String, fmt: => Option[String])
+      (f: => Long): Long = {
     try f
     catch {
-      case e: DateTimeParseException => throw QueryExecutionErrors.timeParseError(e)
+      case e: DateTimeParseException =>
+        throw QueryExecutionErrors.timeParseError(input.toString, fmt, e)
     }
   }
 
-  def parse(s: UTF8String): Long = withErrorCondition(formatter.parse(s.toString))
+  def parse(s: UTF8String): Long = withErrorCondition(s, fmt)(formatter.parse(s.toString))
 
   def parse(s: UTF8String, fmt: UTF8String): Long = {
-    withErrorCondition(TimeFormatter(fmt.toString, isParsing = true).parse(s.toString))
+    val format = fmt.toString
+    withErrorCondition(s, Some(format)) {
+      TimeFormatter(format, isParsing = true).parse(s.toString)
+    }
   }
 }
