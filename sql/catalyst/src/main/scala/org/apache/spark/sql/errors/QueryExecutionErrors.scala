@@ -282,7 +282,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "input" -> toSQLValue(input, StringType),
         "format" -> toSQLValue(
-          fmt.getOrElse("[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]"),
+          fmt.getOrElse("HH:mm:ss.SSSSSS"),
           StringType)),
       context = Array.empty,
       summary = "",

@@ -39,11 +39,8 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkErrorInExpression[SparkDateTimeException](
       expression = new ToTime(Literal("100:50")),
-      condition = "CAST_INVALID_INPUT",
-      parameters = Map(
-        "expression" -> "'100:50'",
-        "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"TIME(6)\""))
+      condition = "CANNOT_PARSE_TIME",
+      parameters = Map("input" -> "'100:50'", "format" -> "'HH:mm:ss.SSSSSS'"))
     checkErrorInExpression[SparkDateTimeException](
       expression = new ToTime(Literal("100:50"), Literal("mm:HH")),
       condition = "CANNOT_PARSE_TIME",

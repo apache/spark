@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.format.DateTimeParseException
+import java.time.DateTimeException
 
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -53,7 +53,7 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ToTime(str: Expression, format: Option[Expression])
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+  extends RuntimeReplaceable with ExpectsInputTypes {
 
   def this(str: Expression, format: Expression) = this(str, Option(format))
   def this(str: Expression) = this(str, None)
@@ -71,16 +71,13 @@ case class ToTime(str: Expression, format: Option[Expression])
 
   override lazy val replacement: Expression = format match {
     case None => invokeParser()
-    case Some(expr) if expr.foldable =>
-      invokeParser(Some(expr.eval().toString), Seq(str))
-    case _ =>
-      invokeParser()
+    case Some(expr) if expr.foldable => invokeParser(Some(expr.eval().toString), Seq(str))
+    case _ => invokeParser()
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    TypeCollection(
-      StringTypeWithCollation(supportsTrimCollation = true)) +:
-      format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
+    Seq(StringTypeWithCollation(supportsTrimCollation = true)) ++
+      format.map(_ => StringTypeWithCollation(supportsTrimCollation = true))
   }
 
   override def prettyName: String = "to_time"
@@ -106,7 +103,7 @@ case class ToTimeParser(fmt: Option[String]) {
       (f: => Long): Long = {
     try f
     catch {
-      case e: DateTimeParseException =>
+      case e: DateTimeException =>
         throw QueryExecutionErrors.timeParseError(input.toString, fmt, e)
     }
   }

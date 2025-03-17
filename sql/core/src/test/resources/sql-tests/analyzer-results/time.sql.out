@@ -17,7 +17,7 @@ Project [59985000000 AS 59985000000#x]
 -- !query
 select to_time(null), to_time('01:02:03'), to_time('23-59-59.999999', 'HH-mm-ss.SSSSSS')
 -- !query analysis
-Project [to_time(cast(null as string), None) AS to_time(NULL)#x, to_time(01:02:03, None) AS to_time(01:02:03)#x, to_time(23-59-59.999999, Some(HH-mm-ss.SSSSSS)) AS to_time(23-59-59.999999, HH-mm-ss.SSSSSS)#x]
+Project [to_time(null, None) AS to_time(NULL)#x, to_time(01:02:03, None) AS to_time(01:02:03)#x, to_time(23-59-59.999999, Some(HH-mm-ss.SSSSSS)) AS to_time(23-59-59.999999, HH-mm-ss.SSSSSS)#x]
 +- OneRowRelation
 
 
