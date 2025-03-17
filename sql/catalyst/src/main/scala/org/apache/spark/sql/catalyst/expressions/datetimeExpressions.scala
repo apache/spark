@@ -2604,7 +2604,6 @@ case class MakeTime(
         nanos)
       localTimeToMicros(lt)
     } catch {
-      case e: SparkDateTimeException if failOnError => throw e
       case e: DateTimeException if failOnError =>
         throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
       case _: DateTimeException => null
@@ -2630,8 +2629,6 @@ case class MakeTime(
         ${toSecAndNanosCodeGen(secAndMicros, secs, nanos)}
         java.time.LocalTime lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
         ${ev.value} = $dtu.localTimeToMicros(lt);
-      } catch (org.apache.spark.SparkDateTimeException e) {
-        $failOnSparkErrorBranch
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""
