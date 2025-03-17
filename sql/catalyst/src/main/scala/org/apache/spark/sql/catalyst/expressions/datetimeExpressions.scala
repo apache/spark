@@ -2576,10 +2576,10 @@ case class MakeDate(
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class MakeTime(
-                     hours: Expression,
-                     minutes: Expression,
-                     secAndMicros: Expression,
-                     failOnError: Boolean = SQLConf.get.ansiEnabled)
+    hours: Expression,
+    minutes: Expression,
+    secAndMicros: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression with ImplicitCastInputTypes with SecAndNanosExtractor {
   override def nullIntolerant: Boolean = true
 
