@@ -2875,7 +2875,7 @@ case class MakeTimestamp(
     failOnError: Boolean = SQLConf.get.ansiEnabled,
     override val dataType: DataType = SQLConf.get.timestampType)
   extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with SecAndNanosExtractor {
+  with SecAndNanosExtractor {
   override def nullIntolerant: Boolean = true
 
   def this(
