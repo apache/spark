@@ -368,11 +368,6 @@ object SQLConf {
   private def isValidLogLevel(level: String): Boolean =
     VALID_LOG_LEVELS.contains(level.toUpperCase(Locale.ROOT))
 
-  private def toLogLevel(upperCaseValidLevel: String): Level = {
-    require(VALID_LOG_LEVELS.contains(upperCaseValidLevel))
-    Level.valueOf(upperCaseValidLevel)
-  }
-
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -5780,13 +5775,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def planChangeLogLevel: Level = toLogLevel(getConf(PLAN_CHANGE_LOG_LEVEL))
+  def planChangeLogLevel: Level = Level.valueOf((getConf(PLAN_CHANGE_LOG_LEVEL))
 
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
 
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
-  def expressionTreeChangeLogLevel: Level = toLogLevel(getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL))
+  def expressionTreeChangeLogLevel: Level = Level.valueOf((getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL))
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
@@ -6017,7 +6012,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
-  def codegenLogLevel: Level = toLogLevel(getConf(CODEGEN_LOG_LEVEL))
+  def codegenLogLevel: Level = Level.valueOf((getConf(CODEGEN_LOG_LEVEL))
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
