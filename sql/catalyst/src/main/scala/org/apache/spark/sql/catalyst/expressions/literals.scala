@@ -127,6 +127,7 @@ object Literal {
     // java classes
     case _ if clz == classOf[LocalDate] => DateType
     case _ if clz == classOf[Date] => DateType
+    case _ if clz == classOf[LocalTime] => TimeType()
     case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[LocalDateTime] => TimestampNTZType

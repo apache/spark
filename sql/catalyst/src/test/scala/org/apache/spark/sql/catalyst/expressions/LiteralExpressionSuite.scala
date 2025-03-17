@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -311,6 +312,13 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val localDate1 = LocalDate.of(2100, 4, 22)
       checkEvaluation(Literal(Array(localDate0, localDate1)), Array(localDate0, localDate1))
     }
+  }
+
+  test("construct literals from arrays of java.time.LocalTime") {
+    val localTime0 = LocalTime.of(1, 2, 3)
+    checkEvaluation(Literal(Array(localTime0)), Array(localTime0))
+    val localTime1 = LocalTime.of(23, 59, 59, 999999000)
+    checkEvaluation(Literal(Array(localTime0, localTime1)), Array(localTime0, localTime1))
   }
 
   test("construct literals from java.time.Instant") {
