@@ -19,6 +19,11 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.0 to 4.1
+---------------------------------
+
+* In Spark 4.0, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, ``enable spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
+
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
@@ -75,7 +80,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``compute.ops_on_diff_frames`` is on by default. To restore the previous behavior, set ``compute.ops_on_diff_frames`` to ``false``.
 * In Spark 4.0, the data type ``YearMonthIntervalType`` in ``DataFrame.collect`` no longer returns the underlying integers. To restore the previous behavior, set ``PYSPARK_YM_INTERVAL_LEGACY`` environment variable to ``1``.
 * In Spark 4.0, items other than functions (e.g. ``DataFrame``, ``Column``, ``StructType``) have been removed from the wildcard import ``from pyspark.sql.functions import *``, you should import these items from proper modules (e.g. ``from pyspark.sql import DataFrame, Column``, ``from pyspark.sql.types import StructType``).
-* In Spark 4.0, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, ``enable spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
+
 
 Upgrading from PySpark 3.3 to 3.4
 ---------------------------------
