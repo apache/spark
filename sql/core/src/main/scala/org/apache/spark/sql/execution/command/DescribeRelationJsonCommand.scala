@@ -223,6 +223,12 @@ case class DescribeRelationJsonCommand(
           "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField))
         )
 
+      case stringType: StringType =>
+        JObject(
+          "name" -> JString("string"),
+          "collation" -> JString(stringType.collationName)
+        )
+
       case _ =>
         JObject("name" -> JString(dataType.simpleString))
     }
