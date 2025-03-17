@@ -71,7 +71,10 @@ case class ToTime(str: Expression, format: Option[Expression])
 
   override lazy val replacement: Expression = format match {
     case None => invokeParser()
-    case Some(expr) if expr.foldable => invokeParser(Some(expr.eval().toString), Seq(str))
+    case Some(expr) if expr.foldable =>
+      Option(expr.eval())
+        .map(f => invokeParser(Some(f.toString), Seq(str)))
+        .getOrElse(Literal(null, expr.dataType))
     case _ => invokeParser()
   }
 

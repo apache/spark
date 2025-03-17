@@ -19,9 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.types.StringType
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {
+    checkEvaluation(new ToTime(Literal("00:00:00"), Literal.create(null)), null)
+    checkEvaluation(new ToTime(Literal("00:00:00"), NonFoldableLiteral(null, StringType)), null)
+    checkEvaluation(new ToTime(Literal(null, StringType), Literal("HH:mm:ss")), null)
+
     checkEvaluation(new ToTime(Literal("00:00:00")), localTime())
     checkEvaluation(new ToTime(Literal("23-59-00.000999"), Literal("HH-mm-ss.SSSSSS")),
       localTime(23, 59, 0, 999))
