@@ -866,17 +866,21 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         ("1970-01-01T00:00:00.123456789-08:00", "1970-01-01 00:00:00.123456789",
          "1970-01-01 00:00:00.123456789-08:00"),
         ("2100-12-31T23:59:59.00100-08:00", "2100-12-31 23:59:59.001",
-         "2100-12-31 23:59:59.001-08:00")
+         "2100-12-31 23:59:59.001-08:00"),
+        ("1677-09-20T16:12:45.291448384-08:00", "1677-09-20 16:12:45.291448384",
+         "1677-09-20 16:12:45.291448384-08:00")
     )
-    timestamps.foreach { case (in, cast, toJson) =>
-      val instant = Instant.from(ISO_DATE_TIME.parse(in))
-      val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
-      val builder = new VariantBuilder(false)
-      builder.appendTimestampNanos(nanos)
-      val bytes = builder.result().getValue()
-      checkToJson(bytes, "\"" + toJson + "\"")
-      checkCast(bytes, StringType, cast)
-      checkCast(bytes, TimestampType, nanos / NANOS_PER_MICROS)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "-08:00") {
+      timestamps.foreach { case (in, cast, toJson) =>
+        val instant = Instant.from(ISO_DATE_TIME.parse(in))
+        val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
+        val builder = new VariantBuilder(false)
+        builder.appendTimestampNanos(nanos)
+        val bytes = builder.result().getValue()
+        checkToJson(bytes, "\"" + toJson + "\"")
+        checkCast(bytes, StringType, cast)
+        checkCast(bytes, TimestampType, nanos / NANOS_PER_MICROS)
+      }
     }
 
     // TimestampNanosNtz
@@ -885,7 +889,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         ("1970-01-01T00:00:00.123456789Z", "1970-01-01 00:00:00.123456789",
          "1970-01-01 00:00:00.123456789"),
         ("2100-12-31T23:59:59.00100Z", "2100-12-31 23:59:59.001",
-         "2100-12-31 23:59:59.001")
+         "2100-12-31 23:59:59.001"),
+        ("1677-09-21T00:12:45.291448384Z", "1677-09-21 00:12:45.291448384",
+         "1677-09-21 00:12:45.291448384")
     )
     timestamps_ntz.foreach { case (in, cast, toJson) =>
       val instant = Instant.from(ISO_DATE_TIME.parse(in))
