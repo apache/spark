@@ -1393,6 +1393,12 @@ object SQLConf {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString(s"${5 * 60}")
 
+  val BROADCAST_TABLE_SIZE_LIMIT = buildConf("spark.sql.broadcast.tableSizeLimit")
+    .doc("The maximum table size (based on stats) that can be broadcast, in broadcast joins.")
+    .version("4.0.0")
+    .longConf
+    .createWithDefault(8L << 30)
+
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
     .doc("Set a Fair Scheduler pool for a JDBC client session.")
@@ -4902,6 +4908,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     val timeoutValue = getConf(BROADCAST_TIMEOUT)
     if (timeoutValue < 0) Long.MaxValue else timeoutValue
   }
+
+  def broadcastMaxTableSize: Long = getConf(BROADCAST_TABLE_SIZE_LIMIT)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
