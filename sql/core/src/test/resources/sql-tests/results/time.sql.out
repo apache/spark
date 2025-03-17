@@ -2,6 +2,6 @@
 -- !query
 select time '16:39:45\t'
 -- !query schema
-struct<59985000000:time(6)>
+struct<TIME '16:39:45':time(6)>
 -- !query output
 16:39:45
