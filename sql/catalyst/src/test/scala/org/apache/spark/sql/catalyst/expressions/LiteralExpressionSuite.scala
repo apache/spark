@@ -31,6 +31,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -504,6 +505,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         case SECOND => 90061000000L
       }
       checkEvaluation(Literal.create(duration, dt), result)
+    }
+
+    val time = LocalTime.of(12, 13, 14)
+    DataTypeTestUtils.timeTypes.foreach { tt =>
+      checkEvaluation(Literal.create(time, tt), localTime(12, 13, 14))
     }
   }
 
