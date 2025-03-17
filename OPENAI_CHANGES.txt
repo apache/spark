@@ -56,3 +56,4 @@
 - [INTERNAL] Setup Buildkite to publish release artifacts
 - [INTERNAL] Add internal Maven artifactory
 - [INTERNAL] Switch to OpenAI Hadoop
+- [INTERNAL] Make max broadcast table size configurable
