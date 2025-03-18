@@ -572,7 +572,7 @@ public class VariantBuilder {
   // Try to parse a JSON number as a decimal. Return whether the parsing succeeds. The input must
   // only use the decimal format (an integer value with an optional '.' in it) and must not use
   // scientific notation. It also must fit into the precision limitation of decimal types.
-  public boolean tryParseDecimal(String input) {
+  private boolean tryParseDecimal(String input) {
     for (int i = 0; i < input.length(); ++i) {
       char ch = input.charAt(i);
       if (ch != '-' && ch != '.' && !(ch >= '0' && ch <= '9')) {

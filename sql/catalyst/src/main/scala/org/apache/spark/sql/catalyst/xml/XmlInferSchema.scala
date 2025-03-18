@@ -351,7 +351,25 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
   }
 
   private def isDouble(value: String): Boolean = {
-    XmlInferSchema.tryParseDouble(value).isDefined
+    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
+      value.substring(1)
+    } else {
+      value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a double. All built-in formats will start with a digit or period.
+    if (signSafeValue.isEmpty ||
+      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
+      return false
+    }
+    // Rule out strings ending in D or F, as they will parse as double but should be disallowed
+    if (signSafeValue.last match {
+      case 'd' | 'D' | 'f' | 'F' => true
+      case _ => false
+    }) {
+      return false
+    }
+    (allCatch opt signSafeValue.toDouble).isDefined
   }
 
   private def isLong(value: String): Boolean = {
@@ -560,27 +578,5 @@ object XmlInferSchema {
         case (_, _) => StringType
       }
     }
-  }
-
-  def tryParseDouble(value: String): Option[Double] = {
-    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
-      value.substring(1)
-    } else {
-      value
-    }
-    // A little shortcut to avoid trying many formatters in the common case that
-    // the input isn't a double. All built-in formats will start with a digit or period.
-    if (signSafeValue.isEmpty ||
-      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
-      return None
-    }
-    // Rule out strings ending in D or F, as they will parse as double but should be disallowed
-    if (signSafeValue.last match {
-      case 'd' | 'D' | 'f' | 'F' => true
-      case _ => false
-    }) {
-      return None
-    }
-    allCatch opt signSafeValue.toDouble
   }
 }

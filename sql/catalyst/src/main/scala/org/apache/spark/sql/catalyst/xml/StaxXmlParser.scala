@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.xml
 
 import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
+import java.math.BigDecimal
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util.Locale
@@ -28,6 +29,7 @@ import javax.xml.validation.Schema
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
+import scala.util.control.Exception.allCatch
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
@@ -47,6 +49,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantBuilder.FieldEntry
+import org.apache.spark.types.variant.VariantUtil.MAX_DECIMAL16_PRECISION
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class StaxXmlParser(
@@ -388,7 +391,7 @@ class StaxXmlParser(
                 row(index) = values :+ newValue
 
               case VariantType =>
-                val v = StaxXmlParser.convertVariant(parser, field, attributes, options)
+                val v = StaxXmlParser.convertVariant(parser, attributes, options)
                 row(index) = new VariantVal(v.getValue, v.getMetadata)
 
               case dt: DataType =>
@@ -914,10 +917,7 @@ object StaxXmlParser {
     val parser = StaxXmlParserUtils.filteredReader(xml)
     val rootEvent =
       StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
-    val rootAttributes =
-      rootEvent.asStartElement.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
-    val rootStartElementName =
-      StaxXmlParserUtils.getName(rootEvent.asStartElement().getName, options)
+    val rootAttributes = rootEvent.asStartElement.getAttributes.asScala.toArray
     val variant = convertVariant(parser, rootAttributes, options)
     val v = new VariantVal(variant.getValue, variant.getMetadata)
     parser.close()
@@ -941,7 +941,7 @@ object StaxXmlParser {
       case (f, v) =>
         val variants = fieldToVariants.getOrElseUpdate(f, new java.util.ArrayList[Variant]())
         val builder = new VariantBuilder(false)
-        appendXMLColumnToVariant(builder, v, options)
+        appendXMLCharacterToVariant(builder, v, options)
         variants.add(builder.result())
     }
 
@@ -953,21 +953,21 @@ object StaxXmlParser {
           val attributes = s.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
           val field = StaxXmlParserUtils.getName(s.asStartElement.getName, options)
           val variants = fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
-          variants.add(convertVariant(parser, field, attributes, options))
+          variants.add(convertVariant(parser, attributes, options))
 
         case c: Characters if !c.isWhiteSpace =>
           if (fieldToVariants.nonEmpty) {
             // If there are other nested fields in the root element, we need to treat the CDATA
             // as a value field, where we use the [[XMLOptions.valueTag]] as the field key
             val builder = new VariantBuilder(false)
-            appendXMLColumnToVariant(builder, c.getData, options)
+            appendXMLCharacterToVariant(builder, c.getData, options)
             val variants =
               fieldToVariants.getOrElseUpdate(options.valueTag, new java.util.ArrayList[Variant]())
             variants.add(builder.result())
           } else {
             // If there is no nested fields in the root element, add the CDATA to the root builder
             // directly
-            appendXMLColumnToVariant(rootBuilder, c.getData, options)
+            appendXMLCharacterToVariant(rootBuilder, c.getData, options)
           }
 
         case e: EndElement =>
@@ -1018,11 +1018,11 @@ object StaxXmlParser {
   }
 
   /**
-   * Convert a XML value `s` into a variant value and append the result to `builder`.
-   * The result can only be one of a variant integer/decimal/string. Anything that cannot be
-   * precisely represented by a variant integer/decimal will be represented by a variant string.
+   * Convert an XML Character value `s` into a variant value and append the result to `builder`.
+   * The result can only be one of a variant boolean/long/decimal/double/string. Anything other than
+   * the supported types will be appended to the Variant builder as a string.
    */
-  private def appendXMLColumnToVariant(
+  private def appendXMLCharacterToVariant(
       builder: VariantBuilder,
       s: String,
       options: XmlOptions): Unit = {
@@ -1032,37 +1032,73 @@ object StaxXmlParser {
       s
     }
 
-    if (value == null || value == options.nullValue) {
-      builder.appendNull()
-      return
+    value match {
+      case v if v == options.nullValue || v == null =>
+        builder.appendNull()
+      case "true" => builder.appendBoolean(true)
+      case "false" => builder.appendBoolean(false)
+      case v =>
+        // Try to parse the value as a numeric type (long, decimal, or double) first
+        if (!tryAppendNumeric(builder, v, options)) {
+          // If the character is of other primitive types, parse it as a string
+          builder.appendString(value)
+        }
+    }
+  }
+
+  // Try to parse the value as a numeric type (long, decimal, or double) and append it to the
+  // Variant builder
+  private def tryAppendNumeric(
+      builder: VariantBuilder,
+      value: String,
+      options: XmlOptions): Boolean = {
+    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
+      value.substring(1)
+    } else {
+      value
     }
 
-    // Try to parse the value as a long first
-    scala.util.Try(value.toLong) match {
-      case scala.util.Success(l) if l.toString == value =>
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a decimal. All built-in formats will start with a digit or period.
+    if (signSafeValue.isEmpty ||
+      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
+      return false
+    }
+    // Rule out strings ending in D or F
+    if (signSafeValue.last match {
+        case 'd' | 'D' | 'f' | 'F' => true
+        case _ => false
+      }) {
+      return false
+    }
+
+    // Try parse the value as a long first
+    allCatch opt signSafeValue.toLong match {
+      case Some(l) if l.toString == signSafeValue =>
         builder.appendLong(l)
-        return
+        return true
       case _ =>
     }
 
-    // If the value is not a long, try to parse it as a decimal
-    try {
-      if (builder.tryParseDecimal(value)) {
-        return
+    // Try parse the value as decimal if options.tryParseDecimal is set
+    if (options.prefersDecimal) {
+      allCatch opt new BigDecimal(value) match {
+        case Some(d)
+            if d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION =>
+          builder.appendDecimal(d)
+          return true
+        case _ =>
       }
-    } catch {
-      case _: NumberFormatException =>
-      // Ignore the exception and treat it as a string
     }
 
-    // If the value is not a decimal, try to parse it as a double
-    val double = XmlInferSchema.tryParseDouble(value)
-    if (double.isDefined) {
-      builder.appendDouble(double.get)
-      return
+    // Try parse the value as double
+    allCatch opt signSafeValue.toDouble match {
+      case Some(d) if d.toString == signSafeValue =>
+        builder.appendDouble(d)
+        return true
+      case _ =>
     }
 
-    // Otherwise, treat it as a string
-    builder.appendString(value)
+    false
   }
 }
