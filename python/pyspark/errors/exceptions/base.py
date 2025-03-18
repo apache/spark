@@ -458,7 +458,9 @@ def recover_python_exception(e: TException) -> TException:
     """
     Recover Python exception stack trace.
 
-    .. versionadded:: 4.0.0
+    Many JVM exceptions types may wrap Python exceptions. For example:
+    - UDFs can cause PythonException
+    - UDTFs and Data Sources can cause AnalysisException
     """
     python_exception_header = "Traceback (most recent call last):"
     try:
