@@ -105,7 +105,7 @@ case class UnionLoopExec(
       plan
     }
     val df = Dataset.ofRows(session, planOrLimitedPlan)
-    val cachedDF = df.repartition()
+    val materializedDF = df.repartition()
     val count = cachedDF.count()
     (cachedDF, count)
   }
