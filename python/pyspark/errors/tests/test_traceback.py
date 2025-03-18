@@ -16,7 +16,9 @@
 #
 import os
 import platform
+import sys
 import tempfile
+import traceback
 import unittest
 from datetime import datetime
 from decimal import Decimal
@@ -68,13 +70,22 @@ message = pandas_requirement_message or pyarrow_requirement_message
 class BaseTracebackTestsMixin:
     spark: SparkSession
 
-    def test_basic_data_source_class(self):
+    def test_udf_traceback(self):
         @udf()
         def foo():
             raise ValueError("bar")
 
         df = self.spark.range(1).select(foo())
-        df.show()
+        try:
+            df.show()
+        except PythonException as e:
+            _, _, tb = sys.exc_info()
+        else:
+            self.fail("PythonException not raised")
+
+        s = "\n".join(traceback.format_tb(tb))
+        self.assertIn("""df.show()""", s)
+        self.assertIn("""raise ValueError("bar")""", s)
 
 
 class TracebackTests(BaseTracebackTestsMixin, ReusedSQLTestCase):

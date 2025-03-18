@@ -1,8 +1,8 @@
 """
 Class for parsing Python tracebacks.
 
-This module was extracted from the `tblib` package:
-https://github.com/ionelmc/python-tblib
+This module was adapted from the `tblib` package https://github.com/ionelmc/python-tblib
+modified to recover line content from the traceback.
 
 BSD 2-Clause License
 
@@ -32,7 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import re
 import sys
 from types import CodeType, FrameType, TracebackType
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 __version__ = "3.0.0"
 __all__ = "Traceback", "TracebackParseError", "Frame", "Code"
@@ -106,6 +106,16 @@ class Frame:
         """
 
 
+class LineCacheEntry(list):
+    """
+    The list of lines in a file where only some of the lines are available.
+    """
+
+    def set_line(self, lineno: int, line: str) -> None:
+        self.extend([""] * (lineno - len(self)))
+        self[lineno - 1] = line
+
+
 class Traceback:
     """
     Class that wraps builtin Traceback objects.
@@ -131,6 +141,10 @@ class Traceback:
     def __init__(self, tb: TracebackType, *, get_locals: Any = None):
         self.tb_frame = Frame(tb.tb_frame, get_locals=get_locals)
         self.tb_lineno = int(tb.tb_lineno)
+        self.cached_lines: Dict[str, Dict[int, str]] = {}  # filename -> lineno -> line
+        """
+        Lines shown in the parsed traceback.
+        """
 
         # Build in place to avoid exceeding the recursion limit
         _tb = tb.tb_next
@@ -143,6 +157,26 @@ class Traceback:
             prev_traceback.tb_next = traceback
             prev_traceback = traceback
             _tb = _tb.tb_next
+
+    def populate_linecache(self) -> None:
+        """
+        For each cached line, update the linecache if the file is not present.
+        This helps us show the original lines even if the source file is not available,
+        for example when the parsed traceback comes from a different host.
+        """
+        import linecache
+
+        for filename, lines in self.cached_lines.items():
+            entry: list[str] = linecache.getlines(filename, module_globals=None)
+            if entry:
+                if not isinstance(entry, LineCacheEntry):
+                    # no need to update the cache if the file is present
+                    continue
+            else:
+                entry = LineCacheEntry()
+                linecache.cache[filename] = (1, None, entry, filename)
+            for lineno, line in lines.items():
+                entry.set_line(lineno, line)
 
     def as_traceback(self) -> Optional[TracebackType]:
         """
@@ -250,18 +284,26 @@ class Traceback:
         Creates an instance by parsing a stacktrace.
         Strict means that parsing stops when lines are not indented by at least two spaces anymore.
         """
-        frames = []
-        header = strict
 
-        for line in string.splitlines():
-            line = line.rstrip()
-            if header:
+        frames: List[Dict[str, str]] = []
+        cached_lines: Dict[str, Dict[int, str]] = {}
+
+        lines = string.splitlines()[::-1]
+        if strict:  # skip the header
+            while lines:
+                line = lines.pop()
                 if line == "Traceback (most recent call last):":
-                    header = False
-                continue
+                    break
+
+        while lines:
+            line = lines.pop()
             frame_match = FRAME_RE.match(line)
             if frame_match:
                 frames.append(frame_match.groupdict())
+                if lines and lines[-1].startswith("    "):  # code for the frame
+                    filename = frame_match.group("co_filename")
+                    lineno = int(frame_match.group("tb_lineno"))
+                    cached_lines.setdefault(filename, {}).setdefault(lineno, lines.pop().strip())
             elif line.startswith("  "):
                 pass
             elif strict:
@@ -284,7 +326,9 @@ class Traceback:
                     ),
                     tb_next=previous,
                 )
-            return cls(previous)  # type: ignore
+            self = cls(previous)  # type: ignore
+            self.cached_lines = cached_lines
+            return self
         else:
             raise TracebackParseError("Could not find any frames in %r." % string)
 
