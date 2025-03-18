@@ -114,7 +114,7 @@ case class UnionLoopExec(
    * In the first iteration, anchor term is executed.
    * Then, in each following iteration, the UnionLoopRef node is substituted with the plan from the
    * previous iteration, and such plan is executed.
-   * After every iteration, the dataframe is repartitioned.
+   * After every iteration, the dataframe is materialized.
    * The recursion stops when the generated dataframe is empty, or either the limit or
    * the specified maximum depth from the config is reached.
    */
