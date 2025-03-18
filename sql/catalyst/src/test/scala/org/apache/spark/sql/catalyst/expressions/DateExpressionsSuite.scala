@@ -2152,64 +2152,45 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("creating values of TimeType via make_time") {
-    Seq(true, false).foreach { ansi =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
-        // basic case
-        checkEvaluation(
-          MakeTime(Literal(13), Literal.create(2, IntegerType),
-            Literal(Decimal(BigDecimal(23.5), 16, 6))),
-          LocalTime.of(13, 2, 23, 500000000))
+    // basic case
+    checkEvaluation(
+      MakeTime(Literal(13), Literal.create(2, IntegerType),
+        Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      LocalTime.of(13, 2, 23, 500000000))
 
-        // null cases
-        checkEvaluation(
-          MakeTime(Literal.create(null, IntegerType), Literal(18),
-            Literal(Decimal(BigDecimal(23.5), 16, 6))),
-          null)
-        checkEvaluation(
-          MakeTime(Literal(13), Literal.create(null, IntegerType),
-            Literal(Decimal(BigDecimal(23.5), 16, 6))),
-          null)
-        checkEvaluation(MakeTime(Literal(13), Literal(18),
-          Literal.create(null, DecimalType(16, 6))), null)
-      }
-    }
+    // null cases
+    checkEvaluation(
+      MakeTime(Literal.create(null, IntegerType), Literal(18),
+        Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      null)
+    checkEvaluation(
+      MakeTime(Literal(13), Literal.create(null, IntegerType),
+        Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      null)
+    checkEvaluation(MakeTime(Literal(13), Literal(18),
+      Literal.create(null, DecimalType(16, 6))), null)
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      // Invalid times return null
-      checkEvaluation(
-        MakeTime(Literal(Int.MaxValue), Literal(18),
-          Literal(Decimal(BigDecimal(23.5), 16, 6))),
-        null)
-      checkEvaluation(
-        MakeTime(Literal(13), Literal(Int.MinValue),
-          Literal(Decimal(BigDecimal(23.5), 16, 6))),
-        null)
-      checkEvaluation(MakeTime(Literal(13), Literal(18),
-        Literal(Decimal(BigDecimal(60.1), 16, 6))), null)
-    }
+    // Invalid cases
+    val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS"
+    val baseErrorParams = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\"")
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS"
-      val baseErrorParams = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\"")
-      
-      checkErrorInExpression[SparkDateTimeException](
-        MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
-        errorCode,
-        baseErrorParams +
-          ("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25")
-      )
-      checkErrorInExpression[SparkDateTimeException](
-        MakeTime(Literal(23), Literal(-1), Literal(Decimal(BigDecimal(23.5), 16, 6))),
-        errorCode,
-        baseErrorParams +
-          ("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1")
-      )
-      checkErrorInExpression[SparkDateTimeException](
-        MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
-        errorCode,
-        baseErrorParams +
-          ("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100")
-      )
-    }
+    checkErrorInExpression[SparkDateTimeException](
+      MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      errorCode,
+      baseErrorParams +
+        ("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25")
+    )
+    checkErrorInExpression[SparkDateTimeException](
+      MakeTime(Literal(23), Literal(-1), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      errorCode,
+      baseErrorParams +
+        ("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1")
+    )
+    checkErrorInExpression[SparkDateTimeException](
+      MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
+      errorCode,
+      baseErrorParams +
+        ("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100")
+    )
   }
 }

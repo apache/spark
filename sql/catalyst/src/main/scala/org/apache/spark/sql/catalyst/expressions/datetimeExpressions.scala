@@ -2558,7 +2558,7 @@ case class MakeDate(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(hour, minute, second) - Create time from hour, minute and second fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
+  usage = "_FUNC_(hour, minute, second) - Create time from hour, minute and second fields. For invalid inputs it will throw an error.",
   arguments = """
     Arguments:
       * hour - the hour to represent, from 0 to 23
@@ -2578,20 +2578,16 @@ case class MakeDate(
 case class MakeTime(
     hours: Expression,
     minutes: Expression,
-    secAndMicros: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    secAndMicros: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with SecAndNanosExtractor {
   override def nullIntolerant: Boolean = true
-
-  def this(hours: Expression, minutes: Expression, secAndMicros: Expression) =
-    this(hours, minutes, secAndMicros, SQLConf.get.ansiEnabled)
 
   override def first: Expression = hours
   override def second: Expression = minutes
   override def third: Expression = secAndMicros
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
   override def dataType: DataType = TimeType(TimeType.MAX_PRECISION)
-  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
+  override def nullable: Boolean = children.exists(_.nullable)
 
   override protected def nullSafeEval(hours: Any, minutes: Any, secAndMicros: Any): Any = {
     val (secs, nanos) = toSecondsAndNanos(secAndMicros.asInstanceOf[Decimal])
@@ -2604,21 +2600,13 @@ case class MakeTime(
         nanos)
       localTimeToMicros(lt)
     } catch {
-      case e: DateTimeException if failOnError =>
+      case e: DateTimeException =>
         throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
-      case _: DateTimeException => null
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-
-    val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
-    } else {
-      s"${ev.isNull} = true;"
-    }
-
     val secs = "seconds"
     val nanos = "nanos"
 
@@ -2629,7 +2617,7 @@ case class MakeTime(
         java.time.LocalTime lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
         ${ev.value} = $dtu.localTimeToMicros(lt);
       } catch (java.time.DateTimeException e) {
-        $failOnErrorBranch
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);
       }"""
     })
   }
