@@ -168,7 +168,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false",
-      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_MAINTENANCE_MULTIPLIER_FOR_MIN_TIME_DELTA_TO_LOG.key -> "1",
+      SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG.key ->
+        "1"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
@@ -190,6 +193,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         query.processAllAvailable()
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+        val batchId =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastProgress.batchId
+        val timestamp = System.currentTimeMillis()
 
         // Verify stores do not report snapshot upload events to the coordinator.
         // As a result, all stores will return nothing as the latest version
@@ -198,6 +204,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
             StateStoreProviderId(StateStoreId(stateCheckpointDir, 0, partitionId), query.runId)
           assert(coordRef.getLatestSnapshotVersionForTesting(providerId).isEmpty)
         }
+        // Verify that no instances are marked as lagging
+        assert(coordRef.getLaggingStoresForTesting(query.runId, batchId, timestamp).isEmpty)
         query.stop()
     }
   }
