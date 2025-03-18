@@ -2171,26 +2171,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, DecimalType(16, 6))), null)
 
     // Invalid cases
-    val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS"
-    val baseErrorParams = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\"")
-
+    val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS_ANSI_ONLY"
     checkErrorInExpression[SparkDateTimeException](
       MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
       errorCode,
-      baseErrorParams +
-        ("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25")
+      Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25")
     )
     checkErrorInExpression[SparkDateTimeException](
       MakeTime(Literal(23), Literal(-1), Literal(Decimal(BigDecimal(23.5), 16, 6))),
       errorCode,
-      baseErrorParams +
-        ("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1")
+      Map("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1")
     )
     checkErrorInExpression[SparkDateTimeException](
       MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
       errorCode,
-      baseErrorParams +
-        ("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100")
+      Map("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100")
     )
   }
 }

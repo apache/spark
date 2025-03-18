@@ -1188,6 +1188,12 @@
     ],
     "sqlState" : "22023"
   },
+  "DATETIME_FIELD_OUT_OF_BOUNDS_ANSI_ONLY" : {
+    "message" : [
+      "<rangeMessage>."
+    ],
+    "sqlState" : "22023"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
