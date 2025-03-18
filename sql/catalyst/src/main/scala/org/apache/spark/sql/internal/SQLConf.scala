@@ -2236,31 +2236,35 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG =
-    buildConf("spark.sql.streaming.stateStore.minSnapshotVersionDeltaToLog")
+  val STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.minSnapshotDeltaMultiplierForMinVersionDeltaToLog")
       .internal()
       .doc(
-        "Minimum number of versions between the most recent uploaded snapshot version of a " +
-        "single state store instance and the most recent version across all state store " +
-        "instances to log a warning message."
+        "This multiplier determines the minimum version threshold for logging warnings when a " +
+        "state store instance falls behind. The coordinator logs a warning if a state store's " +
+        "last uploaded snapshot's version lags behind the most recent snapshot version by this " +
+        "threshold. The threshold is calculated as the configured minimum number of deltas " +
+        "needed to create a snapshot, multiplied by this multiplier."
       )
-      .version("4.0.0")
+      .version("4.1.0")
       .intConf
       .checkValue(k => k >= 1, "Must be greater than or equal to 1")
-      .createWithDefault(30)
+      .createWithDefault(5)
 
-  val STATE_STORE_COORDINATOR_MIN_SNAPSHOT_TIME_DELTA_TO_LOG =
-    buildConf("spark.sql.streaming.stateStore.minSnapshotTimeDeltaToLog")
+  val STATE_STORE_COORDINATOR_MAINTENANCE_MULTIPLIER_FOR_MIN_TIME_DELTA_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.maintenanceMultiplierForMinTimeDeltaToLog")
       .internal()
       .doc(
-        "Minimum time between the timestamps of the most recent uploaded snapshot of a single " +
-        "state store instance and the most recent snapsnot upload's timestamp across all " +
-        "state store instances to log a warning message. It is recommended for this value to be " +
-        "longer than the maintenance interval."
+        "This multiplier determines the minimum time threshold for logging warnings when a " +
+        "state store instance falls behind. The coordinator logs a warning if a state store's " +
+        "last snapshot upload time lags behind the most recent snapshot upload by this " +
+        "threshold. The threshold is calculated as the maintenance interval multiplied by " +
+        "this multiplier."
       )
-      .version("4.0.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(TimeUnit.MINUTES.toMillis(30))
+      .version("4.1.0")
+      .intConf
+      .checkValue(k => k >= 1, "Must be greater than or equal to 1")
+      .createWithDefault(10)
 
   val STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED =
     buildConf("spark.sql.streaming.stateStore.coordinatorReportUpload.enabled")
@@ -2269,7 +2273,7 @@ object SQLConf {
         "If enabled, state store instances will send a message to the state store " +
         "coordinator whenever they complete a snapshot upload."
       )
-      .version("4.0.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2282,7 +2286,7 @@ object SQLConf {
         "as the coordinator only checks for lagging instances upon receiving a new " +
         "snapshot upload message."
       )
-      .version("4.0.0")
+      .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(5))
 

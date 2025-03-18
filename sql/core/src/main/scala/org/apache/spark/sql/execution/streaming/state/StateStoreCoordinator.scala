@@ -21,7 +21,7 @@ import java.util.UUID
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -93,9 +93,9 @@ object StateStoreCoordinatorRef extends Logging {
   /**
    * Create a reference to a [[StateStoreCoordinator]]
    */
-  def forDriver(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
+  def forDriver(env: SparkEnv, sqlConf: SQLConf): StateStoreCoordinatorRef = synchronized {
     try {
-      val coordinator = new StateStoreCoordinator(env.rpcEnv, env.conf)
+      val coordinator = new StateStoreCoordinator(env.rpcEnv, sqlConf)
       val coordinatorRef = env.rpcEnv.setupEndpoint(endpointName, coordinator)
       logInfo("Registered StateStoreCoordinator endpoint")
       new StateStoreCoordinatorRef(coordinatorRef)
@@ -183,7 +183,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
  */
 private class StateStoreCoordinator(
     override val rpcEnv: RpcEnv,
-    conf: SparkConf)
+    val sqlConf: SQLConf)
   extends ThreadSafeRpcEndpoint
   with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
@@ -191,12 +191,6 @@ private class StateStoreCoordinator(
   // Stores the latest snapshot upload event for a specific state store provider instance
   private val stateStoreLatestUploadedSnapshot =
     new mutable.HashMap[StateStoreProviderId, SnapshotUploadEvent]
-
-  // Determine alert thresholds from configurations for both time and version differences.
-  private val minTimeDeltaForLogging =
-    conf.get(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_TIME_DELTA_TO_LOG)
-  private val minVersionDeltaForLogging =
-    conf.get(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
 
   // Default snapshot upload event to use when a provider has never uploaded a snapshot
   private val defaultSnapshotUploadEvent = SnapshotUploadEvent(-1, 0)
@@ -255,7 +249,7 @@ private class StateStoreCoordinator(
         // full reports.
         val (laggingStores, latestSnapshotPerQuery) = findLaggingStores()
         val coordinatorLagReportInterval =
-          SQLConf.get.getConf(SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
+          sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
         if (laggingStores.nonEmpty &&
           System.currentTimeMillis() - lastFullSnapshotLagReport > coordinatorLagReportInterval) {
           // Mark timestamp of the full report and log the lagging instances
@@ -314,8 +308,23 @@ private class StateStoreCoordinator(
       val versionDelta = latest.version - version
       val timeDelta = latest.timestamp - timestamp
 
-      versionDelta >= minVersionDeltaForLogging ||
-        (version >= 0 && timeDelta > minTimeDeltaForLogging)
+      // Determine alert thresholds from configurations for both time and version differences.
+      val snapshotVersionDeltaMultiplier = sqlConf.getConf(
+        SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG)
+      val maintenanceIntervalMultiplier = sqlConf.getConf(
+        SQLConf.STATE_STORE_COORDINATOR_MAINTENANCE_MULTIPLIER_FOR_MIN_TIME_DELTA_TO_LOG)
+      val minDeltasForSnapshot = sqlConf.getConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
+      val maintenanceInterval = sqlConf.getConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL)
+
+      // Use the configured multipliers to determine the proper alert thresholds
+      val minVersionDeltaForLogging = snapshotVersionDeltaMultiplier * minDeltasForSnapshot
+      val minTimeDeltaForLogging = maintenanceIntervalMultiplier * maintenanceInterval
+
+      // Mark a state store as lagging if it is behind in both version and time.
+      // In the case that a snapshot was never uploaded, we treat version -1 as the preceding
+      // version of 0, and only rely on the version delta condition.
+      // Time requirement will be automatically satisfied as the initial timestamp is 0.
+      versionDelta >= minVersionDeltaForLogging && timeDelta > minTimeDeltaForLogging
     }
 
     override def compare(otherEvent: SnapshotUploadEvent): Int = {

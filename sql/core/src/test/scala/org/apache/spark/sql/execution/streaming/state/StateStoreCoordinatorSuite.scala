@@ -115,7 +115,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   test("multiple references have same underlying coordinator") {
     withCoordinatorRef(sc) { coordRef1 =>
-      val coordRef2 = StateStoreCoordinatorRef.forDriver(sc.env)
+      val coordRef2 = StateStoreCoordinatorRef.forDriver(sc.env, new SQLConf)
 
       val id = StateStoreProviderId(StateStoreId("x", 0, 0), UUID.randomUUID)
 
@@ -222,13 +222,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG.key ->
+        "2"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
-        // Set directly to SparkConf
-        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "2")
 
         // Start a query and run some data to force snapshot uploads
         val inputData = MemoryStream[Int]
@@ -240,11 +240,12 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
-        // Add and commit data multiple times to force new snapshot versions
-        inputData.addData(1, 2, 3)
-        query.processAllAvailable()
-        inputData.addData(1, 2, 3)
-        query.processAllAvailable()
+        // Add, commit, and wait multiple times to force snapshot versions and time difference
+        (0 until 2).foreach { _ =>
+          inputData.addData(1, 2, 3)
+          query.processAllAvailable()
+          Thread.sleep(1000)
+        }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
 
@@ -257,9 +258,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         // Verify that we should not have any state stores lagging behind
         assert(coordRef.getLaggingStoresForTesting().isEmpty)
         query.stop()
-
-        // Manually unset the custom SparkConf configs
-        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 
@@ -275,13 +273,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG.key ->
+        "2"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
-        // Set directly to SparkConf
-        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "2")
 
         // Start a query and run some data to force snapshot uploads
         val inputData = MemoryStream[Int]
@@ -293,11 +291,12 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
-        // Add and commit data multiple times to force new snapshot versions
-        inputData.addData(1, 2, 3)
-        query.processAllAvailable()
-        inputData.addData(1, 2, 3)
-        query.processAllAvailable()
+        // Add, commit, and wait multiple times to force snapshot versions and time difference
+        (0 until 2).foreach { _ =>
+          inputData.addData(1, 2, 3)
+          query.processAllAvailable()
+          Thread.sleep(1000)
+        }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
 
@@ -317,9 +316,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         assert(laggingStores.size == 2)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
         query.stop()
-
-        // Manually unset the custom SparkConf configs
-        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 
@@ -337,13 +333,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG.key ->
+        "5"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
-        // Set directly to SparkConf
-        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "3")
 
         // Start a join query and run some data to force snapshot uploads
         val input1 = MemoryStream[Int]
@@ -357,11 +353,12 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
-        // Add and commit data multiple times to force new snapshot versions
+        // Add, commit, and wait multiple times to force snapshot versions and time difference
         (0 until 5).foreach { _ =>
           input1.addData(1, 5)
           input2.addData(1, 5, 10)
           query.processAllAvailable()
+          Thread.sleep(500)
         }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
@@ -380,9 +377,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         // Verify that we should not have any state stores lagging behind
         assert(coordRef.getLaggingStoresForTesting().isEmpty)
         query.stop()
-
-        // Manually unset the custom SparkConf configs
-        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 
@@ -398,13 +392,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[SkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true"
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG.key ->
+        "5"
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
         implicit val sqlContext = spark.sqlContext
-        // Set directly to SparkConf
-        sc.conf.set(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG.key, "3")
 
         // Start a join query and run some data to force snapshot uploads
         val input1 = MemoryStream[Int]
@@ -418,11 +412,12 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
-        // Add and commit data multiple times to force new snapshot versions
+        // Add, commit, and wait multiple times to force snapshot versions and time difference
         (0 until 5).foreach { _ =>
           input1.addData(1, 5)
           input2.addData(1, 5, 10)
           query.processAllAvailable()
+          Thread.sleep(500)
         }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
@@ -449,9 +444,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         val laggingStores = coordRef.getLaggingStoresForTesting()
         assert(laggingStores.size == 2 * 4)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
-
-        // Manually unset the custom SparkConf configs
-        sc.conf.remove(SQLConf.STATE_STORE_COORDINATOR_MIN_SNAPSHOT_VERSION_DELTA_TO_LOG)
     }
   }
 }
@@ -460,7 +452,7 @@ object StateStoreCoordinatorSuite {
   def withCoordinatorRef(sc: SparkContext)(body: StateStoreCoordinatorRef => Unit): Unit = {
     var coordinatorRef: StateStoreCoordinatorRef = null
     try {
-      coordinatorRef = StateStoreCoordinatorRef.forDriver(sc.env)
+      coordinatorRef = StateStoreCoordinatorRef.forDriver(sc.env, new SQLConf)
       body(coordinatorRef)
     } finally {
       if (coordinatorRef != null) coordinatorRef.stop()
@@ -469,9 +461,10 @@ object StateStoreCoordinatorSuite {
 
   def withCoordinatorAndSQLConf(sc: SparkContext, pairs: (String, String)*)(
       body: (StateStoreCoordinatorRef, SparkSession) => Unit): Unit = {
+    var spark: SparkSession = null
     var coordinatorRef: StateStoreCoordinatorRef = null
     try {
-      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       SparkSession.setActiveSession(spark)
       coordinatorRef = spark.streams.stateStoreCoordinator
       // Set up SQLConf entries
@@ -479,6 +472,8 @@ object StateStoreCoordinatorSuite {
       body(coordinatorRef, spark)
     } finally {
       SparkSession.getActiveSession.foreach(_.streams.active.foreach(_.stop()))
+      // Unset all custom SQLConf entries
+      if (spark != null) pairs.foreach { case (key, _) => spark.conf.unset(key) }
       if (coordinatorRef != null) coordinatorRef.stop()
       StateStore.stop()
     }
