@@ -2262,8 +2262,8 @@ object SQLConf {
       .doc(
         "This multiplier determines the minimum version threshold for logging warnings when a " +
         "state store instance falls behind. The coordinator logs a warning if a state store's " +
-        "last uploaded snapshot's version lags behind the most recent snapshot version by this " +
-        "threshold. The threshold is calculated as the configured minimum number of deltas " +
+        "last uploaded snapshot's version lags behind the query's latest known version by " +
+        "this threshold. The threshold is calculated as the configured minimum number of deltas " +
         "needed to create a snapshot, multiplied by this multiplier."
       )
       .version("4.1.0")
@@ -2277,9 +2277,8 @@ object SQLConf {
       .doc(
         "This multiplier determines the minimum time threshold for logging warnings when a " +
         "state store instance falls behind. The coordinator logs a warning if a state store's " +
-        "last snapshot upload time lags behind the most recent snapshot upload by this " +
-        "threshold. The threshold is calculated as the maintenance interval multiplied by " +
-        "this multiplier."
+        "last snapshot upload time lags behind the current time by this threshold. " +
+        "The threshold is calculated as the maintenance interval multiplied by this multiplier."
       )
       .version("4.1.0")
       .intConf
@@ -2301,10 +2300,10 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.snapshotLagReportInterval")
       .internal()
       .doc(
-        "The minimum amount of time between the state store coordinator's report on " +
+        "The minimum amount of time between the state store coordinator's full report on " +
         "state store instances lagging in snapshot uploads. The reports may be delayed " +
-        "as the coordinator only checks for lagging instances upon receiving a new " +
-        "snapshot upload message."
+        "as the coordinator only checks for lagging instances upon receiving a message " +
+        "instructing it to do so."
       )
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)

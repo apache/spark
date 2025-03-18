@@ -664,17 +664,16 @@ private[sql] class RocksDBStateStoreProvider
    * @param version The snapshot version that was just uploaded from RocksDB
    */
   def reportSnapshotUploaded(version: Long): Unit = {
-    if (!storeConf.stateStoreCoordinatorReportUploadEnabled) {
-      return
+    if (storeConf.stateStoreCoordinatorReportUploadEnabled) {
+      // Collect the state store ID and query run ID to report back to the coordinator
+      StateStore.reportSnapshotUploaded(
+        StateStoreProviderId(
+          stateStoreId,
+          UUID.fromString(getRunId(hadoopConf))
+        ),
+        version
+      )
     }
-    // Collect the state store ID and query run ID to report back to the coordinator
-    StateStore.reportSnapshotUploaded(
-      StateStoreProviderId(
-        stateStoreId,
-        UUID.fromString(getRunId(hadoopConf))
-      ),
-      version
-    )
   }
 }
 

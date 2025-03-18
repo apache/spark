@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.{Clock, Utils}
@@ -282,6 +283,9 @@ abstract class ProgressContext(
 
     progressReporter.lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
     progressReporter.updateProgress(newProgress)
+
+    // Ask the state store coordinator to look for any lagging instances and report them.
+    StateStore.constructLaggingInstanceReport(lastExecution.runId, lastEpochId)
 
     // Update the value since this trigger executes a batch successfully.
     this.execStatsOnLatestExecutedBatch = Some(execStats)

@@ -31,18 +31,6 @@ import org.apache.spark.sql.functions.{count, expr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
-// SkipMaintenanceOnCertainPartitionsProvider is a test-only provider that skips running
-// maintenance for partitions 0 and 1 (these are arbitrary choices). This is used to test
-// snapshot upload lag can be observed through StreamingQueryProgress metrics.
-class SkipMaintenanceOnCertainPartitionsProvider extends RocksDBStateStoreProvider {
-  override def doMaintenance(): Unit = {
-    if (stateStoreId.partitionId == 0 || stateStoreId.partitionId == 1) {
-      return
-    }
-    super.doMaintenance()
-  }
-}
-
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   import StateStoreCoordinatorSuite._
@@ -248,6 +236,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+        val batchId =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastProgress.batchId
+        val timestamp = System.currentTimeMillis()
 
         // Verify all stores have uploaded a snapshot and it's logged by the coordinator
         (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
@@ -256,7 +247,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
         }
         // Verify that we should not have any state stores lagging behind
-        assert(coordRef.getLaggingStoresForTesting().isEmpty)
+        assert(coordRef.getLaggingStoresForTesting(query.runId, batchId, timestamp).isEmpty)
         query.stop()
     }
   }
@@ -299,6 +290,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+        val batchId =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastProgress.batchId
+        val timestamp = System.currentTimeMillis()
 
         (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
           val providerId =
@@ -312,7 +306,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           }
         }
         // We should have two state stores (id 0 and 1) that are lagging behind at this point
-        val laggingStores = coordRef.getLaggingStoresForTesting()
+        val laggingStores = coordRef.getLaggingStoresForTesting(query.runId, batchId, timestamp)
         assert(laggingStores.size == 2)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
         query.stop()
@@ -362,6 +356,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+        val batchId =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastProgress.batchId
+        val timestamp = System.currentTimeMillis()
 
         // Verify all state stores for join queries are reporting snapshot uploads
         (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
@@ -375,7 +372,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           }
         }
         // Verify that we should not have any state stores lagging behind
-        assert(coordRef.getLaggingStoresForTesting().isEmpty)
+        assert(coordRef.getLaggingStoresForTesting(query.runId, batchId, timestamp).isEmpty)
         query.stop()
     }
   }
@@ -421,6 +418,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         }
         val stateCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.checkpointLocation
+        val batchId =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastProgress.batchId
+        val timestamp = System.currentTimeMillis()
 
         // Verify all state stores for join queries are reporting snapshot uploads
         (0 until query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)).foreach { partitionId =>
@@ -441,7 +441,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         }
         // Verify that only stores from partition id 0 and 1 are lagging behind.
         // Each partition has 4 stores for join queries, so there are 2 * 4 = 8 lagging stores.
-        val laggingStores = coordRef.getLaggingStoresForTesting()
+        val laggingStores = coordRef.getLaggingStoresForTesting(query.runId, batchId, timestamp)
         assert(laggingStores.size == 2 * 4)
         assert(laggingStores.forall(_.storeId.partitionId <= 1))
     }
