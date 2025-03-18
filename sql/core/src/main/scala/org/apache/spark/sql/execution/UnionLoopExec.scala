@@ -74,7 +74,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @param output The output attributes of this loop.
  * @param limit If defined, the total number of rows output by this operator will be bounded by
  *              limit.
- *              Its value is pushed down to UnionLoop in Optimizer in case Limit node is present
+ *              Its value is pushed down to UnionLoop in Optimizer in case LocalLimit node is present
  *              in the logical plan and then transferred to UnionLoopExec in SparkStrategies.
  *              Note here: limit can be applied in the main query calling the recursive CTE, and not
  *              inside the recursive term of recursive CTE.
