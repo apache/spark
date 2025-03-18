@@ -903,7 +903,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'yyyy-MM-dd GGGGG'"
@@ -918,7 +919,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEEE'"
@@ -933,7 +935,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEE'"
