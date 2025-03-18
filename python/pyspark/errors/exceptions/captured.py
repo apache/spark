@@ -38,6 +38,7 @@ from pyspark.errors.exceptions.base import (
     QueryContext as BaseQueryContext,
     QueryContextType,
 )
+from pyspark.errors.exceptions.traceback import Traceback
 
 if TYPE_CHECKING:
     from py4j.protocol import Py4JJavaError
@@ -235,11 +236,22 @@ def convert_exception(e: "Py4JJavaError") -> CapturedException:
             )
         )
     ):
+        # msg = (
+        #     "\n  An ex!ception was thrown from the Python worker. "
+        #     "Please see the stack trace below.\n%s" % c.getMessage()
+        # )
+        # return PythonException(msg, stacktrace)
+        python_stacktrace = c.getMessage()
         msg = (
             "\n  An exception was thrown from the Python worker. "
-            "Please see the stack trace below.\n%s" % c.getMessage()
+            "Please see the stack trace below.\n%s" % python_stacktrace
         )
-        return PythonException(msg, stacktrace)
+        ex = PythonException(msg, stacktrace)
+        try:
+            tb = Traceback.from_string(python_stacktrace).as_traceback()
+            return ex.with_traceback(tb)
+        except Exception:
+            return ex
 
     return UnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
 

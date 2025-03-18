@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors.exceptions.traceback import Traceback
 import pyspark.sql.connect.proto as pb2
 import json
 from typing import Dict, List, Optional, TYPE_CHECKING
@@ -88,10 +89,16 @@ def convert_exception(
             ]
 
     if "org.apache.spark.api.python.PythonException" in classes:
-        return PythonException(
+        msg = (
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % message
         )
+        ex = PythonException(msg, stacktrace)
+        try:
+            tb = Traceback.from_string(message).as_traceback()
+            return ex.with_traceback(tb)
+        except Exception:
+            return ex
 
     # Return exception based on class mapping
     for error_class_name in classes:
