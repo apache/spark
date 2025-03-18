@@ -4541,7 +4541,7 @@ object SQLConf {
     .doc("Maximum level of recursion that is allowed while executing a recursive CTE definition." +
       "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
       "unlimited.")
-    .version("4.0.0")
+    .version("4.1.0")
     .intConf
     .createWithDefault(100)
 
@@ -4549,7 +4549,7 @@ object SQLConf {
     .doc("Maximum number of rows that can be returned when executing a recursive CTE definition." +
       "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
       "unlimited.")
-    .version("4.0.0")
+    .version("4.1.0")
     .intConf
     .createWithDefault(1000)
 

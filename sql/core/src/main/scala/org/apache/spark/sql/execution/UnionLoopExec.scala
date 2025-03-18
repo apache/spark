@@ -58,8 +58,8 @@ import org.apache.spark.sql.internal.SQLConf
  * :                    +- Project [1#0 AS n#1]
  * :                       +- UnionLoopRef 0, [1#0], false
  * +- Project [n#3]
- * +- SubqueryAlias t
- * +- CTERelationRef 0, true, [n#3], false, false
+ *   +- SubqueryAlias t
+ *     +- CTERelationRef 0, true, [n#3], false, false
  * }}}
  *
  * @param loopId This is id of the CTERelationDef containing the recursive query. Its value is
@@ -104,10 +104,10 @@ case class UnionLoopExec(
     } else {
       plan
     }
-    val df = Dataset.ofRows(session, planOrLimitedPlan)
+    val df = Dataset.ofRows(session, planWithLimit)
     val materializedDF = df.repartition()
-    val count = cachedDF.count()
-    (cachedDF, count)
+    val count = materializedDF.count()
+    (materializedDF, count)
   }
 
   /**
