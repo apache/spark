@@ -248,8 +248,9 @@ def convert_exception(e: "Py4JJavaError") -> CapturedException:
         )
         ex = PythonException(msg, stacktrace)
         try:
-            tb = Traceback.from_string(python_stacktrace).as_traceback()
-            return ex.with_traceback(tb)
+            tb = Traceback.from_string(python_stacktrace)
+            tb.populate_linecache()
+            return ex.with_traceback(tb.as_traceback())
         except Exception:
             return ex
 

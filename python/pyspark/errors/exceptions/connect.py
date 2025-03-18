@@ -93,10 +93,12 @@ def convert_exception(
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % message
         )
-        ex = PythonException(msg, stacktrace)
+        ex = PythonException(msg)
         try:
-            tb = Traceback.from_string(message).as_traceback()
-            return ex.with_traceback(tb)
+            print("asdfklsfj", message)
+            tb = Traceback.from_string(message)
+            tb.populate_linecache()
+            return ex.with_traceback(tb.as_traceback())
         except Exception:
             return ex
 
