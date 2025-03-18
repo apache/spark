@@ -42,12 +42,20 @@ WITH RECURSIVE r(level) AS (
 SELECT * FROM r;
 
 -- unlimited recursion fails at spark.sql.cteRecursionRowLimit level
-WITH RECURSIVE r(level) AS (
-    VALUES 1
+CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
+    (0,0),
+    (0,1),
+    (1,0),
+    (1,1);
+
+WITH RECURSIVE t(n) AS (
+    SELECT 1
     UNION ALL
-    (SELECT level + 1 FROM r UNION SELECT 1)
+    SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
 )
-SELECT * FROM r;
+SELECT * FROM t;
+
+DROP VIEW ZeroAndOne;
 
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (

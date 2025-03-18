@@ -4551,7 +4551,7 @@ object SQLConf {
       "unlimited.")
     .version("4.1.0")
     .intConf
-    .createWithDefault(1000)
+    .createWithDefault(1000000)
 
   val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
     .internal()

@@ -113,12 +113,24 @@ org.apache.spark.SparkException
 
 
 -- !query
-WITH RECURSIVE r(level) AS (
-    VALUES 1
+CREATE TEMPORARY VIEW ZeroAndOne(current, next) AS VALUES
+    (0,0),
+    (0,1),
+    (1,0),
+    (1,1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
     UNION ALL
-    (SELECT level + 1 FROM r UNION SELECT 1)
+    SELECT next FROM t LEFT JOIN ZeroAndOne ON n = current
 )
-SELECT * FROM r
+SELECT * FROM t
 -- !query schema
 struct<>
 -- !query output
@@ -127,9 +139,17 @@ org.apache.spark.SparkException
   "errorClass" : "RECURSION_ROW_LIMIT_EXCEEDED",
   "sqlState" : "42836",
   "messageParameters" : {
-    "rowLimit" : "1000"
+    "rowLimit" : "1000000"
   }
 }
+
+
+-- !query
+DROP VIEW ZeroAndOne
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
