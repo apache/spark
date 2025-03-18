@@ -10,7 +10,7 @@ CreateViewCommand `time_view`, select '11:53:26.038344' time_str, 'HH:mm:ss.SSSS
 -- !query
 select time '16:39:45\t'
 -- !query analysis
-Project [59985000000 AS 59985000000#x]
+Project [16:39:45 AS TIME '16:39:45'#x]
 +- OneRowRelation
 
 
