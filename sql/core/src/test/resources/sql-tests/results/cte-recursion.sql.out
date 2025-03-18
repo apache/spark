@@ -114,6 +114,26 @@ org.apache.spark.SparkException
 
 -- !query
 WITH RECURSIVE r(level) AS (
+    VALUES 1
+    UNION ALL
+    (SELECT level + 1 FROM r UNION SELECT 1)
+)
+SELECT * FROM r
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "RECURSION_ROW_LIMIT_EXCEEDED",
+  "sqlState" : "42836",
+  "messageParameters" : {
+    "rowLimit" : "1000"
+  }
+}
+
+
+-- !query
+WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL
   SELECT level + 1 FROM r
@@ -127,6 +147,28 @@ struct<level:int>
 2
 3
 4
+5
+6
+7
+8
+9
+
+
+-- !query
+WITH RECURSIVE r(level) AS (
+    VALUES 0
+    UNION ALL
+    SELECT level + 1 FROM r
+)
+SELECT * FROM r LIMIT 10 OFFSET 5
+-- !query schema
+struct<level:int>
+-- !query output
+10
+11
+12
+13
+14
 5
 6
 7

@@ -980,7 +980,6 @@ struct<plan:string>
 Loop id: xxxx
 Output [1]: [col1#x]
 Limit: None
-IsGlobal: false
 
 (2) LocalRelation
 Arguments: [col1#x]

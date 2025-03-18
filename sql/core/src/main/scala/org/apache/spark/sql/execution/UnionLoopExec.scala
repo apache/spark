@@ -78,15 +78,13 @@ import org.apache.spark.sql.internal.SQLConf
  *              in the logical plan and then transferred to UnionLoopExec in SparkStrategies.
  *              Note here: limit can be applied in the main query calling the recursive CTE, and not
  *              inside the recursive term of recursive CTE.
- * @param isGlobal Defines whether the limit parameter is a local limit or a global limit.
  */
 case class UnionLoopExec(
     loopId: Long,
     @transient anchor: LogicalPlan,
     @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
-    limit: Option[Int] = None,
-    isGlobal: Boolean = false) extends LeafExecNode {
+    limit: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
@@ -98,8 +96,7 @@ case class UnionLoopExec(
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
    */
-  private def executeAndCacheAndCount(
-                                       plan: LogicalPlan, currentLimit: Int) = {
+  private def executeAndCacheAndCount(plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a (local) limit node above the plan and execute
     // the newly created plan.
     val planOrLimitedPlan = if (limit.isDefined) {
@@ -126,6 +123,7 @@ case class UnionLoopExec(
     val numOutputRows = longMetric("numOutputRows")
     val numIterations = longMetric("numIterations")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
+    val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
@@ -139,11 +137,7 @@ case class UnionLoopExec(
 
     var currentLevel = 1
 
-    val numPartitions = prevDF.queryExecution.toRdd.partitions.length
-
-    if (!isGlobal) {
-      currentLimit = currentLimit * numPartitions
-    }
+    var currentNumRows = 0
 
     var limitReached: Boolean = false
     // Main loop for obtaining the result of the recursive query.
@@ -161,6 +155,8 @@ case class UnionLoopExec(
         .newInstance()
       unionChildren += prevPlan
 
+      currentNumRows += prevCount.toInt
+
       if (limit.isDefined) {
         currentLimit -= prevCount.toInt
         if (currentLimit <= 0) {
@@ -168,16 +164,23 @@ case class UnionLoopExec(
         }
       }
 
+      if (rowLimit != -1 && currentNumRows > rowLimit) {
+        throw new SparkException(
+          errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
+          messageParameters = Map("rowLimit" -> rowLimit.toString),
+          cause = null)
+      }
+
       // Update metrics
       numOutputRows += prevCount
       numIterations += 1
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
-      // the current plan is created by substituting UnionLoopRef node with the project node of
-      // the previous plan.
-      // This way we support only UNION ALL case. Additional case should be added for UNION case.
-      // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
       if (!limitReached) {
+        // the current plan is created by substituting UnionLoopRef node with the project node of
+        // the previous plan.
+        // This way we support only UNION ALL case. Additional case should be added for UNION case.
+        // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
         val newRecursion = recursion.transform {
           case r: UnionLoopRef =>
             val logicalPlan = prevDF.logicalPlan
@@ -204,14 +207,7 @@ case class UnionLoopExec(
           Dataset.ofRows(session, Union(unionChildren.toSeq))
         }
       }
-      val dfMaybeCoalesced = {
-        if (isGlobal) {
-          df
-        } else {
-          df.coalesce(numPartitions)
-        }
-      }
-      dfMaybeCoalesced.queryExecution.toRdd
+      df.queryExecution.toRdd
     }
   }
 
@@ -225,7 +221,6 @@ case class UnionLoopExec(
        |Loop id: $loopId
        |${QueryPlan.generateFieldString("Output", output)}
        |Limit: $limit
-       |IsGlobal: $isGlobal
        |""".stripMargin
   }
 }
