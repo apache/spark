@@ -212,6 +212,11 @@ object StateStoreErrors {
     StateStoreInvalidVariableTypeChange = {
     new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
   }
+
+  def failedToGetChangelogWriter(version: Long, e: Throwable):
+    StateStoreFailedToGetChangelogWriter = {
+    new StateStoreFailedToGetChangelogWriter(version, e)
+  }
 }
 
 class StateStoreDuplicateStateVariableDefined(stateVarName: String)
@@ -409,6 +414,12 @@ class StateStoreSnapshotPartitionNotFound(
       "snapshotPartitionId" -> snapshotPartitionId.toString,
       "operatorId" -> operatorId.toString,
       "checkpointLocation" -> checkpointLocation))
+
+class StateStoreFailedToGetChangelogWriter(version: Long, e: Throwable)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.FAILED_TO_GET_CHANGELOG_WRITER",
+    messageParameters = Map("version" -> version.toString),
+    cause = e)
 
 class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
   extends SparkRuntimeException(

@@ -347,6 +347,8 @@ object QueryTest extends Assertions {
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
+      // SPARK-51349: "null" and null had the same precedence in sorting
+      case "null" => "__null_string__"
       case o => o
     })
   }
@@ -478,5 +480,11 @@ class QueryTestSuite extends QueryTest with test.SharedSparkSession {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
+  }
+
+  test("SPARK-51349: null string and true null are distinguished") {
+    checkAnswer(sql("select case when id == 0 then struct('null') else struct(null) end s " +
+      "from range(2)"),
+      Seq(Row(Row(null)), Row(Row("null"))))
   }
 }

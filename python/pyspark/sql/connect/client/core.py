@@ -958,7 +958,7 @@ class SparkConnectClient(object):
         # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
         # DataFrame manually with the correct schema.
         if table.num_rows == 0:
-            pdf = pd.DataFrame(columns=schema.names)
+            pdf = pd.DataFrame(columns=schema.names, index=range(0))
         else:
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])

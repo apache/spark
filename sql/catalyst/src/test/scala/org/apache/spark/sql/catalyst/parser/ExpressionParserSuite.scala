@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
@@ -1237,5 +1237,20 @@ class ExpressionParserSuite extends AnalysisTest {
           start = 2,
           stop = 9 + quantifier.length))
     }
+  }
+
+  test("time literals") {
+    assertEqual("tIme '12:13:14'", Literal(LocalTime.parse("12:13:14")))
+    assertEqual("TIME'23:59:59.999999'", Literal(LocalTime.parse("23:59:59.999999")))
+
+    checkError(
+      exception = parseException("time '12-13.14'"),
+      condition = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map("valueType" -> "\"TIME\"", "value" -> "'12-13.14'"),
+      context = ExpectedContext(
+        fragment = "time '12-13.14'",
+        start = 0,
+        stop = 14))
   }
 }

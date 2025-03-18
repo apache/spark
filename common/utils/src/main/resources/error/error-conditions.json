@@ -304,6 +304,11 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "FAILED_TO_GET_CHANGELOG_WRITER" : {
+        "message" : [
+          "Failed to get the changelog writer for state store at version <version>."
+        ]
+      },
       "HDFS_STORE_PROVIDER_OUT_OF_MEMORY" : {
         "message" : [
           "Could not load HDFS state store with id <stateStoreId> because of an out of memory exception."
@@ -399,6 +404,12 @@
       "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
     ],
     "sqlState" : "22018"
+  },
+  "CANNOT_PARSE_TIME" : {
+    "message" : [
+      "The input string <input> cannot be parsed to a TIME value because it does not match to the datetime format <format>."
+    ],
+    "sqlState" : "22010"
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [

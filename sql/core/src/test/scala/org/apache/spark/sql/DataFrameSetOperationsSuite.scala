@@ -1478,11 +1478,13 @@ class DataFrameSetOperationsSuite extends QueryTest
     def checkIfColumnar(
         plan: SparkPlan,
         targetPlan: (SparkPlan) => Boolean,
-        isColumnar: Boolean): Unit = {
+        isColumnar: Boolean,
+        targetPlanNum: Int): Unit = {
       val target = collect(plan) {
         case p if targetPlan(p) => p
       }
       assert(target.nonEmpty)
+      assert(target.size == targetPlanNum)
       assert(target.forall(_.supportsColumnar == isColumnar))
     }
 
@@ -1494,15 +1496,13 @@ class DataFrameSetOperationsSuite extends QueryTest
         val union = df1.union(df2)
         union.collect()
         checkIfColumnar(union.queryExecution.executedPlan,
-          _.isInstanceOf[InMemoryTableScanExec], supported)
-        checkIfColumnar(union.queryExecution.executedPlan,
-          _.isInstanceOf[InMemoryTableScanExec], supported)
-        checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported)
+          _.isInstanceOf[InMemoryTableScanExec], supported, 2)
+        checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported, 1)
         checkAnswer(union, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Row(6) :: Nil)
 
         val nonColumnarUnion = df1.union(Seq(7, 8, 9).toDF("k"))
         checkIfColumnar(nonColumnarUnion.queryExecution.executedPlan,
-          _.isInstanceOf[UnionExec], false)
+          _.isInstanceOf[UnionExec], false, 1)
         checkAnswer(nonColumnarUnion,
           Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(8) :: Row(9) :: Nil)
       }

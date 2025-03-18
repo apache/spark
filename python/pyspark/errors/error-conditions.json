@@ -159,8 +159,8 @@
       "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
     ]
   },
-  "COLLATION_INVALID_PROVIDER" : {
-    "message" : [
+  "COLLATION_INVALID_PROVIDER": {
+    "message": [
       "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
     ]
   },
@@ -372,8 +372,8 @@
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
-  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS" : {
-    "message" : [
+  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS": {
+    "message": [
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ]
   },
@@ -502,8 +502,8 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
-  "MALFORMED_VARIANT" : {
-    "message" : [
+  "MALFORMED_VARIANT": {
+    "message": [
       "Variant binary is malformed. Please check the data source is valid."
     ]
   },
@@ -517,7 +517,7 @@
       "A master URL must be set in your configuration."
     ]
   },
-  "MEMORY_PROFILE_INVALID_SOURCE":{
+  "MEMORY_PROFILE_INVALID_SOURCE": {
     "message": [
       "Memory profiler can only be used on editors with line numbers."
     ]
@@ -812,7 +812,7 @@
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
     ]
   },
-  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS" : {
+  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS": {
     "message": [
       "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
     ]
@@ -865,7 +865,7 @@
   },
   "RESPONSE_ALREADY_RECEIVED": {
     "message": [
-      "OPERATION_NOT_FOUND on the server but responses were already received from it."
+      "<error_type> on the server but responses were already received from it."
     ]
   },
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
