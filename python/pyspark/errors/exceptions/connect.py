@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors.exceptions.traceback import Traceback
 import pyspark.sql.connect.proto as pb2
 import json
 from typing import Dict, List, Optional, TYPE_CHECKING
@@ -40,6 +39,7 @@ from pyspark.errors.exceptions.base import (
     StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
     PickleException as BasePickleException,
     UnknownException as BaseUnknownException,
+    recover_python_exception,
 )
 
 if TYPE_CHECKING:
@@ -53,6 +53,16 @@ class SparkConnectException(PySparkException):
 
 
 def convert_exception(
+    info: "ErrorInfo",
+    truncated_message: str,
+    resp: Optional[pb2.FetchErrorDetailsResponse],
+    display_server_stacktrace: bool = False,
+) -> SparkConnectException:
+    converted = _convert_exception(info, truncated_message, resp, display_server_stacktrace)
+    return recover_python_exception(converted)
+
+
+def _convert_exception(
     info: "ErrorInfo",
     truncated_message: str,
     resp: Optional[pb2.FetchErrorDetailsResponse],
@@ -89,18 +99,10 @@ def convert_exception(
             ]
 
     if "org.apache.spark.api.python.PythonException" in classes:
-        msg = (
+        return PythonException(
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % message
         )
-        ex = PythonException(msg)
-        try:
-            print("asdfklsfj", message)
-            tb = Traceback.from_string(message)
-            tb.populate_linecache()
-            return ex.with_traceback(tb.as_traceback())
-        except Exception:
-            return ex
 
     # Return exception based on class mapping
     for error_class_name in classes:

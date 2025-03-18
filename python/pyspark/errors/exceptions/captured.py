@@ -37,8 +37,8 @@ from pyspark.errors.exceptions.base import (
     UnknownException as BaseUnknownException,
     QueryContext as BaseQueryContext,
     QueryContextType,
+    recover_python_exception,
 )
-from pyspark.errors.exceptions.traceback import Traceback
 
 if TYPE_CHECKING:
     from py4j.protocol import Py4JJavaError
@@ -186,6 +186,11 @@ class CapturedException(PySparkException):
 
 
 def convert_exception(e: "Py4JJavaError") -> CapturedException:
+    converted = _convert_exception(e)
+    return recover_python_exception(converted)
+
+
+def _convert_exception(e: "Py4JJavaError") -> CapturedException:
     from pyspark import SparkContext
     from py4j.java_gateway import is_instance_of
 
@@ -236,23 +241,11 @@ def convert_exception(e: "Py4JJavaError") -> CapturedException:
             )
         )
     ):
-        # msg = (
-        #     "\n  An ex!ception was thrown from the Python worker. "
-        #     "Please see the stack trace below.\n%s" % c.getMessage()
-        # )
-        # return PythonException(msg, stacktrace)
-        python_stacktrace = c.getMessage()
         msg = (
             "\n  An exception was thrown from the Python worker. "
-            "Please see the stack trace below.\n%s" % python_stacktrace
+            "Please see the stack trace below.\n%s" % c.getMessage()
         )
-        ex = PythonException(msg, stacktrace)
-        try:
-            tb = Traceback.from_string(python_stacktrace)
-            tb.populate_linecache()
-            return ex.with_traceback(tb.as_traceback())
-        except Exception:
-            return ex
+        return PythonException(msg, stacktrace)
 
     return UnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
 

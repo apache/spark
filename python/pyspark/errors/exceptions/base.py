@@ -17,7 +17,7 @@
 import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
+from typing import Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
 
 from pyspark.errors.utils import ErrorClassesReader
 from pyspark.logger import PySparkLogger
@@ -449,3 +449,33 @@ class QueryContext(ABC):
         Summary of the exception cause.
         """
         ...
+
+
+TException = TypeVar("TException", bound=PySparkException)
+
+
+def recover_python_exception(e: TException) -> TException:
+    """
+    Recover Python exception stack trace.
+
+    .. versionadded:: 4.0.0
+    """
+    python_exception_header = "Traceback (most recent call last):"
+    try:
+        from pyspark.errors.exceptions.traceback import Traceback
+
+        message = str(e)
+        start = message.find(python_exception_header)
+        if start == -1:
+            # No Python exception found
+            return e
+
+        # The message contains a Python exception. Parse it to use it as the exception's traceback.
+        # This allows richer error messages, for example showing line content in Python UDF.
+        python_exception_string = message[start:]
+        tb = Traceback.from_string(python_exception_string)
+        tb.populate_linecache()
+        return e.with_traceback(tb.as_traceback())
+    except Exception:
+        # Parsing the stacktrace is best effort.
+        return e
