@@ -140,6 +140,8 @@ case class UnionLoopExec(
     var currentNumRows = 0
 
     var limitReached: Boolean = false
+
+    val numPartitions = prevDF.queryExecution.toRdd.partitions.length
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
 
@@ -207,7 +209,8 @@ case class UnionLoopExec(
           Dataset.ofRows(session, Union(unionChildren.toSeq))
         }
       }
-      df.queryExecution.toRdd
+      val coalescedDF = df.coalesce(numPartitions)
+      coalescedDF.queryExecution.toRdd
     }
   }
 

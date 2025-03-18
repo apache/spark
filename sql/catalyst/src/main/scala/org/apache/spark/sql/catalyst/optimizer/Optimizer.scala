@@ -850,9 +850,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
     // If limit node is present, we should propagate it down to UnionLoop, so that it is later
     // propagated to UnionLoopExec.
-    case l @ LocalLimit(IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
+    case LocalLimit(IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
       p.copy(child = ul.copy(limit = Some(limit)))
-    case l @ LocalLimit(IntegerLiteral(limit), ul: UnionLoop) =>
+    case LocalLimit(IntegerLiteral(limit), ul: UnionLoop) =>
       ul.copy(limit = Some(limit))
 
     // Add extra limits below JOIN:
