@@ -27,6 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonWorker, SpecialLengths}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -42,6 +43,8 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
   protected def handleMetadataAfterExec(stream: DataInputStream): Unit = { }
 
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OUT
+
+  protected def arrowMaxRecordsPerOutputBatch: Int = SQLConf.get.arrowMaxRecordsPerOutputBatch
 
   protected def newReaderIterator(
       stream: DataInputStream,
@@ -64,6 +67,9 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       private var schema: StructType = _
       private var vectors: Array[ColumnVector] = _
 
+      private var rowCount = -1
+      private var currentRowIdx = -1
+
       context.addTaskCompletionListener[Unit] { _ =>
         if (reader != null) {
           reader.close(false)
@@ -83,17 +89,37 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
           throw writer.exception.get
         }
         try {
-          if (reader != null && batchLoaded) {
+          if (batchLoaded && rowCount > 0 && currentRowIdx < rowCount) {
+            val batchRoot = if (arrowMaxRecordsPerOutputBatch > 0) {
+              val remainingRows = rowCount - currentRowIdx
+              if (remainingRows > arrowMaxRecordsPerOutputBatch) {
+                root.slice(currentRowIdx, arrowMaxRecordsPerOutputBatch)
+              } else {
+                root
+              }
+            } else {
+              root
+            }
+
+            currentRowIdx = currentRowIdx + batchRoot.getRowCount
+
+            vectors = batchRoot.getFieldVectors().asScala.map { vector =>
+              new ArrowColumnVector(vector)
+            }.toArray[ColumnVector]
+
+            val batch = new ColumnarBatch(vectors)
+            batch.setNumRows(batchRoot.getRowCount)
+            deserializeColumnarBatch(batch, schema)
+          } else if (reader != null && batchLoaded) {
             val bytesReadStart = reader.bytesRead()
             batchLoaded = reader.loadNextBatch()
             if (batchLoaded) {
-              val batch = new ColumnarBatch(vectors)
-              val rowCount = root.getRowCount
-              batch.setNumRows(root.getRowCount)
+              rowCount = root.getRowCount
+              currentRowIdx = 0
               val bytesReadEnd = reader.bytesRead()
               pythonMetrics("pythonNumRowsReceived") += rowCount
               pythonMetrics("pythonDataReceived") += bytesReadEnd - bytesReadStart
-              deserializeColumnarBatch(batch, schema)
+              read()
             } else {
               reader.close(false)
               allocator.close()
@@ -106,9 +132,6 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
                 reader = new ArrowStreamReader(stream, allocator)
                 root = reader.getVectorSchemaRoot()
                 schema = ArrowUtils.fromArrowSchema(root.getSchema())
-                vectors = root.getFieldVectors().asScala.map { vector =>
-                  new ArrowColumnVector(vector)
-                }.toArray[ColumnVector]
                 read()
               case SpecialLengths.TIMING_DATA =>
                 handleTimingData()
