@@ -642,8 +642,26 @@ private[ml] object MLUtils {
     // Association Rules
     (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
-    // Feature Models
+    // Feature transformers / models
+    (classOf[Binarizer], Set()),
     (classOf[Bucketizer], Set("getSplits", "getSplitsArray")),
+    (classOf[BucketedRandomProjectionLSHModel], Set()),
+    (classOf[DCT], Set()),
+    (classOf[ElementwiseProduct], Set()),
+    (classOf[FeatureHasher], Set()),
+    (classOf[HashingTF], Set()),
+    (classOf[Interaction], Set()),
+    (classOf[MinHashLSHModel], Set()),
+    (classOf[NGram], Set()),
+    (classOf[Normalizer], Set()),
+    (classOf[SQLTransformer], Set()),
+    (classOf[StopWordsRemover], Set()),
+    (classOf[TargetEncoderModel], Set()),
+    (classOf[Tokenizer], Set()),
+    (classOf[VectorAssembler], Set()),
+    (classOf[VectorSizeHint], Set()),
+    (classOf[VectorSlicer], Set()),
+
     (classOf[ImputerModel], Set("surrogateDF")),
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
