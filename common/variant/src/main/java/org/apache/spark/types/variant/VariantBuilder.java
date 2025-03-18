@@ -431,19 +431,6 @@ public class VariantBuilder {
     }
   }
 
-  /**
-   * Create a variant array from multiple variants.
-   */
-  public void appendVariantArray(ArrayList<Variant> variants) {
-    ArrayList<Integer> offsets = new ArrayList<>();
-    int start = writePos;
-    for (Variant variant : variants) {
-      offsets.add(writePos - start);
-      appendVariant(variant);
-    }
-    finishWritingArray(start, offsets);
-  }
-
   // Append the variant value without rewriting or creating any metadata. This is used when
   // building an object during shredding, where there is a fixed pre-existing metadata that
   // all shredded values will refer to.

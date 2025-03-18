@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.xml
 import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
+import java.util
 import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamConstants, XMLStreamException}
 import javax.xml.stream.events._
@@ -965,37 +966,46 @@ object StaxXmlParser {
 
         case _: EndElement =>
           if (fieldToVariants.nonEmpty) {
-            // check if we only have value tag fields
             val onlyValueTagFields = fieldToVariants.keySet.forall(_ == options.valueTag)
             if (onlyValueTagFields) {
+              // If the element only has value tag field, parse the element as a variant primitive
               assert(
                 fieldToVariants(options.valueTag).size() == 1,
                 "Only one value tag field is expected " +
                 "if there are no other child elements or attributes"
               )
-              // Append the value directly to the current element
               rootBuilder.appendVariant(fieldToVariants(options.valueTag).get(0))
             } else {
-              // If there are more than one nested fields under the root element, we need to add all
-              // fields to the root builder as a variant object
+              // Otherwise, build the element as an object with all the fields in fieldToVariants
               val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
 
               fieldToVariants.foreach {
                 case (field, variants) =>
-                  // Add the field to the variant metadata
+                  // Add the field key to the variant metadata
                   val fieldId = rootBuilder.addKey(field)
                   rootFieldEntries.add(
                     new FieldEntry(field, fieldId, rootBuilder.getWritePos - start)
                   )
 
-                  if (variants.size() > 1) {
-                    // If the field has more than one entry, it's an array. Thus, we will add all
-                    // variants to the root builder as an array
-                    rootBuilder.appendVariantArray(variants)
+                  val fieldValue = if (variants.size() > 1) {
+                    // If the field has more than one entry, it's an array field. Build a Variant
+                    // array as the field value
+                    val arrayBuilder = new VariantBuilder(false)
+                    val start = arrayBuilder.getWritePos
+                    val offsets = new util.ArrayList[Integer]()
+                    variants.asScala.foreach { v =>
+                      offsets.add(arrayBuilder.getWritePos - start)
+                      arrayBuilder.appendVariant(v)
+                    }
+                    arrayBuilder.finishWritingArray(start, offsets)
+                    arrayBuilder.result()
                   } else {
-                    // Otherwise, we will add the field to the root builder as a single variant
-                    rootBuilder.appendVariant(variants.get(0))
+                    // Otherwise, just use the first variant as the field value
+                    variants.get(0)
                   }
+
+                  // Append the field value to the variant builder
+                  rootBuilder.appendVariant(fieldValue)
               }
 
               // Finish writing the root element as an object if it has more than one nested fields
