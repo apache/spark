@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.xml
 
 import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
-import java.math.BigDecimal
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util.Locale
@@ -956,46 +955,52 @@ object StaxXmlParser {
           variants.add(convertVariant(parser, attributes, options))
 
         case c: Characters if !c.isWhiteSpace =>
+          // Treat the CDATA as a value tag field, where we use the [[XMLOptions.valueTag]] as the
+          // field key
+          val builder = new VariantBuilder(false)
+          appendXMLCharacterToVariant(builder, c.getData, options)
+          val variants =
+            fieldToVariants.getOrElseUpdate(options.valueTag, new java.util.ArrayList[Variant]())
+          variants.add(builder.result())
+
+        case _: EndElement =>
           if (fieldToVariants.nonEmpty) {
-            // If there are other nested fields in the root element, we need to treat the CDATA
-            // as a value field, where we use the [[XMLOptions.valueTag]] as the field key
-            val builder = new VariantBuilder(false)
-            appendXMLCharacterToVariant(builder, c.getData, options)
-            val variants =
-              fieldToVariants.getOrElseUpdate(options.valueTag, new java.util.ArrayList[Variant]())
-            variants.add(builder.result())
-          } else {
-            // If there is no nested fields in the root element, add the CDATA to the root builder
-            // directly
-            appendXMLCharacterToVariant(rootBuilder, c.getData, options)
-          }
+            // check if we only have value tag fields
+            val onlyValueTagFields = fieldToVariants.keySet.forall(_ == options.valueTag)
+            if (onlyValueTagFields) {
+              assert(
+                fieldToVariants(options.valueTag).size() == 1,
+                "Only one value tag field is expected " +
+                "if there are no other child elements or attributes"
+              )
+              // Append the value directly to the current element
+              rootBuilder.appendVariant(fieldToVariants(options.valueTag).get(0))
+            } else {
+              // If there are more than one nested fields under the root element, we need to add all
+              // fields to the root builder as a variant object
+              val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
 
-        case e: EndElement =>
-          if (fieldToVariants.nonEmpty) {
-            // If there are more than one nested fields under the root element, we need to add all
-            // fields to the root builder as a variant object
-            val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
+              fieldToVariants.foreach {
+                case (field, variants) =>
+                  // Add the field to the variant metadata
+                  val fieldId = rootBuilder.addKey(field)
+                  rootFieldEntries.add(
+                    new FieldEntry(field, fieldId, rootBuilder.getWritePos - start)
+                  )
 
-            fieldToVariants.foreach {
-              case (field, variants) =>
-                // Add the field to the variant metadata
-                val fieldId = rootBuilder.addKey(field)
-                rootFieldEntries.add(
-                  new FieldEntry(field, fieldId, rootBuilder.getWritePos - start)
-                )
+                  if (variants.size() > 1) {
+                    // If the field has more than one entry, it's an array. Thus, we will add all
+                    // variants to the root builder as an array
+                    rootBuilder.appendVariantArray(variants)
+                  } else {
+                    // Otherwise, we will add the field to the root builder as a single variant
+                    rootBuilder.appendVariant(variants.get(0))
+                  }
+              }
 
-                if (variants.size() > 1) {
-                  // If the field has more than one entry, it's an array. Thus, we will add all
-                  // variants to the root builder as an array
-                  rootBuilder.appendVariantArray(variants)
-                } else {
-                  // Otherwise, we will add the field to the root builder as a single variant
-                  rootBuilder.appendVariant(variants.get(0))
-                }
+              // Finish writing the root element as an object if it has more than one nested fields
+              rootBuilder.finishWritingObject(start, rootFieldEntries)
             }
-
-            // Finish writing the root element as an object if it has more than one nested fields
-            rootBuilder.finishWritingObject(start, rootFieldEntries)
           }
           shouldStop = true
 
@@ -1073,8 +1078,8 @@ object StaxXmlParser {
     }
 
     // Try parse the value as a long first
-    allCatch opt signSafeValue.toLong match {
-      case Some(l) if l.toString == signSafeValue =>
+    allCatch opt value.toLong match {
+      case Some(l) =>
         builder.appendLong(l)
         return true
       case _ =>
@@ -1082,7 +1087,8 @@ object StaxXmlParser {
 
     // Try parse the value as decimal if options.tryParseDecimal is set
     if (options.prefersDecimal) {
-      allCatch opt new BigDecimal(value) match {
+      val decimalParser = ExprUtils.getDecimalParser(options.locale)
+      allCatch opt decimalParser(value) match {
         case Some(d)
             if d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION =>
           builder.appendDecimal(d)
@@ -1092,8 +1098,8 @@ object StaxXmlParser {
     }
 
     // Try parse the value as double
-    allCatch opt signSafeValue.toDouble match {
-      case Some(d) if d.toString == signSafeValue =>
+    allCatch opt value.toDouble match {
+      case Some(d) =>
         builder.appendDouble(d)
         return true
       case _ =>

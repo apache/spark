@@ -20,16 +20,12 @@ import java.time.ZoneOffset
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
-import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.test.SharedSparkSession
 
 class XmlVariantSuite
     extends QueryTest
     with SharedSparkSession
-    with CommonFileDataSourceSuite
     with TestXmlData {
-
-  override protected def dataSourceFormat: String = "xml"
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
@@ -57,7 +53,9 @@ class XmlVariantSuite
     // Decimal -> Decimal
     testParser(
       xml = "<ROW><price>158,058,049.001</price></ROW>",
-      expectedJsonStr = """{"price":158058049.001}""")
+      expectedJsonStr = """{"price":158058049.001}""",
+      extraOptions = Map("prefersDecimal" -> "true")
+    )
 
     // Double -> Double
     testParser("<ROW><double>1.00</double></ROW>", """{"double":1.0}""")
@@ -95,7 +93,7 @@ class XmlVariantSuite
   test("Parser: parse XML elements as variant object") {
     testParser(
       xml = "<ROW><info><name>Sam</name><amount>93</amount></info></ROW>",
-      expectedJsonStr = """{"info":{"name":"Sam","amount":93}}"""
+      expectedJsonStr = """{"info":{"amount":93,"name":"Sam"}}"""
     )
   }
 
@@ -110,25 +108,25 @@ class XmlVariantSuite
     // XML elements with only attributes
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\" amount=\"93\"></ROW>",
-      expectedJsonStr = """{"_id":"2","_name":"Sam","_amount":"93"}"""
+      expectedJsonStr = """{"_amount":93,"_id":2,"_name":"Sam"}"""
     )
 
     // XML elements with attributes and elements
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\"><amount>93</amount></ROW>",
-      expectedJsonStr = """{"_id":"2","_name":"Sam","amount":93}"""
+      expectedJsonStr = """{"_id":2,"_name":"Sam","amount":93}"""
     )
 
     // XML elements with attributes and nested elements
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\"><info><amount>93</amount></info></ROW>",
-      expectedJsonStr = """{"_id":"2","_name":"Sam","info":{"amount":93}}"""
+      expectedJsonStr = """{"_id":2,"_name":"Sam","info":{"amount":93}}"""
     )
 
     // XML elements with attributes and value tag
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\">93</ROW>",
-      expectedJsonStr = """{"_id":"2","_name":"Sam","_VALUE":93}"""
+      expectedJsonStr = """{"_VALUE":93,"_id":2,"_name":"Sam"}"""
     )
   }
 
@@ -136,7 +134,7 @@ class XmlVariantSuite
     // XML elements with value tags and attributes
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\">93</ROW>",
-      expectedJsonStr = """{"_id":"2","_name":"Sam","_VALUE":93}"""
+      expectedJsonStr = """{"_VALUE":93,"_id":2,"_name":"Sam"}"""
     )
 
     // XML elements with value tags and nested elements
