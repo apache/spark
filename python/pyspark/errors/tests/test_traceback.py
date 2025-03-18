@@ -21,10 +21,11 @@ import tempfile
 import traceback
 import unittest
 
+import pyspark.sql.functions as F
 from pyspark.errors import PythonException
 from pyspark.errors.exceptions.base import AnalysisException
 from pyspark.errors.exceptions.traceback import Traceback
-from pyspark.sql.functions import udf
+from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.session import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.sqlutils import (
@@ -37,6 +38,7 @@ from pyspark.testing.sqlutils import (
 
 
 class TracebackTests(unittest.TestCase):
+    """Tests for the Traceback class."""
     def make_traceback(self):
         try:
             raise ValueError("bar")
@@ -51,7 +53,7 @@ class TracebackTests(unittest.TestCase):
             foo = importlib.util.module_from_spec(spec)
             try:
                 spec.loader.exec_module(foo)
-                foo.f()
+                foo.foo()
             except Exception:
                 return traceback.format_exc()
             else:
@@ -68,13 +70,13 @@ class TracebackTests(unittest.TestCase):
         self.assert_traceback(Traceback.from_string(s), s)
 
     def test_missing_source(self):
-        s = self.make_traceback_with_temp_file("""def f(): 1 / 0""")
+        s = self.make_traceback_with_temp_file("""def foo(): 1 / 0""")
         linecache.clearcache()  # remove temp file from cache
         self.assert_traceback(Traceback.from_string(s), s)
 
     def test_syntax_error(self):
-        self.maxDiff = None
-        s = self.make_traceback_with_temp_file("""bad syntax""")
+        bad_syntax = "bad syntax"
+        s = self.make_traceback_with_temp_file(bad_syntax)
         tb = Traceback.from_string(s)
         tb.populate_linecache()
         actual = "".join(traceback.format_tb(tb.as_traceback()))
@@ -87,6 +89,7 @@ class TracebackTests(unittest.TestCase):
     pandas_requirement_message or pyarrow_requirement_message,
 )
 class BaseTracebackSqlTestsMixin:
+    """Tests for recovering the original traceback from JVM exceptions."""
     spark: SparkSession
 
     @staticmethod
@@ -94,25 +97,24 @@ class BaseTracebackSqlTestsMixin:
         raise ValueError("bar")
 
     def test_udf(self):
-        @udf()
+
+        @F.udf()
         def foo():
             raise ValueError("bar")
 
         df = self.spark.range(1).select(foo())
         try:
             df.show()
-        except PythonException as e:
+        except PythonException:
             _, _, tb = sys.exc_info()
         else:
             self.fail("PythonException not raised")
 
-        s = "\n".join(traceback.format_tb(tb))
+        s = "".join(traceback.format_tb(tb))
         self.assertIn("""df.show()""", s)
         self.assertIn("""raise ValueError("bar")""", s)
 
-    def test_datasource(self):
-        from pyspark.sql.datasource import DataSource
-
+    def test_datasource_analysis(self):
         class MyDataSource(DataSource):
             def schema(self):
                 raise ValueError("bar")
@@ -120,14 +122,75 @@ class BaseTracebackSqlTestsMixin:
         self.spark.dataSource.register(MyDataSource)
         try:
             self.spark.read.format("MyDataSource").load().show()
-        except AnalysisException as e:
-            traceback.print_exc()
+        except AnalysisException:
             _, _, tb = sys.exc_info()
         else:
             self.fail("AnalysisException not raised")
 
-        s = "\n".join(traceback.format_tb(tb))
+        s = "".join(traceback.format_tb(tb))
         self.assertIn("""self.spark.read.format("MyDataSource").load().show()""", s)
+        self.assertIn("""raise ValueError("bar")""", s)
+
+    def test_datasource_execution(self):
+        class MyDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema):
+                return MyDataSourceReader()
+
+        class MyDataSourceReader(DataSourceReader):
+            def read(self, partitions):
+                raise ValueError("bar")
+
+        self.spark.dataSource.register(MyDataSource)
+        try:
+            self.spark.read.format("MyDataSource").load().show()
+        except PythonException:
+            _, _, tb = sys.exc_info()
+        else:
+            self.fail("PythonException not raised")
+
+        s = "".join(traceback.format_tb(tb))
+        self.assertIn("""self.spark.read.format("MyDataSource").load().show()""", s)
+        self.assertIn("""raise ValueError("bar")""", s)
+
+    def test_udtf_analysis(self):
+        @F.udtf()
+        class MyUdtf:
+            @staticmethod
+            def analyze():
+                raise ValueError("bar")
+
+            def eval(self):
+                ...
+
+        try:
+            MyUdtf().show()
+        except AnalysisException:
+            _, _, tb = sys.exc_info()
+        else:
+            self.fail("AnalysisException not raised")
+
+        s = "".join(traceback.format_tb(tb))
+        self.assertIn("""MyUdtf().show()""", s)
+        self.assertIn("""raise ValueError("bar")""", s)
+
+    def test_udtf_execution(self):
+        @F.udtf(returnType="x int")
+        class MyUdtf:
+            def eval(self):
+                raise ValueError("bar")
+
+        try:
+            MyUdtf().show()
+        except PythonException:
+            _, _, tb = sys.exc_info()
+        else:
+            self.fail("PythonException not raised")
+
+        s = "".join(traceback.format_tb(tb))
+        self.assertIn("""MyUdtf().show()""", s)
         self.assertIn("""raise ValueError("bar")""", s)
 
 
