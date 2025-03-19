@@ -1478,7 +1478,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     // the streaming query started from Spark 3.5.4. We should consistently apply the fix, instead
     // of "on and off", because that may expose more possibility to break.
 
-    val problematicConfName = "spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan"
+    def isProblematicConfName(name: String): Boolean = {
+      name.endsWith(".sql.optimizer.pruneFiltersCanPruneStreamingSubplan") &&
+        name != SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key
+    }
 
     withTempDir { dir =>
       val input = getClass.getResource("/structured-streaming/checkpoint-version-3.5.4")
@@ -1516,11 +1519,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
                 Some("false"),
                 "The new offset log should have the fixed config instead of the incorrect one."
               )
-              assert(!confInMetadata.contains(problematicConfName),
+              assert(!confInMetadata.keys.exists(isProblematicConfName),
                 "The new offset log should not have the incorrect config.")
             } else {
               assert(
-                confInMetadata.get(problematicConfName) === Some("false"),
+                confInMetadata.find { case (key, _) =>
+                  isProblematicConfName(key)
+                }.get._2 === "false",
                 "The offset log in test resource should have the incorrect config to test properly."
               )
               assert(

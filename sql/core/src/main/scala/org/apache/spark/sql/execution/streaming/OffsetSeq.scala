@@ -181,12 +181,19 @@ object OffsetSeqMetadata extends Logging {
       }
     }
 
-    // SPARK-51187: This incorrect config is not added in the relevantSQLConfs, but the
+    // SPARK-51187: The incorrect config is not added in the relevantSQLConfs, but the
     // metadata in the offset log may have this if the batch ran from Spark 3.5.4.
     // We need to pick the value from the metadata and set it in the new config.
     // This also leads the further batches to have a correct config in the offset log.
-    metadata.conf.get("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan") match {
-      case Some(value) =>
+    // We leverage the fact that the name of incorrect config has the same postfix with
+    // the correct config, ".sql.optimizer.pruneFiltersCanPruneStreamingSubplan"
+
+    metadata.conf.keys.find { key =>
+      key.endsWith(".sql.optimizer.pruneFiltersCanPruneStreamingSubplan") &&
+        key != PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key
+    } match {
+      case Some(key) =>
+        val value = metadata.conf(key)
         sessionConf.setConfString(PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key, value)
 
       case _ =>
