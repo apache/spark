@@ -240,6 +240,11 @@
 
     <test.java.home>${java.home}</test.java.home>
 
+    <!--
+      SPARK-51558: During the testing process, the env `OBJC_DISABLE_INITIALIZE_FORK_SAFETY`
+      is automatically set, with a default value of `NO`.
+      When testing on macOS, it will be automatically set to `YES`.
+    -->
     <test.objc.disable.initialize.fork.safety>NO</test.objc.disable.initialize.fork.safety>
 
     <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
