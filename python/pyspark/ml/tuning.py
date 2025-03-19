@@ -859,6 +859,7 @@ class CrossValidator(
         datasets = self._kFold(dataset)
 
         tmp_dfs_path = _get_temp_dfs_path()
+        spark_session = SparkSession.getActiveSession()
         for i in range(nFolds):
             validation = datasets[i][1]
             train = datasets[i][0]
@@ -866,8 +867,10 @@ class CrossValidator(
             if tmp_dfs_path:
                 validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
                 validation.write.save(validation_tmp_path)
+                validation = spark_session.read.load(validation_tmp_path)
                 train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
                 train.write.save(train_tmp_path)
+                train = spark_session.read.load(train_tmp_path)
             else:
                 validation.cache()
                 train.cache()
@@ -886,7 +889,6 @@ class CrossValidator(
                 # TODO: Spark does not have FS API to delete a path on Distributed storage,
                 #  this is a workaround to delete the data inside the temporary directory.
                 #  we can improve it once Spark adds FS deletion API.
-                spark_session = SparkSession.getActiveSession()
                 empty_df = spark_session.range(0)
                 empty_df.write.mode("overwrite").save(validation_tmp_path)
                 empty_df.write.mode("overwrite").save(train_tmp_path)
@@ -1510,11 +1512,14 @@ class TrainValidationSplit(
         train = df.filter(~condition)
 
         tmp_dfs_path = _get_temp_dfs_path()
+        spark_session = SparkSession.getActiveSession()
         if tmp_dfs_path:
             validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
             validation.write.save(validation_tmp_path)
+            validation = spark_session.read.load(validation_tmp_path)
             train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
             train.write.save(train_tmp_path)
+            train = spark_session.read.load(train_tmp_path)
         else:
             validation.cache()
             train.cache()
@@ -1540,7 +1545,6 @@ class TrainValidationSplit(
             # TODO: Spark does not have FS API to delete a path on Distributed storage,
             #  this is a workaround to delete the data inside the temporary directory.
             #  we can improve it once Spark adds FS deletion API.
-            spark_session = SparkSession.getActiveSession()
             empty_df = spark_session.range(0)
             empty_df.write.mode("overwrite").save(validation_tmp_path)
             empty_df.write.mode("overwrite").save(train_tmp_path)
