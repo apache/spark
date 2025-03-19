@@ -264,7 +264,7 @@ object MLUtils extends Logging {
         .otherwise(
           raise_error(
             printf(
-              lit(s"Fold number must be in range [0, $numFolds), but got %s"), col(foldColName))
+              lit(s"Fold number must be in range [0, $numFolds), but got %s."), col(foldColName))
           )
         )
     )
