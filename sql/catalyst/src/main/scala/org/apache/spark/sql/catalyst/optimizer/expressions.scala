@@ -1092,7 +1092,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
-    case c @ Cast(e: Attribute, StringType, _, _)
+    case c @ Cast(e: NamedExpression, StringType, _, _)
       if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
     case c @ Cast(Cast(e, dt1: NumericType, _, _), dt2: NumericType, _, _)
