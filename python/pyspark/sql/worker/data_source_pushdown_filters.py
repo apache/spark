@@ -26,6 +26,7 @@ from pyspark.errors import PySparkAssertionError, PySparkValueError
 from pyspark.serializers import SpecialLengths, UTF8Deserializer, read_int, write_int
 from pyspark.sql.datasource import DataSource, DataSourceReader, EqualTo, Filter
 from pyspark.sql.types import StructType, _parse_datatype_json_string
+from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
 from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
@@ -165,10 +166,22 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Monkey patch the data source instance
-        # to return the existing reader with the pushed down filters.
-        data_source.reader = lambda schema: reader  # type: ignore[method-assign]
-        pickleSer._write_with_length(data_source, outfile)
+        # Receive the max arrow batch size.
+        max_arrow_batch_size = read_int(infile)
+        assert max_arrow_batch_size > 0, (
+            "The maximum arrow batch size should be greater than 0, but got "
+            f"'{max_arrow_batch_size}'"
+        )
+
+        # Return the read function and partitions. Doing this in the same worker as filter pushdown
+        # helps reduce the number of Python worker calls.
+        write_read_func_and_partitions(
+            outfile,
+            reader=reader,
+            data_source=data_source,
+            schema=schema,
+            max_arrow_batch_size=max_arrow_batch_size,
+        )
 
         # Return the supported filter indices.
         write_int(len(supported_filter_indices), outfile)

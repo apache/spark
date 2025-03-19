@@ -42,18 +42,19 @@ class PythonScanBuilder(
     }
 
     val dataSource = ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema))
-    val result = ds.source.pushdownFiltersInPython(dataSource, outputSchema, filters)
+    ds.source.pushdownFiltersInPython(dataSource, outputSchema, filters) match {
+      case None => filters // No filters are supported.
+      case Some(result) =>
+        // Filter pushdown also returns partitions and the read function.
+        // This helps reduce the number of Python worker calls.
+        ds.setReadInfo(result.readInfo)
 
-    // The Data Source instance state changes after pushdown to remember the reader instance
-    // created and the filters pushed down. So pushdownFiltersInPython returns a new pickled
-    // Data Source instance. We need to use that new instance for further operations.
-    ds.setDataSourceInPython(dataSource.copy(dataSource = result.dataSource))
-
-    // Partition the filters into supported and unsupported ones.
-    val isPushed = result.isFilterPushed.zip(filters)
-    supportedFilters = isPushed.collect { case (true, filter) => filter }.toArray
-    val unsupported = isPushed.collect { case (false, filter) => filter }.toArray
-    unsupported
+        // Partition the filters into supported and unsupported ones.
+        val isPushed = result.isFilterPushed.zip(filters)
+        supportedFilters = isPushed.collect { case (true, filter) => filter }.toArray
+        val unsupported = isPushed.collect { case (false, filter) => filter }.toArray
+        unsupported
+    }
   }
 
   override def pushedFilters(): Array[Filter] = supportedFilters

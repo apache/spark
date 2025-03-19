@@ -63,10 +63,7 @@ class PythonBatch(
   private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   private lazy val infoInPython: PythonDataSourceReadInfo = {
-    ds.source.createReadInfoInPython(
-      ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
-      outputSchema,
-      isStreaming = false)
+    ds.getOrCreateReadInfo(shortName, options, outputSchema, isStreaming = false)
   }
 
   override def planInputPartitions(): Array[InputPartition] =
