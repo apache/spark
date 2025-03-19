@@ -2049,12 +2049,12 @@ object SQLConf {
     .createWithDefault(1024)
 
   val INPUT_CODEGEN_RDD_INTERRUPT_ON_CANCEL =
-    buildConf("spark.sql.codegen.inputCodegenRDD.interruptOnCancel")
+    buildConf("spark.sql.codegen.interruptInputRDDOnCancel")
       .internal()
       .doc("Whether to interrupt InputCodegenRDD on the task cancellation. Interrupt " +
         "InputCodegenRDD would be useful to stop task and release resource quickly, " +
         "and also reduce the task killing timeout failures by task reaper.")
-      .version("3.5.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
 
