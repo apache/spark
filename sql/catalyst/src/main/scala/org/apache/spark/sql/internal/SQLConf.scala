@@ -4556,6 +4556,22 @@ object SQLConf {
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
     .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
+  val CTE_RECURSION_LEVEL_LIMIT = buildConf("spark.sql.cteRecursionLevelLimit")
+    .doc("Maximum level of recursion that is allowed while executing a recursive CTE definition." +
+      "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
+      "unlimited.")
+    .version("4.1.0")
+    .intConf
+    .createWithDefault(100)
+
+  val CTE_RECURSION_ROW_LIMIT = buildConf("spark.sql.cteRecursionRowLimit")
+    .doc("Maximum number of rows that can be returned when executing a recursive CTE definition." +
+      "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
+      "unlimited.")
+    .version("4.1.0")
+    .intConf
+    .createWithDefault(1000000)
+
   val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
     .internal()
     .doc("If true, always inline the CTE relations for the queries in commands. This is the " +
