@@ -464,7 +464,7 @@ def recover_python_exception(e: T) -> T:
     """
     python_exception_header = "Traceback (most recent call last):"
     try:
-        from pyspark.errors.exceptions.traceback import Traceback
+        from pyspark.errors.exceptions.tblib import Traceback
 
         message = str(e)
         start = message.find(python_exception_header)
