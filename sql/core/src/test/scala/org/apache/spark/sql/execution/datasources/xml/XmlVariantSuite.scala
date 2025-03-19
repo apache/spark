@@ -17,9 +17,9 @@
 package org.apache.spark.sql.execution.datasources.xml
 
 import java.time.ZoneOffset
-
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
+import org.apache.spark.sql.functions.{col, variant_get}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class XmlVariantSuite
@@ -28,6 +28,8 @@ class XmlVariantSuite
     with TestXmlData {
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
+
+  private val resDir = "test-data/xml-resources/"
 
   private def testParser(
       xml: String,
@@ -239,6 +241,72 @@ class XmlVariantSuite
     testParser(
       xml = complexFieldAndType2.head,
       expectedJsonStr = expectedJsonStr2
+    )
+  }
+
+  test("DSL: read XML files using singleVariantColumn") {
+    val df = spark.read
+      .format("xml")
+      .option("singleVariantColumn", "var")
+      .options(baseOptions)
+      .load(getTestResourcePath(resDir + "cars.xml"))
+    checkAnswer(
+      df.select(variant_get(col("var"), "$.year", "int")),
+      Seq(Row(2012), Row(1997), Row(2015))
+    )
+  }
+
+  test("DSL: read XML files with defined schema") {
+    val df = spark.read
+      .format("xml")
+      .options(baseOptions)
+      .schema("year variant, make string, model string, comment string")
+      .load(getTestResourcePath(resDir + "cars.xml"))
+    checkAnswer(
+      df.select(variant_get(col("year"), "$", "int")),
+      Seq(Row(2012), Row(1997), Row(2015))
+    )
+  }
+
+  test("SQL: read an entire XML record as variant using from_xml SQL expression") {
+    val xmlStr =
+      """
+        |<ROW>
+        |    <year>2012<!--A comment within tags--></year>
+        |    <make>Tesla</make>
+        |    <model>S</model>
+        |    <comment>No comment</comment>
+        |</ROW>
+        |""".stripMargin
+
+    // Read the entire XML record as a single variant
+    // Verify we can extract fields from the variant type
+    checkAnswer(
+      spark
+        .sql(s"""SELECT from_xml('$xmlStr', 'variant') as var""")
+        .select(variant_get(col("var"), "$.year", "int")),
+      Seq(Row(2012))
+    )
+  }
+
+  test("SQL: read partial XML record as variant using from_xml with a defined schema") {
+    val xmlStr =
+      """
+        |<ROW>
+        |    <year>2012<!--A comment within tags--></year>
+        |    <make>Tesla</make>
+        |    <model>S</model>
+        |    <comment>No comment</comment>
+        |</ROW>
+        |""".stripMargin
+    // Read specific elements in the XML record as variant
+    val schemaDDL = "year variant, make string, model string, comment string"
+    // Verify we can extract fields from the variant type
+    checkAnswer(
+      spark
+        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as car""".stripMargin)
+        .select(variant_get(col("car.year"), "$", "int")),
+      Seq(Row(2012))
     )
   }
 }
