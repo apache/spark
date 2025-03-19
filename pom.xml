@@ -3606,6 +3606,7 @@
       <id>applesilicon</id>
       <properties>
         <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest</test.default.exclude.tags>
+        <env.OBJC_DISABLE_INITIALIZE_FORK_SAFETY>YES</env.OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
       </properties>
       <activation>
         <os>
