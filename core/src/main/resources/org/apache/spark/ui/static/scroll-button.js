@@ -15,30 +15,34 @@
  * limitations under the License.
  */
 
-/* global $ */
 
 export { addScrollButton };
 
-function addScrollButton() {
-  const container = $('<div></div>', {
-    'class': 'scroll-btn-container'
-  });
-
-  const topBtn = $('<div></div>', {
-    'class': 'scroll-btn-half scroll-btn-top'
-  }).click(function () {
-    $('html, body').animate({scrollTop: 0}, 'slow');
-  });
-
-  const bottomBtn = $('<div></div>', {
-    'class': 'scroll-btn-half scroll-btn-bottom'
-  }).click(function () {
-    $('html, body').animate({scrollTop: $(document).height()}, 'slow');
-  });
-  container.append(topBtn, bottomBtn);
-  $('body').append(container);
+function createBtn(top = true) {
+  const button = document.createElement('div');
+  button.classList.add('scroll-btn-half');
+  const className = top ? 'scroll-btn-top' : 'scroll-btn-bottom';
+  button.classList.add(className);
+  button.addEventListener('click', function () {
+    window.scrollTo({
+      top: top ? 0 : document.body.scrollHeight,
+      behavior: 'smooth' });
+  })
+  return button;
 }
 
-$(document).ready(function () { addScrollButton(); });
+function addScrollButton() {
+  const containerClass = 'scroll-btn-container';
+  if (document.querySelector(`.${containerClass}`)) {
+    return;
+  }
+  const container = document.createElement('div');
+  container.className = containerClass;
+  container.appendChild(createBtn());
+  container.appendChild(createBtn(false));
+  document.body.appendChild(container);
+}
 
-
+document.addEventListener('DOMContentLoaded', function () {
+  addScrollButton();
+});

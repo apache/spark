@@ -19,7 +19,7 @@
 import '../../core/src/main/resources/org/apache/spark/ui/static/jquery-3.5.1.min.js';
 import { addScrollButton } from '../../core/src/main/resources/org/apache/spark/ui/static/scroll-button.js';
 
-/* global $, d3 */
+/* global $ */
 
 /**
  * @jest-environment jsdom
