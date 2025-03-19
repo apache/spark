@@ -24,7 +24,7 @@ import unittest
 import pyspark.sql.functions as F
 from pyspark.errors import PythonException
 from pyspark.errors.exceptions.base import AnalysisException
-from pyspark.errors.exceptions.traceback import Traceback
+from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.session import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase
