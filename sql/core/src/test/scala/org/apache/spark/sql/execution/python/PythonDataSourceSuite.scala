@@ -267,7 +267,6 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
        *       PushedFilters: [EqualTo(partition,0)],
        *       ReadSchema: struct<id:int,partition:int> RuntimeFilters: []
        */
-      fail(df.queryExecution.explainString(org.apache.spark.sql.execution.ExtendedMode))
       val filter = collectFirst(df.queryExecution.executedPlan) {
         case s: FilterExec =>
           val condition = s.condition.toString
