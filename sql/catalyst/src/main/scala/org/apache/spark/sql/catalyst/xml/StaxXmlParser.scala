@@ -969,11 +969,6 @@ object StaxXmlParser {
             val onlyValueTagFields = fieldToVariants.keySet.forall(_ == options.valueTag)
             if (onlyValueTagFields) {
               // If the element only has value tag field, parse the element as a variant primitive
-              assert(
-                fieldToVariants(options.valueTag).size() == 1,
-                "Only one value tag field is expected " +
-                "if there are no other child elements or attributes"
-              )
               rootBuilder.appendVariant(fieldToVariants(options.valueTag).get(0))
             } else {
               // Otherwise, build the element as an object with all the fields in fieldToVariants

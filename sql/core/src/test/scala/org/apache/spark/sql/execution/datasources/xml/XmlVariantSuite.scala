@@ -34,10 +34,7 @@ class XmlVariantSuite
       expectedJsonStr: String,
       extraOptions: Map[String, String] = Map.empty): Unit = {
     val parsed = StaxXmlParser.parseVariant(xml, XmlOptions(baseOptions ++ extraOptions))
-    assert(
-      parsed.toJson(ZoneOffset.UTC) == expectedJsonStr,
-      s"Failed to parse $xml, expected $expectedJsonStr, got ${parsed.toJson(ZoneOffset.UTC)}"
-    )
+    assert(parsed.toJson(ZoneOffset.UTC) == expectedJsonStr)
   }
 
   test("Parser: parse primitive XML elements (long, decimal, double, etc.) as variants") {
@@ -54,6 +51,11 @@ class XmlVariantSuite
     testParser(
       xml = "<ROW><price>158,058,049.001</price></ROW>",
       expectedJsonStr = """{"price":158058049.001}""",
+      extraOptions = Map("prefersDecimal" -> "true")
+    )
+    testParser(
+      xml = "<ROW><decimal>10.05</decimal></ROW>",
+      expectedJsonStr = """{"decimal":10.05}""",
       extraOptions = Map("prefersDecimal" -> "true")
     )
 
@@ -141,6 +143,102 @@ class XmlVariantSuite
     testParser(
       xml = "<ROW><info>Sam<amount>93</amount></info></ROW>",
       expectedJsonStr = """{"info":{"_VALUE":"Sam","amount":93}}"""
+    )
+  }
+
+  test("Parser: null and empty XML elements are parsed as variant null") {
+    // XML elements with null and empty values
+    testParser(
+      xml = "<ROW><name></name><amount>93</amount></ROW>",
+      expectedJsonStr = """{"amount":93,"name":null}"""
+    )
+    testParser(
+      xml = "<ROW><name>Sam</name><amount>n/a</amount></ROW>",
+      expectedJsonStr = """{"amount":null,"name":"Sam"}""",
+      extraOptions = Map("nullValue" -> "n/a")
+    )
+  }
+
+  test("Parser: parse mixed types as variants") {
+    val expectedJsonStr =
+      """
+        |{
+        |   "arrayOfArray1":[
+        |     {"item":[1,2,3]},
+        |     {"item":["str1","str2"]}
+        |   ],
+        |   "arrayOfArray2":[
+        |     {"item":[1,2,3]},
+        |     {"item":[1.1,2.1,3.1]}
+        |   ],
+        |   "arrayOfBigInteger":[9.223372036854776E20,-9.223372036854776E20],
+        |   "arrayOfBoolean":[true,false,true],
+        |   "arrayOfDouble":[1.2,1.7976931348623157,4.9E-324,2.2250738585072014E-308],
+        |   "arrayOfInteger":[1,2147483647,-2147483648],
+        |   "arrayOfLong":[21474836470,9223372036854775807,-9223372036854775808],
+        |   "arrayOfNull":[null,null],
+        |   "arrayOfString":["str1","str2"],
+        |   "arrayOfStruct":[
+        |     {"field1":true,"field2":"str1"},
+        |     {"field1":false},
+        |     {"field3":null}
+        |   ],
+        |   "struct":{
+        |     "field1":true,
+        |     "field2":9.223372036854776E19
+        |   },
+        |   "structWithArrayFields":{
+        |     "field1":[4,5,6],
+        |     "field2":["str1","str2"]
+        |   }
+        |}
+        |""".stripMargin.replaceAll("\\s+", "")
+    testParser(
+      xml = complexFieldAndType1.head,
+      expectedJsonStr = expectedJsonStr
+    )
+
+    val expectedJsonStr2 =
+      """
+        |{
+        |   "arrayOfArray1":[
+        |     {"array":{"item":5}},
+        |     {
+        |       "array":[
+        |         {"item":[6,7]},
+        |         {"item":8}
+        |       ]
+        |     }
+        |   ],
+        |   "arrayOfArray2":[
+        |     {"array":{"item":{"inner1":"str1"}}},
+        |     {
+        |       "array":[
+        |         null,
+        |         {
+        |           "item":[
+        |             {"inner2":["str3","str33"]},
+        |             {"inner1":"str11","inner2":"str4"}
+        |           ]
+        |         }
+        |       ]
+        |     },
+        |     {
+        |       "array":{
+        |         "item":{
+        |           "inner3":[
+        |             {"inner4":[2,3]},
+        |             null
+        |           ]
+        |         }
+        |       }
+        |     }
+        |   ]
+        |}
+        """.stripMargin.replaceAll("\\s+", "")
+    testParser(
+      xml = complexFieldAndType2.head,
+      expectedJsonStr = expectedJsonStr2
     )
   }
 }
