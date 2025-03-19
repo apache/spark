@@ -38,19 +38,10 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
-/**
- * Trait representing events reported from a RocksDB instance.
- *
- * We pass this into the internal RocksDB instance to report specific events like snapshot uploads.
- * This should only be used to report back to the coordinator for metrics and monitoring purposes.
- */
-trait RocksDBEventListener {
-  def reportSnapshotUploaded(version: Long): Unit
-}
 
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
-  with SupportsFineGrainedReplay with RocksDBEventListener {
+  with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
   class RocksDBStateStore(lastVersion: Long) extends StateStore {
@@ -395,6 +386,7 @@ private[sql] class RocksDBStateStoreProvider
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
     this.stateSchemaProvider = stateSchemaProvider
+    this.rocksDBEventListener = RocksDBEventListener(getRunId(hadoopConf), stateStoreId, storeConf)
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -528,6 +520,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
+  @volatile private var rocksDBEventListener: RocksDBEventListener = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -536,7 +529,7 @@ private[sql] class RocksDBStateStoreProvider
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, Some(this))
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, Some(rocksDBEventListener))
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -653,26 +646,6 @@ private[sql] class RocksDBStateStoreProvider
     // if the column family is not internal and uses reserved characters, throw an exception
     if (!isInternal && colFamilyName.charAt(0) == '$') {
       throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
-    }
-  }
-
-  /**
-   * Callback function from RocksDB to report events to the coordinator.
-   * Additional information such as the state store ID and the query run ID are
-   * attached here to report back to the coordinator.
-   *
-   * @param version The snapshot version that was just uploaded from RocksDB
-   */
-  def reportSnapshotUploaded(version: Long): Unit = {
-    if (storeConf.stateStoreCoordinatorReportUploadEnabled) {
-      // Collect the state store ID and query run ID to report back to the coordinator
-      StateStore.reportSnapshotUploaded(
-        StateStoreProviderId(
-          stateStoreId,
-          UUID.fromString(getRunId(hadoopConf))
-        ),
-        version
-      )
     }
   }
 }
@@ -993,6 +966,43 @@ class RocksDBStateStoreChangeDataReader(
     } else {
       val valueRow = currEncoder._2.decodeValue(currRecord._3)
       (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
+    }
+  }
+}
+
+/**
+ * Object used to relay events reported from a RocksDB instance to the state store coordinator.
+ *
+ * We pass this into the RocksDB instance to report specific events like snapshot uploads.
+ * This should only be used to report back to the coordinator for metrics and monitoring purposes.
+ */
+private[state] case class RocksDBEventListener(
+    queryRunId: String,
+    stateStoreId: StateStoreId,
+    storeConf: StateStoreConf) {
+
+  /** ID of the state store provider managing the RocksDB instance */
+  private val stateStoreProviderId: StateStoreProviderId =
+    StateStoreProviderId(stateStoreId, UUID.fromString(queryRunId))
+
+  /** Whether the event listener should relay these messages to the state store coordinator */
+  private val coordinatorReportUploadEnabled: Boolean =
+    storeConf.stateStoreCoordinatorReportUploadEnabled
+
+  /**
+   * Callback function from RocksDB to report events to the coordinator.
+   * Additional information such as the state store ID and the query run ID are
+   * attached here to report back to the coordinator.
+   *
+   * @param version The snapshot version that was just uploaded from RocksDB
+   */
+  def reportSnapshotUploaded(version: Long): Unit = {
+    // Only report to the coordinator if this is enabled, as sometimes we do not need
+    // to track for lagging instances.
+    // Also ignore message if we are missing the provider ID from lack of initialization.
+    if (coordinatorReportUploadEnabled) {
+      // Report the provider ID and the version to the coordinator
+      StateStore.reportSnapshotUploaded(stateStoreProviderId, version)
     }
   }
 }

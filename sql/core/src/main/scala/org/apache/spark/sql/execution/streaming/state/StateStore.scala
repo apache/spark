@@ -1139,17 +1139,6 @@ object StateStore extends Logging {
     coordinatorRef.foreach(_.snapshotUploaded(storeProviderId, snapshotVersion, currentTime))
   }
 
-  private[streaming] def constructLaggingInstanceReport(
-      queryRunId: UUID,
-      latestVersion: Long): Unit = {
-    // Asks the coordinator to check and report for any lagging state store instances
-    // Attach the current time, indicating when the current batch just completed
-    val currentTime = System.currentTimeMillis()
-    coordinatorRef.foreach(
-      _.constructLaggingInstanceReport(queryRunId, latestVersion, currentTime)
-    )
-  }
-
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
