@@ -107,7 +107,7 @@ case class UnionLoopExec(
     }
     val df = Dataset.ofRows(session, planWithLimit)
     val materializedDF = df.repartition()
-    val count = materializedDF.count()
+    val count = materializedDF.queryExecution.toRdd.count()
     (materializedDF, count)
   }
 

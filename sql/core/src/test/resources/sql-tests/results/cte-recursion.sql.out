@@ -175,28 +175,6 @@ struct<level:int>
 
 
 -- !query
-WITH RECURSIVE r(level) AS (
-    VALUES 0
-    UNION ALL
-    SELECT level + 1 FROM r
-)
-SELECT * FROM r LIMIT 10 OFFSET 5
--- !query schema
-struct<level:int>
--- !query output
-10
-11
-12
-13
-14
-5
-6
-7
-8
-9
-
-
--- !query
 WITH RECURSIVE r AS (
   SELECT 0 as level
   UNION

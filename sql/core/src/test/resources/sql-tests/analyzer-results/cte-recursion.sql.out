@@ -195,32 +195,6 @@ WithCTE
 
 
 -- !query
-WITH RECURSIVE r(level) AS (
-    VALUES 0
-    UNION ALL
-    SELECT level + 1 FROM r
-)
-SELECT * FROM r LIMIT 10 OFFSET 5
--- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias r
-:     +- Project [col1#x AS level#x]
-:        +- UnionLoop xxxx
-:           :- LocalRelation [col1#x]
-:           +- Project [(level#x + 1) AS (level + 1)#x]
-:              +- SubqueryAlias r
-:                 +- Project [col1#x AS level#x]
-:                    +- UnionLoopRef xxxx, [col1#x], false
-+- GlobalLimit 10
-   +- LocalLimit 10
-      +- Offset 5
-         +- Project [level#x]
-            +- SubqueryAlias r
-               +- CTERelationRef xxxx, true, [level#x], false, false
-
-
--- !query
 WITH RECURSIVE r AS (
   SELECT 0 as level
   UNION

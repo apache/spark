@@ -65,14 +65,6 @@ WITH RECURSIVE r(level) AS (
 )
 SELECT * FROM r LIMIT 10;
 
--- terminate recursion with LIMIT and OFFSET
-WITH RECURSIVE r(level) AS (
-    VALUES 0
-    UNION ALL
-    SELECT level + 1 FROM r
-)
-SELECT * FROM r LIMIT 10 OFFSET 5;
-
 -- UNION - not yet supported
 WITH RECURSIVE r AS (
   SELECT 0 as level
