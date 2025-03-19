@@ -451,10 +451,10 @@ class QueryContext(ABC):
         ...
 
 
-TException = TypeVar("TException", bound=PySparkException)
+T = TypeVar("T", bound=PySparkException)
 
 
-def recover_python_exception(e: TException) -> TException:
+def recover_python_exception(e: T) -> T:
     """
     Recover Python exception stack trace.
 
