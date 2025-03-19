@@ -17,6 +17,7 @@
 
 import os
 import sys
+import uuid
 import itertools
 from multiprocessing.pool import ThreadPool
 from typing import (
@@ -73,6 +74,15 @@ __all__ = [
     "TrainValidationSplit",
     "TrainValidationSplitModel",
 ]
+
+
+_SPARKML_TUNING_TEMP_DFS_PATH = "SPARKML_TUNING_TEMP_DFS_PATH"
+
+
+def _get_temp_dfs_path():
+    return os.environ.get(_SPARKML_TUNING_TEMP_DFS_PATH)
+
+
 
 
 def _parallelFitTasks(
@@ -847,9 +857,20 @@ class CrossValidator(
             subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
         datasets = self._kFold(dataset)
+
+        tmp_dfs_path = _get_temp_dfs_path()
         for i in range(nFolds):
-            validation = datasets[i][1].cache()
-            train = datasets[i][0].cache()
+            validation = datasets[i][1]
+            train = datasets[i][0]
+
+            if tmp_dfs_path:
+                validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+                validation.write.save(validation_tmp_path)
+                train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+                train.write.save(train_tmp_path)
+            else:
+                validation.cache()
+                train.cache()
 
             tasks = map(
                 inheritable_thread_target(dataset.sparkSession),
@@ -861,8 +882,17 @@ class CrossValidator(
                     assert subModels is not None
                     subModels[i][j] = subModel
 
-            validation.unpersist()
-            train.unpersist()
+            if tmp_dfs_path:
+                # TODO: Spark does not have FS API to delete a path on Distributed storage,
+                #  this is a workaround to delete the data inside the temporary directory.
+                #  we can improve it once Spark adds FS deletion API.
+                spark_session = SparkSession.getActiveSession()
+                empty_df = spark_session.range(0)
+                empty_df.write.mode("overwrite").save(validation_tmp_path)
+                empty_df.write.mode("overwrite").save(train_tmp_path)
+            else:
+                validation.unpersist()
+                train.unpersist()
 
         metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
 
@@ -1475,8 +1505,19 @@ class TrainValidationSplit(
         randCol = self.uid + "_rand"
         df = dataset.select("*", F.rand(seed).alias(randCol))
         condition = df[randCol] >= tRatio
-        validation = df.filter(condition).cache()
-        train = df.filter(~condition).cache()
+
+        validation = df.filter(condition)
+        train = df.filter(~condition)
+
+        tmp_dfs_path = _get_temp_dfs_path()
+        if tmp_dfs_path:
+            validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+            validation.write.save(validation_tmp_path)
+            train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+            train.write.save(train_tmp_path)
+        else:
+            validation.cache()
+            train.cache()
 
         subModels = None
         collectSubModelsParam = self.getCollectSubModels()
@@ -1495,8 +1536,17 @@ class TrainValidationSplit(
                 assert subModels is not None
                 subModels[j] = subModel
 
-        train.unpersist()
-        validation.unpersist()
+        if tmp_dfs_path:
+            # TODO: Spark does not have FS API to delete a path on Distributed storage,
+            #  this is a workaround to delete the data inside the temporary directory.
+            #  we can improve it once Spark adds FS deletion API.
+            spark_session = SparkSession.getActiveSession()
+            empty_df = spark_session.range(0)
+            empty_df.write.mode("overwrite").save(validation_tmp_path)
+            empty_df.write.mode("overwrite").save(train_tmp_path)
+        else:
+            train.unpersist()
+            validation.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(cast(List[float], metrics))
