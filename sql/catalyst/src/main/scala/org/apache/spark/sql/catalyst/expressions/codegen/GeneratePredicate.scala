@@ -38,8 +38,8 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
     val ctx = newCodeGenContext()
 
     // Do sub-expression elimination for predicates.
-    val eval = ctx.generateExpressions(Seq(predicate), useSubexprElimination).head
-    val evalSubexpr = ctx.subexprFunctionsCode
+    val (evalExprs, evalSubexpr) = ctx.generateExpressions(Seq(predicate), useSubexprElimination)
+    val eval = evalExprs.head
 
     val codeBody = s"""
       public SpecificPredicate generate(Object[] references) {

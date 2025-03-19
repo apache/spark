@@ -61,7 +61,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       case (NoOp, _) => false
       case _ => true
     }
-    val exprVals = ctx.generateExpressions(validExpr.map(_._1), useSubexprElimination)
+    val (exprVals, evalSubexpr) =
+      ctx.generateExpressions(validExpr.map(_._1), useSubexprElimination)
 
     // 4-tuples: (code for projection, isNull variable name, value variable name, column index)
     val projectionCodes: Seq[(String, String)] = validExpr.zip(exprVals).map {
@@ -90,9 +91,6 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           e.nullable)
         (code, update)
     }
-
-    // Evaluate all the subexpressions.
-    val evalSubexpr = ctx.subexprFunctionsCode
 
     val allProjections = ctx.splitExpressionsWithCurrentInputs(projectionCodes.map(_._1))
     val allUpdates = ctx.splitExpressionsWithCurrentInputs(projectionCodes.map(_._2))

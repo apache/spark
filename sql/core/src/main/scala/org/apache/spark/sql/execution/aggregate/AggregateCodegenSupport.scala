@@ -210,7 +210,7 @@ trait AggregateCodegenSupport
     val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
       bindReferences(updateExprsForOneFunc, inputAttrs)
     }
-    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
+    val subExprs = ctx.subexpressionElimination(boundUpdateExprs.flatten)
     val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
     val bufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
       ctx.withSubExprEliminationExprs(subExprs.states) {

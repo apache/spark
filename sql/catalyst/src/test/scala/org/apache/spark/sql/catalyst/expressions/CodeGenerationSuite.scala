@@ -491,24 +491,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
       assert(!ctx.subExprEliminationExprs.contains(wrap(add1)))
     }
-
-    // emulate an actual codegen workload
-    {
-      val ctx = new CodegenContext
-      // before
-      ctx.generateExpressions(Seq(add2, add1), doSubexpressionElimination = true) // trigger CSE
-      assert(ctx.subExprEliminationExprs.contains(wrap(add1)))
-      // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(wrap(ref) -> dummy)) {
-        assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
-        assert(!ctx.subExprEliminationExprs.contains(wrap(add1)))
-        Seq.empty
-      }
-      // after
-      assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(wrap(add1)))
-      assert(!ctx.subExprEliminationExprs.contains(wrap(ref)))
-    }
   }
 
   test("SPARK-23986: freshName can generate duplicated names") {
