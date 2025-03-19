@@ -1189,12 +1189,11 @@ def read_excel(
 
             psdf = cast(DataFrame, from_pandas(pdf))
 
-            index_scol_names = psdf._internal.index_spark_column_names
             raw_schema = psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
+            index_scol_names = psdf._internal.index_spark_column_names
             nullable_fields = []
             for field in raw_schema.fields:
                 if field.name in index_scol_names:
-                    print(field)
                     nullable_fields.append(field)
                 else:
                     nullable_fields.append(
