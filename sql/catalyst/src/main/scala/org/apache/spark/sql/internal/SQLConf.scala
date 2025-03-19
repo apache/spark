@@ -1535,8 +1535,8 @@ object SQLConf {
     .createWithDefaultString(s"${5 * 60}")
 
   val MAX_BROADCAST_TABLE_SIZE = buildConf("spark.sql.maxBroadcastTableSize")
-    .doc("The maximum table size that can be broadcast in broadcast joins.")
-    .version("4.0.0")
+    .doc("The maximum table size in bytes that can be broadcast in broadcast joins.")
+    .version("4.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(8L << 30)
 
