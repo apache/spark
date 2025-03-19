@@ -2404,6 +2404,11 @@
         "message" : [
           "Cannot detect a seconds fraction pattern of variable length. Please make sure the pattern contains 'S', and does not contain illegal characters."
         ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
+        ]
       }
     },
     "sqlState" : "22007"
@@ -7879,11 +7884,6 @@
   "_LEGACY_ERROR_TEMP_2129" : {
     "message" : [
       "Conflict found: Field <field> <actual> differs from <field> <expected> derived from <candidate>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2130" : {
-    "message" : [
-      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2131" : {
