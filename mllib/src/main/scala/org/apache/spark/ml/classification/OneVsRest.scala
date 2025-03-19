@@ -214,7 +214,7 @@ final class OneVsRestModel private[ml] (
       }
       tmpModel.transform(df)
         .withColumn(accColName, array_append(
-          col(accColName), get_vector(col(tmpRawPredName), lit(1))))
+          col(accColName), vector_get(col(tmpRawPredName), lit(1))))
         .select(columns.toImmutableArraySeq: _*)
     }
 

@@ -48,7 +48,7 @@ object functions {
     Column.internalFn("array_binary_search", a, v)
 
   // input: vector, output: double
-  private[ml] def get_vector(v: Column, index: Column): Column = {
+  private[ml] def vector_get(v: Column, index: Column): Column = {
     val unwrapped = sf.unwrap_udt(v)
     val isDense = unwrapped.getField("type") === sf.lit(1)
     val values = unwrapped.getField("values")
@@ -67,9 +67,9 @@ object functions {
   }
 
   // input: array<double>, output: int
-  private[ml] def array_argmax(v: Column): Column = {
+  private[ml] def array_argmax(arr: Column): Column = {
     sf.aggregate(
-      v,
+      arr,
       sf.struct(
         sf.lit(Double.NegativeInfinity).alias("v"), // max value
         sf.lit(-1).alias("i"),              // index of max value
@@ -78,7 +78,8 @@ object functions {
         val v = acc.getField("v")
         val i = acc.getField("i")
         val j = acc.getField("j")
-        sf.when(vv > v, sf.struct(vv.alias("v"), j.alias("i"), j + 1))
+        sf.when((!vv.isNaN) && (!vv.isNull) && (vv > v),
+            sf.struct(vv.alias("v"), j.alias("i"), j + 1))
           .otherwise(sf.struct(v.alias("v"), i.alias("i"), j + 1))
       },
       acc => acc.getField("i")

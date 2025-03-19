@@ -113,7 +113,7 @@ class FunctionsSuite extends MLTest {
       (Vectors.sparse(3, Seq((0, -1.0))), 2)
     ).toDF("vec", "idx")
 
-    val result = df.select(get_vector(col("vec"), col("idx"))).as[Double].collect()
+    val result = df.select(vector_get(col("vec"), col("idx"))).as[Double].collect()
     assert(result === Array(1.0, 2.0, 3.0, -1.0, 0.0, 0.0))
   }
 
