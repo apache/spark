@@ -321,8 +321,8 @@ object ShuffleExchangeExec {
         true
       }
     } else {
-      // Catch-all case to safely handle any future ShuffleManager implementations.
-      true
+      // Catch-all case to safely handle any future or third party ShuffleManager implementations.
+      SQLConf.get.needToCopyObjectsBeforeShuffle
     }
   }
 
