@@ -43,16 +43,7 @@ class PythonScan(
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
     new PythonMicroBatchStream(ds, shortName, outputSchema, options)
 
-  override def description: String = {
-    val metadataStr = getMetaData().toSeq.sorted.map {
-      case (key, value) =>
-        val redactedValue =
-          Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
-        key + ": " + StringUtils.abbreviate(
-          redactedValue, sparkSession.sessionState.conf.maxMetadataStringLength)
-    }.mkString(", ")
-    s"(Python) $metadataStr"
-  }
+  override def description: String = "(Python)"
 
   override def readSchema(): StructType = outputSchema
 
