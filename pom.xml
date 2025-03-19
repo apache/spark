@@ -240,6 +240,8 @@
 
     <test.java.home>${java.home}</test.java.home>
 
+    <test.objc.disable.initialize.fork.safety>NO</test.objc.disable.initialize.fork.safety>
+
     <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
     <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
     <test.exclude.tags></test.exclude.tags>
@@ -2883,6 +2885,7 @@
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
               <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
+              <OBJC_DISABLE_INITIALIZE_FORK_SAFETY>${test.objc.disable.initialize.fork.safety}</OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
             </environmentVariables>
             <systemPropertyVariables>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
@@ -2937,6 +2940,7 @@
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
+              <OBJC_DISABLE_INITIALIZE_FORK_SAFETY>${test.objc.disable.initialize.fork.safety}</OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
             </environmentVariables>
             <systemProperties>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
@@ -3606,7 +3610,7 @@
       <id>applesilicon</id>
       <properties>
         <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest</test.default.exclude.tags>
-        <env.OBJC_DISABLE_INITIALIZE_FORK_SAFETY>YES</env.OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
+        <test.objc.disable.initialize.fork.safety>YES</test.objc.disable.initialize.fork.safety>
       </properties>
       <activation>
         <os>
