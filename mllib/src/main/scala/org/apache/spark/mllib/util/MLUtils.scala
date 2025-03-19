@@ -263,7 +263,8 @@ object MLUtils extends Logging {
       when((lit(0) <= col(foldColName)) && (col(foldColName) < lit(numFolds)), col(foldColName))
         .otherwise(
           raise_error(
-            printf(lit(f"Fold number must be in range [0, {nFolds}), but got %s"), col(foldColName))
+            printf(
+              lit(s"Fold number must be in range [0, $numFolds), but got %s"), col(foldColName))
           )
         )
     )
