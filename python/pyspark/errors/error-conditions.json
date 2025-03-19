@@ -905,7 +905,7 @@
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
-      "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
     ]
   },
   "SESSION_ALREADY_EXIST": {
