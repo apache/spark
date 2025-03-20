@@ -282,9 +282,6 @@ class Filter(ABC):
     See `Data Types <https://spark.apache.org/docs/latest/sql-ref-datatypes.html>`_
     for more information about how values are represented in Python.
 
-    Currently only the equality of attribute and literal value is supported for
-    filter pushdown. Other types of filters cannot be pushed down.
-
     Examples
     --------
     Supported filters
@@ -293,10 +290,22 @@ class Filter(ABC):
     | SQL filter          | Representation                             |
     +---------------------+--------------------------------------------+
     | `a.b.c = 1`         | `EqualTo(("a", "b", "c"), 1)`              |
-    | `a = 1`             | `EqualTo(("a", "b", "c"), 1)`              |
+    | `a = 1`             | `EqualTo(("a",), 1)`                       |
     | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
     | `a = array(1, 2)`   | `EqualTo(("a",), [1, 2])`                  |
+    | `a`                 | `EqualTo(("a",), True)`                    |
+    | `not a`             | `Not(EqualTo(("a",), True))`               |
     | `a <> 1`            | `Not(EqualTo(("a",), 1))`                  |
+    | `a > 1`             | `GreaterThan(("a",), 1)`                   |
+    | `a >= 1`            | `GreaterThanOrEqual(("a",), 1)`            |
+    | `a < 1`             | `LessThan(("a",), 1)`                      |
+    | `a <= 1`            | `LessThanOrEqual(("a",), 1)`               |
+    | `a in (1, 2, 3)`    | `In(("a",), (1, 2, 3))`                    |
+    | `a is null`         | `IsNull(("a",))`                           |
+    | `a is not null`     | `IsNotNull(("a",))`                        |
+    | `a like 'abc%'`     | `StringStartsWith(("a",), "abc")`          |
+    | `a like '%abc'`     | `StringEndsWith(("a",), "abc")`            |
+    | `a like '%abc%'`    | `StringContains(("a",), "abc")`            |
     +---------------------+--------------------------------------------+
 
     Unsupported filters
@@ -304,6 +313,10 @@ class Filter(ABC):
     - `f(a, b) = 1`
     - `a % 2 = 1`
     - `a[0] = 1`
+    - `a < 0 or a > 1`
+    - `a like 'c%c%'`
+    - `a ilike 'hi'`
+    - `a = 'hi' collate zh`
     """
 
 

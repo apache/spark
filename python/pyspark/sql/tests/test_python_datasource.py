@@ -421,6 +421,9 @@ class BasePythonDataSourceTestsMixin:
         self._check_filters("int", "(0 < x and x < 1) or x = 2", [])
         self._check_filters("int", "x % 5 = 1", [])
         self._check_filters("array<int>", "x[0] = 1", [])
+        self._check_filters("string", "x like 'a%a%'", [])
+        self._check_filters("string", "x ilike 'a'", [])
+        self._check_filters("string", "x = 'a' collate zh", [])
 
     def test_filter_value_type(self):
         self._check_filters("int", "x = 1", [EqualTo(("x",), 1)])
@@ -455,9 +458,12 @@ class BasePythonDataSourceTestsMixin:
         self._check_filters("int", "1 <= x", [GreaterThanOrEqual(("x",), 1)])
         self._check_filters("int", "x < 1", [LessThan(("x",), 1)])
         self._check_filters("int", "x <= 1", [LessThanOrEqual(("x",), 1)])
-        self._check_filters("string", "startswith(x, 'a')", [StringStartsWith(("x",), "a")])
-        self._check_filters("string", "endswith(x, 'a')", [StringEndsWith(("x",), "a")])
-        self._check_filters("string", "contains(x, 'a')", [StringContains(("x",), "a")])
+        self._check_filters("string", "x like 'a%'", [StringStartsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a'", [StringEndsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a%'", [StringContains(("x",), "a")])
+        self._check_filters(
+            "string", "x like 'a%b'", [StringStartsWith(("x",), "a"), StringEndsWith(("x",), "b")]
+        )
         self._check_filters("int", "x in (1, 2)", [In(("x",), [1, 2])])
 
     def test_filter_nested_column(self):
