@@ -493,9 +493,6 @@ object ShuffleExchangeExec {
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
         serializer,
-        None,
-        None,
-        false,
         shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics))
 
     dependency
