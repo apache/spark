@@ -132,11 +132,12 @@ def main(infile: IO, outfile: IO) -> None:
     - a `DataSource` instance representing the data source
     - a `StructType` instance representing the output schema of the data source
     - a list of filters to be pushed down
+    - configuration values
 
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. It applies the filters by calling the `pushFilters` method
-    on the reader and determines which filters are supported. The data source with updated reader
-    is then sent back to the JVM along with the indices of the supported filters.
+    on the reader and determines which filters are supported. The indices of the supported
+    filters are sent back to the JVM, along with the list of partitions and the read function.
     """
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
