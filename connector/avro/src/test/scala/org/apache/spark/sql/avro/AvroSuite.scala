@@ -966,6 +966,10 @@ abstract class AvroSuite
 
   test("SPARK-49082: Widening date to timestampNTZ in AvroDeserializer") {
     withTempPath { tempPath =>
+      // Since timestampNTZ only supports timestamps from
+      // -290308-12-21 BCE 19:59:06 to +294247-01-10 CE 04:00:54,
+      // dates outside of this range cannot be widened to timestampNTZ
+      // and will throw an ArithmeticException.
       val datePath = s"$tempPath/date_data"
       val dateDf =
         Seq(LocalDate.of(2024, 1, 1),
