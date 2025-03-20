@@ -8,24 +8,24 @@ BSD 2-Clause License
 
 Copyright (c) 2013-2023, Ionel Cristian Mărieș. All rights reserved.
 
-Redistribution and use in source and binary forms, with or without modification, are 
+Redistribution and use in source and binary forms, with or without modification, are
 permitted provided that the following conditions are met:
 
-1. Redistributions of source code must retain the above copyright notice, this list of 
+1. Redistributions of source code must retain the above copyright notice, this list of
     conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright notice, this list 
-    of conditions and the following disclaimer in the documentation and/or other materials 
+2. Redistributions in binary form must reproduce the above copyright notice, this list
+    of conditions and the following disclaimer in the documentation and/or other materials
     provided with the distribution.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY 
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
-MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL 
-THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
-HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR 
-TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
@@ -63,7 +63,8 @@ class TracebackParseError(Exception):
 
 class Code:
     """
-    Class that replicates just enough of the builtin Code object to enable serialization and traceback rendering.
+    Class that replicates just enough of the builtin Code object to enable serialization
+    and traceback rendering.
     """
 
     co_code: Optional[bytes] = None
@@ -82,7 +83,8 @@ class Code:
 
 class Frame:
     """
-    Class that replicates just enough of the builtin Frame object to enable serialization and traceback rendering.
+    Class that replicates just enough of the builtin Frame object to enable serialization
+    and traceback rendering.
 
     Args:
 
@@ -123,7 +125,8 @@ class Traceback:
     Args:
         get_locals (callable): A function that take a frame argument and returns a dict.
 
-            Ideally you will only return exactly what you need, and only with simple types that can be json serializable.
+            Ideally you will only return exactly what you need, and only with simple types
+            that can be json serializable.
 
             Example:
 
@@ -225,8 +228,8 @@ class Traceback:
 
     def as_dict(self) -> dict:
         """
-        Converts to a dictionary representation. You can serialize the result to JSON as it only has
-        builtin objects like dicts, lists, ints or strings.
+        Converts to a dictionary representation. You can serialize the result to JSON
+        as it only has builtin objects like dicts, lists, ints or strings.
         """
         if self.tb_next is None:
             tb_next = None
