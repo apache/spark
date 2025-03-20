@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.connector.catalog.constraints;
 
-import org.apache.spark.sql.connector.catalog.Identifier;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-
 import java.util.Arrays;
 import java.util.Objects;
+
+import org.apache.spark.sql.connector.catalog.Identifier;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A FOREIGN KEY constraint.
@@ -45,8 +45,10 @@ public class ForeignKey extends BaseConstraint {
       NamedReference[] columns,
       Identifier refTable,
       NamedReference[] refColumns,
-      ConstraintState state) {
-    super(name, state);
+      boolean enforced,
+      ValidationStatus validationStatus,
+      boolean rely) {
+    super(name, enforced, validationStatus, rely);
     this.columns = columns;
     this.refTable = refTable;
     this.refColumns = refColumns;
@@ -78,7 +80,7 @@ public class ForeignKey extends BaseConstraint {
     return String.format(
         "FOREIGN KEY (%s) REFERENCES %s (%s)",
         toSQL(columns),
-        refTable.toString(),
+        refTable,
         toSQL(refColumns));
   }
 
@@ -91,14 +93,51 @@ public class ForeignKey extends BaseConstraint {
         Arrays.equals(columns, that.columns) &&
         Objects.equals(refTable, that.refTable) &&
         Arrays.equals(refColumns, that.refColumns) &&
-        Objects.equals(state(), that.state());
+        enforced() == that.enforced() &&
+        Objects.equals(validationStatus(), that.validationStatus()) &&
+        rely() == that.rely();
   }
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(name(), refTable, state());
+    int result = Objects.hash(name(), refTable, enforced(), validationStatus(), rely());
     result = 31 * result + Arrays.hashCode(columns);
     result = 31 * result + Arrays.hashCode(refColumns);
     return result;
+  }
+
+  public static class Builder extends BaseConstraint.Builder<Builder, ForeignKey> {
+
+    private final NamedReference[] columns;
+    private final Identifier refTable;
+    private final NamedReference[] refColumns;
+
+    public Builder(
+        String name,
+        NamedReference[] columns,
+        Identifier refTable,
+        NamedReference[] refColumns) {
+      super(name);
+      this.columns = columns;
+      this.refTable = refTable;
+      this.refColumns = refColumns;
+    }
+
+    @Override
+    protected Builder self() {
+      return this;
+    }
+
+    @Override
+    public ForeignKey build() {
+      return new ForeignKey(
+          name(),
+          columns,
+          refTable,
+          refColumns,
+          enforced(),
+          validationStatus(),
+          rely());
+    }
   }
 }

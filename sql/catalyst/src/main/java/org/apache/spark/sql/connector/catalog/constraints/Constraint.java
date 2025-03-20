@@ -20,10 +20,9 @@ package org.apache.spark.sql.connector.catalog.constraints;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Identifier;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.expressions.filter.Predicate;
 
 /**
- * A constraint that defines valid states of data in a table.
+ * A constraint that restricts states of data in a table.
  *
  * @since 4.1.0
  */
@@ -35,94 +34,86 @@ public interface Constraint {
   String name();
 
   /**
-   * Returns the definition of this constraint in DDL format.
+   * Indicates whether this constraint is actively enforced. If enforced, data modifications
+   * that violate the constraint fail with a constraint violation error.
+   */
+  boolean enforced();
+
+  /**
+   * Indicates whether the existing data in the table satisfies this constraint. The constraint
+   * can be valid (the data is guaranteed to satisfy the constraint), invalid (some records violate
+   * the constraint), or unvalidated (the validity is unknown).
+   */
+  ValidationStatus validationStatus();
+
+  /**
+   * Indicates whether this constraint is assumed to hold true if the validity is unknown.
+   */
+  boolean rely();
+
+  /**
+   * Returns the definition of this constraint in the DDL format.
    */
   String toDDL();
 
   /**
-   * Returns the state of this constraint.
-   */
-  ConstraintState state();
-
-  /**
-   * Creates a CHECK constraint with a search condition defined in SQL (Spark SQL dialect).
+   * Instantiates a builder for a CHECK constraint.
    *
    * @param name the constraint name
-   * @param sql the SQL representation of the search condition (Spark SQL dialect)
-   * @param state the constraint state
-   * @return a CHECK constraint with the provided configuration
+   * @return a CHECK constraint builder
    */
-  static Check check(String name, String sql, ConstraintState state) {
-    return new Check(name, sql, null /* no predicate */, state);
+  static Check.Builder check(String name) {
+    return new Check.Builder(name);
   }
 
   /**
-   * Creates a CHECK constraint with a search condition defined by a {@link Predicate predicate}.
+   * Instantiates a builder for a UNIQUE constraint.
    *
    * @param name the constraint name
-   * @param predicate the search condition
-   * @param state the constraint state
-   * @return a CHECK constraint with the provided configuration
+   * @param columns columns that comprise the unique key
+   * @return a UNIQUE constraint builder
    */
-  static Check check(String name, Predicate predicate, ConstraintState state) {
-    return new Check(name, null /* no SQL */, predicate, state);
+  static Unique.Builder unique(String name, NamedReference[] columns) {
+    return new Unique.Builder(name, columns);
   }
 
   /**
-   * Creates a CHECK constraint with a search condition defined in SQL (Spark SQL dialect) and
-   * by {@link Predicate} (if the SQL representation can be converted into a supported expression).
-   * The SQL string and predicate must be equivalent.
+   * Instantiates a builder for a PRIMARY KEY constraint.
    *
    * @param name the constraint name
-   * @param sql the SQL representation of the search condition (Spark SQL dialect)
-   * @param predicate the search condition
-   * @param state the constraint state
-   * @return a CHECK constraint with the provided configuration
+   * @param columns columns that comprise the primary key
+   * @return a PRIMARY KEY constraint builder
    */
-  static Check check(String name, String sql, Predicate predicate, ConstraintState state) {
-    return new Check(name, sql, predicate, state);
+  static PrimaryKey.Builder primaryKey(String name, NamedReference[] columns) {
+    return new PrimaryKey.Builder(name, columns);
   }
 
   /**
-   * Creates a UNIQUE constraint.
-   *
-   * @param name the constraint name
-   * @param columns the columns that comprise the unique key
-   * @param state the constraint state
-   * @return a UNIQUE constraint with the provided configuration
-   */
-  static Unique unique(String name, NamedReference[] columns, ConstraintState state) {
-    return new Unique(name, columns, state);
-  }
-
-  /**
-   * Creates a PRIMARY KEY constraint.
-   *
-   * @param name the constraint name
-   * @param columns the columns that comprise the primary key
-   * @param state the constraint state
-   * @return a PRIMARY KEY constraint with the provided configuration
-   */
-  static PrimaryKey primaryKey(String name, NamedReference[] columns, ConstraintState state) {
-    return new PrimaryKey(name, columns, state);
-  }
-
-  /**
-   * Creates a FOREIGN KEY constraint.
+   * Instantiates a builder for a FOREIGN KEY constraint.
    *
    * @param name the constraint name
    * @param columns the referencing columns
    * @param refTable the referenced table identifier
    * @param refColumns the referenced columns in the referenced table
-   * @param state the constraint state
-   * @return a FOREIGN KEY constraint with the provided configuration
+   * @return a FOREIGN KEY constraint builder
    */
-  static ForeignKey foreignKey(
+  static ForeignKey.Builder foreignKey(
       String name,
       NamedReference[] columns,
       Identifier refTable,
-      NamedReference[] refColumns,
-      ConstraintState state) {
-    return new ForeignKey(name, columns, refTable, refColumns, state);
+      NamedReference[] refColumns) {
+    return new ForeignKey.Builder(name, columns, refTable, refColumns);
+  }
+
+  /**
+   * An indicator of the validity of the constraint.
+   * <p>
+   * A constraint may be validated independently of enforcement, meaning it can be validated
+   * without being actively enforced, or vice versa. A constraint can be valid (the data is
+   * guaranteed to satisfy the constraint), invalid (some records violate the constraint),
+   * or unvalidated (the validity is unknown).
+   */
+  enum ValidationStatus {
+    VALID, INVALID, UNVALIDATED
   }
 }

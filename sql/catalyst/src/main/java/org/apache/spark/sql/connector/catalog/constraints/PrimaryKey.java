@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog.constraints;
 
-import org.apache.spark.sql.connector.expressions.NamedReference;
-
 import java.util.Arrays;
 import java.util.Objects;
+
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A PRIMARY KEY constraint.
@@ -28,6 +28,7 @@ import java.util.Objects;
  * A PRIMARY KEY constraint specifies ore or more columns as a primary key. Such constraint is
  * satisfied if and only if no two rows in a table have the same non-null values in the primary
  * key columns and none of the values in the specified column or columns are {@code NULL}.
+ * A table can have at most one primary key.
  *
  * @since 4.1.0
  */
@@ -38,8 +39,10 @@ public class PrimaryKey extends BaseConstraint {
   PrimaryKey(
       String name,
       NamedReference[] columns,
-      ConstraintState state) {
-    super(name, state);
+      boolean enforced,
+      ValidationStatus validationStatus,
+      boolean rely) {
+    super(name, enforced, validationStatus, rely);
     this.columns = columns;
   }
 
@@ -62,13 +65,35 @@ public class PrimaryKey extends BaseConstraint {
     PrimaryKey that = (PrimaryKey) other;
     return Objects.equals(name(), that.name()) &&
         Arrays.equals(columns, that.columns()) &&
-        Objects.equals(state(), that.state());
+        enforced() == that.enforced() &&
+        Objects.equals(validationStatus(), that.validationStatus()) &&
+        rely() == that.rely();
   }
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(name(), state());
+    int result = Objects.hash(name(), enforced(), validationStatus(), rely());
     result = 31 * result + Arrays.hashCode(columns);
     return result;
+  }
+
+  public static class Builder extends BaseConstraint.Builder<Builder, PrimaryKey> {
+
+    private final NamedReference[] columns;
+
+    Builder(String name, NamedReference[] columns) {
+      super(name);
+      this.columns = columns;
+    }
+
+    @Override
+    protected Builder self() {
+      return this;
+    }
+
+    @Override
+    public PrimaryKey build() {
+      return new PrimaryKey(name(), columns, enforced(), validationStatus(), rely());
+    }
   }
 }
