@@ -56,6 +56,8 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
+    _get_temp_dfs_path,
+    _remove_dfs_dir,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql import functions as F
@@ -74,15 +76,6 @@ __all__ = [
     "TrainValidationSplit",
     "TrainValidationSplitModel",
 ]
-
-
-_SPARKML_TUNING_TEMP_DFS_PATH = "SPARKML_TUNING_TEMP_DFS_PATH"
-
-
-def _get_temp_dfs_path():
-    return os.environ.get(_SPARKML_TUNING_TEMP_DFS_PATH)
-
-
 
 
 def _parallelFitTasks(
@@ -886,12 +879,8 @@ class CrossValidator(
                     subModels[i][j] = subModel
 
             if tmp_dfs_path:
-                # TODO: Spark does not have FS API to delete a path on Distributed storage,
-                #  this is a workaround to delete the data inside the temporary directory.
-                #  we can improve it once Spark adds FS deletion API.
-                empty_df = spark_session.range(0)
-                empty_df.write.mode("overwrite").save(validation_tmp_path)
-                empty_df.write.mode("overwrite").save(train_tmp_path)
+                _remove_dfs_dir(validation_tmp_path)
+                _remove_dfs_dir(train_tmp_path)
             else:
                 validation.unpersist()
                 train.unpersist()
@@ -1542,12 +1531,8 @@ class TrainValidationSplit(
                 subModels[j] = subModel
 
         if tmp_dfs_path:
-            # TODO: Spark does not have FS API to delete a path on Distributed storage,
-            #  this is a workaround to delete the data inside the temporary directory.
-            #  we can improve it once Spark adds FS deletion API.
-            empty_df = spark_session.range(0)
-            empty_df.write.mode("overwrite").save(validation_tmp_path)
-            empty_df.write.mode("overwrite").save(train_tmp_path)
+            _remove_dfs_dir(validation_tmp_path)
+            _remove_dfs_dir(train_tmp_path)
         else:
             train.unpersist()
             validation.unpersist()

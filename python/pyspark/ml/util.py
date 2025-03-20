@@ -1104,3 +1104,27 @@ def try_remote_functions(f: FuncT) -> FuncT:
             return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+_SPARKML_TEMP_DFS_PATH = "SPARKML_TEMP_DFS_PATH"
+
+
+def _get_temp_dfs_path():
+    return os.environ.get(_SPARKML_TEMP_DFS_PATH)
+
+
+def _remove_dfs_dir(path):
+    from pyspark.ml.wrapper import JavaWrapper
+    from pyspark.sql import is_remote
+    if is_remote():
+        from pyspark.ml.util import ML_CONNECT_HELPER_ID
+
+        helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+        helper._call_java("handleOverwrite", path, True)
+    else:
+        from pyspark.sql import SparkSession
+
+        spark_session = SparkSession.getActiveSession()
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
+        wrapper = JavaWrapper(_java_obj)
+        wrapper._call_java("handleOverwrite", path, True, spark_session._jsparkSession)
