@@ -185,8 +185,14 @@ private[spark] class Executor(
     val currentFiles = new HashMap[String, Long]
     val currentJars = new HashMap[String, Long]
     val currentArchives = new HashMap[String, Long]
+    // SPARK-51537, The isolation session should also use global jars
+    val jars = if (isDefaultState(jobArtifactState.uuid)) {
+      currentJars
+    } else {
+      defaultSessionState.currentJars
+    }
     val urlClassLoader =
-      createClassLoader(currentJars, isStubbingEnabledForState(jobArtifactState.uuid))
+      createClassLoader(jars, isStubbingEnabledForState(jobArtifactState.uuid))
     val replClassLoader = addReplClassLoaderIfNeeded(
       urlClassLoader, jobArtifactState.replClassDirUri, jobArtifactState.uuid)
     new IsolatedSessionState(
