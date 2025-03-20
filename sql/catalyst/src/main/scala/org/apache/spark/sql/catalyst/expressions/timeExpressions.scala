@@ -199,6 +199,19 @@ case class MinutesOfTime(child: Expression)
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(time_expr) - Returns the minute component of the given time.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME'23:59:59.999999');
+       59
+  """,
+  since = "4.1.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
 object MinuteExpressionBuilder extends ExpressionBuilder {
   override def build(name: String, expressions: Seq[Expression]): Expression = {
     val child = expressions.head
