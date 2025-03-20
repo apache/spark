@@ -60,7 +60,7 @@ from pyspark.ml.util import (
     _remove_dfs_dir,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, SparkSession
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
