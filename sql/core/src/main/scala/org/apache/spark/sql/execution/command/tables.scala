@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -202,7 +203,8 @@ case class AlterTableRenameCommand(
       // If `optStorageLevel` is defined, the old table was cached.
       val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
         sparkSession.table(oldName.unquotedString))
-      val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
+      val optStorageLevel = optCachedData.map(_.cachedRepresentation.
+        fold(CacheManager.inMemoryRelationExtractor, identity).cacheBuilder.storageLevel)
       if (optStorageLevel.isDefined) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName)
       }
