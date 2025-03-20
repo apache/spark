@@ -38,7 +38,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NonFateSharingCache, Utils}
 
-
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
   with SupportsFineGrainedReplay {
@@ -971,7 +970,7 @@ class RocksDBStateStoreChangeDataReader(
 }
 
 /**
- * Object used to relay events reported from a RocksDB instance to the state store coordinator.
+ * Class used to relay events reported from a RocksDB instance to the state store coordinator.
  *
  * We pass this into the RocksDB instance to report specific events like snapshot uploads.
  * This should only be used to report back to the coordinator for metrics and monitoring purposes.
@@ -985,9 +984,9 @@ private[state] case class RocksDBEventListener(
   private val stateStoreProviderId: StateStoreProviderId =
     StateStoreProviderId(stateStoreId, UUID.fromString(queryRunId))
 
-  /** Whether the event listener should relay these messages to the state store coordinator */
-  private val coordinatorReportUploadEnabled: Boolean =
-    storeConf.stateStoreCoordinatorReportUploadEnabled
+  /** Whether the coordinator is logging state stores lagging behind */
+  private val coordinatorReportSnapshotUploadLagEnabled: Boolean =
+    storeConf.stateStoreCoordinatorReportSnapshotUploadLag
 
   /**
    * Callback function from RocksDB to report events to the coordinator.
@@ -997,10 +996,8 @@ private[state] case class RocksDBEventListener(
    * @param version The snapshot version that was just uploaded from RocksDB
    */
   def reportSnapshotUploaded(version: Long): Unit = {
-    // Only report to the coordinator if this is enabled, as sometimes we do not need
-    // to track for lagging instances.
-    // Also ignore message if we are missing the provider ID from lack of initialization.
-    if (coordinatorReportUploadEnabled) {
+    // Only report to the coordinator if it is reporting lagging stores
+    if (coordinatorReportSnapshotUploadLagEnabled) {
       // Report the provider ID and the version to the coordinator
       StateStore.reportSnapshotUploaded(stateStoreProviderId, version)
     }

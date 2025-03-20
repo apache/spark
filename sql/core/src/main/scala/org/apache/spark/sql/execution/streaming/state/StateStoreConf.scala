@@ -98,11 +98,10 @@ class StateStoreConf(
     StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
 
   /**
-   * Whether to report snapshot uploaded messages from the internal RocksDB instance
-   * to the state store coordinator.
+   * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
    */
-  val stateStoreCoordinatorReportUploadEnabled: Boolean =
-    sqlConf.stateStoreCoordinatorReportUploadEnabled
+  val stateStoreCoordinatorReportSnapshotUploadLag: Boolean =
+    sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
   /**
    * Additional configurations related to state store. This will capture all configs in

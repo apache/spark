@@ -2256,54 +2256,52 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG =
-    buildConf("spark.sql.streaming.stateStore.minSnapshotDeltaMultiplierForMinVersionDeltaToLog")
+  val STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.multiplierForMinVersionDiffToLog")
       .internal()
       .doc(
-        "This multiplier determines the minimum version threshold for logging warnings when a " +
-        "state store instance falls behind. The coordinator logs a warning if a state store's " +
-        "last uploaded snapshot's version lags behind the query's latest known version by " +
-        "this threshold. The threshold is calculated as the configured minimum number of deltas " +
-        "needed to create a snapshot, multiplied by this multiplier."
+        "Determines the version threshold for logging warnings when a state store falls behind. " +
+        "The coordinator logs a warning when the store's uploaded snapshot version trails the " +
+        "query's latest version by the configured number of deltas needed to create a snapshot, " +
+        "times this multiplier."
       )
       .version("4.1.0")
       .intConf
       .checkValue(k => k >= 1, "Must be greater than or equal to 1")
       .createWithDefault(5)
 
-  val STATE_STORE_COORDINATOR_MAINTENANCE_MULTIPLIER_FOR_MIN_TIME_DELTA_TO_LOG =
-    buildConf("spark.sql.streaming.stateStore.maintenanceMultiplierForMinTimeDeltaToLog")
+  val STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.multiplierForMinTimeDiffToLog")
       .internal()
       .doc(
-        "This multiplier determines the minimum time threshold for logging warnings when a " +
-        "state store instance falls behind. The coordinator logs a warning if a state store's " +
-        "last snapshot upload time lags behind the current time by this threshold. " +
-        "The threshold is calculated as the maintenance interval multiplied by this multiplier."
+        "Determines the time threshold for logging warnings when a state store falls behind. " +
+        "The coordinator logs a warning when the store's uploaded snapshot timestamp trails the " +
+        "current time by the configured maintenance interval, times this multiplier."
       )
       .version("4.1.0")
       .intConf
       .checkValue(k => k >= 1, "Must be greater than or equal to 1")
       .createWithDefault(10)
 
-  val STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED =
-    buildConf("spark.sql.streaming.stateStore.coordinatorReportUpload.enabled")
+  val STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG =
+    buildConf("spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag")
       .internal()
       .doc(
-        "If enabled, state store instances will send a message to the state store " +
-        "coordinator whenever they complete a snapshot upload."
+        "When enabled, the state store coordinator will report state stores whose snapshot " +
+        "have not been uploaded for some time. See the conf snapshotLagReportInterval for " +
+        "the minimum time between reports, and the conf multiplierForMinVersionDiffToLog " +
+        "and multiplierForMinTimeDiffToLog for the logging thresholds."
       )
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL =
     buildConf("spark.sql.streaming.stateStore.snapshotLagReportInterval")
       .internal()
       .doc(
-        "The minimum amount of time between the state store coordinator's full report on " +
-        "state store instances lagging in snapshot uploads. The reports may be delayed " +
-        "as the coordinator only checks for lagging instances upon receiving a message " +
-        "instructing it to do so."
+        "The minimum amount of time between the state store coordinator's reports on " +
+        "state store instances trailing behind in snapshot uploads."
       )
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
@@ -5853,8 +5851,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
     getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
 
-  def stateStoreCoordinatorReportUploadEnabled: Boolean =
-    getConf(STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED)
+  def stateStoreCoordinatorReportSnapshotUploadLag: Boolean =
+    getConf(STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

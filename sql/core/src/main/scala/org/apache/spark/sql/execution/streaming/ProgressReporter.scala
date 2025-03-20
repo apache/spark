@@ -62,6 +62,9 @@ class ProgressReporter(
   val noDataProgressEventInterval: Long =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
+  val coordinatorReportSnapshotUploadLag: Boolean =
+    sparkSession.sessionState.conf.stateStoreCoordinatorReportSnapshotUploadLag
+
   val stateStoreCoordinator: StateStoreCoordinatorRef =
     sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
 
@@ -287,13 +290,11 @@ abstract class ProgressContext(
     progressReporter.lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
     progressReporter.updateProgress(newProgress)
 
-    // Ask the state store coordinator to look for any lagging instances and report them.
-    progressReporter.stateStoreCoordinator
-      .constructLaggingInstanceReport(
-        lastExecution.runId,
-        lastEpochId,
-        triggerClock.getTimeMillis()
-      )
+    // Ask the state store coordinator to log all lagging state stores
+    if (progressReporter.coordinatorReportSnapshotUploadLag) {
+      progressReporter.stateStoreCoordinator
+        .logLaggingStateStores(lastExecution.runId, lastEpochId + 1)
+    }
 
     // Update the value since this trigger executes a batch successfully.
     this.execStatsOnLatestExecutedBatch = Some(execStats)

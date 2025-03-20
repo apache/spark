@@ -70,10 +70,9 @@ private case class ReportSnapshotUploaded(
  * This message is used for the coordinator to look for all state stores that are lagging behind
  * in snapshot uploads. The coordinator will then log a warning message for each lagging instance.
  */
-private case class ConstructLaggingInstanceReport(
+private case class LogLaggingStateStores(
     queryRunId: UUID,
-    latestVersion: Long,
-    timestamp: Long)
+    latestVersion: Long)
   extends StateStoreCoordinatorMessage
 
 /**
@@ -86,13 +85,12 @@ private case class GetLatestSnapshotVersionForTesting(storeId: StateStoreProvide
 
 /**
  * Message used for testing.
- * This message is used to retrieve the all active state store instance falling behind in
- * snapshot uploads, using version and time criterias.
+ * This message is used to retrieve all active state store instance falling behind in
+ * snapshot uploads, using version and time criteria.
  */
 private case class GetLaggingStoresForTesting(
     queryRunId: UUID,
-    latestVersion: Long,
-    timestamp: Long)
+    latestVersion: Long)
   extends StateStoreCoordinatorMessage
 
 private object StopCoordinator
@@ -167,14 +165,9 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
     rpcEndpointRef.askSync[Boolean](ReportSnapshotUploaded(storeProviderId, version, timestamp))
   }
 
-  /** Ask the coordinator to find all state store instances that are lagging behind in uploads */
-  private[sql] def constructLaggingInstanceReport(
-      queryRunId: UUID,
-      latestVersion: Long,
-      timestamp: Long): Unit = {
-    rpcEndpointRef.askSync[Boolean](
-      ConstructLaggingInstanceReport(queryRunId, latestVersion, timestamp)
-    )
+  /** Ask the coordinator to log all state store instances that are lagging behind in uploads */
+  private[sql] def logLaggingStateStores(queryRunId: UUID, latestVersion: Long): Unit = {
+    rpcEndpointRef.askSync[Boolean](LogLaggingStateStores(queryRunId, latestVersion))
   }
 
   /**
@@ -193,10 +186,9 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
    */
   private[state] def getLaggingStoresForTesting(
       queryRunId: UUID,
-      latestVersion: Long,
-      timestamp: Long): Seq[StateStoreProviderId] = {
+      latestVersion: Long): Seq[StateStoreProviderId] = {
     rpcEndpointRef.askSync[Seq[StateStoreProviderId]](
-      GetLaggingStoresForTesting(queryRunId, latestVersion, timestamp)
+      GetLaggingStoresForTesting(queryRunId, latestVersion)
     )
   }
 
@@ -227,7 +219,7 @@ private class StateStoreCoordinator(
   // Stores the last timestamp in milliseconds where the coordinator did a full report on
   // instances lagging behind on snapshot uploads. The initial timestamp is defaulted to
   // 0 milliseconds.
-  private var lastFullSnapshotLagReport = 0L
+  private var lastFullSnapshotLagReportTimeMs = 0L
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId, providerIdsToCheck) =>
@@ -274,11 +266,12 @@ private class StateStoreCoordinator(
       }
       context.reply(true)
 
-    case ConstructLaggingInstanceReport(queryRunId, latestVersion, endOfBatchTimestamp) =>
+    case LogLaggingStateStores(queryRunId, latestVersion) =>
       // Only log lagging instances if the snapshot report upload is enabled,
       // otherwise all instances will be considered lagging.
-      if (sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED)) {
-        val laggingStores = findLaggingStores(queryRunId, latestVersion, endOfBatchTimestamp)
+      val currentTimestamp = System.currentTimeMillis()
+      val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
+      if (laggingStores.nonEmpty) {
         logWarning(
           log"StateStoreCoordinator Snapshot Lag Report for " +
           log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
@@ -291,16 +284,15 @@ private class StateStoreCoordinator(
         // full reports.
         val coordinatorLagReportInterval =
           sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
-        val currentTimestamp = System.currentTimeMillis()
         if (laggingStores.nonEmpty &&
-          currentTimestamp - lastFullSnapshotLagReport > coordinatorLagReportInterval) {
+          currentTimestamp - lastFullSnapshotLagReportTimeMs > coordinatorLagReportInterval) {
           // Mark timestamp of the full report and log the lagging instances
-          lastFullSnapshotLagReport = currentTimestamp
+          lastFullSnapshotLagReportTimeMs = currentTimestamp
           laggingStores.foreach { providerId =>
             val logMessage = stateStoreLatestUploadedSnapshot.get(providerId) match {
               case Some(snapshotEvent) =>
-                val versionDelta = latestVersion - snapshotEvent.version
-                val timeDelta = endOfBatchTimestamp - snapshotEvent.timestamp
+                val versionDelta = latestVersion - Math.max(snapshotEvent.version, 0)
+                val timeDelta = currentTimestamp - snapshotEvent.timestamp
 
                 log"StateStoreCoordinator Snapshot Lag Detected for " +
                 log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
@@ -314,12 +306,10 @@ private class StateStoreCoordinator(
                 log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
                 log"Provider: ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, providerId)} " +
                 log"(Latest batch ID: ${MDC(LogKeys.BATCH_ID, latestVersion)}, " +
-                log"latest snapshot: never uploaded)"
+                log"latest snapshot: no upload for query run)"
             }
             logWarning(logMessage)
           }
-        } else if (laggingStores.nonEmpty) {
-          logInfo(log"StateStoreCoordinator Snapshot Lag Report - last full report was too recent")
         }
       }
       context.reply(true)
@@ -329,8 +319,9 @@ private class StateStoreCoordinator(
       logDebug(s"Got latest snapshot version of the state store $providerId: $version")
       context.reply(version)
 
-    case GetLaggingStoresForTesting(queryRunId, latestVersion, timestamp) =>
-      val laggingStores = findLaggingStores(queryRunId, latestVersion, timestamp)
+    case GetLaggingStoresForTesting(queryRunId, latestVersion) =>
+      val currentTimestamp = System.currentTimeMillis()
+      val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
       logDebug(s"Got lagging state stores: ${laggingStores.mkString(", ")}")
       context.reply(laggingStores)
 
@@ -346,14 +337,15 @@ private class StateStoreCoordinator(
   ) extends Ordered[SnapshotUploadEvent] {
 
     def isLagging(latestVersion: Long, latestTimestamp: Long): Boolean = {
-      val versionDelta = latestVersion - version
+      // Use version 0 for stores that have not uploaded a snapshot version for this run.
+      val versionDelta = latestVersion - Math.max(version, 0)
       val timeDelta = latestTimestamp - timestamp
 
       // Determine alert thresholds from configurations for both time and version differences.
       val snapshotVersionDeltaMultiplier = sqlConf.getConf(
-        SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_DELTA_MULTIPLIER_FOR_MIN_VERSION_DELTA_TO_LOG)
+        SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG)
       val maintenanceIntervalMultiplier = sqlConf.getConf(
-        SQLConf.STATE_STORE_COORDINATOR_MAINTENANCE_MULTIPLIER_FOR_MIN_TIME_DELTA_TO_LOG)
+        SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG)
       val minDeltasForSnapshot = sqlConf.getConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
       val maintenanceInterval = sqlConf.getConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL)
 
@@ -389,7 +381,7 @@ private class StateStoreCoordinator(
       referenceTimestamp: Long): Seq[StateStoreProviderId] = {
     // Do not report any instance as lagging if the snapshot report upload is disabled,
     // since it will treat all active instances as stores that have never uploaded.
-    if (!sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_REPORT_UPLOAD_ENABLED)) {
+    if (!sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG)) {
       return Seq.empty
     }
     // Look for instances that are lagging behind in snapshot uploads
