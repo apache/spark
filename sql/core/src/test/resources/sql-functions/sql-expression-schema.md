@@ -346,6 +346,7 @@
 | org.apache.spark.sql.catalyst.expressions.ToDegrees | degrees | SELECT degrees(3.141592653589793) | struct<DEGREES(3.141592653589793):double> |
 | org.apache.spark.sql.catalyst.expressions.ToNumber | to_number | SELECT to_number('454', '999') | struct<to_number(454, 999):decimal(3,0)> |
 | org.apache.spark.sql.catalyst.expressions.ToRadians | radians | SELECT radians(180) | struct<RADIANS(180):double> |
+| org.apache.spark.sql.catalyst.expressions.ToTime | to_time | SELECT to_time('00:12:00') | struct<to_time(00:12:00):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.ToUTCTimestamp | to_utc_timestamp | SELECT to_utc_timestamp('2016-08-31', 'Asia/Seoul') | struct<to_utc_timestamp(2016-08-31, Asia/Seoul):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ToUnixTimestamp | to_unix_timestamp | SELECT to_unix_timestamp('2016-04-08', 'yyyy-MM-dd') | struct<to_unix_timestamp(2016-04-08, yyyy-MM-dd):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TransformKeys | transform_keys | SELECT transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1) | struct<transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), lambdafunction((namedlambdavariable() + 1), namedlambdavariable(), namedlambdavariable())):map<int,int>> |

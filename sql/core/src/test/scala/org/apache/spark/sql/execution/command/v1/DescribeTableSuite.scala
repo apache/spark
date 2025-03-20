@@ -265,8 +265,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         schema_name = Some("ns"),
         columns = Some(List(
           TableColumn("employee_id", Type("int"), true),
-          TableColumn("employee_name", Type("string"), true),
-          TableColumn("department", Type("string"), true),
+          TableColumn("employee_name", Type("string", collation = Some("UTF8_BINARY")), true),
+          TableColumn("department", Type("string", collation = Some("UTF8_BINARY")), true),
           TableColumn("hire_date", Type("date"), true)
         )),
         last_access = Some("UNKNOWN"),
@@ -330,9 +330,9 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         schema_name = Some("ns"),
         columns = Some(List(
           TableColumn("id", Type("int"), true),
-          TableColumn("name", Type("string"), true),
-          TableColumn("region", Type("string"), true),
-          TableColumn("category", Type("string"), true)
+          TableColumn("name", Type("string", collation = Some("UTF8_BINARY")), true),
+          TableColumn("region", Type("string", collation = Some("UTF8_BINARY")), true),
+          TableColumn("category", Type("string", collation = Some("UTF8_BINARY")), true)
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
@@ -394,9 +394,9 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         schema_name = Some("ns"),
         columns = Some(List(
           TableColumn("id", Type("int"), true),
-          TableColumn("name", Type("string"), true),
-          TableColumn("region", Type("string"), true),
-          TableColumn("category", Type("string"), true)
+          TableColumn("name", Type("string", collation = Some("UTF8_BINARY")), true),
+          TableColumn("region", Type("string", collation = Some("UTF8_BINARY")), true),
+          TableColumn("category", Type("string", collation = Some("UTF8_BINARY")), true)
         )),
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
@@ -421,6 +421,58 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       assert(iso8601Regex.matches(parsedOutput.created_time.get))
       assert(expectedOutput == parsedOutput.copy(
         location = None, created_time = None, storage_properties = None))
+    }
+  }
+
+  test("DESCRIBE AS JSON collation") {
+    withNamespaceAndTable("ns", "table") { t =>
+      val tableCreationStr =
+        s"""
+           |CREATE TABLE $t (
+           |  c1 STRING COLLATE UNICODE_CI,
+           |  c2 STRING COLLATE UNICODE_RTRIM,
+           |  c3 STRING COLLATE FR,
+           |  c4 STRING,
+           |  id INT
+           |)
+           |USING parquet COMMENT 'table_comment'
+           |""".stripMargin
+      spark.sql(tableCreationStr)
+
+      val descriptionDf = spark.sql(s"DESC EXTENDED $t AS JSON")
+      val firstRow = descriptionDf.select("json_metadata").head()
+      val jsonValue = firstRow.getString(0)
+      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+
+      val expectedOutput = DescribeTableJson(
+        table_name = Some("table"),
+        catalog_name = Some("spark_catalog"),
+        namespace = Some(List("ns")),
+        schema_name = Some("ns"),
+        columns = Some(List(
+          TableColumn("c1", Type("string", collation = Some("UNICODE_CI"))),
+          TableColumn("c2", Type("string", collation = Some("UNICODE_RTRIM"))),
+          TableColumn("c3", Type("string", collation = Some("fr"))),
+          TableColumn("c4", Type("string", collation = Some("UTF8_BINARY"))),
+          TableColumn("id", Type("int")))),
+        last_access = Some("UNKNOWN"),
+        created_by = Some(s"Spark $SPARK_VERSION"),
+        `type` = Some("MANAGED"),
+        storage_properties = None,
+        provider = Some("parquet"),
+        bucket_columns = Some(Nil),
+        sort_columns = Some(Nil),
+        comment = Some("table_comment"),
+        serde_library = if (getProvider() == "hive") {
+          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
+        } else {
+          None
+        },
+        table_properties = None
+      )
+      assert(parsedOutput.location.isDefined)
+      assert(iso8601Regex.matches(parsedOutput.created_time.get))
+      assert(expectedOutput == parsedOutput.copy(location = None, created_time = None))
     }
   }
 
@@ -450,7 +502,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         schema_name = Some("ns"),
         columns = Some(List(
           TableColumn("id", Type("int"), default = Some("1")),
-          TableColumn("name", Type("string"), default = Some("'unknown'")),
+          TableColumn("name", Type("string", collation = Some("UTF8_BINARY")),
+            default = Some("'unknown'")),
           TableColumn("created_at", Type("timestamp_ltz"), default = Some("CURRENT_TIMESTAMP")),
           TableColumn("is_active", Type("boolean"), default = Some("true"))
         )),
@@ -503,7 +556,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             schema_name = if (isTemp) Some("session") else Some("default"),
             columns = Some(List(
               TableColumn("id", Type("int")),
-              TableColumn("name", Type("string")),
+              TableColumn("name", Type("string", collation = Some("UTF8_BINARY"))),
               TableColumn("created_at", Type("timestamp_ltz"))
             )),
             last_access = Some("UNKNOWN"),
@@ -603,7 +656,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
               fields = Some(List(
                 Field(
                   name = "name",
-                  `type` = Type("string")
+                  `type` = Type("string", collation = Some("UTF8_BINARY"))
                 ),
                 Field(
                   name = "age",
@@ -616,13 +669,13 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
                     fields = Some(List(
                       Field(
                         name = "email",
-                        `type` = Type("string")
+                        `type` = Type("string", collation = Some("UTF8_BINARY"))
                       ),
                       Field(
                         name = "phone_numbers",
                         `type` = Type(
                           name = "array",
-                          element_type = Some(Type("string")),
+                          element_type = Some(Type("string", collation = Some("UTF8_BINARY"))),
                           element_nullable = Some(true)
                         )
                       ),
@@ -635,11 +688,11 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
                             fields = Some(List(
                               Field(
                                 name = "street",
-                                `type` = Type("string")
+                                `type` = Type("string", collation = Some("UTF8_BINARY"))
                               ),
                               Field(
                                 name = "city",
-                                `type` = Type("string")
+                                `type` = Type("string", collation = Some("UTF8_BINARY"))
                               ),
                               Field(
                                 name = "zip",
@@ -661,10 +714,10 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             name = "preferences",
             `type` = Type(
               name = "map",
-              key_type = Some(Type("string")),
+              key_type = Some(Type("string", collation = Some("UTF8_BINARY"))),
               value_type = Some(Type(
                 name = "array",
-                element_type = Some(Type("string")),
+                element_type = Some(Type("string", collation = Some("UTF8_BINARY"))),
                 element_nullable = Some(true)
               )),
               value_nullable = Some(true)
@@ -673,7 +726,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           ),
           TableColumn(
             name = "id",
-            `type` = Type("string"),
+            `type` = Type("string", collation = Some("UTF8_BINARY")),
             default = None
           )
         )),
@@ -836,6 +889,8 @@ case class TableColumn(
 
 case class Type(
    name: String,
+   collation: Option[String] = None,
+   length: Option[Int] = None,
    fields: Option[List[Field]] = None,
    `type`: Option[Type] = None,
    element_type: Option[Type] = None,
