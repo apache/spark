@@ -187,22 +187,22 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     new util.HashMap[Identifier, UnboundProcedure]
   procedures.put(Identifier.of(Array("dummy"), "increment"), UnboundIncrement)
 
-  protected def allNamespaces(): Seq[Seq[String]] = {
+  protected def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq)
       ++ namespaces.keySet.asScala
       ++ procedures.keySet.asScala.map(_.namespace.toSeq)).toSeq.distinct
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = {
-    allNamespaces().exists(_.startsWith(namespace))
+    allNamespaces.exists(_.startsWith(namespace))
   }
 
   override def listNamespaces: Array[Array[String]] = {
-    allNamespaces().map(_.head).distinct.map(Array(_)).toArray
+    allNamespaces.map(_.head).distinct.map(Array(_)).toArray
   }
 
   override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
-    allNamespaces()
+    allNamespaces
       .filter(_.size > namespace.length)
       .filter(_.startsWith(namespace))
       .map(_.take(namespace.length + 1))
