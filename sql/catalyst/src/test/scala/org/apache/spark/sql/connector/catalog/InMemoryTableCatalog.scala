@@ -190,7 +190,10 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   protected def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq)
       ++ namespaces.keySet.asScala
-      ++ procedures.keySet.asScala.map(_.namespace.toSeq)).toSeq.distinct
+      ++ procedures.keySet.asScala
+      .filter(i => !i.namespace.sameElements(Array("dummy")))
+      .map(_.namespace.toSeq)
+      ).toSeq.distinct
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = {
