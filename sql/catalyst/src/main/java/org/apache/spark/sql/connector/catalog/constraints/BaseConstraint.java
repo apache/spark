@@ -17,18 +17,26 @@
 
 package org.apache.spark.sql.connector.catalog.constraints;
 
-import org.apache.spark.sql.connector.expressions.NamedReference;
-
 import java.util.StringJoiner;
+
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 abstract class BaseConstraint implements Constraint {
 
   private final String name;
-  private final ConstraintState state;
+  private final boolean enforced;
+  private final ValidationStatus validationStatus;
+  private final boolean rely;
 
-  protected BaseConstraint(String name, ConstraintState state) {
+  protected BaseConstraint(
+      String name,
+      boolean enforced,
+      ValidationStatus validationStatus,
+      boolean rely) {
     this.name = name;
-    this.state = state;
+    this.enforced = enforced;
+    this.validationStatus = validationStatus;
+    this.rely = rely;
   }
 
   protected abstract String definition();
@@ -39,8 +47,18 @@ abstract class BaseConstraint implements Constraint {
   }
 
   @Override
-  public ConstraintState state() {
-    return state;
+  public boolean enforced() {
+    return enforced;
+  }
+
+  @Override
+  public ValidationStatus validationStatus() {
+    return validationStatus;
+  }
+
+  @Override
+  public boolean rely() {
+    return rely;
   }
 
   @Override
@@ -49,9 +67,9 @@ abstract class BaseConstraint implements Constraint {
         "CONSTRAINT %s %s %s %s %s",
         name,
         definition(),
-        state.enforced() ? "ENFORCED" : "NOT ENFORCED",
-        state.validated() ? "VALID" : "NOT VALID",
-        state.rely() ? "RELY" : "NORELY");
+        enforced ? "ENFORCED" : "NOT ENFORCED",
+        validationStatus,
+        rely ? "RELY" : "NORELY");
   }
 
   @Override
@@ -67,5 +85,51 @@ abstract class BaseConstraint implements Constraint {
     }
 
     return joiner.toString();
+  }
+
+  abstract static class Builder<B, C> {
+    private final String name;
+    private boolean enforced = true;
+    private ValidationStatus validationStatus = ValidationStatus.UNVALIDATED;
+    private boolean rely = false;
+
+    Builder(String name) {
+      this.name = name;
+    }
+
+    protected abstract B self();
+
+    public abstract C build();
+
+    public String name() {
+      return name;
+    }
+
+    public B enforced(boolean enforced) {
+      this.enforced = enforced;
+      return self();
+    }
+
+    public boolean enforced() {
+      return enforced;
+    }
+
+    public B validationStatus(ValidationStatus validationStatus) {
+      this.validationStatus = validationStatus;
+      return self();
+    }
+
+    public ValidationStatus validationStatus() {
+      return validationStatus;
+    }
+
+    public B rely(boolean rely) {
+      this.rely = rely;
+      return self();
+    }
+
+    public boolean rely() {
+      return rely;
+    }
   }
 }
