@@ -50,20 +50,25 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isSupportedExtract(extract: Extract): Boolean = {
+    extract.field match {
+      case "YEAR_OF_WEEK" => false
+      case _ => true
+    }
+  }
+
   class MySQLSQLBuilder extends JDBCSQLBuilder {
 
-    override def visitExtract(extract: Extract): String = {
-      val field = extract.field
+    override def visitExtract(field: String, source: String): String = {
       field match {
-        case "DAY_OF_YEAR" => s"DAYOFYEAR(${build(extract.source())})"
-        case "WEEK" => s"WEEKOFYEAR(${build(extract.source())})"
-        case "YEAR_OF_WEEK" => visitUnexpectedExpr(extract)
+        case "DAY_OF_YEAR" => s"DAYOFYEAR($source)"
+        case "WEEK" => s"WEEKOFYEAR($source)"
         // WEEKDAY uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
         // so we use the formula (WEEKDAY + 1) to follow the ISO standard.
-        case "DAY_OF_WEEK" => s"(WEEKDAY(${build(extract.source())}) + 1)"
+        case "DAY_OF_WEEK" => s"(WEEKDAY($source) + 1)"
         // SECOND, MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on MySQL and Spark for
         // both datetime and interval types.
-        case _ => super.visitExtract(field, build(extract.source()))
+        case _ => super.visitExtract(field, source)
       }
     }
 
