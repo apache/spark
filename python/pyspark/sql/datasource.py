@@ -309,75 +309,124 @@ class Filter(ABC):
 
 @dataclass(frozen=True)
 class EqualTo(Filter):
+    """
+    A filter that evaluates to `True` iff the column evaluates to a value
+    equal to `value`.
+    """
     attribute: ColumnPath
     value: Any
 
 
 @dataclass(frozen=True)
 class EqualNullSafe(Filter):
+    """
+    Performs equality comparison, similar to EqualTo. However, this differs from EqualTo
+    in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
+    (rather than NULL) if one of the input is NULL and the other is not NULL.
+    """
     attribute: ColumnPath
     value: Any
 
-
 @dataclass(frozen=True)
 class GreaterThan(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    greater than `value`.
+    """
     attribute: ColumnPath
     value: Any
 
 
 @dataclass(frozen=True)
 class GreaterThanOrEqual(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    greater than or equal to `value`.
+    """
     attribute: ColumnPath
     value: Any
 
 
 @dataclass(frozen=True)
 class LessThan(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    less than `value`.
+    """
     attribute: ColumnPath
     value: Any
 
 
 @dataclass(frozen=True)
 class LessThanOrEqual(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    less than or equal to `value`.
+    """
     attribute: ColumnPath
     value: Any
 
 
 @dataclass(frozen=True)
 class In(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to one of the values
+    in the array.
+    """
     attribute: ColumnPath
     value: Tuple[Any, ...]
 
 
 @dataclass(frozen=True)
 class IsNull(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to null.
+    """
     attribute: ColumnPath
 
 
 @dataclass(frozen=True)
 class IsNotNull(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a non-null value.
+    """
     attribute: ColumnPath
 
 
 @dataclass(frozen=True)
 class Not(Filter):
+    """
+    A filter that evaluates to `True` iff `child` is evaluated to `False`.
+    """
     child: Filter
 
 
 @dataclass(frozen=True)
 class StringStartsWith(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that starts with `value`.
+    """
     attribute: ColumnPath
     value: str
 
 
 @dataclass(frozen=True)
 class StringEndsWith(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that ends with `value`.
+    """
     attribute: ColumnPath
     value: str
 
 
 @dataclass(frozen=True)
 class StringContains(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that contains the string `value`.
+    """
     attribute: ColumnPath
     value: str
 
