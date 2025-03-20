@@ -65,7 +65,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
            """.stripMargin
         }
 
-        logBasedOnLevel(message())
+        logBasedOnLevel(logLevel)(message())
       }
     }
   }
@@ -83,7 +83,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
         }
       }
 
-      logBasedOnLevel(message())
+      logBasedOnLevel(logLevel)(message())
     }
   }
 
@@ -101,18 +101,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
       """.stripMargin
     // scalastyle:on line.size.limit
 
-    logBasedOnLevel(message)
-  }
-
-  private def logBasedOnLevel(f: => MessageWithContext): Unit = {
-    logLevel match {
-      case "TRACE" => logTrace(f.message)
-      case "DEBUG" => logDebug(f.message)
-      case "INFO" => logInfo(f)
-      case "WARN" => logWarning(f)
-      case "ERROR" => logError(f)
-      case _ => logTrace(f.message)
-    }
+    logBasedOnLevel(logLevel)(message)
   }
 }
 
