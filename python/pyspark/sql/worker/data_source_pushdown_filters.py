@@ -41,6 +41,7 @@ from pyspark.sql.datasource import (
     IsNull,
     LessThan,
     LessThanOrEqual,
+    Not,
     StringContains,
     StringEndsWith,
     StringStartsWith,
@@ -96,20 +97,24 @@ def deserializeVariant(variantDict: dict) -> VariantVal:
 
 def deserializeFilter(jsonDict: dict) -> Filter:
     name = jsonDict["name"]
+    filter: Filter
     if name in binary_filters:
         binary_filter_cls: Type[BinaryFilter] = binary_filters[name]
-        return binary_filter_cls(
+        filter = binary_filter_cls(
             attribute=tuple(jsonDict["columnPath"]),
             value=deserializeVariant(jsonDict["value"]).toPython(),
         )
     elif name in unary_filters:
         unary_filter_cls: Type[UnaryFilter] = unary_filters[name]
-        return unary_filter_cls(attribute=tuple(jsonDict["columnPath"]))
+        filter = unary_filter_cls(attribute=tuple(jsonDict["columnPath"]))
     else:
         raise PySparkNotImplementedError(
             errorClass="UNSUPPORTED_FILTER",
             messageParameters={"name": name},
         )
+    if jsonDict["isNegated"]:
+        filter = Not(filter)
+    return filter
 
 
 def main(infile: IO, outfile: IO) -> None:

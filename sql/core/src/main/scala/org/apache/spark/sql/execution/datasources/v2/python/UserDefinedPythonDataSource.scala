@@ -40,6 +40,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -356,8 +357,11 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       columnPath: collection.Seq[String],
       @JsonInclude(JsonInclude.Include.NON_ABSENT)
       value: Option[VariantVal],
+      @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+      isNegated: Boolean,
       @JsonIgnore
-      index: Int)
+      index: Int
+  )
 
   private val mapper = new ObjectMapper().registerModules(DefaultScalaModule)
 
@@ -377,6 +381,12 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
 
   private val serializedFilters = filters.zipWithIndex.flatMap {
     case (filter, i) =>
+      // Unwrap Not filter
+      val (childFilter, isNegated) = filter match {
+        case sources.Not(f) => (f, true)
+        case _ => (filter, false)
+      }
+
       def construct(
           name: String,
           attribute: String,
@@ -394,35 +404,36 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
               return None
           }
         }
-        Some(SerializedFilter(name, columnPath, variant, i))
+        Some(SerializedFilter(name, columnPath, variant, isNegated, i))
       }
 
-      filter match {
-        case org.apache.spark.sql.sources.EqualTo(attribute, value) =>
+      childFilter match {
+        case sources.EqualTo(attribute, value) =>
           construct("EqualTo", attribute, Some(value))
-        case org.apache.spark.sql.sources.EqualNullSafe(attribute, value) =>
+        case sources.EqualNullSafe(attribute, value) =>
           construct("EqualNullSafe", attribute, Some(value))
-        case org.apache.spark.sql.sources.GreaterThan(attribute, value) =>
+        case sources.GreaterThan(attribute, value) =>
           construct("GreaterThan", attribute, Some(value))
-        case org.apache.spark.sql.sources.GreaterThanOrEqual(attribute, value) =>
+        case sources.GreaterThanOrEqual(attribute, value) =>
           construct("GreaterThanOrEqual", attribute, Some(value))
-        case org.apache.spark.sql.sources.LessThan(attribute, value) =>
+        case sources.LessThan(attribute, value) =>
           construct("LessThan", attribute, Some(value))
-        case org.apache.spark.sql.sources.LessThanOrEqual(attribute, value) =>
+        case sources.LessThanOrEqual(attribute, value) =>
           construct("LessThanOrEqual", attribute, Some(value))
-        case org.apache.spark.sql.sources.In(attribute, value) =>
+        case sources.In(attribute, value) =>
           construct("In", attribute, Some(value), ArrayType(_))
-        case org.apache.spark.sql.sources.IsNull(attribute) =>
+        case sources.IsNull(attribute) =>
           construct("IsNull", attribute, None)
-        case org.apache.spark.sql.sources.IsNotNull(attribute) =>
+        case sources.IsNotNull(attribute) =>
           construct("IsNotNull", attribute, None)
-        case org.apache.spark.sql.sources.StringStartsWith(attribute, value) =>
+        case sources.StringStartsWith(attribute, value) =>
           construct("StringStartsWith", attribute, Some(value))
-        case org.apache.spark.sql.sources.StringEndsWith(attribute, value) =>
+        case sources.StringEndsWith(attribute, value) =>
           construct("StringEndsWith", attribute, Some(value))
-        case org.apache.spark.sql.sources.StringContains(attribute, value) =>
+        case sources.StringContains(attribute, value) =>
           construct("StringContains", attribute, Some(value))
         // collation aware filters are currently not supported
+        // And, Or are currently not supported
         case _ =>
           None
       }

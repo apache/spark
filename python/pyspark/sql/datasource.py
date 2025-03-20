@@ -296,6 +296,7 @@ class Filter(ABC):
     | `a = 1`             | `EqualTo(("a", "b", "c"), 1)`              |
     | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
     | `a = array(1, 2)`   | `EqualTo(("a",), [1, 2])`                  |
+    | `a <> 1`            | `Not(EqualTo(("a",), 1))`                  |
     +---------------------+--------------------------------------------+
 
     Unsupported filters
@@ -356,6 +357,11 @@ class IsNull(Filter):
 @dataclass(frozen=True)
 class IsNotNull(Filter):
     attribute: ColumnPath
+
+
+@dataclass(frozen=True)
+class Not(Filter):
+    child: Filter
 
 
 @dataclass(frozen=True)

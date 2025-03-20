@@ -40,6 +40,7 @@ from pyspark.sql.datasource import (
     IsNull,
     LessThan,
     LessThanOrEqual,
+    Not,
     StringContains,
     StringEndsWith,
     StringStartsWith,
@@ -416,11 +417,9 @@ class BasePythonDataSourceTestsMixin:
         self._check_filters(
             "struct<a:int, b:int, c:int>", "x.a = 1 and x.b = x.c", [EqualTo(("x", "a"), 1)]
         )
-        self._check_filters("int", "x <> 0", [])
         self._check_filters("int", "x = 1 or x > 2", [])
         self._check_filters("int", "(0 < x and x < 1) or x = 2", [])
         self._check_filters("int", "x % 5 = 1", [])
-        self._check_filters("boolean", "not x", [])
         self._check_filters("array<int>", "x[0] = 1", [])
 
     def test_filter_value_type(self):
@@ -448,7 +447,9 @@ class BasePythonDataSourceTestsMixin:
 
     def test_filter_type(self):
         self._check_filters("boolean", "x", [EqualTo(("x",), True)])
+        self._check_filters("boolean", "not x", [Not(EqualTo(("x",), True))])
         self._check_filters("int", "x is null", [IsNull(("x",))])
+        self._check_filters("int", "x <> 0", [Not(EqualTo(("x",), 0))])
         self._check_filters("int", "x <=> 1", [EqualNullSafe(("x",), 1)])
         self._check_filters("int", "1 < x", [GreaterThan(("x",), 1)])
         self._check_filters("int", "1 <= x", [GreaterThanOrEqual(("x",), 1)])
