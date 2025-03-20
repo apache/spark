@@ -241,6 +241,15 @@ object SQLConf {
     }
   }
 
+  val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
+    buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
+    .internal()
+    .doc(
+      "When this conf is enabled, AddMetadataColumns rule should only add necessary metadata " +
+      "columns and only if those columns are not already present in the project list.")
+    .booleanConf
+    .createWithDefault(true)
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
