@@ -1296,61 +1296,67 @@ class BaseUDFTestsMixin(object):
                 def doubleInDoubleOut(d):
                     return d * 100.0
 
-                # double -> UDT
-                assertDataFrameEqual(
-                    df.select(doubleInUDTOut(df.label)),
-                    [Row(ExamplePoint(1.0, 10.0))],
-                )
-                # UDT -> double
-                assertDataFrameEqual(
-                    df.select(udtInDoubleOut(df.point)),
-                    [Row(2.0)],
-                )
-                # double -> array of UDT
-                assertDataFrameEqual(
-                    df.select(doubleInUDTArrayOut(df.label)),
-                    [Row([ExamplePoint(1.0, 10.0), ExamplePoint(2.0, 11.0)])],
-                )
-                # array of UDT -> double
-                assertDataFrameEqual(
-                    df.select(udtArrayInDoubleOut(df.points)),
-                    [Row(7.0)],
-                )
-                # double -> UDT -> double
-                assertDataFrameEqual(
-                    df.select(udtInDoubleOut(doubleInUDTOut(df.label))),
-                    [Row(10.0)],
-                )
-                # double -> UDT -> UDT
-                assertDataFrameEqual(
-                    df.select(udtInUDTOut(doubleInUDTOut(df.label))),
-                    [Row(ExamplePoint(10.0, 100.0))],
-                )
-                # double -> double -> UDT
-                assertDataFrameEqual(
-                    df.select(doubleInUDTOut(doubleInDoubleOut(df.label))),
-                    [Row(ExamplePoint(100.0, 1000.0))],
-                )
-                # UDT -> UDT -> double
-                assertDataFrameEqual(
-                    df.select(udtInDoubleOut(udtInUDTOut(df.point))),
-                    [Row(20.0)],
-                )
-                # UDT -> UDT -> UDT
-                assertDataFrameEqual(
-                    df.select(udtInUDTOut(udtInUDTOut(df.point))),
-                    [Row(ExamplePoint(100.0, 200.0))],
-                )
-                # UDT -> double -> double
-                assertDataFrameEqual(
-                    df.select(doubleInDoubleOut(udtInDoubleOut(df.point))),
-                    [Row(200.0)],
-                )
-                # UDT -> double -> UDT
-                assertDataFrameEqual(
-                    df.select(doubleInUDTOut(udtInDoubleOut(df.point))),
-                    [Row(ExamplePoint(2.0, 20.0))],
-                )
+                queries = [
+                    (
+                        "double -> UDT",
+                        df.select(doubleInUDTOut(df.label)),
+                        [Row(ExamplePoint(1.0, 10.0))],
+                    ),
+                    (
+                        "UDT -> double",
+                        df.select(udtInDoubleOut(df.point)),
+                        [Row(2.0)],
+                    ),
+                    (
+                        "double -> array of UDT",
+                        df.select(doubleInUDTArrayOut(df.label)),
+                        [Row([ExamplePoint(1.0, 10.0), ExamplePoint(2.0, 11.0)])],
+                    ),
+                    (
+                        "array of UDT -> double",
+                        df.select(udtArrayInDoubleOut(df.points)),
+                        [Row(7.0)],
+                    ),
+                    (
+                        "double -> UDT -> double",
+                        df.select(udtInDoubleOut(doubleInUDTOut(df.label))),
+                        [Row(10.0)],
+                    ),
+                    (
+                        "double -> UDT -> UDT",
+                        df.select(udtInUDTOut(doubleInUDTOut(df.label))),
+                        [Row(ExamplePoint(10.0, 100.0))],
+                    ),
+                    (
+                        "double -> double -> UDT",
+                        df.select(doubleInUDTOut(doubleInDoubleOut(df.label))),
+                        [Row(ExamplePoint(100.0, 1000.0))],
+                    ),
+                    (
+                        "UDT -> UDT -> double",
+                        df.select(udtInDoubleOut(udtInUDTOut(df.point))),
+                        [Row(20.0)],
+                    ),
+                    (
+                        "UDT -> UDT -> UDT",
+                        df.select(udtInUDTOut(udtInUDTOut(df.point))),
+                        [Row(ExamplePoint(100.0, 200.0))],
+                    ),
+                    (
+                        "UDT -> double -> double",
+                        df.select(doubleInDoubleOut(udtInDoubleOut(df.point))),
+                        [Row(200.0)],
+                    ),
+                    (
+                        "UDT -> double -> UDT",
+                        df.select(doubleInUDTOut(udtInDoubleOut(df.point))),
+                        [Row(ExamplePoint(2.0, 20.0))],
+                    ),
+                ]
+
+                for chain, actual, expected in queries:
+                    with self.subTest(chain=chain):
+                        assertDataFrameEqual(actual=actual, expected=expected)
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
