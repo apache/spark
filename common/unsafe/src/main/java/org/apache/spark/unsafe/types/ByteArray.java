@@ -171,7 +171,7 @@ public final class ByteArray {
     // Allocate a new byte array, and copy the inputs one by one into it
     final byte[] result = new byte[Ints.checkedCast(totalLength)];
     int offset = 0;
-    for (int i = 0; i < inputs.length; i++) {
+    for (int i = 0; i < inputs.length; ++i) {
       byte[] input = inputs[i];
       int len = input.length;
       Platform.copyMemory(
