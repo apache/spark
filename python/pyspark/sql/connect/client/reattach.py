@@ -261,14 +261,22 @@ class ExecutePlanResponseReattachableIterator(Generator):
             return iter_fun()
         except grpc.RpcError as e:
             status = rpc_status.from_call(cast(grpc.Call, e))
-            if status is not None and (
-                "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message
-                or "INVALID_HANDLE.SESSION_NOT_FOUND" in status.message
-            ):
+            unexpected_error = next(
+                (
+                    error
+                    for error in [
+                        "INVALID_HANDLE.OPERATION_NOT_FOUND",
+                        "INVALID_HANDLE.SESSION_NOT_FOUND",
+                    ]
+                    if status is not None and error in status.message
+                ),
+                None,
+            )
+            if unexpected_error is not None:
                 if self._last_returned_response_id is not None:
                     raise PySparkRuntimeError(
                         errorClass="RESPONSE_ALREADY_RECEIVED",
-                        messageParameters={},
+                        messageParameters={"error_type": unexpected_error},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(

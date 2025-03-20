@@ -105,6 +105,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               // and we exclude those rows from the current iteration result.
               case alias @ SubqueryAlias(_,
                   Distinct(Union(Seq(anchor, recursion), false, false))) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -126,6 +129,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   colNames,
                   Distinct(Union(Seq(anchor, recursion), false, false))
                 )) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -184,22 +190,6 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
         val ref = UnionLoopRef(r.cteId, anchor.output, false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
-    }
-  }
-
-  /**
-   * Checks if there is any self-reference within subqueries and throws an error
-   * if that is the case.
-   */
-  def checkForSelfReferenceInSubquery(plan: LogicalPlan): Unit = {
-    plan.subqueriesAll.foreach { subquery =>
-      subquery.foreach {
-        case r: CTERelationRef if r.recursive =>
-          throw new AnalysisException(
-            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-            messageParameters = Map.empty)
-        case _ =>
-      }
     }
   }
 

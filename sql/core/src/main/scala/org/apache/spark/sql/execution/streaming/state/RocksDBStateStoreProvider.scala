@@ -325,7 +325,8 @@ private[sql] class RocksDBStateStoreProvider
           rocksDBMetrics.numUncommittedKeys,
           rocksDBMetrics.totalMemUsageBytes,
           stateStoreCustomMetrics,
-          stateStoreInstanceMetrics)
+          stateStoreInstanceMetrics
+        )
       } else {
         logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
           log"and version=${MDC(VERSION_NUM, version)}")

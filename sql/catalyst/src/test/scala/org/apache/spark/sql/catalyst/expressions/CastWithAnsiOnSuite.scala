@@ -737,4 +737,12 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
     checkEvaluation(cast(input, StringType), "0.000000123")
   }
+
+  test("cast invalid string input to time") {
+    Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimeType()),
+        castErrMsg(invalidInput, TimeType()))
+    }
+  }
 }

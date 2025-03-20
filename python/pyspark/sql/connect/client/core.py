@@ -666,7 +666,7 @@ class SparkConnectClient(object):
         elif user_id is not None:
             self._user_id = user_id
         else:
-            self._user_id = os.getenv("USER", None)
+            self._user_id = os.getenv("SPARK_USER", os.getenv("USER", None))
 
         self._channel = self._builder.toChannel()
         self._closed = False
@@ -958,7 +958,7 @@ class SparkConnectClient(object):
         # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
         # DataFrame manually with the correct schema.
         if table.num_rows == 0:
-            pdf = pd.DataFrame(columns=schema.names)
+            pdf = pd.DataFrame(columns=schema.names, index=range(0))
         else:
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
@@ -1228,7 +1228,9 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
-    def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
+    def _execute_plan_request_with_metadata(
+        self, operation_id: Optional[str] = None
+    ) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest(
             session_id=self._session_id,
             client_type=self._builder.userAgent,
@@ -1238,6 +1240,15 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
+        if operation_id is not None:
+            try:
+                uuid.UUID(operation_id, version=4)
+            except ValueError as ve:
+                raise PySparkValueError(
+                    errorClass="INVALID_OPERATION_UUID_ID",
+                    messageParameters={"arg_name": "operation_id", "origin": str(ve)},
+                )
+            req.operation_id = operation_id
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:

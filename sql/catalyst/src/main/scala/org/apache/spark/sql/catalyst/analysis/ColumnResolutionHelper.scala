@@ -406,7 +406,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // Lateral column alias does not have qualifiers. We always use the first name part to
           // look up lateral column aliases.
           val lowerCasedName = u.nameParts.head.toLowerCase(Locale.ROOT)
-          aliasMap.get(lowerCasedName).map {
+          aliasMap.get(lowerCasedName).filter {
+            // Do not resolve LCA with aliased `Generator`, as it will be rewritten by the rule
+            // `ExtractGenerator` with fresh output attribute IDs. The `Generator` will be pulled
+            // out and put in a `Generate` node below `Project`, so that we can resolve the column
+            // normally without LCA resolution.
+            case scala.util.Left(alias) => !alias.child.isInstanceOf[Generator]
+            case _ => true
+          }.map {
             case scala.util.Left(alias) =>
               if (alias.resolved) {
                 val resolvedAttr = resolveExpressionByPlanOutput(

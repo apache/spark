@@ -52,6 +52,10 @@ class PythonDataSourceV2 extends TableProvider {
     dataSourceInPython
   }
 
+  def setDataSourceInPython(dataSourceInPython: PythonDataSourceCreationResult): Unit = {
+    this.dataSourceInPython = dataSourceInPython
+  }
+
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     getOrCreateDataSourceInPython(shortName, options, None).schema
   }
