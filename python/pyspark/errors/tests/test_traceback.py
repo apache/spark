@@ -16,6 +16,7 @@
 #
 import importlib.util
 import linecache
+import os
 import sys
 import tempfile
 import traceback
@@ -45,8 +46,8 @@ class TracebackTests(unittest.TestCase):
         except ValueError:
             return traceback.format_exc()
 
-    def make_traceback_with_temp_file(self, code: str):
-        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
+    def make_traceback_with_temp_file(self, code: str, filename=""):
+        with tempfile.NamedTemporaryFile("w", suffix=f"{filename}.py", delete=True) as f:
             f.write(code)
             f.flush()
             spec = importlib.util.spec_from_file_location("foo", f.name)
@@ -73,6 +74,38 @@ class TracebackTests(unittest.TestCase):
         s = self.make_traceback_with_temp_file("""def foo(): 1 / 0""")
         linecache.clearcache()  # remove temp file from cache
         self.assert_traceback(Traceback.from_string(s), s)
+
+    @unittest.skipIf(
+        os.name != "posix",
+        "These file names may be invalid on non-posix systems",
+    )
+    def test_filename(self):
+        for filename in [
+            "",
+            " ",
+            "\\",
+            '"',
+            "'",
+            '", line 1, in hello',
+        ]:
+            with self.subTest(filename=filename):
+                s = self.make_traceback_with_temp_file("""def foo(): 1 / 0""", filename=filename)
+                linecache.clearcache()
+                self.assert_traceback(Traceback.from_string(s), s)
+
+    @unittest.skipIf(
+        os.name != "posix",
+        "These file names may be invalid on non-posix systems",
+    )
+    def test_filename_failure_newline(self):
+        # tblib can't handle newline in the filename
+        s = self.make_traceback_with_temp_file("""def foo(): 1 / 0""", filename="\n")
+        linecache.clearcache()
+        tb = Traceback.from_string(s)
+        tb.populate_linecache()
+        expected = "".join(s.splitlines(keepends=True)[1:-1])
+        actual = "".join(traceback.format_tb(tb.as_traceback()))
+        self.assertNotEqual(actual, expected)
 
     def test_syntax_error(self):
         bad_syntax = "bad syntax"
