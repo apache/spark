@@ -40,6 +40,7 @@ from pyspark.testing.sqlutils import (
 
 class TracebackTests(unittest.TestCase):
     """Tests for the Traceback class."""
+
     def make_traceback(self):
         try:
             raise ValueError("bar")
@@ -123,6 +124,7 @@ class TracebackTests(unittest.TestCase):
 )
 class BaseTracebackSqlTestsMixin:
     """Tests for recovering the original traceback from JVM exceptions."""
+
     spark: SparkSession
 
     @staticmethod
@@ -130,7 +132,6 @@ class BaseTracebackSqlTestsMixin:
         raise ValueError("bar")
 
     def test_udf(self):
-
         @F.udf()
         def foo():
             raise ValueError("bar")
