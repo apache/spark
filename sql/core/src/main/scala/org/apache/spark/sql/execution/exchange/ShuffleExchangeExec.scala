@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.exchange
 
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
-
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
-
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.rdd.{DeterministicLevel, MapPartitionsRDD, RDD, RDDOperationScope}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -42,6 +40,8 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.{MutablePair, ThreadUtils}
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 import org.apache.spark.util.random.XORShiftRandom
+
+import scala.reflect.ClassTag
 
 /**
  * Common trait for all shuffle exchange implementations to facilitate pattern matching.
@@ -452,25 +452,37 @@ object ShuffleExchangeExec {
         rdd
       }
 
+      val isIndeterministic = newPartitioning match {
+        case expr: Expression => expr.hasIndeterminism
+        case _ => false
+      }
+
       // round-robin function is order sensitive if we don't sort the input.
       val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
-        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
-          val getPartitionKey = getPartitionKeyExtractor()
-          iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
-        }, isOrderSensitive = isOrderSensitive)
+        this.createRddWithPartition(
+          newRdd,
+          (_, iter: Iterator[InternalRow]) => {
+            val getPartitionKey = getPartitionKeyExtractor()
+            iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
+          },
+          isIndeterministic,
+          isOrderSensitive
+        )
+
       } else {
-        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
-          val getPartitionKey = getPartitionKeyExtractor()
-          val mutablePair = new MutablePair[Int, InternalRow]()
-          iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
-        }, isOrderSensitive = isOrderSensitive)
+        this.createRddWithPartition(
+          newRdd,
+          (_, iter: Iterator[InternalRow]) => {
+            val getPartitionKey = getPartitionKeyExtractor()
+            val mutablePair = new MutablePair[Int, InternalRow]()
+            iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
+          },
+          isIndeterministic,
+          isOrderSensitive)
       }
     }
-    val isIndeterministic = newPartitioning match {
-      case expr: Expression => expr.hasIndeterminism
-      case _ => false
-    }
+
     // Now, we manually create a ShuffleDependency. Because pairs in rddWithPartitionIds
     // are in the form of (partitionId, row) and every partitionId is in the expected range
     // [0, part.numPartitions - 1]. The partitioner of this is a PartitionIdPassthrough.
@@ -482,11 +494,29 @@ object ShuffleExchangeExec {
         None,
         None,
         false,
-        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
-        isIndeterministic)
+        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics))
 
     dependency
   }
+
+  private  def createRddWithPartition[T: ClassTag, U: ClassTag](
+     rdd: RDD[T],
+     f: (Int, Iterator[T]) => Iterator[U],
+     isInDeterminate: Boolean,
+     isOrderSensitive: Boolean): RDD[U] = if (isInDeterminate) {
+      RDDOperationScope.withScope(rdd.sparkContext){
+        new MapPartitionsRDD(
+          rdd,
+          (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
+          isOrderSensitive = isOrderSensitive) {
+            override protected def getOutputDeterministicLevel =
+              DeterministicLevel.INDETERMINATE
+          }
+        }
+      } else {
+        rdd.mapPartitionsWithIndexInternal(f, isOrderSensitive = isOrderSensitive)
+      }
+
 
   /**
    * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
