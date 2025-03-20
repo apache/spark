@@ -243,6 +243,13 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     case _ => false
   }
 
+  private def findInputs(udf: PythonUDF): Seq[Expression] = {
+    udf.children.flatMap {
+      case u: PythonUDF => findInputs(u)
+      case expr => Seq(expr)
+    }
+  }
+
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
@@ -279,16 +286,16 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
               evalTypes.mkString(","))
           }
           val evalType = evalTypes.head
-
-          val hasUDTInput = validUdfs.exists(_.children.exists(expr => containsUDT(expr.dataType)))
-          val hasUDTReturn = validUdfs.exists(udf => containsUDT(udf.dataType))
-
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
               BatchEvalPython(validUdfs, resultAttrs, child)
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case PythonEvalType.SQL_ARROW_BATCHED_UDF =>
+
+              val hasUDTInput = validUdfs.flatMap(findInputs)
+                .exists(expr => containsUDT(expr.dataType))
+              val hasUDTReturn = validUdfs.exists(udf => containsUDT(udf.dataType))
 
               if (hasUDTInput || hasUDTReturn) {
                 // Use BatchEvalPython if UDT is detected
