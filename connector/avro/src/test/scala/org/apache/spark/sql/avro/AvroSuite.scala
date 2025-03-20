@@ -971,8 +971,10 @@ abstract class AvroSuite
         Seq(LocalDate.of(2024, 1, 1),
           LocalDate.of(2024, 1, 2),
           LocalDate.of(1312, 2, 27),
-          LocalDate.of(-5877641, 6, 23),
-          LocalDate.of(5881580, 7, 11))
+          LocalDate.of(0, 1, 1),
+          LocalDate.of(-1, 12, 31),
+          LocalDate.of(-290308, 12, 22), // minimum timestampNTZ date
+          LocalDate.of(294247, 1, 10)) // maximum timestampNTZ date
         .toDF("col")
       dateDf.write.format("avro").save(datePath)
       checkAnswer(
@@ -980,8 +982,10 @@ abstract class AvroSuite
         Seq(Row(LocalDateTime.of(2024, 1, 1, 0, 0)),
           Row(LocalDateTime.of(2024, 1, 2, 0, 0)),
           Row(LocalDateTime.of(1312, 2, 27, 0, 0)),
-          Row(LocalDateTime.of(-5877641, 6, 23, 0, 0)),
-          Row(LocalDateTime.of(5881580, 7, 11, 0, 0)))
+          Row(LocalDateTime.of(0, 1, 1, 0, 0)),
+          Row(LocalDateTime.of(-1, 12, 31, 0, 0)),
+          Row(LocalDateTime.of(-290308, 12, 22, 0, 0)),
+          Row(LocalDateTime.of(294247, 1, 10, 0, 0)))
       )
     }
   }
