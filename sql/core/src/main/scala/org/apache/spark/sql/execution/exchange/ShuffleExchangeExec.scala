@@ -19,8 +19,11 @@ package org.apache.spark.sql.execution.exchange
 
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
+
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, MapPartitionsRDD, RDD, RDDOperationScope}
@@ -41,7 +44,6 @@ import org.apache.spark.util.{MutablePair, ThreadUtils}
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 import org.apache.spark.util.random.XORShiftRandom
 
-import scala.reflect.ClassTag
 
 /**
  * Common trait for all shuffle exchange implementations to facilitate pattern matching.
@@ -504,7 +506,7 @@ object ShuffleExchangeExec {
      f: (Int, Iterator[T]) => Iterator[U],
      isInDeterminate: Boolean,
      isOrderSensitive: Boolean): RDD[U] = if (isInDeterminate) {
-      RDDOperationScope.withScope(rdd.sparkContext){
+      RDDOperationScope.withScope(rdd.sparkContext) {
         new MapPartitionsRDD(
           rdd,
           (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
