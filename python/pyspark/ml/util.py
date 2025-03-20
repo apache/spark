@@ -1116,6 +1116,7 @@ def _get_temp_dfs_path():
 def _remove_dfs_dir(path):
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.sql import is_remote
+
     if is_remote():
         from pyspark.ml.util import ML_CONNECT_HELPER_ID
 
