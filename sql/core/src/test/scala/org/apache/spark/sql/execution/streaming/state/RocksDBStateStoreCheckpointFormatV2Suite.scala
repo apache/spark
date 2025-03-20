@@ -183,6 +183,9 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] =
     innerProvider.supportedCustomMetrics
+
+  override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] =
+    innerProvider.supportedInstanceMetrics
 }
 
 class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest

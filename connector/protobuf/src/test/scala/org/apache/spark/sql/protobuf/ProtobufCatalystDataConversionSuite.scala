@@ -287,34 +287,43 @@ class ProtobufCatalystDataConversionSuite
     val catalystDataToProtobuf = generateCatalystDataToProtobuf()
 
     assert(
-      catalystDataToProtobuf.hashCode == 18619165
+      catalystDataToProtobuf
+        .copy(options = Map("mode" -> "FAILFAST"))
+        .hashCode != catalystDataToProtobuf.hashCode
     )
     assert(
-      catalystDataToProtobuf.copy(options = Map("mode" -> "FAILFAST")).hashCode == 1546556846
+      catalystDataToProtobuf
+        .copy(messageName = "otherMessage")
+        .hashCode != catalystDataToProtobuf.hashCode
     )
     assert(
-      catalystDataToProtobuf.copy(messageName = "otherMessage").hashCode == -794759603
+      catalystDataToProtobuf
+        .copy(child = Literal.create(0, IntegerType))
+        .hashCode != catalystDataToProtobuf.hashCode
     )
     assert(
-      catalystDataToProtobuf.copy(child = Literal.create(0, IntegerType)).hashCode == 1936538518
-    )
-    assert(
-      catalystDataToProtobuf.copy(binaryFileDescriptorSet = None).hashCode == 1823277823
+      catalystDataToProtobuf
+        .copy(binaryFileDescriptorSet = None)
+        .hashCode != catalystDataToProtobuf.hashCode
     )
 
     val testFileDescCopy = new Array[Byte](testFileDesc.length)
     testFileDesc.copyToArray(testFileDescCopy)
     assert(
-      catalystDataToProtobuf.copy(
-        binaryFileDescriptorSet = Some(testFileDescCopy)
-      ).hashCode == 18619165
+      catalystDataToProtobuf
+        .copy(
+          binaryFileDescriptorSet = Some(testFileDescCopy)
+        )
+        .hashCode == catalystDataToProtobuf.hashCode
     )
 
     testFileDescCopy(0) = '0'
     assert(
-      catalystDataToProtobuf.copy(
-        binaryFileDescriptorSet = Some(testFileDescCopy)
-      ).hashCode == -536586429
+      catalystDataToProtobuf
+        .copy(
+          binaryFileDescriptorSet = Some(testFileDescCopy)
+        )
+        .hashCode != catalystDataToProtobuf.hashCode
     )
   }
 
@@ -372,34 +381,43 @@ class ProtobufCatalystDataConversionSuite
     )
 
     assert(
-      protobufDataToCatalyst.hashCode == -937893175
+      protobufDataToCatalyst
+        .copy(options = Map("mode" -> "FAILFAST"))
+        .hashCode != protobufDataToCatalyst.hashCode
     )
     assert(
-      protobufDataToCatalyst.copy(options = Map("mode" -> "FAILFAST")).hashCode == -1634963844
+      protobufDataToCatalyst
+        .copy(messageName = "otherMessage")
+        .hashCode != protobufDataToCatalyst.hashCode
     )
     assert(
-      protobufDataToCatalyst.copy(messageName = "otherMessage").hashCode == -1751271943
+      protobufDataToCatalyst
+        .copy(child = Literal.create(0, IntegerType))
+        .hashCode != protobufDataToCatalyst.hashCode
     )
     assert(
-      protobufDataToCatalyst.copy(child = Literal.create(0, IntegerType)).hashCode == -133420428
-    )
-    assert(
-      protobufDataToCatalyst.copy(binaryFileDescriptorSet = None).hashCode == 866765483
+      protobufDataToCatalyst
+        .copy(binaryFileDescriptorSet = None)
+        .hashCode != protobufDataToCatalyst.hashCode
     )
 
     val testFileDescCopy = new Array[Byte](testFileDesc.length)
     testFileDesc.copyToArray(testFileDescCopy)
     assert(
-      protobufDataToCatalyst.copy(
-        binaryFileDescriptorSet = Some(testFileDescCopy)
-      ).hashCode == -937893175
+      protobufDataToCatalyst
+        .copy(
+          binaryFileDescriptorSet = Some(testFileDescCopy)
+        )
+        .hashCode == protobufDataToCatalyst.hashCode
     )
 
     testFileDescCopy(0) = '0'
     assert(
-      protobufDataToCatalyst.copy(
-        binaryFileDescriptorSet = Some(testFileDescCopy)
-      ).hashCode == -1493098769
+      protobufDataToCatalyst
+        .copy(
+          binaryFileDescriptorSet = Some(testFileDescCopy)
+        )
+        .hashCode != protobufDataToCatalyst.hashCode
     )
   }
 

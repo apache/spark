@@ -344,6 +344,22 @@ class NaiveBayes @Since("1.5.0") (
     new NaiveBayesModel(uid, pi.compressed, theta.compressed, sigma.compressed)
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numClasses) // pi
+    size += Matrices.getDenseSize(numClasses, numFeatures) // theta
+    $(modelType) match {
+      case Multinomial | Bernoulli | Complement =>
+        size += Matrices.getDenseSize(0, 0) // sigma
+      case _ =>
+        size += Matrices.getDenseSize(numClasses, numFeatures) // sigma
+    }
+    size
+  }
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayes = defaultCopy(extra)
 }
@@ -549,6 +565,20 @@ class NaiveBayesModel private[ml] (
         throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
           " raw2probabilityInPlace encountered SparseVector")
     }
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.pi != null) {
+      size += this.pi.getSizeInBytes
+    }
+    if (this.theta != null) {
+      size += this.theta.getSizeInBytes
+    }
+    if (this.sigma != null) {
+      size += this.sigma.getSizeInBytes
+    }
+    size
   }
 
   @Since("1.5.0")

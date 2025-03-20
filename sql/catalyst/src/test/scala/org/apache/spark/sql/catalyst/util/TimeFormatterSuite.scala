@@ -93,7 +93,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[SparkRuntimeException] {
           TimeFormatter(invalidPattern)
         },
-        condition = "_LEGACY_ERROR_TEMP_2130",
+        condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
         parameters = Map(
           "pattern" -> s"'$invalidPattern'",
           "docroot" -> SPARK_DOC_ROOT))

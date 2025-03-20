@@ -122,9 +122,11 @@ object TimeFormatter {
     getFormatter(Some(format), locale, isParsing)
   }
 
-  def apply(format: String, isParsing: Boolean): TimeFormatter = {
-    getFormatter(Some(format), defaultLocale, isParsing)
+  def apply(format: Option[String], isParsing: Boolean): TimeFormatter = {
+    getFormatter(format, defaultLocale, isParsing)
   }
+
+  def apply(format: String, isParsing: Boolean): TimeFormatter = apply(Some(format), isParsing)
 
   def apply(format: String): TimeFormatter = {
     getFormatter(Some(format), defaultLocale, isParsing = false)

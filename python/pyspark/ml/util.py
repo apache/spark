@@ -113,6 +113,11 @@ def invoke_remote_attribute_relation(
     methods, obj_ref = _extract_id_methods(instance._java_obj)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
     plan = AttributeRelation(obj_ref, methods)
+
+    # To delay the GC of the model, keep a reference to the source instance,
+    # might be a model or a summary.
+    plan.__source_instance__ = instance  # type: ignore[attr-defined]
+
     return ConnectDataFrame(plan, session)
 
 
@@ -185,29 +190,40 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
 
                 assert isinstance(self._java_obj, str)
                 params = serialize_ml_params(self, session.client)
-                return ConnectDataFrame(
-                    TransformerRelation(
-                        child=dataset._plan, name=self._java_obj, ml_params=params, is_model=True
-                    ),
-                    session,
+                plan = TransformerRelation(
+                    child=dataset._plan,
+                    name=self._java_obj,
+                    ml_params=params,
+                    is_model=True,
                 )
             elif isinstance(self, Transformer):
                 from pyspark.ml.connect.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
                 params = serialize_ml_params(self, session.client)
-                return ConnectDataFrame(
-                    TransformerRelation(
-                        child=dataset._plan,
-                        name=self._java_obj,
-                        ml_params=params,
-                        uid=self.uid,
-                        is_model=False,
-                    ),
-                    session,
+                plan = TransformerRelation(
+                    child=dataset._plan,
+                    name=self._java_obj,
+                    ml_params=params,
+                    uid=self.uid,
+                    is_model=False,
                 )
+
             else:
                 raise RuntimeError(f"Unsupported {self}")
+
+            # To delay the GC of the model, keep a reference to the source transformer
+            # in the transformed dataframe and all its descendants.
+            # For this case:
+            #
+            # def fit_transform(df):
+            #     model = estimator.fit(df)
+            #     return model.transform(df)
+            #
+            # output = fit_transform(df)
+            #
+            plan.__source_transformer__ = self  # type: ignore[attr-defined]
+            return ConnectDataFrame(plan=plan, session=session)
         else:
             return f(self, dataset)
 
@@ -283,18 +299,8 @@ def try_remote_del(f: FuncT) -> FuncT:
 
         if in_remote:
             # Delete the model if possible
-            # model_id = self._java_obj
-            # del_remote_cache(model_id)
-            #
-            # Above codes delete the model from the ml cache eagerly, and may cause
-            # NPE in the server side in the case of 'fit_transform':
-            #
-            # def fit_transform(df):
-            #     model = estimator.fit(df)
-            #     return model.transform(df)
-            #
-            # output = fit_transform(df)
-            # output.show()
+            model_id = self._java_obj
+            del_remote_cache(cast(str, model_id))
             return
         else:
             return f(self)

@@ -1199,7 +1199,14 @@ object Aggregate {
       groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
   }
 
-  def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+  def supportsObjectHashAggregate(
+      aggregateExpressions: Seq[AggregateExpression],
+      groupingExpressions: Seq[Expression]): Boolean = {
+    // We should not use hash aggregation on binary unstable types.
+    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+      return false
+    }
+
     aggregateExpressions.map(_.aggregateFunction).exists {
       case _: TypedImperativeAggregate[_] => true
       case _ => false

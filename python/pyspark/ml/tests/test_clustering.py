@@ -404,6 +404,7 @@ class ClusteringTestsMixin:
         self.assertNotIsInstance(model, LocalLDAModel)
         self.assertIsInstance(model, DistributedLDAModel)
         self.assertTrue(model.isDistributed())
+        self.assertEqual(model.vocabSize(), 2)
 
         dc = model.estimatedDocConcentration()
         self.assertTrue(np.allclose(dc.toArray(), [26.0, 26.0], atol=1e-4), dc)

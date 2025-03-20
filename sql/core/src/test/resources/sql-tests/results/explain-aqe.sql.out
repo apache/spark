@@ -958,6 +958,50 @@ Arguments: isFinalPlan=false
 
 -- !query
 EXPLAIN FORMATTED
+  WITH RECURSIVE r(level) AS (
+    VALUES 0
+    UNION ALL
+    SELECT level + 1 FROM r WHERE level < 9
+  )
+SELECT * FROM r
+-- !query schema
+struct<plan:string>
+-- !query output
+== Physical Plan ==
+* Project (6)
++- UnionLoop (1)
+      :- LocalRelation (2)
+      +- Project (5)
+         +- Filter (4)
+            +- UnionLoopRef (3)
+
+
+(1) UnionLoop
+Loop id: xxxx
+Output [1]: [col1#x]
+Limit: None
+
+(2) LocalRelation
+Arguments: [col1#x]
+
+(3) UnionLoopRef
+Loop id: xxxx
+Output [1]: [col1#x]
+Accumulated: false
+
+(4) Filter
+Arguments: (col1#x < 9)
+
+(5) Project
+Arguments: [(col1#x + 1) AS (level + 1)#x]
+
+(6) Project [codegen id : 1]
+Output [1]: [col1#x AS level#x]
+Input [1]: [col1#x]
+
+
+-- !query
+EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1
 -- !query schema

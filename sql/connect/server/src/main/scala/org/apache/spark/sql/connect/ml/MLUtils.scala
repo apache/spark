@@ -621,8 +621,8 @@ private[ml] object MLUtils {
         "isDistributed",
         "logLikelihood",
         "logPerplexity",
-        "describeTopics")),
-    (classOf[LocalLDAModel], Set("vocabSize")),
+        "describeTopics",
+        "vocabSize")),
     (
       classOf[DistributedLDAModel],
       Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),
