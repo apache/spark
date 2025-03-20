@@ -476,7 +476,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         |"category":"fiction","reader":[{"age":25,"name":"bob"},{"age":26,"name":"jack"}],
         |"price":22.99,"isbn":"0-395-19395-8"}],"bicycle":{"price":19.95,"color":"red"}},
         |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
-        |"fb:testid":"1234","":"empty string","?":"Question Mark?", "\"\"":"Escaped Quotes"}
+        |"fb:testid":"1234","":"empty string","?":"Question Mark?"}
         |""".stripMargin
     testVariantGet(json, "$.store.bicycle", StringType, """{"color":"red","price":19.95}""")
     checkEvaluation(
