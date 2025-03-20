@@ -298,33 +298,6 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   }
 
   case class Result(readSchema: StructType, rows: Array[InternalRow]) extends LocalScan
-
-  override def buildTable(ident: Identifier, columns: Array[Column]): TableBuilder = {
-    new BasicInMemoryTableBuilder(this, ident, columns)
-  }
-
-  private class BasicInMemoryTableBuilder(
-      catalog: TableCatalog,
-      ident: Identifier,
-      columns: Array[Column])
-    extends TableBuilder(catalog, ident, columns) {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    override def create(): Table = {
-      if (tables.containsKey(ident)) {
-        throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
-      }
-
-      val schema = CatalogV2Util.v2ColumnsToStructType(columns)
-      val tableName = s"$name.${ident.quoted}"
-
-      val table = new InMemoryTable(tableName, schema, partitions, properties)
-      tables.put(ident, table)
-      namespaces.putIfAbsent(ident.namespace.toList, Map())
-
-      table
-    }
-  }
 }
 
 object InMemoryTableCatalog {
