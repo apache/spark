@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Locale, UUID}
+import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
@@ -45,7 +45,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case a @ AppendData(r: DataSourceV2Relation, query, options, _, None, _) =>
-      val writeOptions = mergeOptions(options, r.options.asScala.toMap)
+      val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
       val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
@@ -125,14 +125,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     // for DataFrame API cases, same options are carried by both Command and DataSourceV2Relation
     // for DataFrameV2 API cases, options are only carried by Command
     // for SQL cases, options are only carried by DataSourceV2Relation
-    // Since both options are CaseInsensitiveStringMap, change the key values to lower
-    // before comparison.
-    val lowerCaseCommandOptions =
-      commandOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val lowerCaseDsOptions =
-      dsOptions.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    assert(lowerCaseCommandOptions ==
-      lowerCaseDsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
+    assert(commandOptions == dsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
     commandOptions ++ dsOptions
   }
 
