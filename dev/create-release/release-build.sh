@@ -139,7 +139,7 @@ if [[ "$1" == "finalize" ]]; then
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
   svn update "pyspark_client-$RELEASE_VERSION.tar.gz"
   svn update "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
-  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+  twine upload -u __token__ -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_client-$RELEASE_VERSION.tar.gz" \
     "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
