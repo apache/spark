@@ -1284,4 +1284,22 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(2) :: Nil
     )
   }
+
+  test("LateralColumnAlias with Generate") {
+    checkAnswer(
+      sql("WITH cte AS (SELECT EXPLODE(ARRAY(1, 2, 3)) AS c1, c1) SELECT * FROM cte"),
+      Row(1, 1) :: Row(2, 2) :: Row(3, 3) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  explode(split(name , ',')) AS new_name,
+           |  new_name like 'a%'
+           |FROM $testTable
+           |""".stripMargin),
+      Row("alex", true) :: Row("amy", true) :: Row("cathy", false) ::
+        Row("david", false) :: Row("jen", false) :: Nil
+    )
+  }
 }
