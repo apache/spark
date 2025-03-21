@@ -60,7 +60,7 @@ from pyspark.ml.util import (
     _remove_dfs_dir,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
-from pyspark.sql import functions as F, SparkSession
+from pyspark.sql import functions as F
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -852,7 +852,7 @@ class CrossValidator(
         datasets = self._kFold(dataset)
 
         tmp_dfs_path = _get_temp_dfs_path()
-        spark_session = SparkSession.getActiveSession()
+        spark_session = dataset._session
         for i in range(nFolds):
             validation = datasets[i][1]
             train = datasets[i][0]
@@ -879,8 +879,8 @@ class CrossValidator(
                     subModels[i][j] = subModel
 
             if tmp_dfs_path:
-                _remove_dfs_dir(validation_tmp_path)
-                _remove_dfs_dir(train_tmp_path)
+                _remove_dfs_dir(validation_tmp_path, spark_session)
+                _remove_dfs_dir(train_tmp_path, spark_session)
             else:
                 validation.unpersist()
                 train.unpersist()
@@ -1501,7 +1501,7 @@ class TrainValidationSplit(
         train = df.filter(~condition)
 
         tmp_dfs_path = _get_temp_dfs_path()
-        spark_session = SparkSession.getActiveSession()
+        spark_session = dataset._session
         if tmp_dfs_path:
             validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
             validation.write.save(validation_tmp_path)
@@ -1531,8 +1531,8 @@ class TrainValidationSplit(
                 subModels[j] = subModel
 
         if tmp_dfs_path:
-            _remove_dfs_dir(validation_tmp_path)
-            _remove_dfs_dir(train_tmp_path)
+            _remove_dfs_dir(validation_tmp_path, spark_session)
+            _remove_dfs_dir(train_tmp_path, spark_session)
         else:
             train.unpersist()
             validation.unpersist()
