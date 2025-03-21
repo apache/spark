@@ -1796,8 +1796,10 @@ class ListStateProcessor(StatefulProcessor):
 class ListStateLargeTTLProcessor(ListStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema, 30000)
         self.list_state2 = handle.getListState("listState2", state_schema, 30000)
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
 
 class MapStateProcessor(StatefulProcessor):
