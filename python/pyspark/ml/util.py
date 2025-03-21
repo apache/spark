@@ -1109,7 +1109,7 @@ def try_remote_functions(f: FuncT) -> FuncT:
 _SPARKML_TEMP_DFS_PATH = "SPARKML_TEMP_DFS_PATH"
 
 
-def _get_temp_dfs_path() -> str:
+def _get_temp_dfs_path() -> Optional[str]:
     return os.environ.get(_SPARKML_TEMP_DFS_PATH)
 
 
