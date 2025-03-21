@@ -1050,3 +1050,104 @@ struct<a:int>
 3
 4
 5
+
+
+-- !query
+CREATE TABLE tb (
+                    next INT
+)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO tb VALUES (0), (1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT next FROM t CROSS JOIN tb
+    )
+SELECT * FROM t LIMIT 63
+-- !query schema
+struct<n:int>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+
+
+-- !query
+DROP TABLE tb
+-- !query schema
+struct<>
+-- !query output
+
