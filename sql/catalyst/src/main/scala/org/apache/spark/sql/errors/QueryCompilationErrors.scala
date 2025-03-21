@@ -4334,4 +4334,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = origin
     )
   }
+
+  def unexpectedFunctionArgumentDatatype(
+      expression: Expression,
+      requiredType: DataType,
+      argumentType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_FUNCTION_ARGUMENT_TYPE",
+      messageParameters = Map(
+        "sqlExpr" -> toSQLExpr(expression),
+        "requiredType" -> toSQLType(requiredType),
+        "argumentType" -> toSQLType(argumentType)
+      )
+    )
+  }
 }
