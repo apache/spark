@@ -188,6 +188,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             """If plan node statistics are available, generates a logical plan and also the statistics."""
             EXPLAIN_MODE_FORMATTED: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 5
             """Generates a physical plan outline and also node details."""
+            EXPLAIN_MODE_OFF: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 6
+            """No plan outline is generated."""
 
         class ExplainMode(_ExplainMode, metaclass=_ExplainModeEnumTypeWrapper):
             """Plan explanation mode."""
@@ -208,6 +210,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         """If plan node statistics are available, generates a logical plan and also the statistics."""
         EXPLAIN_MODE_FORMATTED: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 5
         """Generates a physical plan outline and also node details."""
+        EXPLAIN_MODE_OFF: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 6
+        """No plan outline is generated."""
 
         PLAN_FIELD_NUMBER: builtins.int
         EXPLAIN_MODE_FIELD_NUMBER: builtins.int
