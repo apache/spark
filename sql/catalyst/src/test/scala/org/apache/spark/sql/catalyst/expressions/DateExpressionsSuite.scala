@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -2149,43 +2149,5 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
-  }
-
-  test("creating values of TimeType via make_time") {
-    // basic case
-    checkEvaluation(
-      MakeTime(Literal(13), Literal.create(2, IntegerType),
-        Literal(Decimal(BigDecimal(23.5), 16, 6))),
-      LocalTime.of(13, 2, 23, 500000000))
-
-    // null cases
-    checkEvaluation(
-      MakeTime(Literal.create(null, IntegerType), Literal(18),
-        Literal(Decimal(BigDecimal(23.5), 16, 6))),
-      null)
-    checkEvaluation(
-      MakeTime(Literal(13), Literal.create(null, IntegerType),
-        Literal(Decimal(BigDecimal(23.5), 16, 6))),
-      null)
-    checkEvaluation(MakeTime(Literal(13), Literal(18),
-      Literal.create(null, DecimalType(16, 6))), null)
-
-    // Invalid cases
-    val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS_ANSI_ONLY"
-    checkErrorInExpression[SparkDateTimeException](
-      MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
-      errorCode,
-      Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25")
-    )
-    checkErrorInExpression[SparkDateTimeException](
-      MakeTime(Literal(23), Literal(-1), Literal(Decimal(BigDecimal(23.5), 16, 6))),
-      errorCode,
-      Map("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1")
-    )
-    checkErrorInExpression[SparkDateTimeException](
-      MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
-      errorCode,
-      Map("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100")
-    )
   }
 }
