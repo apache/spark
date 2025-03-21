@@ -86,3 +86,53 @@ class MapInBatchEvaluatorFactory(
     }
   }
 }
+
+class MapInBatchColumnarEvaluatorFactory(
+    chainedFunc: Seq[(ChainedPythonFunctions, Long)],
+    outputTypes: StructType,
+    batchSize: Int,
+    pythonEvalType: Int,
+    sessionLocalTimeZone: String,
+    largeVarTypes: Boolean,
+    pythonRunnerConf: Map[String, String],
+    val pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends PartitionEvaluatorFactory[InternalRow, ColumnarBatch] {
+
+  override def createEvaluator(): PartitionEvaluator[InternalRow, ColumnarBatch] =
+    new MapInBatchEvaluator
+
+  private class MapInBatchEvaluator extends PartitionEvaluator[InternalRow, ColumnarBatch] {
+    override def eval(
+        partitionIndex: Int,
+        inputs: Iterator[InternalRow]*): Iterator[ColumnarBatch] = {
+      assert(inputs.length == 1)
+      val inputIter = inputs.head
+      // Single function with one struct.
+      val argOffsets = Array(Array(0))
+      val context = TaskContext.get()
+
+      // Here we wrap it via another row so that Python sides understand it
+      // as a DataFrame.
+      val wrappedIter = inputIter.map(InternalRow(_))
+
+      // DO NOT use iter.grouped(). See BatchIterator.
+      val batchIter =
+        if (batchSize > 0) new BatchIterator(wrappedIter, batchSize) else Iterator(wrappedIter)
+
+      val columnarBatchIter = new ArrowPythonRunner(
+        chainedFunc,
+        pythonEvalType,
+        argOffsets,
+        StructType(Array(StructField("struct", outputTypes))),
+        sessionLocalTimeZone,
+        largeVarTypes,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        None).compute(batchIter, context.partitionId(), context)
+
+      columnarBatchIter
+    }
+  }
+}

@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
+import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchColumnarEvaluatorFactory, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.Filter
@@ -170,6 +170,45 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       pythonRunnerConf,
       metrics,
       jobArtifactUUID)
+  }
+
+  /**
+   * (Executor-side) Create an iterator that execute the Python function.
+   */
+  def createMapInBatchColumnarEvaluatorFactory(
+      pickledFunc: Array[Byte],
+      funcName: String,
+      inputSchema: StructType,
+      outputSchema: StructType,
+      metrics: Map[String, SQLMetric],
+      jobArtifactUUID: Option[String]): MapInBatchColumnarEvaluatorFactory = {
+    val pythonFunc = createPythonFunction(pickledFunc)
+
+    val pythonEvalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+
+    val pythonUDF = PythonUDF(
+      name = funcName,
+      func = pythonFunc,
+      dataType = outputSchema,
+      children = toAttributes(inputSchema),
+      evalType = pythonEvalType,
+      udfDeterministic = false
+    )
+
+    val conf = SQLConf.get
+
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
+    new MapInBatchColumnarEvaluatorFactory(
+      Seq((ChainedPythonFunctions(Seq(pythonUDF.func)), pythonUDF.resultId.id)),
+      inputSchema,
+      conf.arrowMaxRecordsPerBatch,
+      pythonEvalType,
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      pythonRunnerConf,
+      metrics,
+      jobArtifactUUID
+    )
   }
 
   def createPythonMetrics(): Array[CustomMetric] = {
