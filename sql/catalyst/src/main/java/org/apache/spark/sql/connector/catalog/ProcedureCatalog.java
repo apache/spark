@@ -38,7 +38,6 @@ public interface ProcedureCatalog extends CatalogPlugin {
   /**
    * List all procedures in the specified namespace.
    *
-   * If a null or empty array is passed, all procedures are returned.
    */
   Identifier[] listProcedures(String[] namespace);
 }

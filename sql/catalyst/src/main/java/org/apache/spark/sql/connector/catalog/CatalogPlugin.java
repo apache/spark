@@ -74,12 +74,4 @@ public interface CatalogPlugin {
   default String[] defaultNamespace() {
     return new String[0];
   }
-
-  /**
-   *
-   * @return true if catalog supports multi-part namespaces
-   */
-  default boolean supportsMultiPartNamespace() {
-    return false;
-  }
 }

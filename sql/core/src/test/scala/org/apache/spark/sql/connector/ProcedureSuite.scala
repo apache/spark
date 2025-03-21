@@ -27,7 +27,7 @@ import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatExcept
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, InMemoryCatalogWithMultiPartNamespace}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.{IN, INOUT, OUT}
@@ -42,8 +42,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
   before {
     spark.conf.set(s"spark.sql.catalog.cat", classOf[InMemoryCatalog].getName)
-    spark.conf.set(s"spark.sql.catalog.cat2",
-      classOf[InMemoryCatalogWithMultiPartNamespace].getName)
+    spark.conf.set(s"spark.sql.catalog.cat2", classOf[InMemoryCatalog].getName)
   }
 
   after {
@@ -383,12 +382,9 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         UnboundMultiResultProcedure)
 
       checkAnswer(
-        // uses default catalog
+        // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat", null, null, "xxx") ::
-          Row("cat", null, "", "xyz") ::
-          Row("cat", null, "ns", "abc") ::
-          Row("cat", null, "ns", "foo") :: Nil)
+        Row("cat", null, null, "xxx") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES IN ns"),
@@ -427,11 +423,9 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
           Row("cat", null, "ns", "foo") :: Nil)
 
       checkAnswer(
+        // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat2", ArraySeq(""), "", "foo") ::
-        Row("cat2", ArraySeq(), null, "bar") ::
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+        Row("cat2", null, null, "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ns_1.db_1"),
@@ -445,11 +439,11 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ``"),
-        Row("cat2", ArraySeq(""), "", "foo") :: Nil)
+        Row("cat2", null, "", "foo") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat2.``"),
-        Row("cat2", ArraySeq(""), "", "foo") :: Nil)
+        Row("cat2", null, "", "foo") :: Nil)
 
       // Switch catalog back to 'cat' before clean up.
       sql("USE cat")

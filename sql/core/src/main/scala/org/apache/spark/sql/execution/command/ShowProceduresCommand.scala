@@ -48,7 +48,7 @@ case class ShowProceduresCommand(
         val procedures = procedureCatalog.listProcedures(ns.toArray)
 
         procedures.toSeq.map{ p =>
-          val nsField = if (catalog.supportsMultiPartNamespace()) {
+          val nsField = if (p.namespace().length > 1) {
             p.namespace()
           } else {
             null
