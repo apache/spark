@@ -410,7 +410,7 @@ class CatalogSuite extends SparkFunSuite {
     val tableColumns = columns :+ Column.create("point", pointStruct)
 
     val tableInfo = new TableInfo.Builder()
-      .withColumns(columns)
+      .withColumns(tableColumns)
       .withPartitions(emptyTrans)
       .withProperties(emptyProps)
       .build()
