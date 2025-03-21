@@ -74,7 +74,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, DecimalType(16, 6))), null)
 
     // Invalid cases
-    val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS_ANSI_ONLY"
+    val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION"
     checkErrorInExpression[SparkDateTimeException](
       MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
       errorCode,

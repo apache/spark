@@ -168,7 +168,7 @@ case class MakeTime(
       localTimeToMicros(lt)
     } catch {
       case e: DateTimeException =>
-        throw QueryExecutionErrors.ansiOnlyDateTimeArgumentOutOfRange(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
     }
   }
 
@@ -184,7 +184,7 @@ case class MakeTime(
         java.time.LocalTime lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
         ${ev.value} = $dtu.localTimeToMicros(lt);
       } catch (java.time.DateTimeException e) {
-        throw QueryExecutionErrors.ansiOnlyDateTimeArgumentOutOfRange(e);
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e);
       }"""
     })
   }
