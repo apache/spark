@@ -8,14 +8,6 @@ ABab
 
 
 -- !query
-SELECT listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
--- !query schema
-struct<listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST):string>
--- !query output
-aAbB
-
-
--- !query
 SELECT listagg(DISTINCT c1 COLLATE utf8_binary) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
 -- !query schema
 struct<listagg(DISTINCT collate(c1, utf8_binary), NULL):string>
@@ -24,45 +16,53 @@ aAbB
 
 
 -- !query
-SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+WITH t(c1) AS (SELECT listagg(col1) WITHIN GROUP (ORDER BY col1) FROM (VALUES ('abc  '), ('abc '), ('abc\n'), ('abc'), ('x'))) SELECT replace(replace(c1, ' ', ''), '\n', '$') FROM t
 -- !query schema
-struct<listagg(DISTINCT collate(c1, utf8_lcase), NULL):string collate UTF8_LCASE>
+struct<replace(replace(c1,  , ), 
+, $):string>
+-- !query output
+abcabc$abcabcx
+
+
+-- !query
+SELECT lower(listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+-- !query schema
+struct<lower(listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST)):string>
+-- !query output
+aabb
+
+
+-- !query
+SELECT lower(listagg(DISTINCT c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+-- !query schema
+struct<lower(listagg(DISTINCT collate(c1, utf8_lcase), NULL)):string collate UTF8_LCASE>
 -- !query output
 ab
 
 
 -- !query
-SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase) FROM (VALUES ('a'), ('B'), ('b'), ('A')) AS t(c1)
+SELECT lower(listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('B'), ('b'), ('A')) AS t(c1)
 -- !query schema
-struct<listagg(DISTINCT collate(c1, utf8_lcase), NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST):string collate UTF8_LCASE>
+struct<lower(listagg(DISTINCT collate(c1, utf8_lcase), NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST)):string collate UTF8_LCASE>
 -- !query output
-aB
+ab
 
 
 -- !query
-SELECT listagg(DISTINCT c1 COLLATE unicode_rtrim) FROM (VALUES ('abc  '), ('abc '), ('x'), ('abc')) AS t(c1)
+SELECT rtrim(listagg(DISTINCT c1 COLLATE unicode_rtrim)) FROM (VALUES ('xbc  '), ('xbc '), ('a'), ('xbc')) AS t(c1)
 -- !query schema
-struct<listagg(DISTINCT collate(c1, unicode_rtrim), NULL):string collate UNICODE_RTRIM>
+struct<rtrim(listagg(DISTINCT collate(c1, unicode_rtrim), NULL)):string collate UNICODE_RTRIM>
 -- !query output
-abc  x
+axbc
 
 
 -- !query
-SELECT listagg(c1) WITHIN GROUP (ORDER BY c1) FROM (VALUES ('abc  '), ('abc '), ('abc\n'), ('abc'), ('x')) AS t(c1)
+WITH t(c1) AS (SELECT listagg(col1) WITHIN GROUP (ORDER BY col1 COLLATE unicode_rtrim) FROM (VALUES ('abc '), ('abc\n'), ('abc'), ('x'))) SELECT replace(replace(c1, ' ', ''), '\n', '$') FROM t
 -- !query schema
-struct<listagg(c1, NULL) WITHIN GROUP (ORDER BY c1 ASC NULLS FIRST):string>
+struct<replace(replace(c1,  , ), 
+, $):string>
 -- !query output
-abcabc
-abc abc  x
-
-
--- !query
-SELECT listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE unicode_rtrim) FROM (VALUES ('abc  '), ('abc '), ('abc\n'), ('abc'), ('x')) AS t(c1)
--- !query schema
-struct<listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, unicode_rtrim) ASC NULLS FIRST):string>
--- !query output
-abc  abc abcabc
-x
+abcabcabc$x
 
 
 -- !query

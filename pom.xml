@@ -137,7 +137,7 @@
     <kafka.version>3.9.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.15.0</parquet.version>
+    <parquet.version>1.15.1</parquet.version>
     <orc.version>2.1.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.24</jetty.version>
@@ -239,6 +239,13 @@
     <kubernetes-client.version>7.1.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
+
+    <!--
+      SPARK-51558: During the testing process, the env `OBJC_DISABLE_INITIALIZE_FORK_SAFETY`
+      is automatically set, with a default value of `NO`.
+      When testing on macOS, it will be automatically set to `YES`.
+    -->
+    <test.objc.disable.initialize.fork.safety>NO</test.objc.disable.initialize.fork.safety>
 
     <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
     <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
@@ -2883,6 +2890,7 @@
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
               <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
+              <OBJC_DISABLE_INITIALIZE_FORK_SAFETY>${test.objc.disable.initialize.fork.safety}</OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
             </environmentVariables>
             <systemPropertyVariables>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
@@ -2937,6 +2945,7 @@
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
+              <OBJC_DISABLE_INITIALIZE_FORK_SAFETY>${test.objc.disable.initialize.fork.safety}</OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
             </environmentVariables>
             <systemProperties>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
@@ -3611,6 +3620,17 @@
         <os>
           <family>mac</family>
           <arch>aarch64</arch>
+        </os>
+      </activation>
+    </profile>
+    <profile>
+      <id>macOS</id>
+      <properties>
+        <test.objc.disable.initialize.fork.safety>YES</test.objc.disable.initialize.fork.safety>
+      </properties>
+      <activation>
+        <os>
+          <family>mac</family>
         </os>
       </activation>
     </profile>
