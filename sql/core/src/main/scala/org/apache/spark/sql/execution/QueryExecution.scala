@@ -317,7 +317,6 @@ class QueryExecution(
     }
 
     mode match {
-      case OffMode =>
       case SimpleMode =>
         queryExecution.simpleString(false, maxFields, append)
       case ExtendedMode =>
@@ -332,6 +331,7 @@ class QueryExecution(
         queryExecution.stringWithStats(maxFields, append)
       case FormattedMode =>
         queryExecution.simpleString(formatted = true, maxFields = maxFields, append)
+      case OffMode => ""
     }
   }
 
