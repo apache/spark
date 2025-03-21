@@ -141,6 +141,7 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
             raise PySparkRuntimeError(
                 errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
                 messageParameters={
+                    "udf_type": "pandas_udf",
                     "expected": str(length),
                     "actual": str(len(result)),
                 },
@@ -213,6 +214,7 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
             raise PySparkRuntimeError(
                 errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
                 messageParameters={
+                    "udf_type": "arrow_batch_udf",
                     "expected": str(length),
                     "actual": str(len(result)),
                 },

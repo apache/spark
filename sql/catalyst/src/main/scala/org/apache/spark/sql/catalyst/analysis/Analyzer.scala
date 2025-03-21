@@ -336,7 +336,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     TypeCoercion.typeCoercionRules
   }
 
-  override def batches: Seq[Batch] = Seq(
+  private def earlyBatches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
@@ -357,7 +357,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs),
+      KeepLegacyOutputs)
+  )
+
+  override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
@@ -409,7 +412,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      ResolveIdentifierClause ::
+      new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
       MoveParameterizedQueriesDown ::
@@ -985,25 +988,30 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object AddMetadataColumns extends Rule[LogicalPlan] {
     import org.apache.spark.sql.catalyst.util._
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
-      AlwaysProcess.fn, ruleId) {
-      case hint: UnresolvedHint => hint
-      // Add metadata output to all node types
-      case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
-        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
-        if (metaCols.isEmpty) {
-          node
-        } else {
-          val newNode = node.mapChildren(addMetadataCol(_, metaCols.map(_.exprId).toSet))
-          // We should not change the output schema of the plan. We should project away the extra
-          // metadata columns if necessary.
-          if (newNode.sameOutput(node)) {
-            newNode
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val onlyUniqueAndNecessaryMetadataColumns =
+        conf.getConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS)
+      plan.resolveOperatorsDownWithPruning(AlwaysProcess.fn, ruleId) {
+        case hint: UnresolvedHint => hint
+        // Add metadata output to all node types
+        case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
+          val inputAttrs = AttributeSet(node.children.flatMap(_.output))
+          val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
+          if (metaCols.isEmpty) {
+            node
           } else {
-            Project(node.output, newNode)
+            val newNode = node.mapChildren(
+              addMetadataCol(_, metaCols.map(_.exprId).toSet, onlyUniqueAndNecessaryMetadataColumns)
+            )
+            // We should not change the output schema of the plan. We should project away the extra
+            // metadata columns if necessary.
+            if (newNode.sameOutput(node)) {
+              newNode
+            } else {
+              Project(node.output, newNode)
+            }
           }
-        }
+      }
     }
 
     private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
@@ -1031,18 +1039,32 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     private def addMetadataCol(
         plan: LogicalPlan,
-        requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
+        requiredAttrIds: Set[ExprId],
+        onlyUniqueAndNecessaryMetadataColumns: Boolean = true): LogicalPlan = plan match {
       case s: ExposesMetadataColumns if s.metadataOutput.exists( a =>
         requiredAttrIds.contains(a.exprId)) =>
         s.withMetadataColumns()
       case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
+        val uniqueMetadataColumns = if (onlyUniqueAndNecessaryMetadataColumns) {
+          val actualRequiredExprIds = new util.HashSet[ExprId](requiredAttrIds.asJava)
+          p.projectList.foreach(ne => actualRequiredExprIds.remove(ne.exprId))
+          p.metadataOutput.filter(attr => actualRequiredExprIds.contains(attr.exprId))
+        } else {
+          p.metadataOutput
+        }
+
         val newProj = p.copy(
           // Do not leak the qualified-access-only restriction to normal plan outputs.
-          projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
-          child = addMetadataCol(p.child, requiredAttrIds))
+          projectList = p.projectList ++ uniqueMetadataColumns.map(_.markAsAllowAnyAccess()),
+          child = addMetadataCol(p.child, requiredAttrIds, onlyUniqueAndNecessaryMetadataColumns)
+        )
         newProj.copyTagsFrom(p)
         newProj
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
+      case _ =>
+        plan.withNewChildren(
+          plan.children
+            .map(addMetadataCol(_, requiredAttrIds, onlyUniqueAndNecessaryMetadataColumns))
+        )
     }
   }
 
@@ -2983,20 +3005,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
-    // We must wait until all expressions except for generator functions are resolved before
-    // rewriting generator functions in Project/Aggregate. This is necessary to make this rule
-    // stable for different execution orders of analyzer rules. See also SPARK-47241.
-    private def canRewriteGenerator(namedExprs: Seq[NamedExpression]): Boolean = {
-      namedExprs.forall { ne =>
-        ne.resolved || {
-          trimNonTopLevelAliases(ne) match {
-            case AliasedGenerator(_, _, _) => true
-            case _ => false
-          }
-        }
-      }
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(GENERATOR), ruleId) {
       case p @ Project(Seq(UnresolvedStarWithColumns(_, _, _)), _) =>
@@ -3015,8 +3023,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val generators = aggList.filter(hasGenerator).map(trimAlias)
         throw QueryCompilationErrors.moreThanOneGeneratorError(generators)
 
-      case Aggregate(groupList, aggList, child, _) if canRewriteGenerator(aggList) &&
-          aggList.exists(hasGenerator) =>
+      case Aggregate(groupList, aggList, child, _) if
+        aggList.forall {
+          case AliasedGenerator(_, _, _) => true
+          case other => other.resolved
+        } && aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
 
@@ -3061,8 +3072,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // first for replacing `Project` with `Aggregate`.
         p
 
-      case p @ Project(projectList, child) if canRewriteGenerator(projectList) &&
-          projectList.exists(hasGenerator) =>
+      // The star will be expanded differently if we insert `Generate` under `Project` too early.
+      case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>

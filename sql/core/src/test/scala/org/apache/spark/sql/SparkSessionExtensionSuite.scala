@@ -26,6 +26,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -73,6 +74,14 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     val spark = builder.getOrCreate()
     try f(spark) finally {
       stop(spark)
+    }
+  }
+
+  private def withTable(spark: SparkSession, tableNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name")
+      }
     }
   }
 
@@ -569,6 +578,28 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         .hint("INPUT_SORTED")
         .queryExecution.optimizedPlan
       assert(res.collect {case s: Sort => s}.isEmpty)
+    }
+  }
+
+  test("early batch rule is applied on resolved IDENTIFIER") {
+    var ruleApplied = false
+
+    case class UnresolvedRelationRule(spark: SparkSession) extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+        case r: UnresolvedRelation =>
+          ruleApplied = true
+          r
+      }
+    }
+
+    withSession(Seq(_.injectHintResolutionRule(UnresolvedRelationRule))) { session =>
+      withTable(session, "my_table") {
+        session.sql("CREATE TABLE IF NOT EXISTS my_table (col1 INT)")
+        ruleApplied = false
+
+        session.sql("SELECT * FROM IDENTIFIER('my_' || 'table')").collect()
+        assert(ruleApplied)
+      }
     }
   }
 }
