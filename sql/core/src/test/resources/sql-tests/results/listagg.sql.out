@@ -339,7 +339,7 @@ SELECT listagg(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
   "sqlState" : "42K0K",
@@ -347,7 +347,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "funcArg" : "\"a\"",
     "funcName" : "`listagg`",
     "orderingExpr" : "\"b\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "listagg(DISTINCT a) WITHIN GROUP (ORDER BY b)"
+  } ]
 }
 
 
@@ -356,7 +363,7 @@ SELECT listagg(DISTINCT a) WITHIN GROUP (ORDER BY a, b) FROM df
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
   "sqlState" : "42K0K",
@@ -364,5 +371,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "funcArg" : "\"a\"",
     "funcName" : "`listagg`",
     "orderingExpr" : "\"a\", \"b\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "listagg(DISTINCT a) WITHIN GROUP (ORDER BY a, b)"
+  } ]
 }
