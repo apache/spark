@@ -26,7 +26,7 @@ import io
 from contextlib import redirect_stdout
 
 from pyspark.sql import Row, functions, DataFrame
-from pyspark.sql.functions import col, lit, count, struct
+from pyspark.sql.functions import col, lit, count, struct, date_format, to_date, array, explode
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -1075,6 +1075,32 @@ class DataFrameTestsMixin:
                     df.select(df.metadataColumn("index")),
                     [Row(0), Row(0), Row(0)],
                 )
+
+    def test_with_column_and_generator(self):
+        # SPARK-51451: Generators should be available with withColumn
+        df = self.spark.createDataFrame([("082017",)], ["dt"]).select(
+            to_date(col("dt"), "MMyyyy").alias("dt")
+        )
+        df_dt = df.withColumn("dt", date_format(col("dt"), "MM/dd/yyyy"))
+        monthArray = [lit(x) for x in range(0, 12)]
+        df_month_y = df_dt.withColumn("month_y", explode(array(monthArray)))
+
+        assertDataFrameEqual(
+            df_month_y,
+            [Row(dt="08/01/2017", month_y=i) for i in range(12)],
+        )
+
+        df_dt_month_y = df.withColumns(
+            {
+                "dt": date_format(col("dt"), "MM/dd/yyyy"),
+                "month_y": explode(array(monthArray)),
+            }
+        )
+
+        assertDataFrameEqual(
+            df_dt_month_y,
+            [Row(dt="08/01/2017", month_y=i) for i in range(12)],
+        )
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):

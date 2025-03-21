@@ -203,27 +203,46 @@ trait StateStoreWriter
 
   def operatorStateMetadataVersion: Int = 1
 
-  override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
-      "number of rows which are dropped by watermark"),
-    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
-    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
-    "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
-    "numRemovedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of removed state rows"),
-    "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
-    "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
-    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
-    "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
-      "number of state store instances")
-  ) ++ stateStoreCustomMetrics ++ pythonMetrics ++ stateStoreInstanceMetrics
+  override lazy val metrics = {
+    // Lazy initialize instance metrics, but do not include these with regular metrics
+    instanceMetrics
+    statefulOperatorCustomMetrics ++ Map(
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numRowsDroppedByWatermark" -> SQLMetrics
+        .createMetric(sparkContext, "number of rows which are dropped by watermark"),
+      "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+      "numUpdatedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of updated state rows"),
+      "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
+      "numRemovedStateRows" -> SQLMetrics
+        .createMetric(sparkContext, "number of removed state rows"),
+      "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
+      "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
+      "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
+      "numStateStoreInstances" -> SQLMetrics
+        .createMetric(sparkContext, "number of state store instances")
+    ) ++ stateStoreCustomMetrics ++ pythonMetrics
+  }
+
+  /**
+   * Map of all instance metrics (including partition ID and store names) to
+   * their SQLMetric counterpart.
+   *
+   * The instance metric objects hold additional information on how to report these metrics,
+   * while the SQLMetric objects store the metric values.
+   *
+   * This map is similar to the metrics map, but needs to be kept separate to prevent propagating
+   * all initialized instance metrics to SparkUI.
+   */
+  lazy val instanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] =
+    stateStoreInstanceMetrics
+
+  override def resetMetrics(): Unit = {
+    super.resetMetrics()
+    instanceMetrics.valuesIterator.foreach(_.reset())
+  }
 
   val stateStoreNames: Seq[String] = Seq(StateStoreId.DEFAULT_STORE_NAME)
-
-  // This is used to relate metric names back to their original metric object,
-  // which holds information on how to report the metric during getProgress.
-  lazy val instanceMetricConfiguration: Map[String, StateStoreInstanceMetric] =
-    stateStoreInstanceMetricObjects
 
   // This method is only used to fetch the state schema directory path for
   // operators that use StateSchemaV3, as prior versions only use a single
@@ -327,28 +346,31 @@ trait StateStoreWriter
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    val instanceMetricsToReport = instanceMetricConfiguration
+    val instanceMetricsToReport = instanceMetrics
       .filter {
-        case (name, metricConfig) =>
+        case (metricConf, sqlMetric) =>
           // Keep instance metrics that are updated or aren't marked to be ignored,
           // as their initial value could still be important.
-          !metricConfig.ignoreIfUnchanged || !longMetric(name).isZero
+          !metricConf.ignoreIfUnchanged || !sqlMetric.isZero
       }
       .groupBy {
         // Group all instance metrics underneath their common metric prefix
         // to ignore partition and store names.
-        case (name, metricConfig) => metricConfig.metricPrefix
+        case (metricConf, sqlMetric) => metricConf.metricPrefix
       }
       .flatMap {
         case (_, metrics) =>
           // Select at most N metrics based on the metric's defined ordering
           // to report to the driver. For example, ascending order would be taking the N smallest.
-          val metricConf = metrics.head._2
+          val metricConf = metrics.head._1
           metrics
             .map {
-              case (_, metric) =>
-                metric.name -> (if (longMetric(metric.name).isZero) metricConf.initValue
-                                else longMetric(metric.name).value)
+              case (metricConf, sqlMetric) =>
+                // Use metric name as it will be combined with custom metrics in progress reports.
+                // All metrics that are at their initial value at this stage should not be ignored
+                // and should show their real initial value.
+                metricConf.name -> (if (sqlMetric.isZero) metricConf.initValue
+                                    else sqlMetric.value)
             }
             .toSeq
             .sortBy(_._2)(metricConf.ordering)
@@ -434,12 +456,11 @@ trait StateStoreWriter
   }
 
   protected def setStoreInstanceMetrics(
-      instanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
-    instanceMetrics.foreach {
+      otherStoreInstanceMetrics: Map[StateStoreInstanceMetric, Long]): Unit = {
+    otherStoreInstanceMetrics.foreach {
       case (metric, value) =>
-        val metricConfig = instanceMetricConfiguration(metric.name)
         // Update the metric's value based on the defined combine method
-        longMetric(metric.name).set(metricConfig.combine(longMetric(metric.name), value))
+        instanceMetrics(metric).set(metric.combine(instanceMetrics(metric), value))
     }
   }
 
@@ -450,13 +471,7 @@ trait StateStoreWriter
     }.toMap
   }
 
-  private def stateStoreInstanceMetrics: Map[String, SQLMetric] = {
-    instanceMetricConfiguration.map {
-      case (name, metric) => (name, metric.createSQLMetric(sparkContext))
-    }
-  }
-
-  private def stateStoreInstanceMetricObjects: Map[String, StateStoreInstanceMetric] = {
+  private def stateStoreInstanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     val maxPartitions = stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
 
@@ -464,7 +479,7 @@ trait StateStoreWriter
       provider.supportedInstanceMetrics.flatMap { metric =>
         stateStoreNames.map { storeName =>
           val metricWithPartition = metric.withNewId(partitionId, storeName)
-          (metricWithPartition.name, metricWithPartition)
+          (metricWithPartition, metricWithPartition.createSQLMetric(sparkContext))
         }
       }
     }.toMap

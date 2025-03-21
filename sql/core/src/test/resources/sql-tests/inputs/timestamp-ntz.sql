@@ -31,3 +31,9 @@ select timestamp_ntz'2022-01-01 00:00:00' < date'2022-01-01';
 select timestamp_ntz'2022-01-01 00:00:00' = timestamp_ltz'2022-01-01 00:00:00';
 select timestamp_ntz'2022-01-01 00:00:00' > timestamp_ltz'2022-01-01 00:00:00';
 select timestamp_ntz'2022-01-01 00:00:00' < timestamp_ltz'2022-01-01 00:00:00';
+
+CREATE TABLE a (a timestamp_ntz, b int) using parquet PARTITIONED BY(a);
+INSERT INTO a PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1);
+DESC FORMATTED a;
+SELECT * FROM a;
+DROP TABLE a;

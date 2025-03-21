@@ -55,11 +55,9 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
-    is_remote,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
-from pyspark.sql.functions import col, lit, rand
-from pyspark.sql.types import BooleanType
+from pyspark.sql import functions as F
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -887,7 +885,7 @@ class CrossValidator(
             seed = self.getOrDefault(self.seed)
             h = 1.0 / nFolds
             randCol = self.uid + "_rand"
-            df = dataset.select("*", rand(seed).alias(randCol))
+            df = dataset.select("*", F.rand(seed).alias(randCol))
             for i in range(nFolds):
                 validateLB = i * h
                 validateUB = (i + 1) * h
@@ -897,38 +895,27 @@ class CrossValidator(
                 datasets.append((train, validation))
         else:
             # Use user-specified fold numbers.
-            def checker(foldNum: int) -> bool:
-                if foldNum < 0 or foldNum >= nFolds:
-                    raise ValueError(
-                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum)
-                    )
-                return True
-
-            if is_remote():
-                from pyspark.sql.connect.udf import UserDefinedFunction
-            else:
-                from pyspark.sql.functions import UserDefinedFunction  # type: ignore[assignment]
-            from pyspark.util import PythonEvalType
-
-            # TODO(SPARK-48515): Use Arrow Python UDF
-            checker_udf = UserDefinedFunction(
-                checker, BooleanType(), evalType=PythonEvalType.SQL_BATCHED_UDF
+            checked = dataset.withColumn(
+                foldCol,
+                F.when(
+                    (F.lit(0) <= F.col(foldCol)) & (F.col(foldCol) < F.lit(nFolds)), F.col(foldCol)
+                ).otherwise(
+                    F.raise_error(
+                        F.printf(
+                            F.lit(f"Fold number must be in range [0, {nFolds}), but got %s"),
+                            F.col(foldCol),
+                        )
+                    ),
+                ),
             )
+
             for i in range(nFolds):
-                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
-                validation = dataset.filter(
-                    checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
-                )
-                if is_remote():
-                    if len(training.take(1)) == 0:
-                        raise ValueError("The training data at fold %s is empty." % i)
-                    if len(validation.take(1)) == 0:
-                        raise ValueError("The validation data at fold %s is empty." % i)
-                else:
-                    if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
-                        raise ValueError("The training data at fold %s is empty." % i)
-                    if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
-                        raise ValueError("The validation data at fold %s is empty." % i)
+                training = checked.filter(F.col(foldCol) != F.lit(i))
+                validation = checked.filter(F.col(foldCol) == F.lit(i))
+                if training.isEmpty():
+                    raise ValueError("The training data at fold %s is empty." % i)
+                if validation.isEmpty():
+                    raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
         return datasets
@@ -1486,7 +1473,7 @@ class TrainValidationSplit(
         tRatio = self.getOrDefault(self.trainRatio)
         seed = self.getOrDefault(self.seed)
         randCol = self.uid + "_rand"
-        df = dataset.select("*", rand(seed).alias(randCol))
+        df = dataset.select("*", F.rand(seed).alias(randCol))
         condition = df[randCol] >= tRatio
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()

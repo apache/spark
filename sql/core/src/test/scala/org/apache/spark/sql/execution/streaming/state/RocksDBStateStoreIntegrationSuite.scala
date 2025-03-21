@@ -86,7 +86,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         (SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10"),
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
         (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
-        (SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "0"),
         (SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
         val inputData = MemoryStream[Int]
 
@@ -124,7 +123,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
               "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumInternalColFamiliesKeys",
-              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies"))
+              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies",
+              "SnapshotLastUploaded.partition_0_default"))
           }
         } finally {
           query.stop()
@@ -513,6 +513,46 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
                   .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2 * 4
               )
             }
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-51097: Verify RocksDB instance metrics are not collected in execution plan"
+  ) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName
+    ) {
+      withTempDir { checkpointDir =>
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+
+        val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+        val df2 = input2
+          .toDF()
+          .select($"value" as "rightKey", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, expr("leftKey = rightKey"))
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1, 5),
+          ProcessAllAvailable(),
+          AddData(input2, 1, 5, 10),
+          ProcessAllAvailable(),
+          CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+          AssertOnQuery { q =>
+            // Go through all elements in the execution plan and verify none of the metrics
+            // are generated from RocksDB's snapshot lag instance metrics.
+            q.lastExecution.executedPlan
+              .collect {
+                case node => node.metrics
+              }
+              .forall { nodeMetrics =>
+                nodeMetrics.forall(metric => !metric._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
+              }
           },
           StopStream
         )

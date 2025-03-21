@@ -671,16 +671,15 @@ class RocksDB(
 
         if (useColumnFamilies) {
           changelogReader.foreach { case (recordType, key, value) =>
-            val (keyWithoutPrefix, cfName) = decodeStateRowWithPrefix(key)
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(keyWithoutPrefix, value, cfName)
+                put(key, value, includesPrefix = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(keyWithoutPrefix, cfName)
+                remove(key, includesPrefix = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(keyWithoutPrefix, value, cfName)
+                merge(key, value, includesPrefix = true)
             }
           }
         } else {
@@ -801,8 +800,9 @@ class RocksDB(
   def put(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -827,8 +827,9 @@ class RocksDB(
   def merge(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -843,8 +844,11 @@ class RocksDB(
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte], cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+  def remove(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -1466,7 +1470,8 @@ class RocksDB(
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
-      lastUploadedSnapshotVersion.set(snapshot.version)
+      // Compare and update with the version that was just uploaded.
+      lastUploadedSnapshotVersion.updateAndGet(v => Math.max(snapshot.version, v))
     } finally {
       snapshot.close()
     }

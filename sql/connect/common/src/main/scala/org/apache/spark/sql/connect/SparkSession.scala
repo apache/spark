@@ -744,7 +744,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
     lazy val isAPIModeConnect =
       Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
         .getOrElse("classic")
-        .toLowerCase(Locale.ROOT) == "connect"
+        .toLowerCase(Locale.ROOT) == "connect" || System.getenv("SPARK_CONNECT_MODE") == "1"
     val remoteString = sparkOptions
       .get("spark.remote")
       .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
@@ -778,6 +778,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
+          pb.environment().remove("SPARK_CONNECT_MODE")
           pb.environment().put("SPARK_IDENT_STRING", serverId)
           pb.environment().put("HOSTNAME", "local")
           pb.environment().put("SPARK_CONNECT_AUTHENTICATE_TOKEN", token)
@@ -801,6 +802,9 @@ object SparkSession extends SparkSessionCompanion with Logging {
               logWarning(log"Spark Connect server log not found at ${MDC(PATH, logFile)}")
             }
           }
+
+        // Let the server fully start to make less noise from retrying.
+        Thread.sleep(1000L)
 
         System.setProperty("spark.remote", s"sc://localhost/;token=$token")
 

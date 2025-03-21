@@ -1031,6 +1031,23 @@ message GroupMap {
 
   // (Optional) The schema for the grouped state.
   optional DataType state_schema = 10;
+
+  // Below fields are used by TransformWithState and TransformWithStateInPandas
+  // (Optional) TransformWithState related parameters.
+  optional TransformWithStateInfo transform_with_state_info = 11;
+}
+
+// Additional input parameters used for TransformWithState operator.
+message TransformWithStateInfo {
+  // (Required) Time mode string for transformWithState.
+  string time_mode = 1;
+
+  // (Optional) Event time column name.
+  optional string event_time_column_name = 2;
+
+  // (Optional) Schema for the output DataFrame.
+  // Only required used for TransformWithStateInPandas.
+  optional DataType output_schema = 3;
 }
 
 message CoGroupMap {

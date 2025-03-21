@@ -63,15 +63,6 @@ if TYPE_CHECKING:
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 
-has_arrow: bool = False
-try:
-    import pyarrow  # noqa: F401
-
-    has_arrow = True
-except ImportError:
-    pass
-
-
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
