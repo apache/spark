@@ -283,7 +283,11 @@ abstract class TypeCoercionHelper {
             case (e, _) => e
           }
 
-          InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          if (newLhs != lhs || castedRhs != rhs) {
+            InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          } else {
+            i
+          }
         } else {
           i
         }
