@@ -649,14 +649,14 @@ class DataFrameAggregateSuite extends QueryTest
       df3.select(
         listagg_distinct($"col1"), listagg($"col1"),
         listagg_distinct($"col2"), listagg($"col2"),
-        listagg_distinct($"col2"), listagg($"col3")),
+        listagg_distinct($"col3"), listagg($"col3")),
       Seq(Row("a", "aa", "b", "bb", null, null))
     )
 
     // Custom delimiter.
-    val df4 = Seq(("a", "b"), ("b", "c"), ("c", "d")).toDF("a", "b")
+    val df4 = Seq(("a", "b"), ("b", "c"), ("c", "d")).toDF("col1", "col2")
     checkAnswer(
-      df4.selectExpr("listagg(a, '|')", "listagg(b, '|')"),
+      df4.selectExpr("listagg(col1, '|')", "listagg(col2, '|')"),
       Seq(Row("a|b|c", "b|c|d"))
     )
   }
