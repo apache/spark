@@ -2307,6 +2307,19 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(5))
 
+  val STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT =
+    buildConf("spark.sql.streaming.stateStore.maxLaggingStoresToReport")
+      .internal()
+      .doc(
+        "Maximum number of state stores the coordinator will report as trailing in " +
+        "snapshot uploads. Stores are selected based on the most lagging behind in " +
+        "snapshot version."
+      )
+      .version("4.1.0")
+      .intConf
+      .checkValue(k => k >= 0, "Must be greater than or equal to 0")
+      .createWithDefault(10)
+
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()

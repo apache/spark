@@ -75,8 +75,7 @@ class RocksDB(
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
     enableStateStoreCheckpointIds: Boolean = false,
-    eventListener: Option[RocksDBEventListener] = None)
-  extends Logging {
+    eventListener: Option[RocksDBEventListener] = None) extends Logging {
 
   import RocksDB._
 
@@ -1476,7 +1475,12 @@ class RocksDB(
       // Compare and update with the version that was just uploaded.
       lastUploadedSnapshotVersion.updateAndGet(v => Math.max(snapshot.version, v))
       // Report snapshot upload event to the coordinator.
-      eventListener.foreach(_.reportSnapshotUploaded(snapshot.version))
+      if (conf.stateStoreCoordinatorReportSnapshotUploadLag) {
+        // Note that we still report uploads even when changelog checkpointing is enabled.
+        // The coordinator needs a way to determine whether upload messages are disabled or not,
+        // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
+        eventListener.foreach(_.reportSnapshotUploaded(snapshot.version))
+      }
     } finally {
       snapshot.close()
     }
@@ -1725,7 +1729,8 @@ case class RocksDBConf(
     highPriorityPoolRatio: Double,
     compressionCodec: String,
     allowFAllocate: Boolean,
-    compression: String)
+    compression: String,
+    stateStoreCoordinatorReportSnapshotUploadLag: Boolean)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -1908,7 +1913,8 @@ object RocksDBConf {
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
       storeConf.compressionCodec,
       getBooleanConf(ALLOW_FALLOCATE_CONF),
-      getStringConf(COMPRESSION_CONF))
+      getStringConf(COMPRESSION_CONF),
+      storeConf.stateStoreCoordinatorReportSnapshotUploadLag)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

@@ -385,7 +385,7 @@ private[sql] class RocksDBStateStoreProvider
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
     this.stateSchemaProvider = stateSchemaProvider
-    this.rocksDBEventListener = RocksDBEventListener(getRunId(hadoopConf), stateStoreId, storeConf)
+    this.rocksDBEventListener = RocksDBEventListener(stateStoreId)
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -975,31 +975,16 @@ class RocksDBStateStoreChangeDataReader(
  * We pass this into the RocksDB instance to report specific events like snapshot uploads.
  * This should only be used to report back to the coordinator for metrics and monitoring purposes.
  */
-private[state] case class RocksDBEventListener(
-    queryRunId: String,
-    stateStoreId: StateStoreId,
-    storeConf: StateStoreConf) {
-
-  /** ID of the state store provider managing the RocksDB instance */
-  private val stateStoreProviderId: StateStoreProviderId =
-    StateStoreProviderId(stateStoreId, UUID.fromString(queryRunId))
-
-  /** Whether the coordinator is logging state stores lagging behind */
-  private val coordinatorReportSnapshotUploadLagEnabled: Boolean =
-    storeConf.stateStoreCoordinatorReportSnapshotUploadLag
-
+private[state] case class RocksDBEventListener(stateStoreId: StateStoreId) {
   /**
    * Callback function from RocksDB to report events to the coordinator.
-   * Additional information such as the state store ID and the query run ID are
+   * Information from the store provider such as the state store ID is
    * attached here to report back to the coordinator.
    *
    * @param version The snapshot version that was just uploaded from RocksDB
    */
   def reportSnapshotUploaded(version: Long): Unit = {
-    // Only report to the coordinator if it is reporting lagging stores
-    if (coordinatorReportSnapshotUploadLagEnabled) {
-      // Report the provider ID and the version to the coordinator
-      StateStore.reportSnapshotUploaded(stateStoreProviderId, version)
-    }
+    // Report the state store ID and the version to the coordinator
+    StateStore.reportSnapshotUploaded(stateStoreId, version)
   }
 }

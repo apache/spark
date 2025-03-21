@@ -677,6 +677,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     logInfo(log"Written snapshot file for version ${MDC(LogKeys.FILE_VERSION, version)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, this)} at ${MDC(LogKeys.FILE_NAME, targetFile)} " +
       log"for ${MDC(LogKeys.OP_TYPE, opType)}")
+    // Report snapshot upload event to the coordinator, and include the store ID with the message.
+    if (storeConf.stateStoreCoordinatorReportSnapshotUploadLag) {
+      StateStore.reportSnapshotUploaded(stateStoreId, version)
+    }
   }
 
   /**

@@ -1131,12 +1131,10 @@ object StateStore extends Logging {
     }
   }
 
-  private[state] def reportSnapshotUploaded(
-      storeProviderId: StateStoreProviderId,
-      snapshotVersion: Long): Unit = {
+  private[state] def reportSnapshotUploaded(storeId: StateStoreId, snapshotVersion: Long): Unit = {
     // Attach the current timestamp of uploaded snapshot and send the message to the coordinator
     val currentTime = System.currentTimeMillis()
-    coordinatorRef.foreach(_.snapshotUploaded(storeProviderId, snapshotVersion, currentTime))
+    coordinatorRef.foreach(_.snapshotUploaded(storeId, snapshotVersion, currentTime))
   }
 
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
