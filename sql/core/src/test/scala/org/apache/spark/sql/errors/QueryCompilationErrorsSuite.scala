@@ -1069,6 +1069,29 @@ class QueryCompilationErrorsSuite
       context = ExpectedContext(fragment = "in (select map(1,2))", start = 16, stop = 35)
     )
   }
+
+  test("SPARK-51580: Throw proper user facing error message when lambda function is out of " +
+    "place in HigherOrderFunction") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select transform(x -> x + 1, array(1,2,3))")
+      },
+      condition = "INVALID_LAMBDA_FUNCTION_CALL.PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION",
+      parameters = Map(),
+      context =
+        ExpectedContext(fragment = "transform(x -> x + 1, array(1,2,3))", start = 7, stop = 41)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select aggregate(array(1,2,3), x -> x + 1, 0)")
+      },
+      condition = "INVALID_LAMBDA_FUNCTION_CALL.PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION",
+      parameters = Map(),
+      context =
+        ExpectedContext(fragment = "aggregate(array(1,2,3), x -> x + 1, 0)", start = 7, stop = 44)
+    )
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
