@@ -17,13 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.TimeFormatter
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerTypee, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -117,6 +122,94 @@ case class ToTimeParser(fmt: Option[String]) {
     val format = fmt.toString
     withErrorCondition(s, Some(format)) {
       TimeFormatter(format, isParsing = true).parse(s.toString)
+    }
+  }
+}
+
+/**
+ * Returns the local time-of-day (TIME(n)) at the start of query evaluation.
+ *
+ * @param precision The desired fractional precision [0..6].
+ */
+case class CurrentTime(precision: Int)
+  extends LeafExpression with ExpectsInputTypes with Nondeterministic with CodegenFallback {
+
+  // The function returns a TIME(n).
+  override def dataType: DataType = TimeType(precision)
+
+  override def nullable: Boolean = false
+
+  override def prettyName: String = "current_time"
+
+  // Validate precision in [0..6]
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (precision < TimeType.MIN_PRECISION || precision > TimeType.MICROS_PRECISION) {
+      TypeCheckFailure(s"Invalid precision $precision. Must be between 0 and 6.")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  @transient private var capturedTimeMicros: Long = _
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    capturedTimeMicros = computeMicrosAtPrecision()
+  }
+
+  override protected def evalInternal(input: InternalRow): Any = {
+    capturedTimeMicros
+  }
+
+  private def computeMicrosAtPrecision(): Long = {
+    val now = LocalTime.now(ZoneId.systemDefault())
+    val nanosOfDay = now.toNanoOfDay
+    // Convert nanos to micros
+    val microsOfDay = nanosOfDay / 1000
+
+    // The user-specified precision p means we keep p fractional digits.
+    // For p=0 => HH:mm:ss, for p=6 => up to microseconds.
+    // We'll truncate by discarding (6 - p) digits.
+    val scale = 6 - precision
+    val factor = math.pow(10, scale).toLong
+
+    (microsOfDay / factor) * factor
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    if (children.isEmpty) {
+      Nil
+    } else {
+      Seq(IntegerType)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_([precision]) - Returns the current local time at the start of query evaluation, with optional precision (0..6).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       15:49:11.914120
+      > SELECT _FUNC_(3);
+       15:49:11.914
+      > SELECT _FUNC_(0);
+       15:49:11
+  """,
+  since = "4.1.0",
+  group = "datetime_funcs"
+)
+// scalastyle:on line.size.limit
+object CurrentTimeExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions match {
+      case Nil => CurrentTime(TimeType.MICROS_PRECISION)
+
+      case Seq(Literal(precisionValue, IntegerType)) =>
+        CurrentTime(precisionValue.asInstanceOf[Int])
+
+      case _ =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), expressions.length)
     }
   }
 }

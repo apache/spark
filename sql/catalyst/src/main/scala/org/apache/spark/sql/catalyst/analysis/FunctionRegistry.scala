@@ -625,6 +625,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
+    expressionBuilder("current_time", CurrentTimeExpressionBuilder),
     expression[CurrentTimestamp]("current_timestamp"),
     expression[CurrentTimeZone]("current_timezone"),
     expression[LocalTimestamp]("localtimestamp"),
