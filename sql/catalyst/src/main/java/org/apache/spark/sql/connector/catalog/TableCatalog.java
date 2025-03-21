@@ -210,10 +210,6 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
-   * <p>
-   * @deprecated This is deprecated. Please override
-   * @link #createTable(TableInfo) instead.
-   * </p>
    *
    * @param ident a table identifier
    * @param columns the columns of the new table.
@@ -226,7 +222,6 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
-  @Deprecated(since = "4.0.0")
   default Table createTable(
       Identifier ident,
       Column[] columns,
@@ -239,7 +234,7 @@ public interface TableCatalog extends CatalogPlugin {
    * Create a table in the catalog.
    *
    * @param ident a table identifier
-   * @param tableInfo Information about the table.
+   * @param tableInfo information about the table.
    * @return metadata for the new table. This can be null if getting the metadata for the new table
    *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
    *
@@ -249,7 +244,7 @@ public interface TableCatalog extends CatalogPlugin {
    */
   default Table createTable(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
-    return createTable(ident, tableInfo.columns, tableInfo.partitions, tableInfo.properties);
+    return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
   /**

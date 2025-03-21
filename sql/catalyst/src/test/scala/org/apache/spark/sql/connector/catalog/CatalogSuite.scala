@@ -950,7 +950,6 @@ class CatalogSuite extends SparkFunSuite {
     val ident2 = Identifier.of(Array("ns1", "ns2"), "test_table_2")
 
     catalog.createNamespace(Array("ns1"), Map("property" -> "value").asJava)
-
     catalog.createTable(ident1, columns, emptyTrans, emptyProps)
     catalog.createTable(ident2, columns, emptyTrans, emptyProps)
 

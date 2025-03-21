@@ -24,11 +24,9 @@ import java.util.Map;
 
 public class TableInfo {
 
-  protected final Column[] columns;
-
-  protected final Map<String, String> properties;
-
-  protected final Transform[] partitions;
+  private final Column[] columns;
+  private final Map<String, String> properties;
+  private final Transform[] partitions;
 
   /**
    * Constructor for TableInfo used by the builder.
@@ -40,22 +38,22 @@ public class TableInfo {
     this.partitions = builder.partitions;
   }
 
-  public Column[] getColumns() {
+  public Column[] columns() {
     return columns;
   }
 
-  public Map<String, String> getProperties() {
+  public Map<String, String> properties() {
     return properties;
   }
 
-  public Transform[] getPartitions() {
+  public Transform[] partitions() {
     return partitions;
   }
 
   public static class Builder {
     private Column[] columns;
     private Map<String, String> properties;
-    private Transform[] partitions = new Transform[0];
+    private Transform[] partitions;
 
     public Builder withColumns(Column[] columns) {
       this.columns = columns;
