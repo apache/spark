@@ -510,11 +510,12 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
       SQLConf.SHUFFLE_PARTITIONS.key -> "3",
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
-      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
       SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
-      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "5",
+      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
+      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG.key -> "2",
       SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
     ) {
       withTempDir { srcDir =>
@@ -527,6 +528,14 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
 
         testStream(query)(
           StartStream(checkpointLocation = srcDir.getCanonicalPath),
+          // Force 3 rounds of snapshot uploads.
+          // MIN_DELTAS_FOR_SNAPSHOT is 2, so we do this 2*3 times.
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
           AddData(inputData, 1, 2, 3),
           ProcessAllAvailable(),
           AddData(inputData, 1, 2, 3),
@@ -552,12 +561,15 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
           },
           StopStream
         )
-
-        // Restart the query, but do not add any data yet so that the associated
+        // Restart the query, but do not add too much data so that the associated
         // StateStoreProviderId (store id + query run id) in the coordinator does
         // not have any uploads linked to it.
         testStream(query)(
           StartStream(checkpointLocation = srcDir.getCanonicalPath),
+          // Perform one round of data, which is enough to activate instances and force a
+          // lagging instance report, but not enough to trigger a snapshot upload yet.
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
           Execute { query =>
             val coordRef =
               query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator

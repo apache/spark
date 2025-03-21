@@ -1476,7 +1476,7 @@ class RocksDB(
       lastUploadedSnapshotVersion.updateAndGet(v => Math.max(snapshot.version, v))
       // Report snapshot upload event to the coordinator.
       if (conf.stateStoreCoordinatorReportSnapshotUploadLag) {
-        // Note that we still report uploads even when changelog checkpointing is enabled.
+        // Note that we still report uploads even when changelog checkpointing is disabled.
         // The coordinator needs a way to determine whether upload messages are disabled or not,
         // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
         eventListener.foreach(_.reportSnapshotUploaded(snapshot.version))

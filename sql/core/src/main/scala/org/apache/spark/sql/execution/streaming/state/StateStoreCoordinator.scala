@@ -207,10 +207,10 @@ private class StateStoreCoordinator(
   // Default snapshot upload event to use when a provider has never uploaded a snapshot
   private val defaultSnapshotUploadEvent = SnapshotUploadEvent(-1, 0)
 
-  // Stores the last timestamp in milliseconds where the coordinator did a full report on
-  // instances lagging behind on snapshot uploads. The initial timestamp is defaulted to
-  // 0 milliseconds.
-  private var lastFullSnapshotLagReportTimeMs = 0L
+  // Stores the last timestamp in milliseconds for each queryRunId indicating when the
+  // coordinator did a report on instances lagging behind on snapshot uploads.
+  // The initial timestamp is defaulted to 0 milliseconds.
+  private val lastFullSnapshotLagReportTimeMs = new mutable.HashMap[UUID, Long]
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId, providerIdsToCheck) =>
@@ -270,15 +270,16 @@ private class StateStoreCoordinator(
           log"${MDC(LogKeys.NUM_LAGGING_STORES, laggingStores.size)}"
         )
         // Report all stores that are behind in snapshot uploads.
-        // Only report the full list of providers lagging behind if the last reported time
-        // is not recent. The lag report interval denotes the minimum time between these
-        // full reports.
+        // Only report the list of providers lagging behind if the last reported time
+        // is not recent for this query run. The lag report interval denotes the minimum
+        // time between these full reports.
         val coordinatorLagReportInterval =
           sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
-        if (laggingStores.nonEmpty &&
-          currentTimestamp - lastFullSnapshotLagReportTimeMs > coordinatorLagReportInterval) {
-          // Mark timestamp of the full report and log the lagging instances
-          lastFullSnapshotLagReportTimeMs = currentTimestamp
+        val timeSinceLastReport =
+          currentTimestamp - lastFullSnapshotLagReportTimeMs.getOrElse(queryRunId, 0L)
+        if (timeSinceLastReport > coordinatorLagReportInterval) {
+          // Mark timestamp of the report and log the lagging instances
+          lastFullSnapshotLagReportTimeMs.put(queryRunId, currentTimestamp)
           // Only report the stores that are lagging the most behind in snapshot uploads.
           laggingStores
             .sortBy(stateStoreLatestUploadedSnapshot.getOrElse(_, defaultSnapshotUploadEvent))
