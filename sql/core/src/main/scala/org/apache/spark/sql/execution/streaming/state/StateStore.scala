@@ -652,6 +652,21 @@ object StateStoreProvider {
       }
     }
   }
+
+  /**
+   * Get the runId from the provided hadoopConf. If it is not found, generate a random UUID.
+   *
+   * @param hadoopConf Hadoop configuration used by the StateStore to save state data
+   */
+  private[state] def getRunId(hadoopConf: Configuration): String = {
+    val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
+    if (runId != null) {
+      runId
+    } else {
+      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
+      UUID.randomUUID().toString
+    }
+  }
 }
 
 /**
@@ -1131,10 +1146,12 @@ object StateStore extends Logging {
     }
   }
 
-  private[state] def reportSnapshotUploaded(storeId: StateStoreId, snapshotVersion: Long): Unit = {
+  private[state] def reportSnapshotUploaded(
+      providerId: StateStoreProviderId,
+      snapshotVersion: Long): Unit = {
     // Attach the current timestamp of uploaded snapshot and send the message to the coordinator
     val currentTime = System.currentTimeMillis()
-    coordinatorRef.foreach(_.snapshotUploaded(storeId, snapshotVersion, currentTime))
+    coordinatorRef.foreach(_.snapshotUploaded(providerId, snapshotVersion, currentTime))
   }
 
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
