@@ -277,8 +277,8 @@ private[aggregate] object CollectTopK {
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, delimiter])[ WITHIN GROUP (ORDER BY key [ASC | DESC] [,...])] - Returns
-    the concatenation of non-null input values, separated by the delimiter ordered by key.
-    If all values are null, null is returned.
+    the concatenation of non-NULL input values, separated by the delimiter ordered by key.
+    If all values are NULL, NULL is returned.
     """,
   arguments = """
     Arguments:
