@@ -8,11 +8,11 @@ CREATE TEMP VIEW df2 AS
 SELECT * FROM (VALUES (1, true), (2, false), (3, false));
 
 -- Test cases for listagg function
-SELECT listagg(col2) FROM df GROUP BY col1;
-SELECT string_agg(col2) FROM df GROUP BY col1;
-SELECT listagg(col2, NULL) FROM df GROUP BY col1;
+WITH t(col) AS (SELECT listagg(col2) FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t;
+WITH t(col) AS (SELECT string_agg(col2) FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t;
+WITH t(col) AS (SELECT listagg(col2, NULL) FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t;
 SELECT listagg(col2) FROM df WHERE 1 != 1;
-SELECT listagg(col2, '|') FROM df GROUP BY col1;
+WITH t(col) AS (SELECT listagg(col2, '|') FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t;
 WITH t(col) AS (SELECT listagg(col1) FROM df) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b') FROM t;
 WITH t(col) AS (SELECT listagg(DISTINCT col1) FROM df) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b') FROM t;
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col1) FROM df;

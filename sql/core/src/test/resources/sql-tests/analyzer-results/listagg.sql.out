@@ -20,39 +20,60 @@ CreateViewCommand `df2`, SELECT * FROM (VALUES (1, true), (2, false), (3, false)
 
 
 -- !query
-SELECT listagg(col2) FROM df GROUP BY col1
+WITH t(col) AS (SELECT listagg(col2) FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t
 -- !query analysis
-Aggregate [col1#x], [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
-+- SubqueryAlias df
-   +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
-         +- Project [col1#x, col2#x]
-            +- SubqueryAlias __auto_generated_subquery_name
-               +- LocalRelation [col1#x, col2#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col2, NULL)#x AS col#x]
+:        +- Aggregate [col1#x], [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
+:           +- SubqueryAlias df
+:              +- View (`df`, [col1#x, col2#x])
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
+:                    +- Project [col1#x, col2#x]
+:                       +- SubqueryAlias __auto_generated_subquery_name
+:                          +- LocalRelation [col1#x, col2#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
-SELECT string_agg(col2) FROM df GROUP BY col1
+WITH t(col) AS (SELECT string_agg(col2) FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t
 -- !query analysis
-Aggregate [col1#x], [string_agg(col2#x, null, 0, 0) AS string_agg(col2, NULL)#x]
-+- SubqueryAlias df
-   +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
-         +- Project [col1#x, col2#x]
-            +- SubqueryAlias __auto_generated_subquery_name
-               +- LocalRelation [col1#x, col2#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [string_agg(col2, NULL)#x AS col#x]
+:        +- Aggregate [col1#x], [string_agg(col2#x, null, 0, 0) AS string_agg(col2, NULL)#x]
+:           +- SubqueryAlias df
+:              +- View (`df`, [col1#x, col2#x])
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
+:                    +- Project [col1#x, col2#x]
+:                       +- SubqueryAlias __auto_generated_subquery_name
+:                          +- LocalRelation [col1#x, col2#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
-SELECT listagg(col2, NULL) FROM df GROUP BY col1
+WITH t(col) AS (SELECT listagg(col2, NULL) FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t
 -- !query analysis
-Aggregate [col1#x], [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
-+- SubqueryAlias df
-   +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
-         +- Project [col1#x, col2#x]
-            +- SubqueryAlias __auto_generated_subquery_name
-               +- LocalRelation [col1#x, col2#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col2, NULL)#x AS col#x]
+:        +- Aggregate [col1#x], [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
+:           +- SubqueryAlias df
+:              +- View (`df`, [col1#x, col2#x])
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
+:                    +- Project [col1#x, col2#x]
+:                       +- SubqueryAlias __auto_generated_subquery_name
+:                          +- LocalRelation [col1#x, col2#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -69,15 +90,22 @@ Aggregate [listagg(col2#x, null, 0, 0) AS listagg(col2, NULL)#x]
 
 
 -- !query
-SELECT listagg(col2, '|') FROM df GROUP BY col1
+WITH t(col) AS (SELECT listagg(col2, '|') FROM df GROUP BY col1) SELECT len(col), regexp_count(col, 'a'), regexp_count(col, 'b'), regexp_count(col, 'c'), regexp_count(col, 'd') FROM t
 -- !query analysis
-Aggregate [col1#x], [listagg(col2#x, |, 0, 0) AS listagg(col2, |)#x]
-+- SubqueryAlias df
-   +- View (`df`, [col1#x, col2#x])
-      +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
-         +- Project [col1#x, col2#x]
-            +- SubqueryAlias __auto_generated_subquery_name
-               +- LocalRelation [col1#x, col2#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col2, |)#x AS col#x]
+:        +- Aggregate [col1#x], [listagg(col2#x, |, 0, 0) AS listagg(col2, |)#x]
+:           +- SubqueryAlias df
+:              +- View (`df`, [col1#x, col2#x])
+:                 +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
+:                    +- Project [col1#x, col2#x]
+:                       +- SubqueryAlias __auto_generated_subquery_name
+:                          +- LocalRelation [col1#x, col2#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -96,7 +124,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -115,7 +143,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -185,7 +213,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [concat(cast((col#x = baba) as string), cast((col#x = bbaa) as string)) AS concat((col = baba), (col = bbaa))#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -204,7 +232,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [concat(cast((col#x = b|a|b|a) as string), cast((col#x = b|b|a|a) as string)) AS concat((col = b|a|b|a), (col = b|b|a|a))#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
