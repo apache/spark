@@ -504,7 +504,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
         val coalesce = collectFirst(plan) {
           case e: AQEShuffleReadExec => e
         }.get
-        assert(coalesce.numEmptyPartitions.get == 3)
         assert(coalesce.metrics("numEmptyPartitions").value == 3)
       }
     }
