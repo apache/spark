@@ -139,6 +139,7 @@ class UnivocityParser(
   // When `options.needHeaderForSingleVariantColumn` is true, it will be set to the header column
   // names by `CSVDataSource.readHeaderForSingleVariantColumn`.
   var headerColumnNames: Option[Array[String]] = None
+  private var singleVariantFieldConverters: Array[VariantValueConverter] = null
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -282,12 +283,7 @@ class UnivocityParser(
           UTF8String.fromString(datum), dt.startField, dt.endField)
       }
 
-    case _: VariantType => (d: String) => {
-      val builder = new VariantBuilder(false)
-      UnivocityParser.appendCsvColumnToVariant(builder, d, options.nullValue)
-      val v = builder.result()
-      new VariantVal(v.getValue, v.getMetadata)
-    }
+    case _: VariantType => new VariantValueConverter
 
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
@@ -358,6 +354,9 @@ class UnivocityParser(
     try {
       val keys = headerColumnNames.orNull
       val numFields = if (keys != null) tokens.length.min(keys.length) else tokens.length
+      if (singleVariantFieldConverters == null) {
+        singleVariantFieldConverters = Array.fill(numFields)(new VariantValueConverter)
+      }
       val builder = new VariantBuilder(false)
       val start = builder.getWritePos
       val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
@@ -365,14 +364,21 @@ class UnivocityParser(
         val key = if (keys != null) keys(i) else "_c" + i
         val id = builder.addKey(key)
         fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-        UnivocityParser.appendCsvColumnToVariant(builder, tokens(i), options.nullValue)
+        val converter = if (i < singleVariantFieldConverters.length) {
+          singleVariantFieldConverters(i)
+        } else {
+          // If we reach here, we will throw an exception below.
+          new VariantValueConverter
+        }
+        converter.convertInput(builder, tokens(i))
       }
       builder.finishWritingObject(start, fields)
       val v = builder.result()
       row(0) = new VariantVal(v.getValue, v.getMetadata)
-      // If the header line has different number of tokens than the content line, the CSV data is
-      // malformed. We may still have partially parsed data in `row`.
-      if (keys != null && keys.length != tokens.length) {
+      // The header line and all content lines must all have the same number of tokens, otherwise
+      // the CSV data is malformed. We may still have partially parsed data in `row`.
+      if ((keys != null && keys.length != tokens.length) ||
+          singleVariantFieldConverters.length != tokens.length) {
         throw QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)
       }
       row
@@ -439,6 +445,99 @@ class UnivocityParser(
       } else {
         requiredRow
       }
+    }
+  }
+
+  private final class VariantValueConverter extends ValueConverter {
+    private var currentType: DataType = LongType
+
+    override def apply(s: String): Any = {
+      val builder = new VariantBuilder(false)
+      convertInput(builder, s)
+      val v = builder.result()
+      new VariantVal(v.getValue, v.getMetadata)
+    }
+
+    /**
+     * Convert a CSV value `s` into a variant value and append the result to `builder`.
+     * The result can only be one of a variant boolean/numeric/string. Anything that cannot be
+     * precisely represented by a variant boolean/numeric will be represented by a variant string.
+     */
+    def convertInput(builder: VariantBuilder, s: String): Unit = {
+      if (s == null || s == options.nullValue) {
+        builder.appendNull()
+        return
+      }
+
+      def parseLong(): DataType = {
+        try {
+          builder.appendLong(s.toLong)
+          LongType
+        } catch {
+          case NonFatal(_) => parseDecimal()
+        }
+      }
+
+      def parseDecimal(): DataType = {
+        try {
+          val d = decimalParser(s)
+          if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+            d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+            builder.appendDecimal(d)
+            DecimalType.USER_DEFAULT
+          } else {
+            parseDate()
+          }
+        } catch {
+          case NonFatal(_) => parseDate()
+        }
+      }
+
+      def parseDate(): DataType = {
+        try {
+          builder.appendDate(dateFormatter.parse(s))
+          DateType
+        } catch {
+          case NonFatal(_) => parseTimestamp()
+        }
+      }
+
+      def parseTimestamp(): DataType = {
+        try {
+          builder.appendTimestamp(timestampFormatter.parse(s))
+          TimestampType
+        } catch {
+          case NonFatal(_) => parseBoolean()
+        }
+      }
+
+      def parseBoolean(): DataType = {
+        if (s == "true") {
+          builder.appendBoolean(true)
+          BooleanType
+        } else if (s == "false") {
+          builder.appendBoolean(false)
+          BooleanType
+        } else {
+          parseString()
+        }
+      }
+
+      def parseString(): DataType = {
+        builder.appendString(s)
+        StringType
+      }
+
+      val newType = currentType match {
+        case LongType => parseLong()
+        case _: DecimalType => parseDecimal()
+        //      case DoubleType => parseDouble()
+        case DateType => parseDate()
+        case TimestampType => parseTimestamp()
+        case BooleanType => parseBoolean()
+        case StringType => parseString()
+      }
+      currentType = newType
     }
   }
 }
@@ -527,62 +626,5 @@ private[sql] object UnivocityParser {
       schema,
       parser.options.columnNameOfCorruptRecord)
     filteredLines.flatMap(safeParser.parse)
-  }
-
-  private def tryParseNumeric(builder: VariantBuilder, s: String): Boolean = {
-    // Use while-loop because this can be performance-critical.
-    var hasDot = false
-    val length = s.length
-    var i = 0
-    while (i < length) {
-      val ch = s.charAt(i)
-      if (ch != '-' && ch != '.' && !(ch >= '0' && ch <= '9')) return false
-      if (ch == '.') hasDot = true
-      i += 1
-    }
-    if (!hasDot) {
-      try {
-        builder.appendLong(s.toLong)
-        return true
-      } catch {
-        case NonFatal(_) =>
-      }
-    }
-    try {
-      val d = new java.math.BigDecimal(s)
-      if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
-        d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
-        builder.appendDecimal(d)
-        return true
-      }
-    } catch {
-      case NonFatal(_) =>
-    }
-    try {
-      builder.appendDouble(s.toDouble)
-      return true
-    } catch {
-      case NonFatal(_) =>
-    }
-    false
-  }
-
-  /**
-   * Convert a CSV value `s` into a variant value and append the result to `builder`.
-   * The result can only be one of a variant boolean/numeric/string. Anything that cannot be
-   * precisely represented by a variant boolean/numeric will be represented by a variant string.
-   */
-  def appendCsvColumnToVariant(builder: VariantBuilder, s: String, nullValue: String): Unit = {
-    s match {
-      case null => builder.appendNull()
-      case "true" => builder.appendBoolean(true)
-      case "false" => builder.appendBoolean(false)
-      case _ =>
-        if (s == nullValue) {
-          builder.appendNull()
-        } else if (!tryParseNumeric(builder, s)) {
-          builder.appendString(s)
-        }
-    }
   }
 }
