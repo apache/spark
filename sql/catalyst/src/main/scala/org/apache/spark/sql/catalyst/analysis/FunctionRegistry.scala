@@ -642,7 +642,7 @@ object FunctionRegistry {
     expression[FromUTCTimestamp]("from_utc_timestamp"),
     expression[Hour]("hour"),
     expression[LastDay]("last_day"),
-    expression[Minute]("minute"),
+    expressionBuilder("minute", MinuteExpressionBuilder),
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),

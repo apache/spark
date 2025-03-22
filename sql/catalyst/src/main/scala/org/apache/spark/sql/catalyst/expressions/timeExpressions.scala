@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, IntegerType, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -157,6 +158,78 @@ object TryToTimeExpressionBuilder extends ExpressionBuilder {
       TryEval(ToTime(expressions.head, expressions.drop(1).lastOption))
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(time_expr) - Returns the minute component of the given time.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME'23:59:59.999999');
+       59
+  """,
+  since = "4.1.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class MinutesOfTime(child: Expression)
+  extends RuntimeReplaceable
+    with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    IntegerType,
+    "getMinutesOfTime",
+    Seq(child),
+    Seq(child.dataType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType())
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override def prettyName: String = "minute"
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+    copy(child = newChildren.head)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the minute component of the given expression.
+
+    If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
+    it returns the minute of that timestamp.
+    If `expr` is a TIME type (since 4.1.0), it returns the minute of the time-of-day.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2009-07-30 12:58:59');
+       58
+      > SELECT _FUNC_(TIME'23:59:59.999999');
+       59
+  """,
+  since = "1.5.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+object MinuteExpressionBuilder extends ExpressionBuilder {
+  override def build(name: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.isEmpty) {
+      throw QueryCompilationErrors.wrongNumArgsError(name, Seq("> 0"), expressions.length)
+    } else {
+      val child = expressions.head
+      child.dataType match {
+        case _: TimeType =>
+          MinutesOfTime(child)
+        case _ =>
+          Minute(child)
+      }
     }
   }
 }
