@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CreateView, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_IDENTIFIER
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -34,15 +39,92 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
     override def batches: Seq[Batch] = earlyBatches.asInstanceOf[Seq[Batch]]
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(UNRESOLVED_IDENTIFIER)) {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    val referredTempVars = new mutable.ArrayBuffer[Seq[String]]
+
+    plan match {
+      case createView: CreateView =>
+        analyzeCreateView(createView, referredTempVars)
+      case _ => apply0(plan)
+    }
+  }
+
+  private def apply0(
+      plan: LogicalPlan,
+      referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan =
+    plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_IDENTIFIER)) {
     case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
+
+      if (referredTempVars.isDefined) {
+        referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+      }
+
       executor.execute(p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr), p.children))
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
         case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
+
+          if (referredTempVars.isDefined) {
+            referredTempVars.get ++= collectTemporaryVariablesInExpressionTree(e)
+          }
+
           e.exprBuilder.apply(evalIdentifierExpr(e.identifierExpr), e.otherExprs)
       }
+  }
+
+  private def analyzeCreateView(
+      createView: CreateView,
+      referredTempVars: mutable.ArrayBuffer[Seq[String]]) = {
+    val analyzedChild = apply0(createView.child)
+    val analyzedQuery = apply0(createView.query, Some(referredTempVars))
+    val tableIdentifier = ResolvedIdentifierToTableIdentifier(analyzedChild)
+    if (referredTempVars.nonEmpty && tableIdentifier.isDefined) {
+      throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
+        tableIdentifier.get,
+        referredTempVars.head.map(elem => s"`$elem`").mkString(".")
+      )
+    }
+    createView.copy(child = analyzedChild, query = analyzedQuery)
+  }
+
+  private object ResolvedIdentifierToTableIdentifier {
+    def apply(resolved: LogicalPlan): Option[Seq[String]] = resolved match {
+      case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
+        if (ident.namespace().length != 1) {
+          throw QueryCompilationErrors
+            .requiresSinglePartNamespaceError(ident.namespace().toSeq)
+        }
+        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)).nameParts)
+      case UnresolvedIdentifier(nameParts, _) =>
+        Some(nameParts)
+      case _ => None
+    }
+  }
+
+  private def collectTemporaryVariablesInLogicalPlan(child: LogicalPlan): Seq[Seq[String]] = {
+    def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {
+      child.flatMap { plan =>
+        plan.expressions.flatMap(_.flatMap {
+          case e: SubqueryExpression => collectTempVars(e.plan)
+          case r: VariableReference => Seq(r.originalNameParts)
+          case _ => Seq.empty
+        })
+      }.distinct
+    }
+    collectTempVars(child)
+  }
+
+  private def collectTemporaryVariablesInExpressionTree(child: Expression): Seq[Seq[String]] = {
+    def collectTempVars(child: Expression): Seq[Seq[String]] = {
+      child.flatMap { expr =>
+        expr.children.flatMap(_.flatMap {
+          case e: SubqueryExpression => collectTemporaryVariablesInLogicalPlan(e.plan)
+          case r: VariableReference => Seq(r.originalNameParts)
+          case _ => Seq.empty
+        })
+      }.distinct
+    }
+    collectTempVars(child)
   }
 
   private def evalIdentifierExpr(expr: Expression): Seq[String] = {
