@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.types.{StringType, TimeType}
 
@@ -50,6 +51,33 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expression = new ToTime(Literal("100:50"), Literal("mm:HH")),
       condition = "CANNOT_PARSE_TIME",
       parameters = Map("input" -> "'100:50'", "format" -> "'mm:HH'"))
+  }
+
+  test("MinuteExpressionBuilder") {
+    // Empty expressions list
+    checkError(
+      exception = intercept[AnalysisException] {
+        MinuteExpressionBuilder.build("minute", Seq.empty)
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`minute`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
+
+    // test TIME-typed child should build MinutesOfTime
+    val timeExpr = Literal(localTime(12, 58, 59), TimeType())
+    val builtExprForTime = MinuteExpressionBuilder.build("minute", Seq(timeExpr))
+    assert(builtExprForTime.isInstanceOf[MinutesOfTime])
+    assert(builtExprForTime.asInstanceOf[MinutesOfTime].child eq timeExpr)
+
+    // test non TIME-typed child should build MinutesOfTime
+    val tsExpr = Literal("2009-07-30 12:58:59")
+    val builtExprForTs = MinuteExpressionBuilder.build("minute", Seq(tsExpr))
+    assert(builtExprForTs.isInstanceOf[Minute])
+    assert(builtExprForTs.asInstanceOf[Minute].child eq tsExpr)
   }
 
   test("Minute with TIME type") {
