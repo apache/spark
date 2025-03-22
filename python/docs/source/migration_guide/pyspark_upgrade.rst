@@ -19,6 +19,11 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.0 to 4.1
+---------------------------------
+
+* In Spark 4.0, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, ``enable spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
+
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
