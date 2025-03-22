@@ -273,9 +273,8 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       outputs: Seq[Seq[Expression]],
       colOrdinals: Seq[Int],
       attrs: Seq[Attribute]): ProjectingInternalRow = {
-    val schema = StructType(attrs.zipWithIndex.map { case (attr, index) =>
-      val nullable = outputs.exists(output => output(colOrdinals(index)).nullable)
-      StructField(attr.name, attr.dataType, nullable, attr.metadata)
+    val schema = StructType(attrs.zipWithIndex.map { case (attr, _) =>
+      StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
     })
     ProjectingInternalRow(schema, colOrdinals)
   }

@@ -45,10 +45,7 @@ class DeltaBasedUpdateAsDeleteAndInsertTableSuite extends DeltaBasedUpdateTableS
       Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
 
     checkLastWriteInfo(
-      expectedRowSchema = StructType(table.schema.map {
-        case attr if attr.name == "id" => attr.copy(nullable = false) // input is a constant
-        case attr => attr
-      }),
+      expectedRowSchema = table.schema,
       expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
 
@@ -82,10 +79,7 @@ class DeltaBasedUpdateAsDeleteAndInsertTableSuite extends DeltaBasedUpdateTableS
         Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
 
       checkLastWriteInfo(
-        expectedRowSchema = StructType(table.schema.map {
-          case attr if attr.name == "id" => attr.copy(nullable = false) // input is a constant
-          case attr => attr
-        }),
+        expectedRowSchema = table.schema,
         expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
         expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
 

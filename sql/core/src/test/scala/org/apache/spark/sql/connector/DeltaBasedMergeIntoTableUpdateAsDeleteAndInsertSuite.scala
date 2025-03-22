@@ -82,4 +82,55 @@ class DeltaBasedMergeIntoTableUpdateAsDeleteAndInsertSuite
         insertWriteLogEntry(data = Row(6, 0, "new")))
     }
   }
+
+  test("SPARK-51479: Test Column Nullable") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "hr" }
+            |{ "pk": 5, "salary": 500, "dep": "hr" }
+            |""".stripMargin)
+
+        val sourceDF = Seq(3, 4, 5, 6).toDF("pk")
+        sourceDF.createOrReplaceTempView("source")
+
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = 1000
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
+             |WHEN NOT MATCHED BY SOURCE AND pk = 1 THEN
+             | DELETE
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(2, 200, "software"), // unchanged
+            Row(3, 1000, "hr"), // update
+            Row(4, 1000, "hr"), // update
+            Row(5, 1000, "hr"), // update
+            Row(6, 0, "new"))) // insert
+
+        checkLastWriteInfo(
+          expectedRowSchema = table.schema,
+          expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
+          expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+        checkLastWriteLog(
+          deleteWriteLogEntry(id = 1, metadata = Row("hr", null)),
+          deleteWriteLogEntry(id = 3, metadata = Row("hr", null)),
+          reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(3, 1000, "hr")),
+          deleteWriteLogEntry(id = 4, metadata = Row("hr", null)),
+          reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(4, 1000, "hr")),
+          deleteWriteLogEntry(id = 5, metadata = Row("hr", null)),
+          reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(5, 1000, "hr")),
+          insertWriteLogEntry(data = Row(6, 0, "new")))
+      }
+    }
 }
