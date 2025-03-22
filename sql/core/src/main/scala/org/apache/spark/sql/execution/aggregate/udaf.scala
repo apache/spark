@@ -473,7 +473,7 @@ case class ScalaUDAF(
   }
 
   override def toString: String = {
-    s"""$nodeName(${children.mkString(",")})"""
+    s"""$fullName(${children.mkString(",")})"""
   }
 
   override def nodeName: String = name
@@ -543,7 +543,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     bufferDeserializer(bufferRow)
   }
 
-  override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
+  override def toString: String = s"""${fullName}(${children.mkString(",")})"""
 
   override def nodeName: String = name
 
