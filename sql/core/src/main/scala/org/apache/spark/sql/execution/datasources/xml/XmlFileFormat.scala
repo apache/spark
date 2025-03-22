@@ -63,8 +63,11 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       files: Seq[FileStatus]): Option[StructType] = {
     val xmlOptions = getXmlOptions(sparkSession, options)
 
-    XmlDataSource(xmlOptions).inferSchema(
-      sparkSession, files, xmlOptions)
+    xmlOptions.singleVariantColumn match {
+      case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
+      case None =>
+        XmlDataSource(xmlOptions).inferSchema(sparkSession, files, xmlOptions)
+    }
   }
 
   override def prepareWrite(
@@ -137,7 +140,7 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[XmlFileFormat]
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: VariantType => false
+    case _: VariantType => true
 
     case _: AtomicType => true
 
