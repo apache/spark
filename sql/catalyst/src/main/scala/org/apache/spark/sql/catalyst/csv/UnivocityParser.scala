@@ -34,7 +34,8 @@ import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.types.variant._
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
  * Constructs a parser for a given schema that translates CSV data to an [[InternalRow]].
@@ -135,6 +136,10 @@ class UnivocityParser(
           options.dateFormatOption.isEmpty
       }
 
+  // When `options.needHeaderForSingleVariantColumn` is true, it will be set to the header column
+  // names by `CSVDataSource.readHeaderForSingleVariantColumn`.
+  var headerColumnNames: Option[Array[String]] = None
+
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
     if (tokenizer.getContext == null) return null
@@ -161,9 +166,12 @@ class UnivocityParser(
   // Each input token is placed in each output row's position by mapping these. In this case,
   //
   //   output row - ["A", 2]
-  private val valueConverters: Array[ValueConverter] = {
-    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
-  }
+  private val valueConverters: Array[ValueConverter] =
+    if (options.singleVariantColumn.isDefined) {
+      null
+    } else {
+      requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
+    }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -274,6 +282,13 @@ class UnivocityParser(
           UTF8String.fromString(datum), dt.startField, dt.endField)
       }
 
+    case _: VariantType => (d: String) => {
+      val builder = new VariantBuilder(false)
+      UnivocityParser.appendCsvColumnToVariant(builder, d, options.nullValue)
+      val v = builder.result()
+      new VariantVal(v.getValue, v.getMetadata)
+    }
+
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
@@ -331,6 +346,42 @@ class UnivocityParser(
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
   }
 
+  /**
+   * The entire line of CSV data is collected into a single variant object. When `headerColumnNames`
+   * is defined, the field names will be extracted from it. Otherwise, the field names will have a
+   * a format of "_c$i" to match the position of the values in the CSV data.
+   */
+  protected final def convertSingleVariantRow(
+      tokens: Array[String],
+      currentInput: UTF8String): GenericInternalRow = {
+    val row = new GenericInternalRow(1)
+    try {
+      val keys = headerColumnNames.orNull
+      val numFields = if (keys != null) tokens.length.min(keys.length) else tokens.length
+      val builder = new VariantBuilder(false)
+      val start = builder.getWritePos
+      val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
+      for (i <- 0 until numFields) {
+        val key = if (keys != null) keys(i) else "_c" + i
+        val id = builder.addKey(key)
+        fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+        UnivocityParser.appendCsvColumnToVariant(builder, tokens(i), options.nullValue)
+      }
+      builder.finishWritingObject(start, fields)
+      val v = builder.result()
+      row(0) = new VariantVal(v.getValue, v.getMetadata)
+      // If the header line has different number of tokens than the content line, the CSV data is
+      // malformed. We may still have partially parsed data in `row`.
+      if (keys != null && keys.length != tokens.length) {
+        throw QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)
+      }
+      row
+    } catch {
+      case NonFatal(e) =>
+        throw BadRecordException(() => currentInput, () => Array(row), cause = e)
+    }
+  }
+
   private def convert(tokens: Array[String]): Option[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
@@ -340,6 +391,10 @@ class UnivocityParser(
     }
 
     val currentInput = getCurrentInput
+
+    if (options.singleVariantColumn.isDefined) {
+      return Some(convertSingleVariantRow(tokens, currentInput))
+    }
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
@@ -472,5 +527,62 @@ private[sql] object UnivocityParser {
       schema,
       parser.options.columnNameOfCorruptRecord)
     filteredLines.flatMap(safeParser.parse)
+  }
+
+  private def tryParseNumeric(builder: VariantBuilder, s: String): Boolean = {
+    // Use while-loop because this can be performance-critical.
+    var hasDot = false
+    val length = s.length
+    var i = 0
+    while (i < length) {
+      val ch = s.charAt(i)
+      if (ch != '-' && ch != '.' && !(ch >= '0' && ch <= '9')) return false
+      if (ch == '.') hasDot = true
+      i += 1
+    }
+    if (!hasDot) {
+      try {
+        builder.appendLong(s.toLong)
+        return true
+      } catch {
+        case NonFatal(_) =>
+      }
+    }
+    try {
+      val d = new java.math.BigDecimal(s)
+      if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+        d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+        builder.appendDecimal(d)
+        return true
+      }
+    } catch {
+      case NonFatal(_) =>
+    }
+    try {
+      builder.appendDouble(s.toDouble)
+      return true
+    } catch {
+      case NonFatal(_) =>
+    }
+    false
+  }
+
+  /**
+   * Convert a CSV value `s` into a variant value and append the result to `builder`.
+   * The result can only be one of a variant boolean/numeric/string. Anything that cannot be
+   * precisely represented by a variant boolean/numeric will be represented by a variant string.
+   */
+  def appendCsvColumnToVariant(builder: VariantBuilder, s: String, nullValue: String): Unit = {
+    s match {
+      case null => builder.appendNull()
+      case "true" => builder.appendBoolean(true)
+      case "false" => builder.appendBoolean(false)
+      case _ =>
+        if (s == nullValue) {
+          builder.appendNull()
+        } else if (!tryParseNumeric(builder, s)) {
+          builder.appendString(s)
+        }
+    }
   }
 }
