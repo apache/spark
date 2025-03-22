@@ -1783,6 +1783,7 @@ ansiNonReserved
     | POSITION
     | PRECEDING
     | PRINCIPALS
+    | PROCEDURES
     | PROPERTIES
     | PURGE
     | QUARTER
