@@ -37,6 +37,7 @@ from pyspark.errors.exceptions.base import (
     UnknownException as BaseUnknownException,
     QueryContext as BaseQueryContext,
     QueryContextType,
+    recover_python_exception,
 )
 
 if TYPE_CHECKING:
@@ -185,6 +186,11 @@ class CapturedException(PySparkException):
 
 
 def convert_exception(e: "Py4JJavaError") -> CapturedException:
+    converted = _convert_exception(e)
+    return recover_python_exception(converted)
+
+
+def _convert_exception(e: "Py4JJavaError") -> CapturedException:
     from pyspark import SparkContext
     from py4j.java_gateway import is_instance_of
 
