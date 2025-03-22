@@ -101,7 +101,8 @@ conditionValues
     ;
 
 declareHandlerStatement
-    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementWithOptionalVarKeyword)
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues
+       (beginEndCompoundBlock | statement | setStatementWithOptionalVarKeyword)
     ;
 
 whileStatement
@@ -197,7 +198,7 @@ statement
     | DROP namespace (IF EXISTS)? identifierReference
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
-        (LIKE? pattern=stringLit)?                                        #showNamespaces
+        (LIKE? pattern=stringLit)?                                     #showNamespaces
     | createTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
@@ -219,8 +220,8 @@ statement
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
     | ALTER TABLE identifierReference
-        ADD (COLUMN | COLUMNS)
-        LEFT_PAREN columns=qualifiedColTypeWithPositionList RIGHT_PAREN #addTableColumns
+        ADD (COLUMN | COLUMNS) LEFT_PAREN
+        columns=qualifiedColTypeWithPositionList RIGHT_PAREN           #addTableColumns
     | ALTER TABLE table=identifierReference
         RENAME COLUMN
         from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
@@ -257,7 +258,7 @@ statement
         DROP (IF EXISTS)? partitionSpec (COMMA partitionSpec)* PURGE?  #dropTablePartitions
     | ALTER TABLE identifierReference
         (partitionSpec)? SET locationSpec                              #setTableLocation
-    | ALTER TABLE identifierReference RECOVER PARTITIONS                 #recoverPartitions
+    | ALTER TABLE identifierReference RECOVER PARTITIONS               #recoverPartitions
     | ALTER TABLE identifierReference
         (clusterBySpec | CLUSTER BY NONE)                              #alterClusterBy
     | ALTER TABLE identifierReference collationSpec                    #alterTableCollation
@@ -292,21 +293,21 @@ statement
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
-        (LIKE? pattern=stringLit)?                                        #showTables
+        (LIKE? pattern=stringLit)?                                     #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
-        LIKE pattern=stringLit partitionSpec?                             #showTableExtended
+        LIKE pattern=stringLit partitionSpec?                          #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
         (LEFT_PAREN key=propertyKey RIGHT_PAREN)?                      #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
-        (LIKE? pattern=stringLit)?                                        #showViews
+        (LIKE? pattern=stringLit)?                                     #showViews
     | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
-    | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
+    | SHOW CATALOGS (LIKE? pattern=stringLit)?                         #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         identifierReference                                            #describeNamespace
@@ -358,7 +359,8 @@ setResetStatement
     ;
 
 executeImmediate
-    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO targetVariable=multipartIdentifierList)? executeImmediateUsing?
+    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO targetVariable=multipartIdentifierList)?
+       executeImmediateUsing?
     ;
 
 executeImmediateUsing
@@ -484,11 +486,14 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause                                             #insertIntoReplaceWhere
-    | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
-    | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
+    : INSERT OVERWRITE TABLE? identifierReference optionsClause?
+       (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
+    | INSERT INTO TABLE? identifierReference optionsClause?
+       partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?    #insertIntoTable
+    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause       #insertIntoReplaceWhere
+    | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?   #insertOverwriteHiveDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)?
+       tableProvider (OPTIONS options=propertyList)?                                  #insertOverwriteDir
     ;
 
 partitionSpecLocation
@@ -604,7 +609,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=stringLit OUTPUTFORMAT outFmt=stringLit    #tableFileFormat
-    | identifier                                             #genericFileFormat
+    | identifier                                                   #genericFileFormat
     ;
 
 storageHandler
@@ -739,7 +744,8 @@ notMatchedClause
     ;
 
 notMatchedBySourceClause
-    : WHEN errorCapturingNot MATCHED BY SOURCE (AND notMatchedBySourceCond=booleanExpression)? THEN notMatchedBySourceAction
+    : WHEN errorCapturingNot MATCHED BY SOURCE
+       (AND notMatchedBySourceCond=booleanExpression)? THEN notMatchedBySourceAction
     ;
 
 matchedAction
@@ -827,7 +833,8 @@ groupingSet
     ;
 
 pivotClause
-    : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN
+    : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN
+       pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN
     ;
 
 pivotColumn
@@ -854,7 +861,8 @@ unpivotOperator
     ;
 
 unpivotSingleValueColumnClause
-    : unpivotValueColumn FOR unpivotNameColumn IN LEFT_PAREN unpivotColumns+=unpivotColumnAndAlias (COMMA unpivotColumns+=unpivotColumnAndAlias)* RIGHT_PAREN
+    : unpivotValueColumn FOR unpivotNameColumn IN LEFT_PAREN
+       unpivotColumns+=unpivotColumnAndAlias (COMMA unpivotColumns+=unpivotColumnAndAlias)* RIGHT_PAREN
     ;
 
 unpivotMultiValueColumnClause
@@ -888,7 +896,8 @@ unpivotAlias
     ;
 
 lateralView
-    : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
+    : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN
+       tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
 
 setQuantifier
@@ -1113,7 +1122,8 @@ predicate
     | errorCapturingNot? kind=IN LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
     | errorCapturingNot? kind=IN LEFT_PAREN query RIGHT_PAREN
     | errorCapturingNot? kind=RLIKE pattern=valueExpression
-    | errorCapturingNot? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
+    | errorCapturingNot? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL)
+       (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
     | errorCapturingNot? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=stringLit)?
     | IS errorCapturingNot? kind=NULL
     | IS errorCapturingNot? kind=(TRUE | FALSE | UNKNOWN)
@@ -1151,14 +1161,19 @@ datetimeUnit
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER)             #currentLike
-    | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
-    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
+    | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN
+       (unit=datetimeUnit | invalidUnit=stringLit)
+       COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN           #timestampadd
+    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN
+       (unit=datetimeUnit | invalidUnit=stringLit)
+       COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN     #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
-    | primaryExpression collateClause                                                      #collate
+    | primaryExpression collateClause                                                          #collate
     | primaryExpression DOUBLE_COLON dataType                                                  #castByColon
-    | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
+    | STRUCT LEFT_PAREN
+       (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN             #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
     | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
