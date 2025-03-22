@@ -191,12 +191,26 @@ private[parquet] class ParquetRowConverter(
 
   private[this] lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(catalystType)
 
+  private[this] val existingValues = existenceDefaultValues(catalystType)
+
+  private[this] val hasExistenceDefaultValues = existingValues.exists(_ != null)
+
   /**
    * The [[InternalRow]] converted from an entire Parquet record.
    */
   def currentRecord: InternalRow = {
-    applyExistenceDefaultValuesToRow(catalystType, currentRow, bitmask)
+    optimizedApplyExistenceDefaultValuesToRow()
     currentRow
+  }
+
+  private def optimizedApplyExistenceDefaultValuesToRow(): Unit = {
+    if (hasExistenceDefaultValues) {
+      for (i <- existingValues.indices) {
+        if (bitmask(i)) {
+          currentRow.update(i, existingValues(i))
+        }
+      }
+    }
   }
 
   private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
@@ -233,9 +247,8 @@ private[parquet] class ParquetRowConverter(
       }
     // If any fields in the Catalyst result schema have associated existence default values,
     // maintain a boolean array to track which fields have been explicitly assigned for each row.
-    if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
-      val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
-      for (i <- 0 until existingValues.length) {
+    if (hasExistenceDefaultValues) {
+      for (i <- existingValues.indices) {
        bitmask(i) =
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
