@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{EmptyRelation, LogicalPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -56,6 +56,7 @@ private[execution] object SparkPlanInfo {
   private def fromLogicalPlan(plan: LogicalPlan): SparkPlanInfo = {
     val childrenInfo = plan match {
       case LogicalQueryStage(_, physical) => Seq(fromSparkPlan(physical))
+      case EmptyRelation(logical) => Seq(fromLogicalPlan(logical))
       case _ => (plan.children ++ plan.subqueries).map(fromLogicalPlan)
     }
     new SparkPlanInfo(
