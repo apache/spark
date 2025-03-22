@@ -17,6 +17,7 @@
 
 import os
 import sys
+import uuid
 import itertools
 from multiprocessing.pool import ThreadPool
 from typing import (
@@ -55,6 +56,8 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
+    _get_temp_dfs_path,
+    _remove_dfs_dir,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql import functions as F
@@ -847,9 +850,23 @@ class CrossValidator(
             subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
         datasets = self._kFold(dataset)
+
+        tmp_dfs_path = _get_temp_dfs_path()
+        spark_session = dataset._session
         for i in range(nFolds):
-            validation = datasets[i][1].cache()
-            train = datasets[i][0].cache()
+            validation = datasets[i][1]
+            train = datasets[i][0]
+
+            if tmp_dfs_path:
+                validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+                validation.write.save(validation_tmp_path)
+                validation = spark_session.read.load(validation_tmp_path)
+                train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+                train.write.save(train_tmp_path)
+                train = spark_session.read.load(train_tmp_path)
+            else:
+                validation.cache()
+                train.cache()
 
             tasks = map(
                 inheritable_thread_target(dataset.sparkSession),
@@ -861,8 +878,12 @@ class CrossValidator(
                     assert subModels is not None
                     subModels[i][j] = subModel
 
-            validation.unpersist()
-            train.unpersist()
+            if tmp_dfs_path:
+                _remove_dfs_dir(validation_tmp_path, spark_session)
+                _remove_dfs_dir(train_tmp_path, spark_session)
+            else:
+                validation.unpersist()
+                train.unpersist()
 
         metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
 
@@ -1475,8 +1496,22 @@ class TrainValidationSplit(
         randCol = self.uid + "_rand"
         df = dataset.select("*", F.rand(seed).alias(randCol))
         condition = df[randCol] >= tRatio
-        validation = df.filter(condition).cache()
-        train = df.filter(~condition).cache()
+
+        validation = df.filter(condition)
+        train = df.filter(~condition)
+
+        tmp_dfs_path = _get_temp_dfs_path()
+        spark_session = dataset._session
+        if tmp_dfs_path:
+            validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+            validation.write.save(validation_tmp_path)
+            validation = spark_session.read.load(validation_tmp_path)
+            train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+            train.write.save(train_tmp_path)
+            train = spark_session.read.load(train_tmp_path)
+        else:
+            validation.cache()
+            train.cache()
 
         subModels = None
         collectSubModelsParam = self.getCollectSubModels()
@@ -1495,8 +1530,12 @@ class TrainValidationSplit(
                 assert subModels is not None
                 subModels[j] = subModel
 
-        train.unpersist()
-        validation.unpersist()
+        if tmp_dfs_path:
+            _remove_dfs_dir(validation_tmp_path, spark_session)
+            _remove_dfs_dir(train_tmp_path, spark_session)
+        else:
+            train.unpersist()
+            validation.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(cast(List[float], metrics))
