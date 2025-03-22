@@ -75,13 +75,9 @@ case class Coalesce(children: Seq[Expression])
     withNewChildrenInternal(alwaysEvaluatedInputs.toIndexedSeq ++ children.drop(1))
   }
 
-  override def branchGroups: Seq[Seq[Expression]] = if (children.length > 1) {
-    // If there is only one child, the first child is already covered by
-    // `alwaysEvaluatedInputs` and we should exclude it here.
-    Seq(children)
-  } else {
-    Nil
-  }
+  override def branchGroups: Seq[Seq[Expression]] = Nil
+
+  override def conditionallyEvaluatedInputs: Seq[Expression] = children.tail
 
   override def eval(input: InternalRow): Any = {
     var result: Any = null
@@ -344,7 +340,9 @@ case class NaNvl(left: Expression, right: Expression)
     copy(left = alwaysEvaluatedInputs.head)
   }
 
-  override def branchGroups: Seq[Seq[Expression]] = Seq(children)
+  override def branchGroups: Seq[Seq[Expression]] = Nil
+
+  override def conditionallyEvaluatedInputs: Seq[Expression] = right :: Nil
 
   override def eval(input: InternalRow): Any = {
     val value = left.eval(input)
