@@ -216,9 +216,10 @@ private class StateStoreCoordinator(
   // The initial timestamp is defaulted to 0 milliseconds.
   private val lastFullSnapshotLagReportTimeMs = new mutable.HashMap[UUID, Long]
 
-  // Stores the start time of the query's run. Queries that started recently should not
-  // have their state stores reported as lagging since we may not have all the information yet.
-  private val queryRunStartTimeMs = new mutable.HashMap[UUID, Long]
+  // Stores the time and latest version of the query run's start.
+  // Queries that started recently should not have their state stores reported as lagging
+  // since we may not have all the information yet.
+  private val queryRunStartingPoint = new mutable.HashMap[UUID, (Long, Long)]
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId, providerIdsToCheck) =>
@@ -269,9 +270,10 @@ private class StateStoreCoordinator(
 
     case LogLaggingStateStores(queryRunId, latestVersion) =>
       val currentTimestamp = System.currentTimeMillis()
-      // Mark the query run's start time if the coordinator has never seen this query run before
-      if (!queryRunStartTimeMs.contains(queryRunId)) {
-        queryRunStartTimeMs.put(queryRunId, currentTimestamp)
+      // Mark the query run's starting timestamp and latest version if the coordinator
+      // has never seen this query run before.
+      if (!queryRunStartingPoint.contains(queryRunId)) {
+        queryRunStartingPoint.put(queryRunId, (currentTimestamp, latestVersion))
       }
       // Only log lagging instances if the snapshot report upload is enabled,
       // otherwise all instances will be considered lagging.
@@ -342,26 +344,6 @@ private class StateStoreCoordinator(
       context.reply(true)
   }
 
-  case class SnapshotUploadEvent(
-      version: Long,
-      timestamp: Long
-  ) extends Ordered[SnapshotUploadEvent] {
-
-    override def compare(otherEvent: SnapshotUploadEvent): Int = {
-      // Compare by version first, then by timestamp as tiebreaker
-      val versionCompare = this.version.compare(otherEvent.version)
-      if (versionCompare == 0) {
-        this.timestamp.compare(otherEvent.timestamp)
-      } else {
-        versionCompare
-      }
-    }
-
-    override def toString(): String = {
-      s"SnapshotUploadEvent(version=$version, timestamp=$timestamp)"
-    }
-  }
-
   private def findLaggingStores(
       queryRunId: UUID,
       referenceVersion: Long,
@@ -386,8 +368,13 @@ private class StateStoreCoordinator(
     // Do not report any instance as lagging if this query run started recently, since the
     // coordinator may be missing some information from the state stores.
     // A run is considered recent if the time between now and the start of the run does not pass
-    // the time requirement for lagging instances (maintenance interval, times a multiplier).
-    if (referenceTimestamp - queryRunStartTimeMs(queryRunId) <= minTimeDeltaForLogging) {
+    // the time requirement for lagging instances.
+    // Similarly, the run is also considered too recent if not enough versions have passed
+    // since the start of the run.
+    val (runStartingTimeMs, runStartingVersion) = queryRunStartingPoint(queryRunId)
+
+    if (referenceTimestamp - runStartingTimeMs <= minTimeDeltaForLogging ||
+        referenceVersion - runStartingVersion <= minVersionDeltaForLogging) {
       return Seq.empty
     }
     // Look for active state store providers that are lagging behind in snapshot uploads
@@ -399,11 +386,33 @@ private class StateStoreCoordinator(
       )
       storeProviderId.queryRunId == queryRunId && (
         // Mark a state store as lagging if it's behind in both version and time.
+        // A state store is considered lagging if it's behind in both version and time according
+        // to the configured thresholds.
         // Stores that didn't upload a snapshot will be treated as a store with a snapshot of
         // version 0.
         referenceVersion - Math.max(latestSnapshot.version, 0) > minVersionDeltaForLogging &&
         referenceTimestamp - latestSnapshot.timestamp > minTimeDeltaForLogging
       )
     }.toSeq
+  }
+}
+
+case class SnapshotUploadEvent(
+    version: Long,
+    timestamp: Long
+) extends Ordered[SnapshotUploadEvent] {
+
+  override def compare(otherEvent: SnapshotUploadEvent): Int = {
+    // Compare by version first, then by timestamp as tiebreaker
+    val versionCompare = this.version.compare(otherEvent.version)
+    if (versionCompare == 0) {
+      this.timestamp.compare(otherEvent.timestamp)
+    } else {
+      versionCompare
+    }
+  }
+
+  override def toString(): String = {
+    s"SnapshotUploadEvent(version=$version, timestamp=$timestamp)"
   }
 }
