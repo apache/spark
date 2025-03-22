@@ -21,6 +21,7 @@ import sys
 import unittest
 import difflib
 import functools
+import signal
 from decimal import Decimal
 from time import time, sleep
 from typing import (
@@ -120,6 +121,25 @@ def read_int(b):
 
 def write_int(i):
     return struct.pack("!i", i)
+
+
+def timeout(seconds):
+    def decorator(func):
+        def handler(signum, frame):
+            raise TimeoutError(f"Function {func.__name__} timed out after {seconds} seconds")
+
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, handler)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def eventually(
