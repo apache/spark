@@ -649,6 +649,7 @@ Below is a list of all the keywords in Spark SQL.
 |PRECEDING|non-reserved|non-reserved|non-reserved|
 |PRIMARY|reserved|non-reserved|reserved|
 |PRINCIPALS|non-reserved|non-reserved|non-reserved|
+|PROCEDURES|non-reserved|non-reserved|non-reserved|
 |PROPERTIES|non-reserved|non-reserved|non-reserved|
 |PURGE|non-reserved|non-reserved|non-reserved|
 |QUARTER|non-reserved|non-reserved|non-reserved|

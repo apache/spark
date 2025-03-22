@@ -277,6 +277,17 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     procedure
   }
 
+  override def listProcedures(namespace: Array[String]): Array[Identifier] = {
+    val result =
+      if (namespaceExists(namespace)) {
+        procedures.keySet.asScala
+          .filter(_.namespace.sameElements(namespace))
+      } else {
+        throw new NoSuchNamespaceException(namespace)
+      }
+    result.filter(!_.namespace.sameElements(Array("dummy"))).toArray
+  }
+
   object UnboundIncrement extends UnboundProcedure {
     override def name: String = "dummy_increment"
     override def description: String = "test method to increment an in-memory counter"
