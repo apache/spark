@@ -28,7 +28,7 @@ import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Locale, Properties, Random, UUID}
+import java.util.{Base64, Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
@@ -640,7 +640,16 @@ private[spark] object Utils
         val is = Channels.newInputStream(source)
         downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
-        val uc = new URI(url).toURL.openConnection()
+        val userInfo = uri.getUserInfo
+        val uc =
+          if (userInfo != null) {
+            // user provided credentials in URL, make sure to hide them in stack trace, logs etc.
+            val ucn = new URI(uri.getScheme, null, uri.getHost, uri.getPort, uri.getPath,
+                            uri.getQuery, uri.getFragment).toURL.openConnection()
+            ucn.setRequestProperty("Authorization", "Basic " +
+              new String(Base64.getEncoder.encode(userInfo.getBytes())))
+            ucn
+          } else uri.toURL.openConnection()
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)
