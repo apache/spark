@@ -114,18 +114,18 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                           WholeStageCodegen (15)
                                                             Project [ws_web_site_sk,wr_returned_date_sk,wr_return_amt,wr_net_loss]
                                                               BroadcastHashJoin [wr_item_sk,wr_order_number,ws_item_sk,ws_order_number]
+                                                                ColumnarToRow
+                                                                  InputAdapter
+                                                                    Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_order_number,wr_return_amt,wr_net_loss,wr_returned_date_sk]
+                                                                      ReusedSubquery [d_date_sk] #1
                                                                 InputAdapter
                                                                   BroadcastExchange #9
                                                                     WholeStageCodegen (14)
-                                                                      ColumnarToRow
-                                                                        InputAdapter
-                                                                          Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_order_number,wr_return_amt,wr_net_loss,wr_returned_date_sk]
-                                                                            ReusedSubquery [d_date_sk] #1
-                                                                Project [ws_item_sk,ws_web_site_sk,ws_order_number]
-                                                                  Filter [ws_item_sk,ws_order_number,ws_web_site_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_web_site_sk,ws_order_number,ws_sold_date_sk]
+                                                                      Project [ws_item_sk,ws_web_site_sk,ws_order_number]
+                                                                        Filter [ws_item_sk,ws_order_number,ws_web_site_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_web_site_sk,ws_order_number,ws_sold_date_sk]
                                                       InputAdapter
                                                         ReusedExchange [d_date_sk] #4
                                                   InputAdapter
