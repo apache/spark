@@ -221,6 +221,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
         return conf
 
+    @unittest.skip("SPARK-51318: Remove `jar` files from Apache Spark repository and disable " +
+        "affected test")
     def test_basic_requests(self):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
@@ -231,6 +233,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         )
         self.assertTrue(response.artifacts[0].name.endswith(f"{file_name}.jar"))
 
+    @unittest.skip("SPARK-51318: Remove `jar` files from Apache Spark repository and disable " +
+        "affected test")
     def test_single_chunk_artifact(self):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
@@ -257,6 +261,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
             self.assertEqual(single_artifact.data.crc, int(f1.readline()))
             self.assertEqual(single_artifact.data.data, f2.read())
 
+    @unittest.skip("SPARK-51318: Remove `jar` files from Apache Spark repository and disable " +
+        "affected test")
     def test_chunked_artifacts(self):
         file_name = "junitLargeJar"
         large_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
@@ -292,6 +298,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
             expected_binaries = list(iter(lambda: f2.read(ArtifactManager.CHUNK_SIZE), b""))
             self.assertEqual(binaries, expected_binaries)
 
+    @unittest.skip("SPARK-51318: Remove `jar` files from Apache Spark repository and disable " +
+        "affected test")
     def test_batched_artifacts(self):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
@@ -325,6 +333,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
             self.assertEqual(artifact2.data.crc, crc)
             self.assertEqual(artifact2.data.data, data)
 
+    @unittest.skip("SPARK-51318: Remove `jar` files from Apache Spark repository and disable " +
+        "affected test")
     def test_single_chunked_and_chunked_artifact(self):
         file_name1 = "smallJar"
         file_name2 = "junitLargeJar"
