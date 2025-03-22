@@ -535,7 +535,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       var attempt = 1
       var lastException: Throwable = null
       while (result.isEmpty && attempt <= maxOffsetFetchAttempts
-        && !Thread.currentThread().isInterrupted) {
+        && !Thread.currentThread.isInterrupted) {
         try {
           result = Some(body)
         } catch {
