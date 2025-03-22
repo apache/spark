@@ -27,6 +27,7 @@ import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.sql.{DataFrame, ForeachWriter}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream}
+import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -1110,6 +1111,34 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
+    }
+  }
+
+  test("checkpointFormatVersion2 racing commits don't return incorrect checkpointInfo") {
+    val sqlConf = new SQLConf()
+    sqlConf.setConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+
+    withTempDir { checkpointDir =>
+      val provider = new CkptIdCollectingStateStoreProviderWrapper()
+      provider.init(
+        StateStoreId(checkpointDir.toString, 0, 0),
+        StateStoreTestsHelper.keySchema,
+        StateStoreTestsHelper.valueSchema,
+        PrefixKeyScanStateEncoderSpec(StateStoreTestsHelper.keySchema, 1),
+        useColumnFamilies = false,
+        new StateStoreConf(sqlConf),
+        new Configuration
+      )
+
+      val store1 = provider.getStore(0)
+      val store1NewVersion = store1.commit()
+      val store2 = provider.getStore(1)
+      val store2NewVersion = store2.commit()
+      val store1CheckpointInfo = store1.getStateStoreCheckpointInfo()
+      val store2CheckpointInfo = store2.getStateStoreCheckpointInfo()
+
+      assert(store1CheckpointInfo.batchVersion == store1NewVersion)
+      assert(store2CheckpointInfo.batchVersion == store2NewVersion)
     }
   }
 }

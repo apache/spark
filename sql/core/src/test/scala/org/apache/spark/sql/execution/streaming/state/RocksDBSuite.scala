@@ -2656,7 +2656,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("a", "5")
         db.put("b", "5")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 2)
         assert(db.metricsOpt.get.numCommittedKeys === 2)
@@ -2672,7 +2672,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("b", "7")
         db.put("c", "7")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === -1)
         assert(db.metricsOpt.get.numCommittedKeys === -1)
@@ -2688,7 +2688,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("c", "8")
         db.put("d", "8")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 4)
         assert(db.metricsOpt.get.numCommittedKeys === 4)
@@ -3344,11 +3344,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       val db = new RocksDB(
-        remoteDir,
         conf = dbConf,
+        stateStoreId = StateStoreId(remoteDir, 0, 0),
         localRootDir = Utils.createTempDir(),
         hadoopConf = new Configuration(),
-        loggingId = s"[Thread-${Thread.currentThread.getId}]",
         useColumnFamilies = false
       )
       try {
@@ -3500,14 +3499,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   class RocksDBCheckpointFormatV2(
-      dfsRootDir: String,
       conf: RocksDBConf,
+      stateStoreId: StateStoreId,
       localRootDir: File = Utils.createTempDir(),
       hadoopConf: Configuration = new Configuration,
-      loggingId: String = "",
       useColumnFamilies: Boolean = false,
       val versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String]())
-    extends RocksDB(dfsRootDir, conf, localRootDir, hadoopConf, loggingId,
+    extends RocksDB(conf, stateStoreId, localRootDir, hadoopConf,
       useColumnFamilies, enableStateStoreCheckpointIds = true) {
 
     override def load(
@@ -3523,7 +3521,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
-    override def commit(): Long = {
+    override def commit(): (Long, StateStoreCheckpointInfo) = {
       val ret = super.commit()
       // update versionToUniqueId from lineageManager
       lineageManager.getLineageForCurrVersion().foreach {
@@ -3553,20 +3551,18 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     try {
       db = if (enableStateStoreCheckpointIds) {
         new RocksDBCheckpointFormatV2(
-          remoteDir,
           conf = conf,
+          stateStoreId = StateStoreId(remoteDir, 0, 0),
           localRootDir = localDir,
           hadoopConf = hadoopConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]",
           useColumnFamilies = useColumnFamilies,
           versionToUniqueId = versionToUniqueId)
       } else {
         new RocksDB(
-          remoteDir,
           conf = conf,
+          stateStoreId = StateStoreId(remoteDir, 0, 0),
           localRootDir = localDir,
           hadoopConf = hadoopConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]",
           useColumnFamilies = useColumnFamilies)
       }
       db.load(version, versionToUniqueId.get(version))
@@ -3657,10 +3653,9 @@ object RocksDBSuite {
   def withSingletonDB[T](func: => T): T = {
     try {
       singleton = new RocksDB(
-        dfsRootDir = Utils.createTempDir().getAbsolutePath,
         conf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
-        hadoopConf = new Configuration(),
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        stateStoreId = StateStoreId(Utils.createTempDir().getAbsolutePath, 0, 0),
+        hadoopConf = new Configuration())
 
       func
     } finally {
