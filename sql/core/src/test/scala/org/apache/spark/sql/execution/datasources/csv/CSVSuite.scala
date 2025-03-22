@@ -3498,9 +3498,11 @@ abstract class CSVSuite
     withTempPath { path =>
       val data =
         """field 1,field2
-          |1.1,1e9
-          |,"hello
-          |world",true
+          |100,1.1
+          |2000-01-01,2000-01-01 00:00:00
+          |,true
+          |1e9,hello,extra
+          |missing
           |""".stripMargin
       Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
 
@@ -3514,32 +3516,38 @@ abstract class CSVSuite
 
       checkSingleVariant(Map(),
         """{"_c0":"field 1","_c1":"field2"}""",
-        """{"_c0":1.1,"_c1":"1e9"}""",
-        """{"_c0":null,"_c1":"hello"}""",
-        """{"_c0":"world\"","_c1":true}""")
+        """{"_c0":"100","_c1":"1.1"}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 00:00:00"}""",
+        """{"_c0":null,"_c1":"true"}""",
+        """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
+        """{"_c0":"missing"}""")
 
-      checkSingleVariant(Map("header" -> "true"),
-        """{"field 1":1.1,"field2":"1e9"}""",
-        """{"field 1":null,"field2":"hello"}""",
-        """{"field 1":"world\"","field2":true}""")
-
-      checkSingleVariant(Map("multiLine" -> "true"),
-        """{"_c0":"field 1","_c1":"field2"}""",
-        """{"_c0":1.1,"_c1":"1e9"}""",
-        """{"_c0":null,"_c1":"hello\nworld","_c2":true}""")
-
-      checkSingleVariant(Map("multiLine" -> "true", "header" -> "true"),
-        """{"field 1":1.1,"field2":"1e9"}""",
-        """{"field 1":null,"field2":"hello\nworld"}""")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("header" -> "true"),
+          """{"field 1":100,"field2":1.1}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 00:00:00+00:00"}""",
+          """{"field 1":null,"field2":true}""",
+          """{"field 1":"1e9","field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
 
       checkError(
         exception = intercept[SparkException] {
-          val options = Map("singleVariantColumn" -> "v", "multiLine" -> "true", "header" -> "true",
-            "mode" -> "failfast")
+          val options = Map("singleVariantColumn" -> "v", "mode" -> "failfast")
           spark.read.options(options).csv(path.getCanonicalPath).collect()
         }.getCause.asInstanceOf[SparkException],
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> """[{"field 1":null,"field2":"hello\nworld"}]""",
+        parameters = Map("badRecord" -> """[{"_c0":"1e9","_c1":"hello","_c2":"extra"}]""",
+          "failFastMode" -> "FAILFAST")
+      )
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("singleVariantColumn" -> "v", "header" -> "true", "mode" -> "failfast")
+          spark.read.options(options).csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """[{"field 1":"1e9","field2":"hello"}]""",
           "failFastMode" -> "FAILFAST")
       )
 
@@ -3554,23 +3562,18 @@ abstract class CSVSuite
 
       checkSchema(Map(),
         ("field 1", "field2"),
-        ("1.1", "1e9"),
-        (null, "hello"),
-        ("world\"", "true"))
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 00:00:00"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
 
       checkSchema(Map("header" -> "true"),
-        ("1.1", "1e9"),
-        (null, "hello"),
-        ("world\"", "true"))
-
-      checkSchema(Map("multiLine" -> "true"),
-        ("field 1", "field2"),
-        ("1.1", "1e9"),
-        (null, "hello\nworld"))
-
-      checkSchema(Map("multiLine" -> "true", "header" -> "true"),
-        ("1.1", "1e9"),
-        (null, "hello\nworld"))
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 00:00:00"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
 
       checkError(
         exception = intercept[SparkException] {
@@ -3579,7 +3582,7 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath).collect()
         }.getCause.asInstanceOf[SparkException],
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> """[null,"hello\nworld"]""", "failFastMode" -> "FAILFAST")
+        parameters = Map("badRecord" -> """["1e9","hello"]""", "failFastMode" -> "FAILFAST")
       )
     }
   }
