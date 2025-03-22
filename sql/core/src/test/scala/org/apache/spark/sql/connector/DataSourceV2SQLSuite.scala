@@ -3786,6 +3786,33 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("micro batch streaming write with default values") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    withTable(t) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $t (id INT, data STRING DEFAULT 'txt', salary INT DEFAULT -1) USING foo")
+
+        val inputData = MemoryStream[Int]
+        val df = inputData.toDF().toDF("id")
+        val query = df
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(t)
+
+        val newData = Seq(1, 2)
+        inputData.addData(newData)
+        query.processAllAvailable()
+        query.stop()
+
+        checkAnswer(
+          sql(s"SELECT * FROM $t"),
+          Row(1, "txt", -1) :: Row(2, "txt", -1) :: Nil)
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
