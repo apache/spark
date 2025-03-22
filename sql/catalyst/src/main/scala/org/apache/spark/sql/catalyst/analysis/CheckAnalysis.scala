@@ -422,6 +422,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 e.invalidFormat(checkRes)
             }
 
+          case parseToTimestamp: ParseToTimestamp if parseToTimestamp.left.dataType != StringType =>
+            throw QueryCompilationErrors.unexpectedFunctionArgumentDatatype(
+              expression = parseToTimestamp,
+              requiredType = StringType,
+              argumentType = parseToTimestamp.left.dataType
+            )
+
           case c: Cast if !c.resolved =>
             throw SparkException.internalError(
               msg = s"Found the unresolved Cast: ${c.simpleString(SQLConf.get.maxToStringFields)}",

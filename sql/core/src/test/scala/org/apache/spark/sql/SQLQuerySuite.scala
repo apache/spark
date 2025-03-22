@@ -4941,6 +4941,37 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
     checkAnswer(df, expectedAnswer)
   }
+
+  test("SPARK-51583: Function to_timestamp can't have non-string arguments") {
+    checkAnswer(
+      sql("SELECT to_timestamp('2016-12-31 00:12:00');"),
+      Row(Timestamp.valueOf("2016-12-31 00:12:00"))
+    )
+    checkAnswer(
+      sql("SELECT to_timestamp('2016-12-31', 'yyyy-MM-dd');"),
+      Row(Timestamp.valueOf("2016-12-31 00:00:00"))
+    )
+    checkError(
+      exception = intercept[AnalysisException](
+        sql("SELECT to_timestamp(1, 'yyyy-MM-dd HH:mm:ss')")
+      ),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_FUNCTION_ARGUMENT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"to_timestamp(1, yyyy-MM-dd HH:mm:ss)\"",
+        "requiredType" -> "\"STRING\"",
+        "argumentType" -> "\"INT\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](
+        sql("SELECT to_timestamp(1.0, 'yyyy-MM-dd HH:mm:ss')")
+      ),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_FUNCTION_ARGUMENT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"to_timestamp(1.0, yyyy-MM-dd HH:mm:ss)\"",
+        "requiredType" -> "\"STRING\"",
+        "argumentType" -> "\"DECIMAL(2,1)\"")
+    )
+  }
 }
 
 case class Foo(bar: Option[String])
