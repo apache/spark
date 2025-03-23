@@ -44,13 +44,13 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   private val timestampFormatter = TimestampFormatter(
-    options.timestampFormatInRead.getOrElse(defaultTimestampPattern()),
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
   private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInRead.getOrElse(defaultTimestampNTZPattern()),
+    options.timestampNTZFormatInRead,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,
@@ -60,12 +60,6 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
   private val ignoreMissingFiles = options.ignoreMissingFiles
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
   private val legacyMode = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
-
-  private def defaultTimestampPattern(): String =
-    s"${DateFormatter.defaultPattern}'T'${TimeFormatter.defaultPattern}[.SSS][XXX]"
-
-  private def defaultTimestampNTZPattern(): String =
-    s"${DateFormatter.defaultPattern}'T'${TimeFormatter.defaultPattern}[.SSS]"
 
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {

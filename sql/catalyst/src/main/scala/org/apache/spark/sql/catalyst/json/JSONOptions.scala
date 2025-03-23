@@ -120,12 +120,15 @@ class JSONOptions(
       Some(parameters.getOrElse(TIMESTAMP_FORMAT,
         s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
     } else {
-      parameters.get(TIMESTAMP_FORMAT)
+      Some(parameters.getOrElse(TIMESTAMP_FORMAT,
+        s"${DateFormatter.defaultPattern}'T'${TimeFormatter.defaultPattern}[.SSS][XXX]"))
     }
   val timestampFormatInWrite: String =
     parameters.getOrElse(TIMESTAMP_FORMAT, commonTimestampFormat)
 
-  val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
+  val timestampNTZFormatInRead: Option[String] = Some(parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
+    s"${DateFormatter.defaultPattern}'T'${TimeFormatter.defaultPattern}[.SSS]"
+  ))
   val timestampNTZFormatInWrite: String =
     parameters.getOrElse(TIMESTAMP_NTZ_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
