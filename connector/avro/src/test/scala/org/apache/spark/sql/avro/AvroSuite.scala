@@ -3087,7 +3087,7 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-XXXXX: unsupported the TIME data types in Avro") {
+  test("SPARK-51590: unsupported the TIME data types in Avro") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
       checkError(

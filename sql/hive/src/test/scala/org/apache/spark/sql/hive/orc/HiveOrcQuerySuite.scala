@@ -425,7 +425,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  test("SPARK-XXXXX: unsupported the TIME data types in Hive ORC") {
+  test("SPARK-51590: unsupported the TIME data types in Hive ORC") {
     withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
