@@ -595,6 +595,7 @@ def initialize_jira():
     else:
         print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
         continue_maybe("Continue without jira?")
+        asf_jira = None
 
 
 def main():

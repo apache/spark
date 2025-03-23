@@ -17,22 +17,57 @@
 package org.apache.spark.sql
 
 // scalastyle:off funsuite
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.spark.sql.functions.sum
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.functions.{max, sum}
 
 /**
  * Test suite for SparkSession implementation binding.
  */
-trait SparkSessionBuilderImplementationBindingSuite extends AnyFunSuite with BeforeAndAfterAll {
+trait SparkSessionBuilderImplementationBindingSuite
+    extends AnyFunSuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach {
 // scalastyle:on
-  protected def configure(builder: SparkSessionBuilder): builder.type = builder
+
+  protected def sparkContext: SparkContext
+  protected def implementationPackageName: String = getClass.getPackageName
+
+  private def assertInCorrectPackage[T](obj: T): Unit = {
+    assert(obj.getClass.getPackageName == implementationPackageName)
+  }
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    clearSessions()
+  }
+
+  override protected def afterAll(): Unit = {
+    clearSessions()
+    super.afterAll()
+  }
+
+  private def clearSessions(): Unit = {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+  }
 
   test("range") {
-    val session = configure(SparkSession.builder()).getOrCreate()
+    val session = SparkSession.builder().getOrCreate()
+    assertInCorrectPackage(session)
     import session.implicits._
     val df = session.range(10).agg(sum("id")).as[Long]
     assert(df.head() == 45)
+  }
+
+  test("sqlContext") {
+    SparkSession.clearActiveSession()
+    val ctx = SQLContext.getOrCreate(sparkContext)
+    assertInCorrectPackage(ctx)
+    import ctx.implicits._
+    val df = ctx.createDataset(1 to 11).select(max("value").as[Long])
+    assert(df.head() == 11)
   }
 }

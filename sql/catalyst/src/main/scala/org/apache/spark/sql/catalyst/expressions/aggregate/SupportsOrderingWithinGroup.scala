@@ -39,7 +39,7 @@ trait SupportsOrderingWithinGroup { self: AggregateFunction =>
    * Tells Analyzer that DISTINCT is supported.
    * The DISTINCT can conflict with order so some functions can ban it.
    *
-   * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
+   * @see [[QueryCompilationErrors.distinctWithOrderingFunctionUnsupportedError]]
    */
   def isDistinctSupported: Boolean
 }

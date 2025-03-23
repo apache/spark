@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.math.BigDecimal
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalTime}
 import java.time.format.DateTimeFormatter
 
 import scala.collection.immutable
@@ -862,7 +862,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select(myUdf1(Column("col"))),
     Row(ArrayBuffer(100)))
 
-     val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
+    val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
       immutable.ArraySeq.unsafeWrapArray[Int]((a :+ 5 :+ 6).toArray))
     checkAnswer(Seq(Array(1, 2, 3))
       .toDF("col")
@@ -1195,6 +1195,35 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       ds1.join(ds2, ds1("value") === ds2("value"), "left_outer")
         .select(f(struct(ds2("value").as("_1")))),
       Row(Row(null)))
+  }
+
+  test("SPARK-51402: Test TimeType in UDF") {
+    // Mocks
+    val mockTimeStr = "00:00:00.000000"
+    val input = Seq(LocalTime.parse(mockTimeStr)).toDF("currentTime")
+    // Regular case
+    val plusHour = udf((l: LocalTime) => l.plusHours(1))
+    val result = input.select(plusHour($"currentTime").as("newTime"))
+    checkAnswer(result, Row(LocalTime.parse("01:00:00.000000")) :: Nil)
+    assert(result.schema === new StructType().add("newTime", TimeType()))
+    // UDF produces `null`
+    val nullFunc = udf((_: LocalTime) => null.asInstanceOf[LocalTime])
+    val nullResult = input.select(nullFunc($"currentTime").as("nullTime"))
+    checkAnswer(nullResult, Row(null) :: Nil)
+    assert(nullResult.schema === new StructType().add("nullTime", TimeType()))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[LocalTime]).toDF("nullTime")
+    val constTime = udf((_: LocalTime) =>
+      LocalTime.parse(mockTimeStr))
+    val constResult = nullInput.select(constTime($"nullTime").as("zeroHour"))
+    checkAnswer(constResult, Row(LocalTime.parse(mockTimeStr)) :: Nil)
+    assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
+    // Error in the conversion of UDF result to the internal representation of time
+    val invalidFunc = udf((l: LocalTime) => "Zero".toLong)
+    val e = intercept[SparkException] {
+      input.select(invalidFunc($"currentTime")).collect()
+    }
+    assert(e.getCause.isInstanceOf[java.lang.NumberFormatException])
   }
 
   test("char/varchar as UDF return type") {

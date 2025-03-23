@@ -131,11 +131,6 @@
       <artifactId>snappy-java</artifactId>
       <scope>provided</scope>
     </dependency>
-    <dependency>
-      <groupId>javax.activation</groupId>
-      <artifactId>activation</artifactId>
-      <scope>provided</scope>
-    </dependency>
   </dependencies>
 
   <build>

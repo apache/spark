@@ -69,6 +69,10 @@ object DataTypeTestUtils {
     YearMonthIntervalType(YEAR),
     YearMonthIntervalType(MONTH))
 
+  val timeTypes: Seq[TimeType] = Seq(
+    TimeType(TimeType.MIN_PRECISION),
+    TimeType(TimeType.MAX_PRECISION))
+
   val unsafeRowMutableFieldTypes: Seq[DataType] = Seq(
     NullType,
     BooleanType,

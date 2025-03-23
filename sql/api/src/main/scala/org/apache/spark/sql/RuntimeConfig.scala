@@ -100,6 +100,11 @@ abstract class RuntimeConfig {
   private[sql] def get[T](entry: ConfigEntry[T], default: T): T
 
   /**
+   * Returns whether a particular key is set.
+   */
+  private[sql] def contains(key: String): Boolean
+
+  /**
    * Returns all properties set in this conf.
    *
    * @since 2.0.0

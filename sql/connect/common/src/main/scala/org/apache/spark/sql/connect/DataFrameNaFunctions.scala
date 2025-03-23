@@ -23,8 +23,8 @@ import org.apache.spark.connect.proto.{NAReplace, Relation}
 import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}
 import org.apache.spark.connect.proto.NAReplace.Replacement
 import org.apache.spark.sql
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.functions
 
 /**
  * Functionality for working with missing data in `DataFrame`s.
@@ -33,7 +33,6 @@ import org.apache.spark.sql.functions
  */
 final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root: Relation)
     extends sql.DataFrameNaFunctions {
-  import sparkSession.RichColumn
 
   override protected def drop(minNonNulls: Option[Int]): DataFrame =
     buildDropDataFrame(None, minNonNulls)
@@ -103,7 +102,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
     sparkSession.newDataFrame { builder =>
       val fillNaBuilder = builder.getFillNaBuilder.setInput(root)
       values.map { case (colName, replaceValue) =>
-        fillNaBuilder.addCols(colName).addValues(functions.lit(replaceValue).expr.getLiteral)
+        fillNaBuilder.addCols(colName).addValues(toLiteral(replaceValue).getLiteral)
       }
     }
   }
@@ -143,8 +142,8 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
     replacementMap.map { case (oldValue, newValue) =>
       Replacement
         .newBuilder()
-        .setOldValue(functions.lit(oldValue).expr.getLiteral)
-        .setNewValue(functions.lit(newValue).expr.getLiteral)
+        .setOldValue(toLiteral(oldValue).getLiteral)
+        .setNewValue(toLiteral(newValue).getLiteral)
         .build()
     }
   }

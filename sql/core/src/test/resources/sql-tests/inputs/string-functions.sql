@@ -306,3 +306,8 @@ select validate_utf8(x'80');
 select try_validate_utf8('');
 select try_validate_utf8('abc');
 select try_validate_utf8(x'80');
+
+-- quote
+select quote('Spark');
+select quote("Don't");
+select quote(NULL);

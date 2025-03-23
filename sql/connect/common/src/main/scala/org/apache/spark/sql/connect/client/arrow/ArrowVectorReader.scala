@@ -20,7 +20,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 
-import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector}
+import org.apache.arrow.vector._
 import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, SparkStringUtils, TimestampFormatter}
@@ -82,7 +82,9 @@ object ArrowVectorReader {
       case v: Float8Vector => new Float8VectorReader(v)
       case v: DecimalVector => new DecimalVectorReader(v)
       case v: VarCharVector => new VarCharVectorReader(v)
+      case v: LargeVarCharVector => new LargeVarCharVectorReader(v)
       case v: VarBinaryVector => new VarBinaryVectorReader(v)
+      case v: LargeVarBinaryVector => new LargeVarBinaryVectorReader(v)
       case v: DurationVector => new DurationVectorReader(v)
       case v: IntervalYearVector => new IntervalYearVectorReader(v)
       case v: DateDayVector => new DateDayVectorReader(v, timeZoneId)
@@ -189,8 +191,25 @@ private[arrow] class VarCharVectorReader(v: VarCharVector)
   override def getString(i: Int): String = Text.decode(vector.get(i))
 }
 
+private[arrow] class LargeVarCharVectorReader(v: LargeVarCharVector)
+    extends TypedArrowVectorReader[LargeVarCharVector](v) {
+  // This is currently a bit heavy on allocations:
+  // - byte array created in VarCharVector.get
+  // - CharBuffer created CharSetEncoder
+  // - char array in String
+  // By using direct buffers and reusing the char buffer
+  // we could get rid of the first two allocations.
+  override def getString(i: Int): String = Text.decode(vector.get(i))
+}
+
 private[arrow] class VarBinaryVectorReader(v: VarBinaryVector)
     extends TypedArrowVectorReader[VarBinaryVector](v) {
+  override def getBytes(i: Int): Array[Byte] = vector.get(i)
+  override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
+}
+
+private[arrow] class LargeVarBinaryVectorReader(v: LargeVarBinaryVector)
+    extends TypedArrowVectorReader[LargeVarBinaryVector](v) {
   override def getBytes(i: Int): Array[Byte] = vector.get(i)
   override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
 }

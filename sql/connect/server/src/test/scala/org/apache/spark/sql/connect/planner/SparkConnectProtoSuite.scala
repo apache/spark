@@ -1115,7 +1115,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         Long.MaxValue,
         Long.MaxValue,
         null,
-        true)
+        true,
+        false)
       .next()
     proto.Relation
       .newBuilder()

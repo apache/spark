@@ -34,6 +34,11 @@ class StateStoreConf(
   val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
 
   /**
+   * Timeout for state store maintenance operations to complete on shutdown
+   */
+  val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
+
+  /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
    * consider generating a snapshot.
    */

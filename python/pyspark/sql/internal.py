@@ -130,3 +130,44 @@ class InternalFunction:
             "SECOND": "secs",
         }
         return F.make_interval(**{unit_mapping[unit]: F.lit(e)})
+
+    @staticmethod
+    def vector_get(vec: Column, idx: Column) -> Column:
+        unwrapped = F.unwrap_udt(vec)
+        is_dense = unwrapped.getField("type") == F.lit(1)
+        values = unwrapped.getField("values")
+        size = F.when(is_dense, F.array_size(values)).otherwise(unwrapped.getField("size"))
+        sparse_idx = InternalFunction.array_binary_search(unwrapped.getField("indices"), idx)
+        value = (
+            F.when(is_dense, F.get(values, idx))
+            .when(sparse_idx >= 0, F.get(values, sparse_idx))
+            .otherwise(F.lit(0.0))
+        )
+
+        return F.when((0 <= idx) & (idx < size), value).otherwise(
+            F.raise_error(F.printf(F.lit("Vector index must be in [0, %s), but got %s"), size, idx))
+        )
+
+    # The main different between this function and the `array_max` + `array_position`:
+    # This function ignores NaN/NULL values, while `array_max` treats NaN values as largest values.
+    @staticmethod
+    def array_argmax(arr: Column) -> Column:
+        def merge(acc: Column, vv: Column) -> Column:
+            v = acc.getField("v")
+            i = acc.getField("i")
+            j = acc.getField("j")
+            return F.when(
+                (~vv.isNaN()) & (~vv.isNull()) & (vv > v),
+                F.struct(vv.alias("v"), j.alias("i"), j + 1),
+            ).otherwise(F.struct(v.alias("v"), i.alias("i"), j + 1))
+
+        return F.aggregate(
+            arr,
+            F.struct(
+                F.lit(float("-inf")).alias("v"),  # max value
+                F.lit(-1).alias("i"),  # index of max value
+                F.lit(0).alias("j"),  # current index
+            ),
+            merge,
+            lambda acc: acc.getField("i"),
+        )

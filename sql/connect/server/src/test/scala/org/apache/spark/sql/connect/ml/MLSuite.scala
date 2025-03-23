@@ -250,10 +250,39 @@ class MLSuite extends MLHelper {
                 .newBuilder()
                 .setName("org.apache.spark.ml.NotExistingML")
                 .setUid("FakedUid")
-                .setType(proto.MlOperator.OperatorType.ESTIMATOR)))
+                .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)))
         .build()
       MLHandler.handleMlCommand(sessionHolder, command)
     }
+  }
+
+  test("Exception: cannot retrieve object") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val modelId = trainLogisticRegressionModel(sessionHolder)
+
+    // Fetch summary attribute
+    val accuracyCommand = proto.MlCommand
+      .newBuilder()
+      .setFetch(
+        proto.Fetch
+          .newBuilder()
+          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod("accuracy")))
+      .build()
+
+    // Successfully fetch summary.accuracy from the cached model
+    MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
+
+    // Remove the model from cache
+    sessionHolder.mlCache.clear()
+
+    // No longer able to retrieve the model from cache
+    val e = intercept[MLCacheInvalidException] {
+      MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
+    }
+    val msg = e.getMessage
+    assert(msg.contains(s"$modelId from the ML cache"))
   }
 
   test("access the attribute which is not in allowed list") {
@@ -261,9 +290,12 @@ class MLSuite extends MLHelper {
     val modelId = trainLogisticRegressionModel(sessionHolder)
 
     val fakeAttributeCmd = fetchCommand(modelId, "notExistingAttribute")
-    intercept[MLAttributeNotAllowedException] {
+    val e = intercept[MLAttributeNotAllowedException] {
       MLHandler.handleMlCommand(sessionHolder, fakeAttributeCmd)
     }
+    val msg = e.getMessage
+    assert(msg.contains("notExistingAttribute"))
+    assert(msg.contains("org.apache.spark.ml.classification.LogisticRegressionModel"))
   }
 
   test("Model must be registered into ServiceLoader when loading") {
@@ -277,7 +309,7 @@ class MLSuite extends MLHelper {
             .setOperator(proto.MlOperator
               .newBuilder()
               .setName("org.apache.spark.sql.connect.ml.NotImplementingMLReadble")
-              .setType(proto.MlOperator.OperatorType.ESTIMATOR))
+              .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR))
             .setPath("/tmp/fake"))
         .build()
       MLHandler.handleMlCommand(sessionHolder, readCmd)

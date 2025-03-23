@@ -351,6 +351,135 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
     )
   }
 
+  // if the keys part of initial state df are different than the keys in the input data, then
+  // they will not be emitted as part of the result with skipEmittingInitialStateKeys set to true
+  testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
+    s"skipEmittingInitialStateKeys=true") {
+    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "true") {
+      val initialState = Seq(
+        ("apple", 1L),
+        ("orange", 2L),
+        ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
+
+      val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
+        val count = state.getOption.map( x => x).getOrElse(0L) + values.size
+        state.update(count)
+        Iterator.single((key, count))
+      }
+
+      val inputData = MemoryStream[String]
+      val result =
+        inputData.toDS()
+          .groupByKey(x => x)
+          .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
+      testStream(result, Update)(
+        AddData(inputData, "apple"),
+        AddData(inputData, "banana"),
+        CheckNewAnswer(("apple", 2), ("banana", 1)),
+        AddData(inputData, "orange"),
+        CheckNewAnswer(("orange", 3)),
+        StopStream
+      )
+    }
+  }
+
+  // if the keys part of initial state df are different than the keys in the input data, then
+  // they will be emitted as part of the result with skipEmittedInitialStateKeys set to false
+  testWithAllStateVersions("flatMapGroupsWithState - initial state - " +
+    s"skipEmittingInitialStateKeys=false") {
+    withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key -> "false") {
+      val initialState = Seq(
+        ("apple", 1L),
+        ("orange", 2L),
+        ("mango", 5L)).toDS().groupByKey(_._1).mapValues(_._2)
+
+      val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
+        val count = state.getOption.map( x => x).getOrElse(0L) + values.size
+        state.update(count)
+        Iterator.single((key, count))
+      }
+
+      val inputData = MemoryStream[String]
+      val result =
+        inputData.toDS()
+          .groupByKey(x => x)
+          .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
+      testStream(result, Update)(
+        AddData(inputData, "apple"),
+        AddData(inputData, "banana"),
+        CheckNewAnswer(("apple", 2), ("banana", 1), ("orange", 2), ("mango", 5)),
+        AddData(inputData, "orange"),
+        CheckNewAnswer(("orange", 3)),
+        StopStream
+      )
+    }
+  }
+
+  // if the keys part of the initial state and the first batch are the same, then the result
+  // is the same irrespective of the value of skipEmittingInitialStateKeys
+  Seq(true, false).foreach { skipEmittingInitialStateKeys =>
+    testWithAllStateVersions("flatMapGroupsWithState - initial state and initial batch " +
+      s"have same keys and skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
+      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
+        skipEmittingInitialStateKeys.toString) {
+        val initialState = Seq(
+          ("apple", 1L),
+          ("orange", 2L)).toDS().groupByKey(_._1).mapValues(_._2)
+
+        val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
+          val count = state.getOption.map(x => x).getOrElse(0L) + values.size
+          state.update(count)
+          Iterator.single((key, count))
+        }
+
+        val inputData = MemoryStream[String]
+        val result =
+          inputData.toDS()
+            .groupByKey(x => x)
+            .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
+        testStream(result, Update)(
+          AddData(inputData, "apple"),
+          AddData(inputData, "apple"),
+          AddData(inputData, "orange"),
+          CheckNewAnswer(("apple", 3), ("orange", 3)),
+          AddData(inputData, "orange"),
+          CheckNewAnswer(("orange", 4)),
+          StopStream
+        )
+      }
+    }
+  }
+
+  Seq(true, false).foreach { skipEmittingInitialStateKeys =>
+    testWithAllStateVersions("flatMapGroupsWithState - batch query and " +
+      s"skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
+      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
+        skipEmittingInitialStateKeys.toString) {
+        val initialState = Seq(
+          ("apple", 1L),
+          ("orange", 2L)).toDS().groupByKey(_._1).mapValues(_._2)
+
+        val fruitCountFunc = (key: String, values: Iterator[String], state: GroupState[Long]) => {
+          val count = state.getOption.map(x => x).getOrElse(0L) + values.size
+          state.update(count)
+          Iterator.single((key, count))
+        }
+
+        val inputData = Seq("orange", "mango")
+        val result =
+          inputData.toDS()
+            .groupByKey(x => x)
+            .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
+        val df = result.toDF()
+        if (skipEmittingInitialStateKeys) {
+          checkAnswer(df, Seq(("orange", 3), ("mango", 1)).toDF())
+        } else {
+          checkAnswer(df, Seq(("apple", 1), ("orange", 3), ("mango", 1)).toDF())
+        }
+      }
+    }
+  }
+
   def testWithAllStateVersions(name: String)(func: => Unit): Unit = {
     for (version <- FlatMapGroupsWithStateExecHelper.supportedVersions) {
       test(s"$name - state format version $version") {

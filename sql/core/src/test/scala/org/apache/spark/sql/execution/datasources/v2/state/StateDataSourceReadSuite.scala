@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.state
 
 import java.io.{File, FileWriter}
+import java.nio.ByteOrder
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
@@ -794,6 +795,11 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
   }
 
   test("flatMapGroupsWithState, state ver 1") {
+    // Skip this test on big endian platforms because the timestampTimeoutAttribute of
+    // StateManagerImplV1 is declared as IntegerType instead of LongType which breaks
+    // serialization on big endian. This can't be fixed because it would be a breaking
+    // schema change.
+    assume(ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN))
     testFlatMapGroupsWithState(1)
   }
 

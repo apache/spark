@@ -369,8 +369,8 @@ Filter cast(true as boolean)
 SELECT udf(udf(1)) FROM range(10) HAVING MAX(id) > 0
 -- !query analysis
 Project [udf(udf(1))#x]
-+- Filter (max(id#xL)#xL > cast(0 as bigint))
-   +- Aggregate [cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS udf(udf(1))#x, max(id#xL) AS max(id#xL)#xL]
++- Filter (max(id)#xL > cast(0 as bigint))
+   +- Aggregate [cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS udf(udf(1))#x, max(id#xL) AS max(id)#xL]
       +- Range (0, 10, step=1)
 
 
@@ -478,8 +478,8 @@ Filter (every(v)#x = false)
 SELECT udf(k), udf(every(v)) FROM test_agg GROUP BY udf(k) HAVING every(v) IS NULL
 -- !query analysis
 Project [udf(k)#x, udf(every(v))#x]
-+- Filter isnull(every(v#x)#x)
-   +- Aggregate [cast(udf(cast(k#x as string)) as int)], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(every(v#x) as string)) as boolean) AS udf(every(v))#x, every(v#x) AS every(v#x)#x]
++- Filter isnull(every(v)#x)
+   +- Aggregate [cast(udf(cast(k#x as string)) as int)], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(every(v#x) as string)) as boolean) AS udf(every(v))#x, every(v#x) AS every(v)#x]
       +- SubqueryAlias test_agg
          +- View (`test_agg`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
@@ -686,8 +686,8 @@ Project [udf(count(1))#xL]
 SELECT k, udf(max(v)) FROM test_agg GROUP BY k HAVING max(v) = true
 -- !query analysis
 Project [k#x, udf(max(v))#x]
-+- Filter (max(v#x)#x = true)
-   +- Aggregate [k#x], [k#x, cast(udf(cast(max(v#x) as string)) as boolean) AS udf(max(v))#x, max(v#x) AS max(v#x)#x]
++- Filter (max(v)#x = true)
+   +- Aggregate [k#x], [k#x, cast(udf(cast(max(v#x) as string)) as boolean) AS udf(max(v))#x, max(v#x) AS max(v)#x]
       +- SubqueryAlias test_agg
          +- View (`test_agg`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]

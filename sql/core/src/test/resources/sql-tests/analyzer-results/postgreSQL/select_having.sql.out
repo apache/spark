@@ -115,8 +115,8 @@ SELECT c, max(a) FROM test_having
 -- !query analysis
 Sort [c#x ASC NULLS FIRST], true
 +- Project [c#x, max(a)#x]
-   +- Filter ((count(1)#xL > cast(2 as bigint)) OR (min(a#x)#x = max(a)#x))
-      +- Aggregate [c#x], [c#x, max(a#x) AS max(a)#x, count(1) AS count(1)#xL, min(a#x) AS min(a#x)#x]
+   +- Filter ((count(1)#xL > cast(2 as bigint)) OR (min(a)#x = max(a)#x))
+      +- Aggregate [c#x], [c#x, max(a#x) AS max(a)#x, count(1) AS count(1)#xL, min(a#x) AS min(a)#x]
          +- SubqueryAlias spark_catalog.default.test_having
             +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet
 

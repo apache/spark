@@ -75,7 +75,11 @@ case class ColumnDefinition(
       // For v1 CREATE TABLE command, we will resolve and execute the default value expression later
       // in the rule `DataSourceAnalysis`. We just need to put the default value SQL string here.
       metadataBuilder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL)
-      metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL)
+      val existsSQL = default.child match {
+        case l: Literal => l.sql
+        case _ => default.originalSQL
+      }
+      metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsSQL)
     }
     generationExpression.foreach { generationExpr =>
       metadataBuilder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, generationExpr)

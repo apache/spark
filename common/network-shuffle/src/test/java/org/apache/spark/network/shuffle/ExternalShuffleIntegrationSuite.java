@@ -219,125 +219,154 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchOneSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
-    assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
-    exec0Fetch.releaseBuffers();
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
+      assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
+      assertTrue(exec0Fetch.failedBlocks.isEmpty());
+      assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
+      exec0Fetch.releaseBuffers();
+    }
   }
 
   @Test
   public void testFetchThreeSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult exec0Fetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2" });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
-      exec0Fetch.successBlocks);
-    assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
-    exec0Fetch.releaseBuffers();
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult exec0Fetch = fetchBlocks("exec-0",
+        new String[]{"shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"});
+      assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
+        exec0Fetch.successBlocks);
+      assertTrue(exec0Fetch.failedBlocks.isEmpty());
+      assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
+      exec0Fetch.releaseBuffers();
+    }
   }
 
   @Test
   public void testRegisterWithCustomShuffleManager() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo("custom shuffle manager"));
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-1", dataContext0.createExecutorInfo("custom shuffle manager"));
+    }
   }
 
   @Test
   public void testFetchWrongBlockId() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { "broadcast_1" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("broadcast_1"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{"broadcast_1"});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Sets.newHashSet("broadcast_1"), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchValidRddBlock() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String validBlockId = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_VALID_BLOCK;
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { validBlockId });
-    assertTrue(execFetch.failedBlocks.isEmpty());
-    assertEquals(Sets.newHashSet(validBlockId), execFetch.successBlocks);
-    assertBuffersEqual(new NioManagedBuffer(ByteBuffer.wrap(exec0RddBlockValid)),
-      execFetch.buffers.get(0));
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String validBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_VALID_BLOCK;
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{validBlockId});
+      assertTrue(execFetch.failedBlocks.isEmpty());
+      assertEquals(Sets.newHashSet(validBlockId), execFetch.successBlocks);
+      assertBuffersEqual(new NioManagedBuffer(ByteBuffer.wrap(exec0RddBlockValid)),
+        execFetch.buffers.get(0));
+    }
   }
 
   @Test
   public void testFetchDeletedRddBlock() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String missingBlockId = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_MISSING_FILE;
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { missingBlockId });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet(missingBlockId), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String missingBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_MISSING_FILE;
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{missingBlockId});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Sets.newHashSet(missingBlockId), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testRemoveRddBlocks() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String validBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_VALID_BLOCK_TO_RM;
-    String missingBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_MISSING_BLOCK_TO_RM;
+    try (ExternalBlockStoreClient blockStoreClient = createExternalBlockStoreClient()) {
+      registerExecutor(blockStoreClient, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String validBlockIdToRemove = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_VALID_BLOCK_TO_RM;
+      String missingBlockIdToRemove = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_MISSING_BLOCK_TO_RM;
 
-    try (ExternalBlockStoreClient client = new ExternalBlockStoreClient(conf, null, false, 5000)) {
-      client.init(APP_ID);
-      Future<Integer> numRemovedBlocks = client.removeBlocks(
-        TestUtils.getLocalHost(),
-        server.getPort(),
-        "exec-1",
-          new String[] { validBlockIdToRemove, missingBlockIdToRemove });
-      assertEquals(1, numRemovedBlocks.get().intValue());
+      try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+        client.init(APP_ID);
+        Future<Integer> numRemovedBlocks = client.removeBlocks(
+          TestUtils.getLocalHost(),
+          server.getPort(),
+          "exec-1",
+          new String[]{validBlockIdToRemove, missingBlockIdToRemove});
+        assertEquals(1, numRemovedBlocks.get().intValue());
+      }
     }
   }
 
   @Test
   public void testFetchCorruptRddBlock() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String corruptBlockId = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_CORRUPT_LENGTH;
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { corruptBlockId });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet(corruptBlockId), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String corruptBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_CORRUPT_LENGTH;
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{corruptBlockId});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Sets.newHashSet(corruptBlockId), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchNonexistent() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_2_0_0" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_2_0_0"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-0",
+        new String[]{"shuffle_2_0_0"});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Sets.newHashSet("shuffle_2_0_0"), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchWrongExecutor() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch0 = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" /* right */});
-    FetchResult execFetch1 = fetchBlocks("exec-0", new String[] { "shuffle_1_0_0" /* wrong */ });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch0.successBlocks);
-    assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch1.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch0 = fetchBlocks("exec-0", new String[]{"shuffle_0_0_0" /* right */});
+      FetchResult execFetch1 = fetchBlocks("exec-0", new String[]{"shuffle_1_0_0" /* wrong */});
+      assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch0.successBlocks);
+      assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch1.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchUnregisteredExecutor() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-2",
-      new String[] { "shuffle_0_0_0", "shuffle_1_0_0" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-2",
+        new String[]{"shuffle_0_0_0", "shuffle_1_0_0"});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchNoServer() throws Exception {
-    TransportConf clientConf = createTransportConf(0, false);
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-0",
-      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      TransportConf clientConf = createTransportConf(0, false);
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-0",
+        new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+    }
   }
 
-  private static void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
-      throws IOException, InterruptedException {
-    ExternalBlockStoreClient client = new ExternalBlockStoreClient(conf, null, false, 5000);
+  private static ExternalBlockStoreClient createExternalBlockStoreClient() {
+    return new ExternalBlockStoreClient(conf, null, false, 5000);
+  }
+
+  private static void registerExecutor(
+      ExternalBlockStoreClient client,
+      String executorId,
+      ExecutorShuffleInfo executorInfo) throws IOException, InterruptedException {
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);

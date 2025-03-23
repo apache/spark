@@ -87,6 +87,11 @@ class RuntimeConfig private[sql] (client: SparkConnectClient)
   }
 
   /** @inheritdoc */
+  override private[sql] def contains(key: String): Boolean = {
+    get(key, null) != null
+  }
+
+  /** @inheritdoc */
   def getAll: Map[String, String] = {
     val response = executeConfigRequest { builder =>
       builder.getGetAllBuilder

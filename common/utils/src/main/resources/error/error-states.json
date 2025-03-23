@@ -4643,6 +4643,18 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0Q": {
+        "description": "Invalid handler declaration.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0R": {
+        "description": "Invalid condition declaration.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",
@@ -6492,7 +6504,24 @@
         "standard": "N",
         "usedBy": ["Oracle"]
     },
-
+    "82001": {
+        "description": "No enough memory for aggregation",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "82002": {
+        "description": "Not enough memory to grow pointer array",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "82003": {
+        "description": "Error while calling spill()",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "82100": {
         "description": "out of memory (could not allocate)",
         "origin": "Oracle",

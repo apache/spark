@@ -469,12 +469,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     withTable(testTable) {
       sql(s"CREATE TABLE $testTable (num int) USING parquet")
       sql(s"INSERT INTO $testTable VALUES (1), (2), (3), (NULL)")
-      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation =>
-        withSQLConf(SQLConf.DEFAULT_COLLATION.key -> collation) {
-          val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
-          checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
-        }
-      )
+      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
+        val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
+        checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
+      })
     }
   }
 

@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 // scalastyle:off line.size.limit
 /**
- * :: Unstable ::
- *
  * Base trait for implementations used by [[SparkSessionExtensions]]
  *
  *
@@ -76,7 +74,6 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
  * @since 3.2.0
  */
 @DeveloperApi
-@Unstable
 @Since("3.2.0")
 trait SparkSessionExtensionsProvider extends Function1[SparkSessionExtensions, Unit]
 // scalastyle:on line.size.limit

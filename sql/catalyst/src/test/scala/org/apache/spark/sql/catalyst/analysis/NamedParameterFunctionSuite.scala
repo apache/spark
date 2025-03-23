@@ -20,7 +20,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedArgumentExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, FunctionSignature, InputParameter, NamedParametersSupport}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, NamedParametersSupport}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.types.DataType
 
@@ -87,14 +87,6 @@ class NamedParameterFunctionSuite extends AnalysisTest {
                                       functionName: String = "function"): SparkThrowable = {
     intercept[SparkThrowable](
       NamedParametersSupport.defaultRearrange(functionSignature, expressions, functionName))
-  }
-
-  private def parseExternalException[T <: FunctionBuilderBase[_]](
-      functionName: String,
-      builder: T,
-      expressions: Seq[Expression]) : SparkThrowable = {
-    intercept[SparkThrowable](
-      FunctionRegistry.rearrangeExpressions[T](functionName, builder, expressions))
   }
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {

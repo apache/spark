@@ -98,7 +98,7 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setName("org.apache.spark.ml.classification.LogisticRegression")
       .setUid("LogisticRegression")
-      .setType(proto.MlOperator.OperatorType.ESTIMATOR)
+      .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
 
   def getMaxIter: proto.MlParams.Builder =
     proto.MlParams
@@ -110,7 +110,7 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setName("org.apache.spark.ml.evaluation.RegressionEvaluator")
       .setUid("RegressionEvaluator")
-      .setType(proto.MlOperator.OperatorType.EVALUATOR)
+      .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_EVALUATOR)
 
   def getMetricName: proto.MlParams.Builder =
     proto.MlParams
@@ -149,7 +149,7 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
       .newBuilder()
       .setUid("vec")
       .setName("org.apache.spark.ml.feature.VectorAssembler")
-      .setType(proto.MlOperator.OperatorType.TRANSFORMER)
+      .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_TRANSFORMER)
 
   def getVectorAssemblerParams: proto.MlParams.Builder =
     proto.MlParams
@@ -220,7 +220,7 @@ trait MLHelper extends SparkFunSuite with SparkConnectPlanTest {
               proto.MlOperator
                 .newBuilder()
                 .setName(clsName)
-                .setType(proto.MlOperator.OperatorType.MODEL))
+                .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_MODEL))
             .setPath(path))
         .build()
 

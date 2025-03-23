@@ -69,10 +69,12 @@ private[sql] object UdfToProtoUtils {
    */
   private[sql] def toProto(
       udf: UserDefinedFunction,
-      arguments: Seq[proto.Expression] = Nil): proto.CommonInlineUserDefinedFunction = {
+      arguments: Seq[proto.Expression] = Nil,
+      isDistinct: Boolean = false): proto.CommonInlineUserDefinedFunction = {
     val invokeUdf = proto.CommonInlineUserDefinedFunction
       .newBuilder()
       .setDeterministic(udf.deterministic)
+      .setIsDistinct(isDistinct)
       .addAllArguments(arguments.asJava)
     val protoUdf = invokeUdf.getScalarScalaUdfBuilder
       .setNullable(udf.nullable)

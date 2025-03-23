@@ -59,7 +59,7 @@ class PushVariantIntoScanSuite extends SharedSparkSession {
 
   testOnFormats { format =>
     sql("create table T (v variant, vs struct<v1 variant, v2 variant, i int>, " +
-      "va array<variant>, vd variant default parse_json('1')) " +
+      "va array<variant>, vd variant default parse_json('1'), s string) " +
       s"using $format")
 
     sql("select variant_get(v, '$.a', 'int') as a, v, cast(v as struct<b float>) as v from T")
@@ -74,6 +74,17 @@ class PushVariantIntoScanSuite extends SharedSparkSession {
           field(0, IntegerType, "$.a"),
           field(1, VariantType, "$", timeZone = "UTC"),
           field(2, StructType(Array(StructField("b", FloatType))), "$"))))
+      case _ => fail()
+    }
+
+    // Validate _metadata works.
+    sql("select variant_get(v, '$.a', 'int') as a, _metadata from T")
+      .queryExecution.optimizedPlan match {
+      case Project(projectList, l: LogicalRelation) =>
+        val output = l.output
+        val v = output(0)
+        checkAlias(projectList(0), "a", GetStructField(v, 0))
+        assert(projectList(1).dataType.isInstanceOf[StructType])
       case _ => fail()
     }
 
@@ -160,6 +171,26 @@ class PushVariantIntoScanSuite extends SharedSparkSession {
         val vd = output(3)
         checkAlias(projectList(0), "a", variantGet(vd))
         assert(vd.dataType == VariantType)
+      case _ => fail()
+    }
+
+    // No push down if the path in variant_get is not a literal
+    sql("select variant_get(v, '$.a', 'int') as a, variant_get(v, s, 'int') v2, v, " +
+      "cast(v as struct<b float>) as v from T")
+      .queryExecution.optimizedPlan match {
+      case Project(projectList, l: LogicalRelation) =>
+        val output = l.output
+        val v = output(0)
+        val s = output(4)
+        checkAlias(projectList(0), "a", GetStructField(v, 0))
+        checkAlias(projectList(1), "v2", VariantGet(GetStructField(v, 1), s,
+          targetType = IntegerType, failOnError = true, timeZoneId = Some(localTimeZone)))
+        checkAlias(projectList(2), "v", GetStructField(v, 1))
+        checkAlias(projectList(3), "v", GetStructField(v, 2))
+        assert(v.dataType == StructType(Array(
+          field(0, IntegerType, "$.a"),
+          field(1, VariantType, "$", timeZone = "UTC"),
+          field(2, StructType(Array(StructField("b", FloatType))), "$"))))
       case _ => fail()
     }
   }

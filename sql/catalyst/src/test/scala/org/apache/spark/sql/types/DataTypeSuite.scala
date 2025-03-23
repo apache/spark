@@ -380,6 +380,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(VarcharType(10), 10)
   yearMonthIntervalTypes.foreach(checkDefaultSize(_, 4))
   dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
+  checkDefaultSize(TimeType(TimeType.MIN_PRECISION), 8)
+  checkDefaultSize(TimeType(TimeType.MAX_PRECISION), 8)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -1370,5 +1372,25 @@ class DataTypeSuite extends SparkFunSuite {
       DataTypes.createVarcharType(-1)
     }
     assert(exception.getMessage.contains("The length of varchar type cannot be negative."))
+  }
+
+  test("precisions of the TIME data type") {
+    TimeType.MIN_PRECISION to TimeType.MAX_PRECISION foreach { p =>
+      assert(TimeType(p).sql == s"TIME($p)")
+    }
+
+    Seq(
+      Int.MinValue,
+      TimeType.MIN_PRECISION - 1,
+      TimeType.MAX_PRECISION + 1,
+      Int.MaxValue).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          TimeType(p)
+        },
+        condition = "UNSUPPORTED_TIME_PRECISION",
+        parameters = Map("precision" -> p.toString)
+      )
+    }
   }
 }

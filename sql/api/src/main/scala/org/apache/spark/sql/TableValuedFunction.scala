@@ -18,12 +18,18 @@ package org.apache.spark.sql
 
 import java.lang
 
+/**
+ * Interface for invoking table-valued functions in Spark SQL.
+ *
+ * @since 4.0.0
+ */
 abstract class TableValuedFunction {
 
   /**
    * Creates a `Dataset` with a single `LongType` column named `id`, containing elements in a
    * range from 0 to `end` (exclusive) with step value 1.
    *
+   * @group table_funcs
    * @since 4.0.0
    */
   def range(end: Long): Dataset[lang.Long]
@@ -32,6 +38,7 @@ abstract class TableValuedFunction {
    * Creates a `Dataset` with a single `LongType` column named `id`, containing elements in a
    * range from `start` to `end` (exclusive) with step value 1.
    *
+   * @group table_funcs
    * @since 4.0.0
    */
   def range(start: Long, end: Long): Dataset[lang.Long]
@@ -40,6 +47,7 @@ abstract class TableValuedFunction {
    * Creates a `Dataset` with a single `LongType` column named `id`, containing elements in a
    * range from `start` to `end` (exclusive) with a step value.
    *
+   * @group table_funcs
    * @since 4.0.0
    */
   def range(start: Long, end: Long, step: Long): Dataset[lang.Long]
@@ -48,6 +56,7 @@ abstract class TableValuedFunction {
    * Creates a `Dataset` with a single `LongType` column named `id`, containing elements in a
    * range from `start` to `end` (exclusive) with a step value, with partition number specified.
    *
+   * @group table_funcs
    * @since 4.0.0
    */
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[lang.Long]

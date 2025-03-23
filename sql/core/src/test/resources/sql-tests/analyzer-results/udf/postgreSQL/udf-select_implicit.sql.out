@@ -101,8 +101,8 @@ SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(test_missing_target.c
 ORDER BY udf(c)
 -- !query analysis
 Project [udf(count(1))#xL]
-+- Sort [cast(udf(cast(c#x as string)) as string)#x ASC NULLS FIRST], true
-   +- Aggregate [cast(udf(cast(c#x as string)) as string)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(c#x as string)) as string) AS cast(udf(cast(c#x as string)) as string)#x]
++- Sort [udf(c)#x ASC NULLS FIRST], true
+   +- Aggregate [cast(udf(cast(c#x as string)) as string)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(c#x as string)) as string) AS udf(c)#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
@@ -132,8 +132,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b)
 -- !query analysis
 Project [udf(count(1))#xL]
-+- Sort [cast(udf(cast(b#x as string)) as int)#x ASC NULLS FIRST], true
-   +- Aggregate [cast(udf(cast(b#x as string)) as int)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(b#x as string)) as int) AS cast(udf(cast(b#x as string)) as int)#x]
++- Sort [udf(b)#x ASC NULLS FIRST], true
+   +- Aggregate [cast(udf(cast(b#x as string)) as int)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(b#x as string)) as int) AS udf(b)#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
@@ -162,8 +162,8 @@ Project [udf(c)#x]
 SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b) desc
 -- !query analysis
 Project [udf(count(1))#xL]
-+- Sort [cast(udf(cast(b#x as string)) as int)#x DESC NULLS LAST], true
-   +- Aggregate [cast(udf(cast(b#x as string)) as int)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(b#x as string)) as int) AS cast(udf(cast(b#x as string)) as int)#x]
++- Sort [udf(b)#x DESC NULLS LAST], true
+   +- Aggregate [cast(udf(cast(b#x as string)) as int)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(b#x as string)) as int) AS udf(b)#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
@@ -285,8 +285,8 @@ SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 	GROUP BY udf(x.b) ORDER BY udf(x.b)
 -- !query analysis
 Project [udf(count(1))#xL]
-+- Sort [cast(udf(cast(b#x as string)) as int)#x ASC NULLS FIRST], true
-   +- Aggregate [cast(udf(cast(b#x as string)) as int)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(b#x as string)) as int) AS cast(udf(cast(b#x as string)) as int)#x]
++- Sort [udf(b)#x ASC NULLS FIRST], true
+   +- Aggregate [cast(udf(cast(b#x as string)) as int)], [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, cast(udf(cast(b#x as string)) as int) AS udf(b)#x]
       +- Filter (cast(udf(cast(a#x as string)) as int) = cast(udf(cast(a#x as string)) as int))
          +- Join Inner
             :- SubqueryAlias x
@@ -314,8 +314,8 @@ GROUP BY udf(lower(test_missing_target.c))
 ORDER BY udf(lower(test_missing_target.c))
 -- !query analysis
 Project [udf(count(c))#xL]
-+- Sort [cast(udf(cast(lower(c#x) as string)) as string)#x ASC NULLS FIRST], true
-   +- Aggregate [cast(udf(cast(lower(c#x) as string)) as string)], [cast(udf(cast(count(c#x) as string)) as bigint) AS udf(count(c))#xL, cast(udf(cast(lower(c#x) as string)) as string) AS cast(udf(cast(lower(c#x) as string)) as string)#x]
++- Sort [udf(lower(c))#x ASC NULLS FIRST], true
+   +- Aggregate [cast(udf(cast(lower(c#x) as string)) as string)], [cast(udf(cast(count(c#x) as string)) as bigint) AS udf(count(c))#xL, cast(udf(cast(lower(c#x) as string)) as string) AS udf(lower(c))#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
@@ -345,8 +345,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT udf(count(b)) FROM test_missing_target GROUP BY udf(b/2) ORDER BY udf(b/2)
 -- !query analysis
 Project [udf(count(b))#xL]
-+- Sort [cast(udf(cast((cast(b#x as double) / cast(2 as double)) as string)) as double)#x ASC NULLS FIRST], true
-   +- Aggregate [cast(udf(cast((cast(b#x as double) / cast(2 as double)) as string)) as double)], [cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL, cast(udf(cast((cast(b#x as double) / cast(2 as double)) as string)) as double) AS cast(udf(cast((cast(b#x as double) / cast(2 as double)) as string)) as double)#x]
++- Sort [udf((b / 2))#x ASC NULLS FIRST], true
+   +- Aggregate [cast(udf(cast((cast(b#x as double) / cast(2 as double)) as string)) as double)], [cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL, cast(udf(cast((cast(b#x as double) / cast(2 as double)) as string)) as double) AS udf((b / 2))#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 
@@ -376,8 +376,8 @@ SELECT udf(count(b)) FROM test_missing_target
 	GROUP BY udf((b + 1) / 2) ORDER BY udf((b + 1) / 2) desc
 -- !query analysis
 Project [udf(count(b))#xL]
-+- Sort [cast(udf(cast((cast((b#x + 1) as double) / cast(2 as double)) as string)) as double)#x DESC NULLS LAST], true
-   +- Aggregate [cast(udf(cast((cast((b#x + 1) as double) / cast(2 as double)) as string)) as double)], [cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL, cast(udf(cast((cast((b#x + 1) as double) / cast(2 as double)) as string)) as double) AS cast(udf(cast((cast((b#x + 1) as double) / cast(2 as double)) as string)) as double)#x]
++- Sort [udf(((b + 1) / 2))#x DESC NULLS LAST], true
+   +- Aggregate [cast(udf(cast((cast((b#x + 1) as double) / cast(2 as double)) as string)) as double)], [cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL, cast(udf(cast((cast((b#x + 1) as double) / cast(2 as double)) as string)) as double) AS udf(((b + 1) / 2))#x]
       +- SubqueryAlias spark_catalog.default.test_missing_target
          +- Relation spark_catalog.default.test_missing_target[a#x,b#x,c#x,d#x] parquet
 

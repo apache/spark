@@ -191,8 +191,7 @@ sealed trait Vector extends Serializable {
   def compressed: Vector = compressedWithNNZ(numNonzeros)
 
   private[ml] def compressedWithNNZ(nnz: Int): Vector = {
-    // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
-    if (1.5 * (nnz + 1.0) < size) {
+    if (Vectors.getSparseSize(nnz) < Vectors.getDenseSize(size)) {
       toSparseWithSize(nnz)
     } else {
       toDense
@@ -230,6 +229,8 @@ sealed trait Vector extends Serializable {
    */
   private[spark] def nonZeroIterator: Iterator[(Int, Double)] =
     activeIterator.filter(_._2 != 0)
+
+  private[ml] def getSizeInBytes: Long
 }
 
 /**
@@ -504,6 +505,27 @@ object Vectors {
 
   /** Max number of nonzero entries used in computing hash code. */
   private[linalg] val MAX_HASH_NNZ = 128
+
+  private[ml] def getSparseSize(nnz: Long): Long = {
+    /*
+      A sparse vector stores one double array, one int array and one int:
+      8 * values.length + 4 * values.length + arrayHeader * 2 + 4
+     */
+    val doubleBytes = java.lang.Double.BYTES
+    val intBytes = java.lang.Integer.BYTES
+    val arrayHeader = 12L
+    (doubleBytes + intBytes) * nnz + arrayHeader * 2L + 4L
+  }
+
+  private[ml] def getDenseSize(size: Long): Long = {
+    /*
+      A dense vector stores one double array:
+      8 * values.length + arrayHeader
+     */
+    val doubleBytes = java.lang.Double.BYTES
+    val arrayHeader = 12L
+    doubleBytes * size + arrayHeader
+  }
 }
 
 /**
@@ -596,6 +618,8 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
 
   private[spark] override def activeIterator: Iterator[(Int, Double)] =
     iterator
+
+  override private[ml] def getSizeInBytes: Long = Vectors.getDenseSize(values.length)
 }
 
 @Since("2.0.0")
@@ -845,6 +869,8 @@ class SparseVector @Since("2.0.0") (
     val localValues = values
     Iterator.tabulate(numActives)(j => (localIndices(j), localValues(j)))
   }
+
+  override private[ml] def getSizeInBytes: Long = Vectors.getSparseSize(values.length)
 }
 
 @Since("2.0.0")

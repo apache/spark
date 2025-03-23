@@ -200,3 +200,11 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "all"
   } ]
 }
+
+
+-- !query
+SELECT all, (SELECT col2 FROM VALUES (2, 2) ORDER BY ALL) FROM VALUES (1) AS t1 (all)
+-- !query schema
+struct<all:int,scalarsubquery():int>
+-- !query output
+1	2

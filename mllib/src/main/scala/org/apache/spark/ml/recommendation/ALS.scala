@@ -281,8 +281,7 @@ class ALSModel private[ml] (
   extends Model[ALSModel] with ALSModelParams with MLWritable {
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("als"), 0, null, null)
+  private[ml] def this() = this("", -1, null, null)
 
   /** @group setParam */
   @Since("1.4.0")

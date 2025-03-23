@@ -311,7 +311,7 @@ class QueryExecution(
       new IncrementalExecution(
         sparkSession, logical, OutputMode.Append(), "<unknown>",
         UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
-        WatermarkPropagator.noop(), false)
+        WatermarkPropagator.noop(), false, mode = this.mode)
     } else {
       this
     }

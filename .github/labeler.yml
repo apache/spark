@@ -223,7 +223,6 @@ CONNECT:
   - changed-files:
     - any-glob-to-any-file: [
      'sql/connect/**/*',
-     'connector/connect/**/*',
      'python/**/connect/**/*'
     ]
 

@@ -350,6 +350,14 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): AFTSurvivalRegression = defaultCopy(extra)
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
 }
 
 @Since("1.6.0")
@@ -370,6 +378,9 @@ class AFTSurvivalRegressionModel private[ml] (
     @Since("1.6.0") val scale: Double)
   extends RegressionModel[Vector, AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
   with MLWritable {
+
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN, Double.NaN)
 
   @Since("3.0.0")
   override def numFeatures: Int = coefficients.size
@@ -464,6 +475,14 @@ class AFTSurvivalRegressionModel private[ml] (
   override def copy(extra: ParamMap): AFTSurvivalRegressionModel = {
     copyValues(new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale), extra)
       .setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
   }
 
   @Since("1.6.0")

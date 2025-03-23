@@ -55,7 +55,7 @@ private[hive] trait HiveClient {
 
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
-   * result in one string.
+   * result in one string. This should be used only in testing environment.
    */
   def runSqlHive(sql: String): Seq[String]
 

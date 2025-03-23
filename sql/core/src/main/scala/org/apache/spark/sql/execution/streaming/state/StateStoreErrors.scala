@@ -145,6 +145,12 @@ object StateStoreErrors {
     new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
   }
 
+  def twsSchemaMustBeNullable(
+      columnFamilyName: String,
+      schema: String): TWSSchemaMustBeNullable = {
+    new TWSSchemaMustBeNullable(columnFamilyName, schema)
+  }
+
   def stateStoreInvalidValueSchemaEvolution(
       oldValueSchema: String,
       newValueSchema: String): StateStoreInvalidValueSchemaEvolution = {
@@ -205,6 +211,11 @@ object StateStoreErrors {
   def invalidVariableTypeChange(stateName: String, oldType: String, newType: String):
     StateStoreInvalidVariableTypeChange = {
     new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
+  }
+
+  def failedToGetChangelogWriter(version: Long, e: Throwable):
+    StateStoreFailedToGetChangelogWriter = {
+    new StateStoreFailedToGetChangelogWriter(version, e)
   }
 }
 
@@ -346,6 +357,15 @@ class StateStoreValueSchemaNotCompatible(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
 
+class TWSSchemaMustBeNullable(
+    columnFamilyName: String,
+    schema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE",
+    messageParameters = Map(
+      "columnFamilyName" -> columnFamilyName,
+      "schema" -> schema))
+
 class StateStoreInvalidValueSchemaEvolution(
     oldValueSchema: String,
     newValueSchema: String)
@@ -394,6 +414,12 @@ class StateStoreSnapshotPartitionNotFound(
       "snapshotPartitionId" -> snapshotPartitionId.toString,
       "operatorId" -> operatorId.toString,
       "checkpointLocation" -> checkpointLocation))
+
+class StateStoreFailedToGetChangelogWriter(version: Long, e: Throwable)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.FAILED_TO_GET_CHANGELOG_WRITER",
+    messageParameters = Map("version" -> version.toString),
+    cause = e)
 
 class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
   extends SparkRuntimeException(

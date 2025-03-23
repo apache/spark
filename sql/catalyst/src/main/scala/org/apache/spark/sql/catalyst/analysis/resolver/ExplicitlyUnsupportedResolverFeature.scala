@@ -49,7 +49,6 @@ class ExplicitlyUnsupportedResolverFeature(reason: String)
  */
 object ExplicitlyUnsupportedResolverFeature {
   val OPERATORS = Set(
-    "org.apache.spark.sql.catalyst.plans.logical.View",
     "org.apache.spark.sql.catalyst.streaming.StreamingRelationV2",
     "org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation",
     "org.apache.spark.sql.execution.streaming.StreamingRelation"

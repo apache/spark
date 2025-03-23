@@ -20,6 +20,7 @@ import os
 import pstats
 from threading import RLock
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, TYPE_CHECKING, overload
+import warnings
 
 from pyspark.accumulators import (
     Accumulator,
@@ -28,7 +29,13 @@ from pyspark.accumulators import (
     _accumulatorRegistry,
 )
 from pyspark.errors import PySparkValueError
-from pyspark.profiler import CodeMapDict, MemoryProfiler, MemUsageParam, PStatsParam
+from pyspark.profiler import (
+    CodeMapDict,
+    MemoryProfiler,
+    MemUsageParam,
+    PStatsParam,
+    has_memory_profiler,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults
@@ -130,6 +137,12 @@ class ProfilerCollector(ABC):
         with self._lock:
             code_map = self._memory_profile_results
 
+        if not has_memory_profiler and not code_map:
+            warnings.warn(
+                "Install the 'memory_profiler' library in the cluster to enable memory profiling",
+                UserWarning,
+            )
+
         def show(id: int) -> None:
             cm = code_map.get(id)
             if cm is not None:
@@ -207,6 +220,12 @@ class ProfilerCollector(ABC):
         """
         with self._lock:
             code_map = self._memory_profile_results
+
+        if not has_memory_profiler and not code_map:
+            warnings.warn(
+                "Install the 'memory_profiler' library in the cluster to enable memory profiling",
+                UserWarning,
+            )
 
         def dump(id: int) -> None:
             cm = code_map.get(id)

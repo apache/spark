@@ -307,7 +307,7 @@ private[spark] class Executor(
     "executor-heartbeater",
     HEARTBEAT_INTERVAL_MS)
 
-  // must be initialized before running startDriverHeartbeat()
+  // must be initialized before running heartbeater.start()
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
@@ -504,8 +504,9 @@ private[spark] class Executor(
     @volatile var task: Task[Any] = _
 
     def kill(interruptThread: Boolean, reason: String): Unit = {
-      logInfo(log"Executor is trying to kill ${LogMDC(TASK_NAME, taskName)}," +
-        log" reason: ${LogMDC(REASON, reason)}")
+      logInfo(log"Executor is trying to kill ${LogMDC(TASK_NAME, taskName)}, " +
+        log"interruptThread: ${LogMDC(INTERRUPT_THREAD, interruptThread)}, " +
+        log"reason: ${LogMDC(REASON, reason)}")
       reasonIfKilled = Some(reason)
       if (task != null) {
         synchronized {

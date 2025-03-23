@@ -261,7 +261,7 @@ On Linux, this can be done by `sudo service docker start`.
 
 or
 
-    ./build/sbt docker-integration-tests/test
+    ./build/sbt -Pdocker-integration-tests docker-integration-tests/test
 
 <!---
 ## Change Scala Version

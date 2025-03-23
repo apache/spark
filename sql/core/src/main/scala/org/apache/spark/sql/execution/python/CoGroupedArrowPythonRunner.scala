@@ -45,6 +45,7 @@ class CoGroupedArrowPythonRunner(
     leftSchema: StructType,
     rightSchema: StructType,
     timeZoneId: String,
+    largeVarTypes: Boolean,
     conf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
@@ -59,7 +60,10 @@ class CoGroupedArrowPythonRunner(
       funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriter(
@@ -108,7 +112,8 @@ class CoGroupedArrowPythonRunner(
           dataOut: DataOutputStream,
           name: String): Unit = {
         val arrowSchema =
-          ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+          ArrowUtils.toArrowSchema(
+            schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)

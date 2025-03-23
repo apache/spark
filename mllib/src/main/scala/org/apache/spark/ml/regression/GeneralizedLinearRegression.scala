@@ -445,6 +445,14 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GeneralizedLinearRegression = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
 }
 
 @Since("2.0.0")
@@ -1009,7 +1017,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   with GeneralizedLinearRegressionBase with MLWritable
   with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary] {
 
-  private[ml] def this() = this(Identifiable.randomUID("glm"), Vectors.empty, Double.NaN)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN)
 
   /**
    * Sets the link prediction (linear predictor) column name.
@@ -1102,6 +1111,14 @@ class GeneralizedLinearRegressionModel private[ml] (
     val copied = copyValues(new GeneralizedLinearRegressionModel(uid, coefficients, intercept),
       extra)
     copied.setSummary(trainingSummary).setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
   }
 
   /**

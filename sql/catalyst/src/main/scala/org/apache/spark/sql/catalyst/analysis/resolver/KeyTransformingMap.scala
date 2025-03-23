@@ -17,28 +17,35 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import scala.collection.mutable
+import java.util.{HashMap, Iterator}
+import java.util.Map.Entry
+import java.util.function.Function
 
 /**
  * The [[KeyTransformingMap]] is a partial implementation of [[mutable.Map]] that transforms input
  * keys with a custom [[mapKey]] method.
  */
 private abstract class KeyTransformingMap[K, V] {
-  private val impl = new mutable.HashMap[K, V]
+  private val impl = new HashMap[K, V]
 
-  def get(key: K): Option[V] = impl.get(mapKey(key))
+  def get(key: K): Option[V] = Option(impl.get(mapKey(key)))
 
-  def contains(key: K): Boolean = impl.contains(mapKey(key))
+  def put(key: K, value: V): V = impl.put(mapKey(key), value)
 
-  def iterator: Iterator[(K, V)] = impl.iterator
+  def contains(key: K): Boolean = impl.containsKey(mapKey(key))
+
+  def computeIfAbsent(key: K, compute: Function[K, V]): V =
+    impl.computeIfAbsent(mapKey(key), compute)
+
+  def iterator: Iterator[Entry[K, V]] = impl.entrySet().iterator()
 
   def +=(kv: (K, V)): this.type = {
-    impl += (mapKey(kv._1) -> kv._2)
+    impl.put(mapKey(kv._1), kv._2)
     this
   }
 
   def -=(key: K): this.type = {
-    impl -= mapKey(key)
+    impl.remove(mapKey(key))
     this
   }
 

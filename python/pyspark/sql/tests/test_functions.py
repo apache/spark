@@ -1496,7 +1496,9 @@ class FunctionsTestsMixin:
         self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
 
     def test_variant_expressions(self):
-        df = self.spark.createDataFrame([Row(json="""{ "a" : 1 }"""), Row(json="""{ "b" : 2 }""")])
+        df = self.spark.createDataFrame(
+            [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]
+        )
         v = F.parse_json(df.json)
 
         def check(resultDf, expected):
@@ -1509,6 +1511,10 @@ class FunctionsTestsMixin:
         check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
         check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
         check(df.select(F.variant_get(v, "$.a", "double")), [1.0, None])
+
+        # non-literal variant_get
+        check(df.select(F.variant_get(v, df.path, "int")), [1, 2])
+        check(df.select(F.try_variant_get(v, df.path, "binary")), [None, None])
 
         with self.assertRaises(SparkRuntimeException) as ex:
             df.select(F.variant_get(v, "$.a", "binary")).collect()

@@ -50,7 +50,9 @@ class TransformerRelation(LogicalPlan):
             plan.ml_relation.transform.obj_ref.CopyFrom(pb2.ObjectRef(id=self._name))
         else:
             plan.ml_relation.transform.transformer.CopyFrom(
-                pb2.MlOperator(name=self._name, uid=self._uid, type=pb2.MlOperator.TRANSFORMER)
+                pb2.MlOperator(
+                    name=self._name, uid=self._uid, type=pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
+                )
             )
 
         if self._ml_params is not None:

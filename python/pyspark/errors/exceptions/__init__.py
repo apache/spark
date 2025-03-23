@@ -30,3 +30,4 @@ def _write_self() -> None:
             sort_keys=True,
             indent=2,
         )
+        f.write("\n")

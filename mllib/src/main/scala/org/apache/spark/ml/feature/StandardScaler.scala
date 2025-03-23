@@ -147,7 +147,8 @@ class StandardScalerModel private[ml] (
 
   import StandardScalerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("stdScal"), Vectors.empty, Vectors.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
   /** @group setParam */
   @Since("1.2.0")

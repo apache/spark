@@ -234,7 +234,7 @@ class _TreeEnsembleModel(JavaPredictionModel[T]):
     @since("1.5.0")
     def treeWeights(self) -> List[float]:
         """Return the weights for each tree"""
-        return list(self._call_java("javaTreeWeights"))
+        return list(self._call_java("treeWeights"))
 
     @property
     @since("2.0.0")

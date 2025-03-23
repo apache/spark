@@ -21,7 +21,7 @@ import scala.util.{Either, Left, Right}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -44,12 +44,14 @@ case class ExecuteImmediateQuery(
 }
 
 /**
- * This rule substitutes execute immediate query node with plan that is passed as string literal
- * or session parameter.
+ * This rule substitutes execute immediate query node with fully analyzed
+ * plan that is passed as string literal or session parameter.
  */
-class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan]
-  with ColumnResolutionHelper {
+class SubstituteExecuteImmediate(
+    val catalogManager: CatalogManager,
+    resolveChild: LogicalPlan => LogicalPlan,
+    checkAnalysis: LogicalPlan => Unit)
+  extends Rule[LogicalPlan] with ColumnResolutionHelper {
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -106,7 +108,12 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case ExecuteImmediateQuery(expressions, query, targetVariables) =>
+      case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
+        e.copy(args = resolveArguments(expressions))
+
+      case ExecuteImmediateQuery(expressions, query, targetVariables)
+        if expressions.forall(_.resolved) =>
+
         val queryString = extractQueryString(query)
         val plan = parseStatement(queryString, targetVariables)
 
@@ -123,21 +130,16 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
           if (posNodes.nonEmpty) {
-            PosParameterizedQuery(
-              plan,
-              // We need to resolve arguments before Resolution batch to make sure
-              // that some rule does not accidentally resolve our parameters.
-              // We do not want this as they can resolve some unsupported parameters
-              resolveArguments(expressions))
+            PosParameterizedQuery(plan, expressions)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
-              case u: UnresolvedAttribute => Alias(u, u.nameParts.last)()
+              case u: VariableReference => Alias(u, u.identifier.name())()
             }
 
             if (aliases.size != expressions.size) {
               val nonAliases = expressions.filter(attr =>
-                !attr.isInstanceOf[Alias] && !attr.isInstanceOf[UnresolvedAttribute])
+                !attr.isInstanceOf[Alias] && !attr.isInstanceOf[VariableReference])
 
               throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
             }
@@ -148,13 +150,20 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidentally resolve our parameters.
               // We do not want this as they can resolve some unsupported parameters.
-              resolveArguments(aliases))
+              aliases)
           }
         }
 
+        // Fully analyze the generated plan. AnalysisContext.withExecuteImmediateContext makes sure
+        // that SQL scripting local variables will not be accessed from the plan.
+        val finalPlan = AnalysisContext.withExecuteImmediateContext {
+          resolveChild(queryPlan)
+        }
+        checkAnalysis(finalPlan)
+
         if (targetVariables.nonEmpty) {
-          SetVariable(targetVariables, queryPlan)
-        } else { queryPlan }
+          SetVariable(targetVariables, finalPlan)
+        } else { finalPlan }
     }
 
   private def parseStatement(
@@ -177,6 +186,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
       }
     } else {
       catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
+    }
+
+    if (plan.isInstanceOf[CompoundBody]) {
+      throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
     }
 
     // do not allow nested execute immediate

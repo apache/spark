@@ -168,18 +168,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
-  private def checkFromInvalidStringUnknownError(input: String, word: String): Unit = {
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        stringToInterval(UTF8String.fromString(input))
-      },
-      condition = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
-      parameters = Map(
-        "input" -> Option(input).map(_.toString).getOrElse("null"),
-        "word" -> word))
-    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
-  }
-
   private def failFuncWithInvalidInput(
       input: String, errorMsg: String, converter: String => CalendarInterval): Unit = {
     withClue("Expected to throw an exception for the invalid input") {

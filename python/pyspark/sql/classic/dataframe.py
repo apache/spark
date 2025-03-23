@@ -1798,7 +1798,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             return DataFrame(self._jdf.transpose(), self.sparkSession)
 
     def asTable(self) -> TableArg:
-        return TableArg(self._jdf.asTable())
+        from pyspark.sql.classic.table_arg import TableArg as ClassicTableArg
+
+        return ClassicTableArg(self._jdf.asTable())
 
     def scalar(self) -> Column:
         return Column(self._jdf.scalar())

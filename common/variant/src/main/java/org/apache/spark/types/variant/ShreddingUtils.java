@@ -19,6 +19,7 @@ package org.apache.spark.types.variant;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.UUID;
 
 import static org.apache.spark.types.variant.VariantUtil.*;
 
@@ -37,6 +38,7 @@ public class ShreddingUtils {
     BigDecimal getDecimal(int ordinal, int precision, int scale);
     String getString(int ordinal);
     byte[] getBinary(int ordinal);
+    UUID getUuid(int ordinal);
     ShreddedRow getStruct(int ordinal, int numFields);
     ShreddedRow getArray(int ordinal);
     int numElements();
@@ -99,6 +101,8 @@ public class ShreddingUtils {
           builder.appendBoolean(row.getBoolean(typedIdx));
         } else if (scalar instanceof VariantSchema.BinaryType) {
           builder.appendBinary(row.getBinary(typedIdx));
+        } else if (scalar instanceof VariantSchema.UuidType) {
+          builder.appendUuid(row.getUuid(typedIdx));
         } else if (scalar instanceof VariantSchema.DecimalType) {
           VariantSchema.DecimalType dt = (VariantSchema.DecimalType) scalar;
           builder.appendDecimal(row.getDecimal(typedIdx, dt.precision, dt.scale));

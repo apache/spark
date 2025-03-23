@@ -249,6 +249,13 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 
+  val hint = parameters.get(JDBC_HINT_STRING).map(value => {
+    require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
+      s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
+        s" It should start with `/*+ ` and end with ` */`.")
+      s"$value "
+    }).getOrElse("")
+
   override def hashCode: Int = this.parameters.hashCode()
 
   override def equals(other: Any): Boolean = other match {
@@ -321,4 +328,5 @@ object JDBCOptions {
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
+  val JDBC_HINT_STRING = newOption("hint")
 }

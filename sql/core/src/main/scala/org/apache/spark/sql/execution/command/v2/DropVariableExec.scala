@@ -39,7 +39,7 @@ case class DropVariableExec(name: String, ifExists: Boolean) extends LeafV2Comma
     } else {
       name.toLowerCase(Locale.ROOT)
     }
-    if (!variableManager.remove(normalizedName)) {
+    if (!variableManager.remove(Seq(normalizedName))) {
       // The variable does not exist
       if (!ifExists) {
         throw new AnalysisException(

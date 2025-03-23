@@ -22,7 +22,7 @@ from shutil import rmtree
 import numpy as np
 
 from pyspark.ml.linalg import Vectors, Matrices
-from pyspark.sql import SparkSession, DataFrame, Row
+from pyspark.sql import DataFrame, Row
 from pyspark.ml.classification import (
     NaiveBayes,
     NaiveBayesModel,
@@ -34,6 +34,10 @@ from pyspark.ml.classification import (
     LogisticRegressionModel,
     LogisticRegressionSummary,
     BinaryLogisticRegressionSummary,
+    FMClassifier,
+    FMClassificationModel,
+    FMClassificationSummary,
+    FMClassificationTrainingSummary,
     DecisionTreeClassifier,
     DecisionTreeClassificationModel,
     RandomForestClassifier,
@@ -44,7 +48,13 @@ from pyspark.ml.classification import (
     BinaryRandomForestClassificationTrainingSummary,
     GBTClassifier,
     GBTClassificationModel,
+    MultilayerPerceptronClassifier,
+    MultilayerPerceptronClassificationModel,
+    MultilayerPerceptronClassificationSummary,
+    MultilayerPerceptronClassificationTrainingSummary,
 )
+from pyspark.ml.regression import DecisionTreeRegressionModel
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ClassificationTestsMixin:
@@ -443,6 +453,104 @@ class ClassificationTestsMixin:
             model2 = LinearSVCModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    def test_factorization_machine(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        fm = FMClassifier(factorSize=2, maxIter=1, regParam=1.0, seed=1)
+        self.assertEqual(fm.getFactorSize(), 2)
+        self.assertEqual(fm.getMaxIter(), 1)
+        self.assertEqual(fm.getRegParam(), 1.0)
+        self.assertEqual(fm.getSeed(), 1)
+
+        model = fm.fit(df)
+        self.assertEqual(fm.uid, model.uid)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(
+            np.allclose(model.intercept, 0.9999070647126924, atol=1e-4), model.intercept
+        )
+        self.assertTrue(
+            np.allclose(
+                model.linear.toArray(), [-0.999999959956255, 0.9999999201744205], atol=1e-4
+            ),
+            model.linear,
+        )
+        self.assertTrue(
+            np.allclose(
+                model.factors.toArray(),
+                [[0.99999918, 0.99999858], [-0.99999943, 0.99999854]],
+                atol=1e-4,
+            ),
+            model.factors,
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        pred = model.predict(vec)
+        self.assertEqual(pred, 1.0)
+        pred = model.predictRaw(vec)
+        self.assertTrue(
+            np.allclose(pred.toArray(), [-5.9999066655847955, 5.9999066655847955], atol=1e-4),
+            pred,
+        )
+        pred = model.predictProbability(vec)
+        self.assertTrue(
+            np.allclose(pred.toArray(), [0.002472853377527451, 0.9975271466224725], atol=1e-4),
+            pred,
+        )
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # model summary
+        self.assertTrue(model.hasSummary)
+        summary = model.summary()
+        self.assertIsInstance(summary, FMClassificationSummary)
+        self.assertIsInstance(summary, FMClassificationTrainingSummary)
+        self.assertEqual(summary.labels, [0.0, 1.0])
+        self.assertEqual(summary.accuracy, 0.25)
+        self.assertEqual(summary.areaUnderROC, 0.5)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        summary2 = model.evaluate(df)
+        self.assertIsInstance(summary2, FMClassificationSummary)
+        self.assertFalse(isinstance(summary2, FMClassificationTrainingSummary))
+        self.assertEqual(summary2.labels, [0.0, 1.0])
+        self.assertEqual(summary2.accuracy, 0.25)
+        self.assertEqual(summary2.areaUnderROC, 0.5)
+        self.assertEqual(summary2.predictions.columns, expected_cols)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="factorization_machine") as d:
+            fm.write().overwrite().save(d)
+            fm2 = FMClassifier.load(d)
+            self.assertEqual(str(fm), str(fm2))
+
+            model.write().overwrite().save(d)
+            model2 = FMClassificationModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_decision_tree_classifier(self):
         df = (
             self.spark.createDataFrame(
@@ -577,6 +685,17 @@ class ClassificationTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
+
         # save & load
         with tempfile.TemporaryDirectory(prefix="gbt_classification") as d:
             gbt.write().overwrite().save(d)
@@ -620,8 +739,6 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 2)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
         self.assertEqual(model.totalNumNodes, 9)
         self.assertTrue(np.allclose(model.featureImportances, [0.7778, 0.2222], atol=1e-4))
@@ -646,6 +763,14 @@ class ClassificationTestsMixin:
         ]
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
+
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeClassificationModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(tree.transform(df).columns, expected_cols)
 
         # model summary
         summary = model.summary
@@ -707,8 +832,7 @@ class ClassificationTestsMixin:
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numClasses, 3)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
+        self.assertEqual(len(model.trees), 3)
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
         self.assertEqual(model.totalNumNodes, 9)
         self.assertEqual(model.featureImportances, Vectors.sparse(2, [0], [1.0]))
@@ -760,13 +884,103 @@ class ClassificationTestsMixin:
             self.assertEqual(str(model), str(model2))
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
+    def test_mlp(self):
+        df = (
+            self.spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
-class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
+        mlp = MultilayerPerceptronClassifier(
+            layers=[2, 2],
+            maxIter=1,
+            seed=1,
+        )
+        self.assertEqual(mlp.getLayers(), [2, 2])
+        self.assertEqual(mlp.getMaxIter(), 1)
+        self.assertEqual(mlp.getSeed(), 1)
 
-    def tearDown(self) -> None:
-        self.spark.stop()
+        model = mlp.fit(df)
+        self.assertEqual(mlp.uid, model.uid)
+        self.assertEqual(model.numClasses, 2)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(
+            np.allclose(
+                model.weights.toArray(),
+                [
+                    0.43562736294302623,
+                    0.364580202422002,
+                    -1.4112729385978997,
+                    -1.2643591053546168,
+                    1.1512595235805883,
+                    0.7857317704872436,
+                ],
+                atol=1e-4,
+            ),
+            model.weights,
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        pred = model.predict(vec)
+        self.assertEqual(pred, 1.0)
+        pred = model.predictRaw(vec)
+        self.assertTrue(
+            np.allclose(pred.toArray(), [-5.905105169408911, -5.53606375628584], atol=1e-4), pred
+        )
+        pred = model.predictProbability(vec)
+        self.assertTrue(
+            np.allclose(pred.toArray(), [0.4087726702431394, 0.5912273297568605], atol=1e-4), pred
+        )
+
+        output = model.transform(df)
+        expected_cols = [
+            "label",
+            "weight",
+            "features",
+            "rawPrediction",
+            "probability",
+            "prediction",
+        ]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # model summary
+        self.assertTrue(model.hasSummary)
+        summary = model.summary()
+        self.assertIsInstance(summary, MultilayerPerceptronClassificationSummary)
+        self.assertIsInstance(summary, MultilayerPerceptronClassificationTrainingSummary)
+        self.assertEqual(summary.labels, [0.0, 1.0])
+        self.assertEqual(summary.accuracy, 0.75)
+        self.assertEqual(summary.predictions.columns, expected_cols)
+
+        summary2 = model.evaluate(df)
+        self.assertIsInstance(summary2, MultilayerPerceptronClassificationSummary)
+        self.assertNotIsInstance(summary2, MultilayerPerceptronClassificationTrainingSummary)
+        self.assertEqual(summary2.labels, [0.0, 1.0])
+        self.assertEqual(summary2.accuracy, 0.75)
+        self.assertEqual(summary2.predictions.columns, expected_cols)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="mlpc") as d:
+            mlp.write().overwrite().save(d)
+            mlp2 = MultilayerPerceptronClassifier.load(d)
+            self.assertEqual(str(mlp), str(mlp2))
+
+            model.write().overwrite().save(d)
+            model2 = MultilayerPerceptronClassificationModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+
+class ClassificationTests(ClassificationTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

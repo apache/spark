@@ -249,13 +249,12 @@ private[spark] class SparkSubmit extends Logging {
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
-    if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
     var childMainClass = ""
 
     // Set the cluster manager
     val clusterManager: Int = args.maybeMaster match {
       case Some(v) =>
-        assert(args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect"))
+        assert(args.maybeRemote.isEmpty)
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
@@ -643,14 +642,11 @@ private[spark] class SparkSubmit extends Logging {
       // All cluster managers
       OptionAssigner(
         // If remote is not set, sets the master,
-        // In local remote mode, starts the default master to to start the server.
-        if (args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect")) args.master
+        if (args.maybeRemote.isEmpty) args.master
         else args.maybeMaster.orNull,
         ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(
-        // In local remote mode, do not set remote.
-        if (sparkConf.contains("spark.local.connect")) null
-        else args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
+        args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
@@ -767,8 +763,7 @@ private[spark] class SparkSubmit extends Logging {
     // In case of shells, spark.ui.showConsoleProgress can be true by default or by user. Except,
     // when Spark Connect is in local mode, because Spark Connect support its own progress
     // reporting.
-    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS) &&
-        !sparkConf.contains("spark.local.connect")) {
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
       sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 

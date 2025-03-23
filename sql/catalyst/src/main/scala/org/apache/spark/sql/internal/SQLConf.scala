@@ -243,12 +243,12 @@ object SQLConf {
 
   val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
     buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
-      .internal()
-      .doc(
-        "When this conf is enabled, AddMetadataColumns rule should only add necessary metadata " +
-          "columns and only if those columns are not already present in the project list.")
-      .booleanConf
-      .createWithDefault(true)
+    .internal()
+    .doc(
+      "When this conf is enabled, AddMetadataColumns rule should only add necessary metadata " +
+      "columns and only if those columns are not already present in the project list.")
+    .booleanConf
+    .createWithDefault(true)
 
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
@@ -801,7 +801,7 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.adaptive.logLevel'. Valid values are " +
-        s"${VALID_LOG_LEVELS.mkString(", ")}.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("debug")
 
   val ADVISORY_PARTITION_SIZE_IN_BYTES =
@@ -1699,13 +1699,13 @@ object SQLConf {
     .createWithDefault(true)
 
   val V2_BUCKETING_ENABLED = buildConf("spark.sql.sources.v2.bucketing.enabled")
-    .doc(s"Similar to ${BUCKETING_ENABLED.key}, this config is used to enable bucketing for V2 " +
-      "data sources. When turned on, Spark will recognize the specific distribution " +
-      "reported by a V2 data source through SupportsReportPartitioning, and will try to " +
-      "avoid shuffle if necessary.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(true)
+      .doc(s"Similar to ${BUCKETING_ENABLED.key}, this config is used to enable bucketing for V2 " +
+        "data sources. When turned on, Spark will recognize the specific distribution " +
+        "reported by a V2 data source through SupportsReportPartitioning, and will try to " +
+        "avoid shuffle if necessary.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
@@ -1837,7 +1837,7 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.dataframeCache.logLevel'. Valid values are " +
-        s"${VALID_LOG_LEVELS.mkString(", ")}.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("trace")
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
@@ -2046,7 +2046,7 @@ object SQLConf {
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.codegen.logLevel'. Valid values are " +
-        s"${VALID_LOG_LEVELS.mkString(", ")}.")
+       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("DEBUG")
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
@@ -2273,8 +2273,8 @@ object SQLConf {
       .internal()
       .doc(
         "Number of state store instance metrics included in streaming query progress messages " +
-          "per stateful operator. Instance metrics are selected based on metric-specific ordering " +
-          "to minimize noise in the progress report."
+        "per stateful operator. Instance metrics are selected based on metric-specific ordering " +
+        "to minimize noise in the progress report."
       )
       .version("4.1.0")
       .intConf
@@ -3532,7 +3532,7 @@ object SQLConf {
     buildConf("spark.sql.execution.pyspark.udf.hideTraceback.enabled")
       .doc(
         "When true, only show the message of the exception from Python UDFs, " +
-          "hiding the stack trace. If this is enabled, simplifiedTraceback has no effect.")
+        "hiding the stack trace. If this is enabled, simplifiedTraceback has no effect.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -5622,9 +5622,9 @@ object SQLConf {
     .internal()
     .doc(
       "When set to true, ParserInterface#parseQuery(...) is going to use base `query` grammar " +
-        "term without EOF resulting in some queries (like `SELECT 1 UNION SELECT 2`) to be parsed " +
-        "incorrectly - `UNION` will be treated as an alias, and the rest of SQL input will be " +
-        "thrown away."
+      "term without EOF resulting in some queries (like `SELECT 1 UNION SELECT 2`) to be parsed " +
+      "incorrectly - `UNION` will be treated as an alias, and the rest of SQL input will be " +
+      "thrown away."
     )
     .version("4.0.0")
     .booleanConf
@@ -5644,8 +5644,8 @@ object SQLConf {
       .internal()
       .doc(
         "When set to true, CTERelationDef.maxRows would output the correct value from the " +
-          "child plan. This is necessary for correct scalar subquery validation in the " +
-          "single-pass Analyzer."
+        "child plan. This is necessary for correct scalar subquery validation in the " +
+        "single-pass Analyzer."
       )
       .version("4.1.0")
       .booleanConf
@@ -6880,3 +6880,4 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     containsConfigKey(key) && !isStaticConfigKey(key)
   }
 }
+

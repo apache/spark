@@ -61,6 +61,10 @@ links.
     margin-top: 0;
   }
 
+  .navbar .dropdown-menu li {
+    position: relative;
+  }
+
   .navbar .dropdown-menu.fade-down {
     top: 80%;
     transform: none !important;
@@ -76,6 +80,17 @@ links.
     visibility: visible;
     top: 100%;
     font-size: calc(0.51rem + 0.55vw);
+  }
+
+  .navbar .dropdown-menu .dropdown-submenu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: -1px !important;
+  }
+
+  .navbar .dropdown-menu li:hover > .dropdown-submenu {
+    display: block;
   }
 }
 

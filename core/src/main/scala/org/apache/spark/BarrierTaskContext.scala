@@ -82,7 +82,7 @@ class BarrierTaskContext private[spark] (
       }
     }
     // Log the update of global sync every 1 minute.
-    timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
+    val timerFuture = timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[String]](
@@ -121,7 +121,7 @@ class BarrierTaskContext private[spark] (
         logProgressInfo(log"failed to perform global sync", Some(startTime))
         throw e
     } finally {
-      timerTask.cancel()
+      timerFuture.cancel(false)
       timer.purge()
     }
   }

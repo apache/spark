@@ -387,7 +387,7 @@ class UserDefinedTableFunction:
         for arg in args:
             if isinstance(arg, TableArg):
                 # If the argument is a TableArg, get the Java TableArg object
-                jargs.append(arg._j_table_arg)
+                jargs.append(arg._j_table_arg)  # type: ignore[attr-defined]
             else:
                 # Otherwise, convert it to a Java column
                 jargs.append(_to_java_column(arg))  # type: ignore[arg-type]
@@ -397,7 +397,7 @@ class UserDefinedTableFunction:
         for key, value in kwargs.items():
             if isinstance(value, TableArg):
                 # If the value is a TableArg, get the Java TableArg object
-                j_arg = value._j_table_arg
+                j_arg = value._j_table_arg  # type: ignore[attr-defined]
             else:
                 # Otherwise, convert it to a Java column
                 j_arg = _to_java_column(value)  # type: ignore[arg-type]

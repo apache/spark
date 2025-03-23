@@ -18,7 +18,11 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver}
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  MetadataResolver,
+  ProhibitedResolver,
+  Resolver
+}
 import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, UnresolvedCatalogRelation}
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -93,7 +97,9 @@ class DataSourceWithHiveResolverSuite extends TestHiveSingleton with SQLTestUtil
       .child
     assert(partiallyResolvedRelation.isInstanceOf[UnresolvedCatalogRelation])
 
-    dataSourceWithHiveResolver.resolveOperator(partiallyResolvedRelation) match {
+    dataSourceWithHiveResolver
+      .resolveOperator(partiallyResolvedRelation, new ProhibitedResolver)
+      .get match {
       case logicalRelation: LogicalRelation =>
         assert(convertedToLogicalRelation)
         assert(logicalRelation.catalogTable.get.identifier.unquotedString == expectedTableName)

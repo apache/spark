@@ -21,8 +21,11 @@ import unittest
 import numpy as np
 
 from pyspark.ml.linalg import Vectors
-from pyspark.sql import SparkSession
 from pyspark.ml.regression import (
+    AFTSurvivalRegression,
+    AFTSurvivalRegressionModel,
+    IsotonicRegression,
+    IsotonicRegressionModel,
     LinearRegression,
     LinearRegressionModel,
     GeneralizedLinearRegression,
@@ -31,6 +34,8 @@ from pyspark.ml.regression import (
     GeneralizedLinearRegressionTrainingSummary,
     LinearRegressionSummary,
     LinearRegressionTrainingSummary,
+    FMRegressor,
+    FMRegressionModel,
     DecisionTreeRegressor,
     DecisionTreeRegressionModel,
     RandomForestRegressor,
@@ -38,13 +43,112 @@ from pyspark.ml.regression import (
     GBTRegressor,
     GBTRegressionModel,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class RegressionTestsMixin:
-    @property
-    def df(self):
-        return (
-            self.spark.createDataFrame(
+    def test_aft_survival(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [(1.0, Vectors.dense(1.0), 1.0), (1e-40, Vectors.sparse(1, [], []), 0.0)],
+            ["label", "features", "censor"],
+        )
+
+        aft = AFTSurvivalRegression()
+        aft.setMaxIter(1)
+        self.assertEqual(aft.getMaxIter(), 1)
+
+        model = aft.fit(df)
+        self.assertEqual(aft.uid, model.uid)
+        self.assertEqual(model.numFeatures, 1)
+        self.assertTrue(np.allclose(model.intercept, 0.0, atol=1e-4), model.intercept)
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), [0.0], atol=1e-4), model.coefficients
+        )
+        self.assertTrue(np.allclose(model.scale, 1.0, atol=1e-4), model.scale)
+
+        vec = Vectors.dense(6.3)
+        pred = model.predict(vec)
+        self.assertEqual(pred, 1.0)
+        pred = model.predictQuantiles(vec)
+        self.assertTrue(
+            np.allclose(
+                pred,
+                [
+                    0.010050335853501444,
+                    0.051293294387550536,
+                    0.1053605156578263,
+                    0.2876820724517809,
+                    0.6931471805599453,
+                    1.3862943611198906,
+                    2.302585092994046,
+                    2.9957322735539895,
+                    4.60517018598809,
+                ],
+                atol=1e-4,
+            ),
+            pred,
+        )
+
+        output = model.transform(df)
+        expected_cols = ["label", "features", "censor", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="aft_survival") as d:
+            aft.write().overwrite().save(d)
+            aft2 = AFTSurvivalRegression.load(d)
+            self.assertEqual(str(aft), str(aft2))
+
+            model.write().overwrite().save(d)
+            model2 = AFTSurvivalRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_isotonic_regression(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [(1.0, Vectors.dense(1.0)), (0.0, Vectors.sparse(1, [], []))], ["label", "features"]
+        )
+
+        ir = IsotonicRegression(
+            isotonic=True,
+            featureIndex=0,
+        )
+        self.assertTrue(ir.getIsotonic())
+        self.assertEqual(ir.getFeatureIndex(), 0)
+
+        model = ir.fit(df)
+        self.assertEqual(model.numFeatures, 1)
+        self.assertTrue(
+            np.allclose(model.boundaries.toArray(), [0.0, 1.0], atol=1e-4), model.boundaries
+        )
+        self.assertTrue(
+            np.allclose(model.predictions.toArray(), [0.0, 1.0], atol=1e-4), model.predictions
+        )
+
+        pred = model.predict(1.0)
+        self.assertTrue(np.allclose(pred, 1.0, atol=1e-4), pred)
+
+        output = model.transform(df)
+        expected_cols = ["label", "features", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="isotonic_regression") as d:
+            ir.write().overwrite().save(d)
+            ir2 = IsotonicRegression.load(d)
+            self.assertEqual(str(ir), str(ir2))
+
+            model.write().overwrite().save(d)
+            model2 = IsotonicRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
+    def test_linear_regression(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
                 [
                     (1.0, 1.0, Vectors.dense(0.0, 5.0)),
                     (0.0, 2.0, Vectors.dense(1.0, 2.0)),
@@ -57,8 +161,6 @@ class RegressionTestsMixin:
             .sortWithinPartitions("weight")
         )
 
-    def test_linear_regression(self):
-        df = self.df
         lr = LinearRegression(
             regParam=0.0,
             maxIter=2,
@@ -266,8 +368,84 @@ class RegressionTestsMixin:
             model2 = GeneralizedLinearRegressionModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    def test_factorization_machine(self):
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1, 1.0, Vectors.dense(0.0, 0.0)),
+                    (2, 1.0, Vectors.dense(1.0, 2.0)),
+                    (3, 2.0, Vectors.dense(0.0, 0.0)),
+                    (4, 2.0, Vectors.dense(1.0, 1.0)),
+                ],
+                ["index", "label", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("index")
+            .select("label", "features")
+        )
+
+        fm = FMRegressor(factorSize=2, maxIter=1, regParam=1.0, seed=1)
+        self.assertEqual(fm.getFactorSize(), 2)
+        self.assertEqual(fm.getMaxIter(), 1)
+        self.assertEqual(fm.getRegParam(), 1.0)
+        self.assertEqual(fm.getSeed(), 1)
+
+        model = fm.fit(df)
+        self.assertEqual(fm.uid, model.uid)
+        self.assertEqual(model.numFeatures, 2)
+        self.assertTrue(
+            np.allclose(model.intercept, 0.9999999966668874, atol=1e-4), model.intercept
+        )
+        self.assertTrue(
+            np.allclose(
+                model.linear.toArray(), [0.9999999933342161, 0.9999999950008276], atol=1e-4
+            ),
+            model.linear,
+        )
+        self.assertTrue(
+            np.allclose(
+                model.factors.toArray(),
+                [[-0.99999954, -0.9999992], [0.99999968, -0.99999918]],
+                atol=1e-4,
+            ),
+            model.factors,
+        )
+
+        vec = Vectors.dense(0.0, 5.0)
+        pred = model.predict(vec)
+        self.assertTrue(np.allclose(pred, 5.999999971671025, atol=1e-4), pred)
+
+        output = model.transform(df)
+        expected_cols = ["label", "features", "prediction"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 4)
+
+        # Model save & load
+        with tempfile.TemporaryDirectory(prefix="factorization_machine") as d:
+            fm.write().overwrite().save(d)
+            fm2 = FMRegressor.load(d)
+            self.assertEqual(str(fm), str(fm2))
+
+            model.write().overwrite().save(d)
+            model2 = FMRegressionModel.load(d)
+            self.assertEqual(str(model), str(model2))
+
     def test_decision_tree_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         dt = DecisionTreeRegressor(
             maxDepth=2,
@@ -323,7 +501,20 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
     def test_gbt_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         gbt = GBTRegressor(
             maxIter=3,
@@ -341,8 +532,6 @@ class RegressionTestsMixin:
         model = gbt.fit(df)
         self.assertEqual(gbt.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 0.1, 0.1])
         self.assertEqual(model.totalNumNodes, 15)
 
@@ -387,6 +576,17 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
+
         # save & load
         with tempfile.TemporaryDirectory(prefix="gbt_regression") as d:
             gbt.write().overwrite().save(d)
@@ -399,7 +599,20 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
     def test_random_forest_regressor(self):
-        df = self.df
+        spark = self.spark
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.5, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.7, 4.0, Vectors.dense(1.5, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
 
         rf = RandomForestRegressor(
             numTrees=3,
@@ -417,8 +630,6 @@ class RegressionTestsMixin:
         model = rf.fit(df)
         self.assertEqual(rf.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
-        # TODO(SPARK-50843): Support access submodel in TreeEnsembleModel
-        # model.trees
         self.assertEqual(model.treeWeights, [1.0, 1.0, 1.0])
         self.assertEqual(model.totalNumNodes, 11)
 
@@ -447,6 +658,17 @@ class RegressionTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 4)
 
+        trees = model.trees
+        self.assertEqual(len(trees), 3)
+        for tree in trees:
+            self.assertIsInstance(tree, DecisionTreeRegressionModel)
+            self.assertTrue(tree.predict(vec) > -10)
+            self.assertEqual(tree.transform(df).count(), 4)
+            self.assertEqual(
+                tree.transform(df).columns,
+                ["label", "weight", "features", "prediction", "leaf"],
+            )
+
         with tempfile.TemporaryDirectory(prefix="random_forest_regression") as d:
             rf.write().overwrite().save(d)
             rf2 = RandomForestRegressor.load(d)
@@ -458,12 +680,8 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
 
-class RegressionTests(RegressionTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class RegressionTests(RegressionTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

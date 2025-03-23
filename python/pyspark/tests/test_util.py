@@ -16,6 +16,7 @@
 #
 import os
 import unittest
+from unittest.mock import patch
 
 from py4j.protocol import Py4JJavaError
 
@@ -123,6 +124,46 @@ class UtilTests(PySparkTestCase):
         self.assertEqual(_parse_memory("1g"), 1024)
         with self.assertRaisesRegex(ValueError, "invalid format"):
             _parse_memory("2gs")
+
+
+class HandleWorkerExceptionTests(unittest.TestCase):
+    exception_bytes = b"ValueError: test_message"
+    traceback_bytes = b"Traceback (most recent call last):"
+
+    def run_handle_worker_exception(self, hide_traceback=None):
+        import io
+        from pyspark.util import handle_worker_exception
+
+        try:
+            raise ValueError("test_message")
+        except Exception as e:
+            with io.BytesIO() as stream:
+                handle_worker_exception(e, stream, hide_traceback)
+                return stream.getvalue()
+
+    @patch.dict(os.environ, {"SPARK_SIMPLIFIED_TRACEBACK": "", "SPARK_HIDE_TRACEBACK": ""})
+    def test_env_full(self):
+        result = self.run_handle_worker_exception()
+        self.assertIn(self.exception_bytes, result)
+        self.assertIn(self.traceback_bytes, result)
+
+    @patch.dict(os.environ, {"SPARK_HIDE_TRACEBACK": "1"})
+    def test_env_hide_traceback(self):
+        result = self.run_handle_worker_exception()
+        self.assertIn(self.exception_bytes, result)
+        self.assertNotIn(self.traceback_bytes, result)
+
+    @patch.dict(os.environ, {"SPARK_HIDE_TRACEBACK": "1"})
+    def test_full(self):
+        # Should ignore the environment variable because hide_traceback is explicitly set.
+        result = self.run_handle_worker_exception(False)
+        self.assertIn(self.exception_bytes, result)
+        self.assertIn(self.traceback_bytes, result)
+
+    def test_hide_traceback(self):
+        result = self.run_handle_worker_exception(True)
+        self.assertIn(self.exception_bytes, result)
+        self.assertNotIn(self.traceback_bytes, result)
 
 
 if __name__ == "__main__":

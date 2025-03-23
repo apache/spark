@@ -84,17 +84,32 @@ Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
 
-Python Spark Connect Client
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Making Spark Connect by default
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Python Spark Connect client is a pure Python library that does not rely on any non-Python dependencies such as jars and JRE in your environment.
-To install the Python Spark Connect client via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_, execute the following command:
+If you want to make Spark Connect default, you can install and additional library via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_, execute the following command:
 
 .. code-block:: bash
 
     pip install pyspark-connect
 
-See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
+It will automatically install ``pyspark`` library as well as dependencies that are necessary for Spark Connect.
+If you want to customize ``pyspark``, you need to install ``pyspark`` with the instructions above in advance.
+
+This package supports both ``spark.master`` (``--master``) with a locally running Spark Connect server, and ``spark.remote`` (``--remote``) including local clusters, e.g., ``local[*]`` as well as connection URIs such as ``sc://localhost``. See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
+
+
+Python Spark Connect Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Python Spark Connect client is a pure Python library that does not rely on any non-Python dependencies such as jars and JRE in your environment.
+To install the Python Spark Connect client via `PyPI (pyspark-client) <https://pypi.org/project/pyspark-client/>`_, execute the following command:
+
+.. code-block:: bash
+
+    pip install pyspark-client
+
+This package only supports `spark.remote` with connection URIs, e.g., ``sc://localhost``. See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
 
 
 Using Conda

@@ -120,7 +120,7 @@ print(
     % (platform.python_version(), platform.python_build()[0], platform.python_build()[1])
 )
 if is_remote():
-    url = os.environ.get("SPARK_REMOTE", None)
+    url = os.environ.get("SPARK_REMOTE", os.environ.get("MASTER", None))
     assert url is not None
     if url.startswith("local"):
         url = "sc://localhost"  # only for display in the console.

@@ -673,15 +673,23 @@ public class HiveSessionImpl implements HiveSession {
         hiveHist.closeStream();
       }
       try {
+        // Forcibly initialize thread local Hive so that
+        // SessionState#unCacheDataNucleusClassLoaders won't trigger
+        // Hive built-in UDFs initialization.
+        Hive.getWithoutRegisterFns(sessionState.getConf());
         sessionState.close();
       } finally {
         sessionState = null;
       }
-    } catch (IOException ioe) {
+    } catch (IOException | HiveException ioe) {
       throw new HiveSQLException("Failure to close", ioe);
     } finally {
       if (sessionState != null) {
         try {
+          // Forcibly initialize thread local Hive so that
+          // SessionState#unCacheDataNucleusClassLoaders won't trigger
+          // Hive built-in UDFs initialization.
+          Hive.getWithoutRegisterFns(sessionState.getConf());
           sessionState.close();
         } catch (Throwable t) {
           LOG.warn("Error closing session", t);

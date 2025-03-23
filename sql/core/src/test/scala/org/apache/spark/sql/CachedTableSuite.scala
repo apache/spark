@@ -1659,7 +1659,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           _.nodeName.contains("TableCacheQueryStage"))
         val aqeNode = findNodeInSparkPlanInfo(inMemoryScanNode.get,
           _.nodeName.contains("AdaptiveSparkPlan"))
-        aqeNode.get.children.head.nodeName == "AQEShuffleRead"
+        val aqePlanRoot = findNodeInSparkPlanInfo(inMemoryScanNode.get,
+          _.nodeName.contains("ResultQueryStage"))
+        aqePlanRoot.get.children.head.nodeName == "AQEShuffleRead"
       }
 
       withTempView("t0", "t1", "t2") {

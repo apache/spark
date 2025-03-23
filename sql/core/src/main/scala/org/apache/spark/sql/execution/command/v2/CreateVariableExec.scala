@@ -19,29 +19,50 @@ package org.apache.spark.sql.execution.command.v2
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingLocalVariableManager}
+import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, ResolvedIdentifier}
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionsEvaluator, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.DefaultValueExpression
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 
 /**
  * Physical plan node for creating a variable.
  */
-case class CreateVariableExec(name: String, defaultExpr: DefaultValueExpression, replace: Boolean)
-  extends LeafV2CommandExec with ExpressionsEvaluator {
+case class CreateVariableExec(
+    resolvedIdentifier: ResolvedIdentifier,
+    defaultExpr: DefaultValueExpression,
+    replace: Boolean) extends LeafV2CommandExec with ExpressionsEvaluator {
 
   override protected def run(): Seq[InternalRow] = {
-    val variableManager = session.sessionState.catalogManager.tempVariableManager
+    val scriptingVariableManager = SqlScriptingLocalVariableManager.get()
+    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
+
     val exprs = prepareExpressions(Seq(defaultExpr.child), subExprEliminationEnabled = false)
     initializeExprs(exprs, 0)
     val initValue = Literal(exprs.head.eval(), defaultExpr.dataType)
-    val normalizedName = if (session.sessionState.conf.caseSensitiveAnalysis) {
-      name
+
+    val normalizedIdentifier = if (session.sessionState.conf.caseSensitiveAnalysis) {
+      resolvedIdentifier.identifier
     } else {
-      name.toLowerCase(Locale.ROOT)
+      Identifier.of(
+        resolvedIdentifier.identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
+        resolvedIdentifier.identifier.name().toLowerCase(Locale.ROOT))
     }
-    variableManager.create(
-      normalizedName, defaultExpr.originalSQL, initValue, replace)
+    val varDef = VariableDefinition(normalizedIdentifier, defaultExpr.originalSQL, initValue)
+
+    // create local variable if we are in a script, otherwise create session variable
+    scriptingVariableManager
+      .filter(_ => resolvedIdentifier.catalog == FakeLocalCatalog)
+      // If resolvedIdentifier.catalog is FakeLocalCatalog, scriptingVariableManager
+      // will always be present.
+      .getOrElse(tempVariableManager)
+      .create(
+        normalizedIdentifier.namespace().toSeq :+ normalizedIdentifier.name(),
+        varDef,
+        replace)
+
     Nil
   }
 
