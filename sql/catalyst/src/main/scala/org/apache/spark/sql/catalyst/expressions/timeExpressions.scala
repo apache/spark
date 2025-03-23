@@ -234,7 +234,6 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(time_expr) - Returns the hour component of the given time.
@@ -271,7 +270,7 @@ case class HoursOfTime(child: Expression)
   }
 }
 
-// scalastyle:off line.size.limit
+
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns the hour component of the given expression.
