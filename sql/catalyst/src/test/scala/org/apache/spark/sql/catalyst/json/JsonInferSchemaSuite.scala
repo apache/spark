@@ -120,4 +120,23 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
       """{"a": "2884-06-24T02:45:51.138"}""",
       StringType)
   }
+
+  test("SPARK-49858: inferring the schema with default timestampFormat") {
+    checkType(
+      Map("inferTimestamp" -> "true"), """{"a": "23456"}""", StringType)
+    checkType(Map("inferTimestamp" -> "true"), """{"a": "23456-01"}""", StringType)
+    checkType(Map("inferTimestamp" -> "true"), """{"a": "2025-01-01"}""", StringType)
+    checkType(
+      Map("inferTimestamp" -> "true"),
+      """{"a": "2025-01-01T00:00:00.123+01:00"}""",
+      TimestampType)
+    checkType(
+      Map("inferTimestamp" -> "true"),
+      """{"a": "2025-01-01T00:00:00.123"}""",
+      TimestampType)
+    checkType(
+      Map("inferTimestamp" -> "true"),
+      """{"a": "2025-01-01T00:00:00.123456+01:00"}""",
+      StringType)
+  }
 }
