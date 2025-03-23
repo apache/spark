@@ -220,25 +220,26 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       checkCachedRelation(t, Seq(Row(0, 0), Row(1, 1)))
 
       withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        // Add a dummy column so that this view is semantically different from raw table scan.
+        sql(s"CREATE VIEW v0 AS SELECT *, 'a' FROM $t")
         cacheRelation("v0")
         sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=2)")
-        checkCachedRelation("v0", Seq(Row(0, 2), Row(1, 1)))
+        checkCachedRelation("v0", Seq(Row(0, 2, "a"), Row(1, 1, "a")))
       }
 
       withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        sql(s"CREATE TEMP VIEW v1 AS SELECT *, 'a' FROM $t")
         cacheRelation("v1")
         sql(s"ALTER TABLE $t PARTITION (part=1) RENAME TO PARTITION (part=3)")
-        checkCachedRelation("v1", Seq(Row(0, 2), Row(1, 3)))
+        checkCachedRelation("v1", Seq(Row(0, 2, "a"), Row(1, 3, "a")))
       }
 
       val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT *, 'a' FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t PARTITION (part=2) RENAME TO PARTITION (part=4)")
-        checkCachedRelation(v2, Seq(Row(0, 4), Row(1, 3)))
+        checkCachedRelation(v2, Seq(Row(0, 4, "a"), Row(1, 3, "a")))
       }
     }
   }

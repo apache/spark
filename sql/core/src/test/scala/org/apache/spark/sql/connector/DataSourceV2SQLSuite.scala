@@ -1388,16 +1388,6 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  private def testShowNamespaces(
-      sqlText: String,
-      expected: Seq[String]): Unit = {
-    val schema = new StructType().add("namespace", StringType, nullable = false)
-
-    val df = spark.sql(sqlText)
-    assert(df.schema === schema)
-    assert(df.collect().map(_.getAs[String](0)).sorted === expected.sorted)
-  }
-
   test("Use: basic tests with USE statements") {
     val catalogManager = spark.sessionState.catalogManager
 

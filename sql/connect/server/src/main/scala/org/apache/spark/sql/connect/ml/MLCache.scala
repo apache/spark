@@ -17,16 +17,27 @@
 package org.apache.spark.sql.connect.ml
 
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentMap, TimeUnit}
+
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.util.ConnectHelper
 
 /**
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
 private[connect] class MLCache extends Logging {
-  private val cachedModel: ConcurrentHashMap[String, Object] =
-    new ConcurrentHashMap[String, Object]()
+  private val helper = new ConnectHelper()
+  private val helperID = "______ML_CONNECT_HELPER______"
+
+  private val cachedModel: ConcurrentMap[String, Object] = CacheBuilder
+    .newBuilder()
+    .softValues()
+    .maximumSize(MLCache.MAX_CACHED_ITEMS)
+    .expireAfterAccess(MLCache.CACHE_TIMEOUT_MINUTE, TimeUnit.MINUTES)
+    .build[String, Object]()
+    .asMap()
 
   /**
    * Cache an object into a map of MLCache, and return its key
@@ -49,7 +60,11 @@ private[connect] class MLCache extends Logging {
    *   the cached object
    */
   def get(refId: String): Object = {
-    cachedModel.get(refId)
+    if (refId == helperID) {
+      helper
+    } else {
+      cachedModel.get(refId)
+    }
   }
 
   /**
@@ -67,4 +82,12 @@ private[connect] class MLCache extends Logging {
   def clear(): Unit = {
     cachedModel.clear()
   }
+}
+
+private[connect] object MLCache {
+  // The maximum number of distinct items in the cache.
+  private val MAX_CACHED_ITEMS = 100
+
+  // The maximum time for an item to stay in the cache.
+  private val CACHE_TIMEOUT_MINUTE = 60
 }

@@ -74,9 +74,11 @@ class VariantShreddingSuite extends QueryTest with SharedSparkSession with Parqu
   def isPushEnabled: Boolean = SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN)
 
   def testWithTempPath(name: String)(block: File => Unit): Unit = test(name) {
-    withPushConfigs() {
-      withTempPath { path =>
-        block(path)
+    withSQLConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED.key-> "true") {
+      withPushConfigs() {
+        withTempPath { path =>
+          block(path)
+        }
       }
     }
   }

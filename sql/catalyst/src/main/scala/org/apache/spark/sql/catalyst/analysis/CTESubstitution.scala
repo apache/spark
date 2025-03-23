@@ -344,7 +344,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
       recursiveCTERelation.map {
         case (_, d) =>
           SubqueryAlias(table,
-            CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, recursive = true))
+            CTERelationRef(
+              d.id, d.resolved, d.output, d.isStreaming, recursive = true, maxRows = d.maxRows))
       }.get
     } else {
       cteRelations
@@ -357,7 +358,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
               // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
               // This is a non-recursive reference, recursive parameter is by default set to false
               SubqueryAlias(table,
-                CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
+                CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, maxRows = d.maxRows))
             }
         }
         .getOrElse(unresolvedRelation)

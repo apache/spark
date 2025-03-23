@@ -54,10 +54,13 @@ class HybridAnalyzer(
     legacyAnalyzer: Analyzer,
     resolverGuard: ResolverGuard,
     resolver: Resolver,
+    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
     checkSupportedSinglePassFeatures: Boolean = true)
     extends SQLConfHelper {
   private var singlePassResolutionDuration: Option[Long] = None
   private var fixedPointResolutionDuration: Option[Long] = None
+  private val resolverRunner: ResolverRunner =
+    new ResolverRunner(resolver, extendedResolutionChecks)
 
   def apply(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     val dualRun =
@@ -176,17 +179,8 @@ class HybridAnalyzer(
    * This method is used to run the single-pass Analyzer which will return the resolved plan
    * or throw an exception if the resolution fails. Both cases are handled in the caller method.
    * */
-  private def resolveInSinglePass(plan: LogicalPlan): LogicalPlan = {
-    val resolvedPlan = resolver.lookupMetadataAndResolve(
-      plan,
-      analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState
-    )
-    if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
-      val validator = new ResolutionValidator
-      validator.validatePlan(resolvedPlan)
-    }
-    resolvedPlan
-  }
+  private def resolveInSinglePass(plan: LogicalPlan): LogicalPlan =
+    resolverRunner.resolve(plan, AnalysisContext.get.getSinglePassResolverBridgeState)
 
   /**
    * This method is used to run the legacy Analyzer which will return the resolved plan

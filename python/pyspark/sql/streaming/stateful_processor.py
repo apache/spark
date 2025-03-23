@@ -426,7 +426,6 @@ class StatefulProcessor(ABC):
         """
         return iter([])
 
-    @abstractmethod
     def close(self) -> None:
         """
         Function called as the last method that allows for users to perform any cleanup or teardown

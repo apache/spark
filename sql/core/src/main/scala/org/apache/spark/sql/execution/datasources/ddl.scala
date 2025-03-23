@@ -23,7 +23,7 @@ import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V1CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DDLUtils, LeafRunnableCommand}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
 case class CreateTable(
     tableDesc: CatalogTable,
     mode: SaveMode,
-    query: Option[LogicalPlan]) extends LogicalPlan with V1CreateTablePlan {
+    query: Option[LogicalPlan]) extends LogicalPlan {
   assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
 
   if (query.isEmpty) {

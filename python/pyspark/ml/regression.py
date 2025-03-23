@@ -18,6 +18,7 @@
 import sys
 from typing import Any, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING
 from abc import ABCMeta
+from functools import cached_property
 
 from pyspark import keyword_only, since
 from pyspark.ml import Predictor, PredictionModel
@@ -71,6 +72,7 @@ from pyspark.ml.wrapper import (
 )
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -485,7 +487,10 @@ class LinearRegressionModel(
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
+            s = LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -506,7 +511,10 @@ class LinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
-        return LinearRegressionSummary(java_lr_summary)
+        s = LinearRegressionSummary(java_lr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class LinearRegressionSummary(JavaWrapper):
@@ -1601,10 +1609,12 @@ class RandomForestRegressionModel(
     .. versionadded:: 1.4.0
     """
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -1990,10 +2000,12 @@ class GBTRegressionModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame, loss: str) -> List[float]:
@@ -2760,9 +2772,12 @@ class GeneralizedLinearRegressionModel(
         `trainingSummary is None`.
         """
         if self.hasSummary:
-            return GeneralizedLinearRegressionTrainingSummary(
+            s = GeneralizedLinearRegressionTrainingSummary(
                 super(GeneralizedLinearRegressionModel, self).summary
             )
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -2783,7 +2798,10 @@ class GeneralizedLinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_glr_summary = self._call_java("evaluate", dataset)
-        return GeneralizedLinearRegressionSummary(java_glr_summary)
+        s = GeneralizedLinearRegressionSummary(java_glr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):

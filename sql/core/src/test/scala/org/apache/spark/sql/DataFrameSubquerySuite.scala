@@ -840,4 +840,28 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(t1.repartition(spark.range(1).select(lit(1)).scalar()), t1)
     }
   }
+
+  test("SPARK-51322: streaming subquery expression is not allowed") {
+    val rateSource = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "10")
+      .option("useManualClock", "true")
+      .load()
+    val df1 = rateSource.select($"value").limit(1)
+    checkError(
+      intercept[AnalysisException](spark.range(5).select(df1.scalar()).collect()),
+      condition = "INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY"
+    )
+    checkError(
+      intercept[AnalysisException](spark.range(5).where(rateSource.exists()).collect()),
+      condition = "INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY"
+    )
+
+    // Correlated subquery expression
+    val df2 = rateSource.where($"value" === $"id".outer())
+    checkError(
+      intercept[AnalysisException](spark.range(5).where(df2.exists()).collect()),
+      condition = "INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY"
+    )
+  }
 }

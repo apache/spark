@@ -19,24 +19,20 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.IntegerType
 
 /**
  * The [[LimitExpressionResolver]] is a resolver that resolves a [[LocalLimit]] or [[GlobalLimit]]
  * expression and performs all the necessary validation.
  */
-class LimitExpressionResolver(expressionResolver: TreeNodeResolver[Expression, Expression])
-    extends TreeNodeResolver[Expression, Expression]
-    with QueryErrorsBase {
+class LimitExpressionResolver extends TreeNodeResolver[Expression, Expression] {
 
   /**
    * Resolve a limit expression of [[GlobalLimit]] or [[LocalLimit]] and perform validation.
    */
   override def resolve(unresolvedLimitExpression: Expression): Expression = {
-    val resolvedLimitExpression = expressionResolver.resolve(unresolvedLimitExpression)
-    validateLimitExpression(resolvedLimitExpression, expressionName = "limit")
-    resolvedLimitExpression
+    validateLimitExpression(unresolvedLimitExpression, expressionName = "limit")
+    unresolvedLimitExpression
   }
 
   /**

@@ -223,7 +223,8 @@ class FPGrowthModel private[ml] (
     private val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
-  private[ml] def this() = this(Identifiable.randomUID("fpgrowth"), null, Map.empty, 0L)
+  // For ml connect only
+  private[ml] def this() = this("", null, Map.empty, -1L)
 
   /** @group setParam */
   @Since("2.2.0")

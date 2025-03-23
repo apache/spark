@@ -142,6 +142,7 @@ private[ui] class EnvironmentPage(
         <div class="aggregated-environmentVariables collapsible-table collapsed">
           {environmentVariablesTable}
         </div>
+        <script src={UIUtils.prependBaseUri(request, "/static/environmentpage.js")}></script>
       </span>
     UIUtils.basicSparkPage(request, content, "Environment")
   }

@@ -38,7 +38,7 @@ trait ListStateMetricsImpl {
   // We keep track of the count of entries in the list in a separate column family
   // to avoid scanning the entire list to get the count.
   private val counterCFValueSchema: StructType =
-    StructType(Seq(StructField("count", LongType, nullable = false)))
+    StructType(Seq(StructField("count", LongType, nullable = true)))
 
   private val counterCFProjection = UnsafeProjection.create(counterCFValueSchema)
 

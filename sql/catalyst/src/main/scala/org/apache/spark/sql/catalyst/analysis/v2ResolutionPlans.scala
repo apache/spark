@@ -261,3 +261,11 @@ object FakeSystemCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = "system"
 }
+
+/**
+ * A fake v2 catalog to hold local variables for SQL scripting.
+ */
+object FakeLocalCatalog extends CatalogPlugin {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "local"
+}

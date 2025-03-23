@@ -273,15 +273,21 @@ abstract class TypeCoercionHelper {
         // IN subquery expression.
         if (commonTypes.length == lhs.length) {
           val castedRhs = rhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+            case (e, dt) if e.dataType != dt =>
+              Alias(Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone), e.name)()
             case (e, _) => e
           }
           val newLhs = lhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Cast(e, dt)
+            case (e, dt) if e.dataType != dt =>
+              Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone)
             case (e, _) => e
           }
 
-          InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          if (newLhs != lhs || castedRhs != rhs) {
+            InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          } else {
+            i
+          }
         } else {
           i
         }

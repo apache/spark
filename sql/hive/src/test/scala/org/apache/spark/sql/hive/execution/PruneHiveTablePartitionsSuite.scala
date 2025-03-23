@@ -177,6 +177,16 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase with TestHiv
     }
   }
 
+  test("SPARK-49507: Fix the case issue after enabling metastorePartitionPruningFastFallback") {
+    withTable("t") {
+      withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key -> "true") {
+        sql("CREATE TABLE t(ID BIGINT, DT STRING) USING PARQUET PARTITIONED BY (DT)")
+        sql("INSERT INTO TABLE t SELECT 1, '20240820'")
+        checkAnswer(sql("SELECT * FROM t WHERE dt=20240820"), Row(1, "20240820") :: Nil)
+      }
+    }
+  }
+
   protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
     case scan: HiveTableScanExec => scan.partitionPruningPred
   }

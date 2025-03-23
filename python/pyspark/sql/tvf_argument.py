@@ -18,7 +18,7 @@
 
 class TableValuedFunctionArgument:
     """
-    Base class for arguments passed to Table Valued Functions.
+    Base class for arguments passed to Table-Valued Functions.
 
     This class is intentionally left empty and serves as a marker to achieve
     parity with the Scala `TableValuedFunctionArgument` trait.

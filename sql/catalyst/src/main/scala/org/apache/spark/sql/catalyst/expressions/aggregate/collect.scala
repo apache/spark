@@ -277,14 +277,14 @@ private[aggregate] object CollectTopK {
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, delimiter])[ WITHIN GROUP (ORDER BY key [ASC | DESC] [,...])] - Returns
-    the concatenation of non-null input values, separated by the delimiter ordered by key.
-    If all values are null, null is returned.
+    the concatenation of non-NULL input values, separated by the delimiter ordered by key.
+    If all values are NULL, NULL is returned.
     """,
   arguments = """
     Arguments:
       * expr - a string or binary expression to be concatenated.
       * delimiter - an optional string or binary foldable expression used to separate the input values.
-        If null, the concatenation will be performed without a delimiter. Default is null.
+        If NULL, the concatenation will be performed without a delimiter. Default is NULL.
       * key - an optional expression for ordering the input values. Multiple keys can be specified.
         If none are specified, the order of the rows in the result is non-deterministic.
   """,
@@ -400,7 +400,7 @@ case class ListAgg(
         )
       )
     } else if (delimiter.dataType == NullType) {
-      // null is the default empty delimiter so type is not important
+      // Null is the default empty delimiter so type is not important
       TypeCheckSuccess
     } else {
       TypeUtils.checkForSameTypeInputExpr(child.dataType :: delimiter.dataType :: Nil, prettyName)
@@ -451,7 +451,7 @@ case class ListAgg(
   }
 
   /**
-   * @return ordering by (orderValue0, orderValue1, ...)
+   * @return Ordering by (orderValue0, orderValue1, ...)
    *         for InternalRow with format [childValue, orderValue0, orderValue1, ...]
    */
   private[this] def bufferOrdering: Ordering[InternalRow] = {
@@ -477,7 +477,7 @@ case class ListAgg(
   }
 
   /**
-   * @return delimiter value or default empty value if delimiter is null. Type respects [[dataType]]
+   * @return Delimiter value or default empty value if delimiter is null. Type respects [[dataType]]
    */
   private[this] def getDelimiterValue: Either[UTF8String, Array[Byte]] = {
     val delimiterValue = delimiter.eval()

@@ -32,17 +32,18 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 public class DBProviderSuite {
 
   @Test
-  public void testRockDBCheckVersionFailed() throws IOException {
+  public void testRockDBCheckVersionFailed() throws IOException, InterruptedException {
     testCheckVersionFailed(DBBackend.ROCKSDB, "rocksdb");
   }
 
   @Test
-  public void testLevelDBCheckVersionFailed() throws IOException {
+  public void testLevelDBCheckVersionFailed() throws IOException, InterruptedException {
     assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
     testCheckVersionFailed(DBBackend.LEVELDB, "leveldb");
   }
 
-  private void testCheckVersionFailed(DBBackend dbBackend, String namePrefix) throws IOException {
+  private void testCheckVersionFailed(DBBackend dbBackend, String namePrefix)
+      throws IOException, InterruptedException {
     String root = System.getProperty("java.io.tmpdir");
     File dbFile = JavaUtils.createDirectory(root, namePrefix);
     try {

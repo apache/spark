@@ -313,7 +313,10 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
   test("multi-result procedure") {
     catalog.createProcedure(Identifier.of(Array("ns"), "proc"), UnboundMultiResultProcedure)
-    checkAnswer(sql("CALL cat.ns.proc()"), Row("last") :: Nil)
+    val e = intercept[SparkException] {
+      sql("CALL cat.ns.proc()")
+    }
+    assert(e.getMessage.contains("Multi-result procedures are temporarily not supported"))
   }
 
   test("invalid input to struct procedure") {

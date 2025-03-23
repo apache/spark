@@ -23,7 +23,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`x`, false
 insert into x values (map(1, 2), 3), (map(1, 4), 5), (map(2, 3), 4), (map(5, 6), 7)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [xm, x2]
-+- Project [map_from_arrays(transform(map_keys(col1#x), lambdafunction(lambda key#x, lambda key#x, false)), transform(map_values(col1#x), lambdafunction(lambda value#x, lambda value#x, false))) AS xm#x, cast(col2#x as int) AS x2#x]
++- Project [col1#x AS xm#x, cast(col2#x as int) AS x2#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -37,7 +37,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`y`, false
 insert into y values (map(1, 2), 10), (map(1, 3), 20), (map(2, 3), 20), (map(8, 3), 20)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/y, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/y], Append, `spark_catalog`.`default`.`y`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/y), [ym, y2]
-+- Project [map_from_arrays(transform(map_keys(col1#x), lambdafunction(lambda key#x, lambda key#x, false)), transform(map_values(col1#x), lambdafunction(lambda value#x, lambda value#x, false))) AS ym#x, cast(col2#x as int) AS y2#x]
++- Project [col1#x AS ym#x, cast(col2#x as int) AS y2#x]
    +- LocalRelation [col1#x, col2#x]
 
 

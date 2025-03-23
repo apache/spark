@@ -440,13 +440,11 @@ trait MasterSuiteBase extends SparkFunSuite
   private val _drivers = PrivateMethod[HashSet[DriverInfo]](Symbol("drivers"))
   protected val _waitingDrivers =
     PrivateMethod[mutable.ArrayBuffer[DriverInfo]](Symbol("waitingDrivers"))
-  private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
   protected val _newDriverId = PrivateMethod[String](Symbol("newDriverId"))
   protected val _newApplicationId = PrivateMethod[String](Symbol("newApplicationId"))
   protected val _maybeUpdateAppName =
     PrivateMethod[DriverDescription](Symbol("maybeUpdateAppName"))
   protected val _createApplication = PrivateMethod[ApplicationInfo](Symbol("createApplication"))
-  protected val _persistenceEngine = PrivateMethod[PersistenceEngine](Symbol("persistenceEngine"))
 
   protected val workerInfo = makeWorkerInfo(512, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -567,7 +565,7 @@ trait MasterSuiteBase extends SparkFunSuite
   }
 
   protected def getState(master: Master): RecoveryState.Value = {
-    master.invokePrivate(_state())
+    master.state
   }
 }
 

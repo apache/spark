@@ -592,9 +592,6 @@ Copyright 2015 The Apache Software Foundation
 Apache Extras Companion for log4j 1.2.
 Copyright 2007 The Apache Software Foundation
 
-Hive Metastore
-Copyright 2016 The Apache Software Foundation
-
 Apache Commons Logging
 Copyright 2003-2013 The Apache Software Foundation
 
@@ -969,12 +966,6 @@ The Derby build relies on a jar file supplied by the JSON Simple
 project, hosted at https://code.google.com/p/json-simple/.
 The JSON simple jar file is licensed under the Apache 2.0 License.
 
-Hive CLI
-Copyright 2016 The Apache Software Foundation
-
-Hive JDBC
-Copyright 2016 The Apache Software Foundation
-
 
 Chill is a set of Scala extensions for Kryo.
 Copyright 2012 Twitter, Inc.
@@ -1056,9 +1047,6 @@ Copyright 2019 The Apache Software Foundation
 Hive Query Language
 Copyright 2019 The Apache Software Foundation
 
-Hive Llap Common
-Copyright 2019 The Apache Software Foundation
-
 Hive Metastore
 Copyright 2019 The Apache Software Foundation
 
@@ -1083,8 +1071,6 @@ Copyright 2019 The Apache Software Foundation
 Hive Storage API
 Copyright 2018 The Apache Software Foundation
 
-Hive Vector-Code-Gen Utilities
-Copyright 2019 The Apache Software Foundation
 
 
                                  Apache License

@@ -117,8 +117,8 @@ SELECT udf(c), max(udf(a)) FROM test_having
 Project [udf(c)#x, max(udf(a))#x]
 +- Sort [c#x ASC NULLS FIRST], true
    +- Project [udf(c)#x, max(udf(a))#x, c#x]
-      +- Filter ((cast(udf(cast(count(1)#xL as string)) as bigint) > cast(2 as bigint)) OR (cast(udf(cast(min(a#x)#x as string)) as int) = cast(udf(cast(max(a#x)#x as string)) as int)))
-         +- Aggregate [c#x], [cast(udf(cast(c#x as string)) as string) AS udf(c)#x, max(cast(udf(cast(a#x as string)) as int)) AS max(udf(a))#x, count(1) AS count(1)#xL, min(a#x) AS min(a#x)#x, max(a#x) AS max(a#x)#x, c#x]
+      +- Filter ((cast(udf(cast(count(1)#xL as string)) as bigint) > cast(2 as bigint)) OR (cast(udf(cast(min(a)#x as string)) as int) = cast(udf(cast(max(a)#x as string)) as int)))
+         +- Aggregate [c#x], [cast(udf(cast(c#x as string)) as string) AS udf(c)#x, max(cast(udf(cast(a#x as string)) as int)) AS max(udf(a))#x, count(1) AS count(1)#xL, min(a#x) AS min(a)#x, max(a#x) AS max(a)#x, c#x]
             +- SubqueryAlias spark_catalog.default.test_having
                +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet
 
@@ -136,8 +136,8 @@ Filter (udf(udf(min(udf(a))))#x = udf(udf(max(udf(a))))#x)
 SELECT udf(min(udf(a))), udf(udf(max(a))) FROM test_having HAVING udf(min(a)) < udf(max(udf(a)))
 -- !query analysis
 Project [udf(min(udf(a)))#x, udf(udf(max(a)))#x]
-+- Filter (cast(udf(cast(min(a#x)#x as string)) as int) < cast(udf(cast(max(cast(udf(cast(a#x as string)) as int))#x as string)) as int))
-   +- Aggregate [cast(udf(cast(min(cast(udf(cast(a#x as string)) as int)) as string)) as int) AS udf(min(udf(a)))#x, cast(udf(cast(cast(udf(cast(max(a#x) as string)) as int) as string)) as int) AS udf(udf(max(a)))#x, min(a#x) AS min(a#x)#x, max(cast(udf(cast(a#x as string)) as int)) AS max(cast(udf(cast(a#x as string)) as int))#x]
++- Filter (cast(udf(cast(min(a)#x as string)) as int) < cast(udf(cast(max(udf(a))#x as string)) as int))
+   +- Aggregate [cast(udf(cast(min(cast(udf(cast(a#x as string)) as int)) as string)) as int) AS udf(min(udf(a)))#x, cast(udf(cast(cast(udf(cast(max(a#x) as string)) as int) as string)) as int) AS udf(udf(max(a)))#x, min(a#x) AS min(a)#x, max(cast(udf(cast(a#x as string)) as int)) AS max(udf(a))#x]
       +- SubqueryAlias spark_catalog.default.test_having
          +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet
 

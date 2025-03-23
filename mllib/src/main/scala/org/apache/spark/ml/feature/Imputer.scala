@@ -246,7 +246,8 @@ class ImputerModel private[ml] (
 
   import ImputerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("imputer"), null)
+  // For ml connect only
+  private[ml] def this() = this("", null)
 
   /** @group setParam */
   @Since("3.0.0")

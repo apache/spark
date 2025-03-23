@@ -405,7 +405,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sparkSession, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
-      instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
+      instance.bestModel.asInstanceOf[MLWritable].write.session(sparkSession).save(bestModelPath)
       if (persistSubModels) {
         require(instance.hasSubModels, "When persisting tuning models, you can only set " +
           "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
@@ -415,7 +415,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
           val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
           for (paramIndex <- instance.getEstimatorParamMaps.indices) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
-            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable]
+              .write.session(sparkSession).save(modelPath)
           }
         }
       }

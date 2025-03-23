@@ -3613,6 +3613,7 @@ class GroupMap(google.protobuf.message.Message):
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     TIMEOUT_CONF_FIELD_NUMBER: builtins.int
     STATE_SCHEMA_FIELD_NUMBER: builtins.int
+    TRANSFORM_WITH_STATE_INFO_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for Group Map API: apply, applyInPandas."""
@@ -3654,6 +3655,11 @@ class GroupMap(google.protobuf.message.Message):
     @property
     def state_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional) The schema for the grouped state."""
+    @property
+    def transform_with_state_info(self) -> global___TransformWithStateInfo:
+        """Below fields are used by TransformWithState and TransformWithStateInPandas
+        (Optional) TransformWithState related parameters.
+        """
     def __init__(
         self,
         *,
@@ -3677,6 +3683,7 @@ class GroupMap(google.protobuf.message.Message):
         output_mode: builtins.str | None = ...,
         timeout_conf: builtins.str | None = ...,
         state_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        transform_with_state_info: global___TransformWithStateInfo | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -3689,6 +3696,8 @@ class GroupMap(google.protobuf.message.Message):
             b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
+            "_transform_with_state_info",
+            b"_transform_with_state_info",
             "func",
             b"func",
             "initial_input",
@@ -3703,6 +3712,8 @@ class GroupMap(google.protobuf.message.Message):
             b"state_schema",
             "timeout_conf",
             b"timeout_conf",
+            "transform_with_state_info",
+            b"transform_with_state_info",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -3716,6 +3727,8 @@ class GroupMap(google.protobuf.message.Message):
             b"_state_schema",
             "_timeout_conf",
             b"_timeout_conf",
+            "_transform_with_state_info",
+            b"_transform_with_state_info",
             "func",
             b"func",
             "grouping_expressions",
@@ -3736,6 +3749,8 @@ class GroupMap(google.protobuf.message.Message):
             b"state_schema",
             "timeout_conf",
             b"timeout_conf",
+            "transform_with_state_info",
+            b"transform_with_state_info",
         ],
     ) -> None: ...
     @typing.overload
@@ -3757,8 +3772,81 @@ class GroupMap(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_timeout_conf", b"_timeout_conf"]
     ) -> typing_extensions.Literal["timeout_conf"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_transform_with_state_info", b"_transform_with_state_info"
+        ],
+    ) -> typing_extensions.Literal["transform_with_state_info"] | None: ...
 
 global___GroupMap = GroupMap
+
+class TransformWithStateInfo(google.protobuf.message.Message):
+    """Additional input parameters used for TransformWithState operator."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TIME_MODE_FIELD_NUMBER: builtins.int
+    EVENT_TIME_COLUMN_NAME_FIELD_NUMBER: builtins.int
+    OUTPUT_SCHEMA_FIELD_NUMBER: builtins.int
+    time_mode: builtins.str
+    """(Required) Time mode string for transformWithState."""
+    event_time_column_name: builtins.str
+    """(Optional) Event time column name."""
+    @property
+    def output_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) Schema for the output DataFrame.
+        Only required used for TransformWithStateInPandas.
+        """
+    def __init__(
+        self,
+        *,
+        time_mode: builtins.str = ...,
+        event_time_column_name: builtins.str | None = ...,
+        output_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_event_time_column_name",
+            b"_event_time_column_name",
+            "_output_schema",
+            b"_output_schema",
+            "event_time_column_name",
+            b"event_time_column_name",
+            "output_schema",
+            b"output_schema",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_event_time_column_name",
+            b"_event_time_column_name",
+            "_output_schema",
+            b"_output_schema",
+            "event_time_column_name",
+            b"event_time_column_name",
+            "output_schema",
+            b"output_schema",
+            "time_mode",
+            b"time_mode",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_event_time_column_name", b"_event_time_column_name"
+        ],
+    ) -> typing_extensions.Literal["event_time_column_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_output_schema", b"_output_schema"]
+    ) -> typing_extensions.Literal["output_schema"] | None: ...
+
+global___TransformWithStateInfo = TransformWithStateInfo
 
 class CoGroupMap(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

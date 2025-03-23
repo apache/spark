@@ -112,28 +112,36 @@ class MlOperator(google.protobuf.message.Message):
         builtins.type,
     ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        UNSPECIFIED: MlOperator._OperatorType.ValueType  # 0
-        ESTIMATOR: MlOperator._OperatorType.ValueType  # 1
-        TRANSFORMER: MlOperator._OperatorType.ValueType  # 2
-        EVALUATOR: MlOperator._OperatorType.ValueType  # 3
-        MODEL: MlOperator._OperatorType.ValueType  # 4
+        OPERATOR_TYPE_UNSPECIFIED: MlOperator._OperatorType.ValueType  # 0
+        OPERATOR_TYPE_ESTIMATOR: MlOperator._OperatorType.ValueType  # 1
+        """ML estimator"""
+        OPERATOR_TYPE_TRANSFORMER: MlOperator._OperatorType.ValueType  # 2
+        """ML transformer (non-model)"""
+        OPERATOR_TYPE_EVALUATOR: MlOperator._OperatorType.ValueType  # 3
+        """ML evaluator"""
+        OPERATOR_TYPE_MODEL: MlOperator._OperatorType.ValueType  # 4
+        """ML model"""
 
     class OperatorType(_OperatorType, metaclass=_OperatorTypeEnumTypeWrapper): ...
-    UNSPECIFIED: MlOperator.OperatorType.ValueType  # 0
-    ESTIMATOR: MlOperator.OperatorType.ValueType  # 1
-    TRANSFORMER: MlOperator.OperatorType.ValueType  # 2
-    EVALUATOR: MlOperator.OperatorType.ValueType  # 3
-    MODEL: MlOperator.OperatorType.ValueType  # 4
+    OPERATOR_TYPE_UNSPECIFIED: MlOperator.OperatorType.ValueType  # 0
+    OPERATOR_TYPE_ESTIMATOR: MlOperator.OperatorType.ValueType  # 1
+    """ML estimator"""
+    OPERATOR_TYPE_TRANSFORMER: MlOperator.OperatorType.ValueType  # 2
+    """ML transformer (non-model)"""
+    OPERATOR_TYPE_EVALUATOR: MlOperator.OperatorType.ValueType  # 3
+    """ML evaluator"""
+    OPERATOR_TYPE_MODEL: MlOperator.OperatorType.ValueType  # 4
+    """ML model"""
 
     NAME_FIELD_NUMBER: builtins.int
     UID_FIELD_NUMBER: builtins.int
     TYPE_FIELD_NUMBER: builtins.int
     name: builtins.str
-    """The qualified name of the ML operator."""
+    """(Required) The qualified name of the ML operator."""
     uid: builtins.str
-    """Unique id of the ML operator"""
+    """(Required) Unique id of the ML operator"""
     type: global___MlOperator.OperatorType.ValueType
-    """Represents what the ML operator is"""
+    """(Required) Represents what the ML operator is"""
     def __init__(
         self,
         *,
@@ -156,7 +164,9 @@ class ObjectRef(google.protobuf.message.Message):
 
     ID_FIELD_NUMBER: builtins.int
     id: builtins.str
-    """The ID is used to lookup the object on the server side."""
+    """(Required) The ID is used to lookup the object on the server side.
+    Note it is different from the 'uid' of a ML object.
+    """
     def __init__(
         self,
         *,

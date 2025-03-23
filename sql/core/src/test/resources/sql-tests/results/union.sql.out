@@ -51,9 +51,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 133,
-    "fragment" : "SELECT *\nFROM   (SELECT * FROM t1 where c1 = 1\n        UNION ALL\n        SELECT * FROM t2\n        UNION ALL\n        SELECT * FROM t2)"
+    "startIndex" : 18,
+    "stopIndex" : 89,
+    "fragment" : "SELECT * FROM t1 where c1 = 1\n        UNION ALL\n        SELECT * FROM t2"
   } ]
 }
 

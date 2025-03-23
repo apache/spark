@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 import os
+import platform
 import shutil
 import tempfile
 import unittest
+import time
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
@@ -2761,6 +2763,9 @@ class BaseUDTFTestsMixin:
         res = self.spark.sql("select i, to_json(v['v1']) from test_udtf_struct(8)")
         assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(99 + n)}"}}') for n in range(8)])
 
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
     def test_udtf_segfault(self):
         for enabled, expected in [
             (True, "Segmentation fault"),
@@ -2797,6 +2802,45 @@ class BaseUDTFTestsMixin:
                     self._check_result_or_exception(
                         TestUDTFWithAnalyze, None, expected, err_type=Exception
                     )
+
+    def test_udtf_kill_on_timeout(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "1s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+            with self.subTest(method="eval"):
+
+                class TestUDTF:
+                    def eval(self):
+                        time.sleep(2)
+                        yield "x"
+
+                self._check_result_or_exception(
+                    TestUDTF,
+                    "x: string",
+                    "Python worker exited unexpectedly",
+                    err_type=Exception,
+                )
+
+            with self.subTest(method="analyze"):
+
+                class TestUDTFWithAnalyze:
+                    @staticmethod
+                    def analyze():
+                        time.sleep(2)
+                        return AnalyzeResult(StructType().add("x", StringType()))
+
+                    def eval(self):
+                        yield "x",
+
+                self._check_result_or_exception(
+                    TestUDTFWithAnalyze,
+                    None,
+                    "Python worker exited unexpectedly",
+                    err_type=Exception,
+                )
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

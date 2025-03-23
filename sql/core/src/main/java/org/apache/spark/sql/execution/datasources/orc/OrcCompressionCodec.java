@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.orc;
 
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.orc.CompressionKind;
@@ -47,11 +47,15 @@ public enum OrcCompressionCodec {
     return this.compressionKind;
   }
 
-  public static final Map<String, String> codecNameMap =
+  private static final EnumMap<OrcCompressionCodec, String> codecNameMap =
     Arrays.stream(OrcCompressionCodec.values()).collect(
-      Collectors.toMap(codec -> codec.name(), codec -> codec.name().toLowerCase(Locale.ROOT)));
+      Collectors.toMap(
+        codec -> codec,
+        codec -> codec.name().toLowerCase(Locale.ROOT),
+        (oldValue, newValue) -> oldValue,
+        () -> new EnumMap<>(OrcCompressionCodec.class)));
 
   public String lowerCaseName() {
-    return codecNameMap.get(this.name());
+    return codecNameMap.get(this);
   }
 }

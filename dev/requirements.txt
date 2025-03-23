@@ -7,7 +7,7 @@ pyarrow>=11.0.0
 six==1.16.0
 pandas>=2.2.0
 scipy
-plotly>=4.8
+plotly<6.0.0
 mlflow>=2.3.1
 scikit-learn
 matplotlib
@@ -73,7 +73,7 @@ graphviz==0.20.3
 flameprof==0.4
 
 # TorchDistributor dependencies
-torch
+torch<2.6.0
 torchvision
 torcheval
 

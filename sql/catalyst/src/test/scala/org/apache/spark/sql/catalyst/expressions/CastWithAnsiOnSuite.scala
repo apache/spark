@@ -303,10 +303,6 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     s"cannot be cast to ${toSQLType(to)} because it is malformed."
   }
 
-  private def castErrMsg(l: Literal, to: DataType): String = {
-    castErrMsg(l, to, l.dataType)
-  }
-
   test("cast from invalid string to numeric should throw NumberFormatException") {
     def check(value: String, dataType: DataType): Unit = {
       checkExceptionInExpression[NumberFormatException](cast(value, dataType),
@@ -740,5 +736,13 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   test("SPARK-39749: cast Decimal to string") {
     val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
     checkEvaluation(cast(input, StringType), "0.000000123")
+  }
+
+  test("cast invalid string input to time") {
+    Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimeType()),
+        castErrMsg(invalidInput, TimeType()))
+    }
   }
 }

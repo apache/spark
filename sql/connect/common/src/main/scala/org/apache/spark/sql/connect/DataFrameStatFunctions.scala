@@ -23,9 +23,9 @@ import org.apache.spark.connect.proto.{Relation, StatSampleBy}
 import org.apache.spark.sql
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, PrimitiveDoubleEncoder}
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toLiteral}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.DataFrameStatFunctions.approxQuantileResultEncoder
-import org.apache.spark.sql.functions.lit
 
 /**
  * Statistic functions for `DataFrame`s.
@@ -120,20 +120,19 @@ final class DataFrameStatFunctions private[sql] (protected val df: DataFrame)
 
   /** @inheritdoc */
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
-    import sparkSession.RichColumn
     require(
       fractions.values.forall(p => p >= 0.0 && p <= 1.0),
       s"Fractions must be in [0, 1], but got $fractions.")
     sparkSession.newDataFrame { builder =>
       val sampleByBuilder = builder.getSampleByBuilder
         .setInput(root)
-        .setCol(col.expr)
+        .setCol(toExpr(col))
         .setSeed(seed)
       fractions.foreach { case (k, v) =>
         sampleByBuilder.addFractions(
           StatSampleBy.Fraction
             .newBuilder()
-            .setStratum(lit(k).expr.getLiteral)
+            .setStratum(toLiteral(k).getLiteral)
             .setFraction(v))
       }
     }

@@ -16,7 +16,20 @@
 #
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    TYPE_CHECKING,
+)
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
@@ -38,6 +51,8 @@ __all__ = [
     "InputPartition",
     "SimpleDataSourceStreamReader",
     "WriterCommitMessage",
+    "Filter",
+    "EqualTo",
 ]
 
 
@@ -234,6 +249,69 @@ class DataSource(ABC):
         )
 
 
+ColumnPath = Tuple[str, ...]
+"""
+A tuple of strings representing a column reference.
+
+For example, `("a", "b", "c")` represents the column `a.b.c`.
+
+.. versionadded: 4.1.0
+"""
+
+
+@dataclass(frozen=True)
+class Filter(ABC):
+    """
+    The base class for filters used for filter pushdown.
+
+    .. versionadded: 4.1.0
+
+    Notes
+    -----
+    Column references are represented as a tuple of strings. For example:
+
+    +----------------+----------------------+
+    | Column         | Representation       |
+    +----------------+----------------------+
+    | `col1`         | `("col1",)`          |
+    | `a.b.c`        | `("a", "b", "c")`    |
+    +----------------+----------------------+
+
+    Literal values are represented as Python objects of types such as
+    `int`, `float`, `str`, `bool`, `datetime`, etc.
+    See `Data Types <https://spark.apache.org/docs/latest/sql-ref-datatypes.html>`_
+    for more information about how values are represented in Python.
+
+    Currently only the equality of attribute and literal value is supported for
+    filter pushdown. Other types of filters cannot be pushed down.
+
+    Examples
+    --------
+    Supported filters
+
+    +---------------------+--------------------------------------------+
+    | SQL filter          | Representation                             |
+    +---------------------+--------------------------------------------+
+    | `a.b.c = 1`         | `EqualTo(("a", "b", "c"), 1)`              |
+    | `a = 1`             | `EqualTo(("a", "b", "c"), 1)`              |
+    | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
+    | `a = array(1, 2)`   | `EqualTo(("a",), [1, 2])`                  |
+    +---------------------+--------------------------------------------+
+
+    Unsupported filters
+    - `a = b`
+    - `f(a, b) = 1`
+    - `a % 2 = 1`
+    - `a[0] = 1`
+    """
+
+
+@dataclass(frozen=True)
+class EqualTo(Filter):
+    attribute: ColumnPath
+    value: Any
+
+
 class InputPartition:
     """
     A base class representing an input partition returned by the `partitions()`
@@ -279,6 +357,67 @@ class DataSourceReader(ABC):
 
     .. versionadded: 4.0.0
     """
+
+    def pushFilters(self, filters: List["Filter"]) -> Iterable["Filter"]:
+        """
+        Called with the list of filters that can be pushed down to the data source.
+
+        The list of filters should be interpreted as the AND of the elements.
+
+        Filter pushdown allows the data source to handle a subset of filters. This
+        can improve performance by reducing the amount of data that needs to be
+        processed by Spark.
+
+        This method is called once during query planning. By default, it returns
+        all filters, indicating that no filters can be pushed down. Subclasses can
+        override this method to implement filter pushdown.
+
+        It's recommended to implement this method only for data sources that natively
+        support filtering, such as databases and GraphQL APIs.
+
+        .. versionadded: 4.1.0
+
+        Parameters
+        ----------
+        filters : list of :class:`Filter`\\s
+
+        Returns
+        -------
+        iterable of :class:`Filter`\\s
+            Filters that still need to be evaluated by Spark post the data source
+            scan. This includes unsupported filters and partially pushed filters.
+            Every returned filter must be one of the input filters by reference.
+
+        Side effects
+        ------------
+        This method is allowed to modify `self`. The object must remain picklable.
+        Modifications to `self` are visible to the `partitions()` and `read()` methods.
+
+        Examples
+        --------
+        Example filters and the resulting arguments passed to pushFilters:
+
+        +-------------------------------+---------------------------------------------+
+        | Filters                       | Pushdown Arguments                          |
+        +-------------------------------+---------------------------------------------+
+        | `a = 1 and b = 2`             | `[EqualTo(("a",), 1), EqualTo(("b",), 2)]`  |
+        | `a = 1 or b = 2`              | `[]`                                        |
+        | `a = 1 or (b = 2 and c = 3)`  | `[]`                                        |
+        | `a = 1 and (b = 2 or c = 3)`  | `[EqualTo(("a",), 1)]`                      |
+        +-------------------------------+---------------------------------------------+
+
+        Implement pushFilters to support EqualTo filters only:
+
+        >>> def pushFilters(self, filters):
+        ...     for filter in filters:
+        ...         if isinstance(filter, EqualTo):
+        ...             # Save supported filter for handling in partitions() and read()
+        ...             self.filters.append(filter)
+        ...         else:
+        ...             # Unsupported filter
+        ...             yield filter
+        """
+        return filters
 
     def partitions(self) -> Sequence[InputPartition]:
         """

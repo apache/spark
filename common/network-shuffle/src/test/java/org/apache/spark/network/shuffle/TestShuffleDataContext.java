@@ -63,7 +63,7 @@ public class TestShuffleDataContext {
     for (String localDir : localDirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir));
-      } catch (IOException e) {
+      } catch (Exception e) {
         logger.warn("Unable to cleanup localDir = " + localDir, e);
       }
     }

@@ -568,7 +568,7 @@ SELECT k FROM (SELECT nt2.k FROM nt1 full outer join nt2 using (k))
 Project [k#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [k#x]
-      +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
+      +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
          +- Join FullOuter, (k#x = k#x)
             :- SubqueryAlias nt1
             :  +- View (`nt1`, [k#x, v1#x])
@@ -589,7 +589,7 @@ SELECT nt2.k AS key FROM nt1 full outer join nt2 using (k) ORDER BY key
 -- !query analysis
 Sort [key#x ASC NULLS FIRST], true
 +- Project [k#x AS key#x]
-   +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
+   +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
       +- Join FullOuter, (k#x = k#x)
          :- SubqueryAlias nt1
          :  +- View (`nt1`, [k#x, v1#x])
@@ -609,7 +609,7 @@ Sort [key#x ASC NULLS FIRST], true
 SELECT k, nt1.k FROM nt1 full outer join nt2 using (k)
 -- !query analysis
 Project [k#x, k#x]
-+- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
++- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
    +- Join FullOuter, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
@@ -629,7 +629,7 @@ Project [k#x, k#x]
 SELECT k, nt2.k FROM nt1 full outer join nt2 using (k)
 -- !query analysis
 Project [k#x, k#x]
-+- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
++- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
    +- Join FullOuter, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
@@ -828,11 +828,11 @@ WithCTE
 :        +- SubqueryAlias t
 :           +- LocalRelation [key#x]
 +- Project [key#x]
-   +- Project [key#x, key#x, key#x]
+   +- Project [key#x, key#x]
       +- Filter NOT key#x LIKE bb.%
-         +- Project [coalesce(key#x, key#x) AS key#x, key#x, key#x, key#x]
+         +- Project [coalesce(key#x, key#x) AS key#x, key#x]
             +- Join FullOuter, (key#x = key#x)
                :- SubqueryAlias t1
-               :  +- CTERelationRef xxxx, true, [key#x], false, false
+               :  +- CTERelationRef xxxx, true, [key#x], false, false, 1
                +- SubqueryAlias t2
-                  +- CTERelationRef xxxx, true, [key#x], false, false
+                  +- CTERelationRef xxxx, true, [key#x], false, false, 1

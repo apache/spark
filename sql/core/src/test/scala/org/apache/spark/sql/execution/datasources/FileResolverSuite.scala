@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.resolver.ProhibitedResolver
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -83,9 +84,12 @@ class FileResolverSuite extends QueryTest with SharedSparkSession {
 
     val unresolvedPlan = spark.sql(sqlText).queryExecution.logical
 
-    val result = fileResolver.resolveOperator(
-      unresolvedPlan.asInstanceOf[Project].child.asInstanceOf[UnresolvedRelation]
-    )
+    val result = fileResolver
+      .resolveOperator(
+        unresolvedPlan.asInstanceOf[Project].child.asInstanceOf[UnresolvedRelation],
+        new ProhibitedResolver
+      )
+      .get
 
     val logicalRelation = result.asInstanceOf[LogicalRelation]
     assert(

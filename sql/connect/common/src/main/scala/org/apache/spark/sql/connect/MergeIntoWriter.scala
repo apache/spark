@@ -24,6 +24,7 @@ import org.apache.spark.connect.proto.{Expression, MergeAction, MergeIntoTableCo
 import org.apache.spark.connect.proto.MergeAction.ActionType._
 import org.apache.spark.sql
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toExpr
 import org.apache.spark.sql.functions.expr
 
 /**
@@ -44,13 +45,12 @@ import org.apache.spark.sql.functions.expr
 @Experimental
 class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column)
     extends sql.MergeIntoWriter[T] {
-  import ds.sparkSession.RichColumn
 
   private val builder = MergeIntoTableCommand
     .newBuilder()
     .setTargetTableName(table)
     .setSourceTablePlan(ds.plan.getRoot)
-    .setMergeCondition(on.expr)
+    .setMergeCondition(toExpr(on))
 
   /**
    * Executes the merge operation.
@@ -121,12 +121,12 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
       condition: Option[Column],
       assignments: Map[String, Column] = Map.empty): Expression = {
     val builder = proto.MergeAction.newBuilder().setActionType(actionType)
-    condition.foreach(c => builder.setCondition(c.expr))
+    condition.foreach(c => builder.setCondition(toExpr(c)))
     assignments.foreach { case (k, v) =>
       builder
         .addAssignmentsBuilder()
-        .setKey(expr(k).expr)
-        .setValue(v.expr)
+        .setKey(toExpr(expr(k)))
+        .setValue(toExpr(v))
     }
     Expression
       .newBuilder()

@@ -19,6 +19,7 @@ package org.apache.spark.launcher;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -46,16 +47,7 @@ class CommandBuilderUtils {
 
   /** Joins a list of strings using the given separator. */
   static String join(String sep, String... elements) {
-    StringBuilder sb = new StringBuilder();
-    for (String e : elements) {
-      if (e != null) {
-        if (sb.length() > 0) {
-          sb.append(sep);
-        }
-        sb.append(e);
-      }
-    }
-    return sb.toString();
+    return join(sep, Arrays.asList(elements));
   }
 
   /** Joins a list of strings using the given separator. */
@@ -63,7 +55,7 @@ class CommandBuilderUtils {
     StringBuilder sb = new StringBuilder();
     for (String e : elements) {
       if (e != null) {
-        if (sb.length() > 0) {
+        if (!sb.isEmpty()) {
           sb.append(sep);
         }
         sb.append(e);

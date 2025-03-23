@@ -49,7 +49,7 @@ class SparkConnectSessionManager extends Logging {
       .build[SessionKey, SessionHolderInfo]()
 
   /** Executor for the periodic maintenance */
-  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+  private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
   private def validateSessionId(
@@ -234,7 +234,7 @@ class SparkConnectSessionManager extends Logging {
       defaultInactiveTimeoutMs: Long,
       ignoreCustomTimeout: Boolean): Unit = {
     // Find any sessions that expired and should be removed.
-    logInfo("Started periodic run of SparkConnectSessionManager maintenance.")
+    logDebug("Started periodic run of SparkConnectSessionManager maintenance.")
 
     def shouldExpire(info: SessionHolderInfo, nowMs: Long): Boolean = {
       val timeoutMs = if (info.customInactiveTimeoutMs.isDefined && !ignoreCustomTimeout) {
@@ -262,7 +262,7 @@ class SparkConnectSessionManager extends Logging {
       }
     })
 
-    logInfo("Finished periodic run of SparkConnectSessionManager maintenance.")
+    logDebug("Finished periodic run of SparkConnectSessionManager maintenance.")
   }
 
   private def newIsolatedSession(): SparkSession = {

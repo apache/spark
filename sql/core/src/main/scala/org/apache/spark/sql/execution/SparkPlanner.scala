@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
@@ -30,9 +29,9 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
-  extends SparkStrategies with SQLConfHelper {
+  extends SparkStrategies {
 
-  override def conf: SQLConf = session.sessionState.conf
+  def conf: SQLConf = session.sessionState.conf
 
   def numPartitions: Int = conf.numShufflePartitions
 

@@ -1366,40 +1366,21 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     sql("select 1 as a, a").queryExecution.assertAnalyzed()
   }
 
-  test("SPARK-49349: Improve error message for LCA with Generate") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          s"""
-            |SELECT
-            |  explode(split(name , ',')) AS new_name,
-            |  new_name like 'a%'
-            |FROM $testTable
-            |""".stripMargin)
-      },
-      condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GENERATOR",
-      sqlState = "0A000",
-      parameters = Map(
-        "lca" -> "`new_name`",
-        "generatorExpr" -> "\"unresolvedalias(lateralAliasReference(new_name) LIKE a%)\""))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          s"""
-             |SELECT
-             |  explode_outer(from_json(name,'array<struct<values:string>>')) as newName,
-             |  size(from_json(newName.values,'array<string>')) +
-             |    size(array(from_json(newName.values,'map<string,string>'))) as size
-             |FROM $testTable
-             |""".stripMargin)
-      },
-      condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GENERATOR",
-      sqlState = "0A000",
-      parameters = Map(
-        "lca" -> "`newName.values`",
-        "generatorExpr" -> ("\"(size(from_json(lateralAliasReference(newName.values), " +
-          "array<string>)) + size(array(from_json(lateralAliasReference(newName.values), " +
-          "map<string,string>)))) AS size\"")))
+  test("LateralColumnAlias with Generate") {
+    checkAnswer(
+      sql("WITH cte AS (SELECT EXPLODE(ARRAY(1, 2, 3)) AS c1, c1) SELECT * FROM cte"),
+      Row(1, 1) :: Row(2, 2) :: Row(3, 3) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  explode(split(name , ',')) AS new_name,
+           |  new_name like 'a%'
+           |FROM $testTable
+           |""".stripMargin),
+      Row("alex", true) :: Row("amy", true) :: Row("cathy", false) ::
+        Row("david", false) :: Row("jen", false) :: Nil
+    )
   }
 }

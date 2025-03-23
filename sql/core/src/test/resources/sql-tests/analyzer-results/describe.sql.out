@@ -334,41 +334,9 @@ ExplainCommand 'DescribeRelationJsonCommand [c=Us, d=2], true, [json_metadata#x]
 
 
 -- !query
-DROP TABLE t
--- !query analysis
-DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t
-
-
--- !query
-DROP VIEW temp_v
--- !query analysis
-DropTempViewCommand temp_v
-
-
--- !query
-DROP VIEW temp_Data_Source_View
--- !query analysis
-DropTempViewCommand temp_Data_Source_View
-
-
--- !query
-DROP VIEW v
--- !query analysis
-DropTableCommand `spark_catalog`.`default`.`v`, false, true, false
-
-
--- !query
 CREATE TABLE d (a STRING DEFAULT 'default-value', b INT DEFAULT 42) USING parquet COMMENT 'table_comment'
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`d`"
-  }
-}
+CreateDataSourceTableCommand `spark_catalog`.`default`.`d`, false
 
 
 -- !query
@@ -398,14 +366,7 @@ DescribeTableCommand `spark_catalog`.`default`.`d`, true, [col_name#x, data_type
 -- !query
 CREATE TABLE e (a STRING DEFAULT CONCAT('a\n b\n ', 'c\n d'), b INT DEFAULT 42) USING parquet COMMENT 'table_comment'
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`e`"
-  }
-}
+CreateDataSourceTableCommand `spark_catalog`.`default`.`e`, false
 
 
 -- !query
@@ -430,3 +391,70 @@ DescribeTableCommand `spark_catalog`.`default`.`e`, true, [col_name#x, data_type
 DESC FORMATTED e
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`e`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+CREATE TABLE f USING json PARTITIONED BY (B, C) AS SELECT 'APACHE' A, CAST('SPARK' AS BINARY) B, TIMESTAMP'2018-11-17 13:33:33' C
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`f`, ErrorIfExists, [A, B, C]
+   +- Project [APACHE AS A#x, cast(SPARK as binary) AS B#x, 2018-11-17 13:33:33 AS C#x]
+      +- OneRowRelation
+
+
+-- !query
+DESC FORMATTED f PARTITION (B='SPARK', C=TIMESTAMP'2018-11-17 13:33:33')
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`f`, [B=SPARK, C=2018-11-17 13:33:33], true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+DESC TABLE EXTENDED f PARTITION (B='SPARK', C=TIMESTAMP'2018-11-17 13:33:33') AS JSON
+-- !query analysis
+DescribeRelationJsonCommand [B=SPARK, C=2018-11-17 13:33:33], true, [json_metadata#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.f, V1Table(default.f), [A#x, B#x, C#x]
+
+
+-- !query
+DROP VIEW temp_v
+-- !query analysis
+DropTempViewCommand temp_v
+
+
+-- !query
+DROP VIEW temp_Data_Source_View
+-- !query analysis
+DropTempViewCommand temp_Data_Source_View
+
+
+-- !query
+DROP VIEW v
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`v`, false, true, false
+
+
+-- !query
+DROP TABLE t
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t
+
+
+-- !query
+DROP TABLE d
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.d
+
+
+-- !query
+DROP TABLE e
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.e
+
+
+-- !query
+DROP TABLE f
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.f

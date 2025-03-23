@@ -68,7 +68,7 @@ jobs:
   tpcds-1g-gen:
     name: "Generate an input dataset for TPCDSQueryBenchmark with SF=1"
     if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, '*')
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -105,7 +105,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: databricks/tpcds-kit
-          ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
+          ref: 1b7fb7529edae091684201fab142d956d6afd881
           path: ./tpcds-kit
       - name: Build tpcds-kit
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'

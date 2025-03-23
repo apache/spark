@@ -27,6 +27,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -336,7 +337,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
 
   /** @inheritdoc */
   override protected def validateSingleVariantColumn(): Unit = {
-    if (extraOptions.get(JSONOptions.SINGLE_VARIANT_COLUMN).isDefined &&
+    if (extraOptions.get(DataSourceOptions.SINGLE_VARIANT_COLUMN).isDefined &&
       userSpecifiedSchema.isDefined) {
       throw QueryCompilationErrors.invalidSingleVariantColumn()
     }

@@ -18,13 +18,19 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class BasicInMemoryTableCatalog extends TableCatalog {
@@ -122,7 +128,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
+    val schema = CatalogV2Util.applySchemaChanges(
+      table.schema,
+      changes,
+      tableProvider = Some("in-memory"),
+      statementType = "ALTER TABLE")
     val finalPartitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
 
     // fail if the last column in the schema was dropped
@@ -162,7 +172,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 }
 
-class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
+class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces
+  with ProcedureCatalog {
 
   override def capabilities: java.util.Set[TableCatalogCapability] = {
     Set(
@@ -172,8 +183,17 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     ).asJava
   }
 
+  protected val procedures: util.Map[Identifier, UnboundProcedure] =
+    new util.HashMap[Identifier, UnboundProcedure]
+  procedures.put(Identifier.of(Array("dummy"), "increment"), UnboundIncrement)
+
   protected def allNamespaces: Seq[Seq[String]] = {
-    (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
+    (tables.keySet.asScala.map(_.namespace.toSeq)
+      ++ namespaces.keySet.asScala
+      ++ procedures.keySet.asScala
+      .filter(i => !i.namespace.sameElements(Array("dummy")))
+      .map(_.namespace.toSeq)
+      ).toSeq.distinct
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = {
@@ -250,6 +270,39 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       throw new NoSuchNamespaceException(name() +: namespace)
     }
   }
+
+  override def loadProcedure(ident: Identifier): UnboundProcedure = {
+    val procedure = procedures.get(ident)
+    if (procedure == null) throw new RuntimeException("Procedure not found: " + ident)
+    procedure
+  }
+
+  object UnboundIncrement extends UnboundProcedure {
+    override def name: String = "dummy_increment"
+    override def description: String = "test method to increment an in-memory counter"
+    override def bind(inputType: StructType): BoundProcedure = BoundIncrement
+  }
+
+  object BoundIncrement extends BoundProcedure {
+    private val value = new AtomicInteger(0)
+
+    override def name: String = "dummy_increment"
+
+    override def description: String = "test method to increment an in-memory counter"
+
+    override def isDeterministic: Boolean = false
+
+    override def parameters: Array[ProcedureParameter] = Array()
+
+    def outputType: StructType = new StructType().add("out", DataTypes.IntegerType)
+
+    override def call(input: InternalRow): java.util.Iterator[Scan] = {
+      val result = Result(outputType, Array(InternalRow(value.incrementAndGet().intValue)))
+      Collections.singleton[Scan](result).iterator()
+    }
+  }
+
+  case class Result(readSchema: StructType, rows: Array[InternalRow]) extends LocalScan
 }
 
 object InMemoryTableCatalog {

@@ -278,15 +278,15 @@ public class TaskMemoryManager {
       }
     } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
-      logger.error("error while calling spill() on {}", e,
+      logger.error("Error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       throw new RuntimeException(e.getMessage());
     } catch (IOException e) {
-      logger.error("error while calling spill() on {}", e,
+      logger.error("Error while calling spill() on {}", e,
         MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
       throw new SparkOutOfMemoryError(
-        "_LEGACY_ERROR_TEMP_3300",
+        "SPILL_OUT_OF_MEMORY",
         new HashMap<String, String>() {{
           put("consumerToSpill", consumerToSpill.toString());
           put("message", e.getMessage());

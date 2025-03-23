@@ -286,7 +286,8 @@ class TargetEncoderModel private[ml] (
     @Since("4.0.0") private[ml] val stats: Array[Map[Double, (Double, Double)]])
   extends Model[TargetEncoderModel] with TargetEncoderBase with MLWritable {
 
-  private[ml] def this() = this(Identifiable.randomUID("TargetEncoder"), Array.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Array.empty)
 
   /** @group setParam */
   @Since("4.0.0")

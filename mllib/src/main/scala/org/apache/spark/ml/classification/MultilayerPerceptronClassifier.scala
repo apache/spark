@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.OneHotEncoderModel
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -173,6 +173,15 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val topology = FeedForwardTopology.multiLayerPerceptron($(layers), softmaxOnTop = true)
+    val expectedWeightSize = topology.layers.map(_.weightSize).sum
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(expectedWeightSize) // weights
+    size
+  }
+
   /**
    * Train a model using the given dataset and parameters.
    * Developers can implement this instead of `fit()` to avoid dealing with schema validation
@@ -283,6 +292,9 @@ class MultilayerPerceptronClassificationModel private[ml] (
   with MultilayerPerceptronParams with Serializable with MLWritable
   with HasTrainingSummary[MultilayerPerceptronClassificationTrainingSummary]{
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty)
+
   @Since("1.6.0")
   override lazy val numFeatures: Int = $(layers).head
 
@@ -323,6 +335,14 @@ class MultilayerPerceptronClassificationModel private[ml] (
     val copied = new MultilayerPerceptronClassificationModel(uid, weights)
       .setParent(parent)
     copyValues(copied, extra)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.weights != null) {
+      size += this.weights.getSizeInBytes
+    }
+    size
   }
 
   @Since("2.0.0")

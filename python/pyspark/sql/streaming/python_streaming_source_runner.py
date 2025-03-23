@@ -21,7 +21,7 @@ import json
 from typing import IO, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
+from pyspark.errors import IllegalArgumentException, PySparkAssertionError
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -78,6 +78,7 @@ def partitions_func(
     start_offset = json.loads(utf8_deserializer.loads(infile))
     end_offset = json.loads(utf8_deserializer.loads(infile))
     partitions = reader.partitions(start_offset, end_offset)
+
     # Return the serialized partition values.
     write_int(len(partitions), outfile)
     for partition in partitions:
@@ -183,12 +184,6 @@ def main(infile: IO, outfile: IO) -> None:
                         },
                     )
                 outfile.flush()
-        except Exception as e:
-            error_msg = "data source {} throw exception: {}".format(data_source.name, e)
-            raise PySparkRuntimeError(
-                errorClass="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-                messageParameters={"msg": error_msg},
-            )
         finally:
             reader.stop()
     except BaseException as e:

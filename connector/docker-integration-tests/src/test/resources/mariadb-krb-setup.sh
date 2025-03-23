@@ -16,5 +16,5 @@
 # limitations under the License.
 #
 
-mysql -u root -p'rootpass' -e 'CREATE USER "mariadb/__IP_ADDRESS_REPLACE_ME__@EXAMPLE.COM" IDENTIFIED WITH gssapi;'
-mysql -u root -p'rootpass' -D mysql -e 'GRANT ALL PRIVILEGES ON *.* TO "mariadb/__IP_ADDRESS_REPLACE_ME__@EXAMPLE.COM";'
+mariadb -u root -p'rootpass' -e 'CREATE USER "mariadb/__IP_ADDRESS_REPLACE_ME__@EXAMPLE.COM" IDENTIFIED WITH gssapi;'
+mariadb -u root -p'rootpass' -D mysql -e 'GRANT ALL PRIVILEGES ON *.* TO "mariadb/__IP_ADDRESS_REPLACE_ME__@EXAMPLE.COM";'

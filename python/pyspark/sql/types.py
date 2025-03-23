@@ -1730,11 +1730,13 @@ class VariantVal:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import *
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
-    >>> v = df.select(parse_json(df.json).alias("var")).collect()[0].var
+    >>> v = df.select(sf.parse_json(df.json).alias("var")).head().var
     >>> v.toPython()
     {'a': 1}
+    >>> v.toJson()
+    '{"a":1}'
     """
 
     def __init__(self, value: bytes, metadata: bytes):

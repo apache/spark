@@ -237,6 +237,15 @@ class FMClassifier @Since("3.0.0") (
 
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMClassifier = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // linear
+    size += Matrices.getDenseSize(numFeatures, $(factorSize)) // factors
+    size
+  }
 }
 
 @Since("3.0.0")
@@ -258,6 +267,9 @@ class FMClassificationModel private[classification] (
   extends ProbabilisticClassificationModel[Vector, FMClassificationModel]
     with FMClassifierParams with MLWritable
     with HasTrainingSummary[FMClassificationTrainingSummary]{
+
+  // For ml connect only
+  private[ml] def this() = this("", Double.NaN, Vectors.empty, Matrices.empty)
 
   @Since("3.0.0")
   override val numClasses: Int = 2
@@ -307,6 +319,17 @@ class FMClassificationModel private[classification] (
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMClassificationModel = {
     copyValues(new FMClassificationModel(uid, intercept, linear, factors), extra)
+  }
+
+  override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.linear != null) {
+      size += this.linear.getSizeInBytes
+    }
+    if (this.factors != null) {
+      size += this.factors.getSizeInBytes
+    }
+    size
   }
 
   @Since("3.0.0")

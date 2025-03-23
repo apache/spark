@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
@@ -36,7 +37,10 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
     with Logging {
 
   private val port = SparkConnectService.localPort
-  private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+  private var connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+  Connect.getAuthenticateToken.foreach { token =>
+    connectUrl = s"$connectUrl;token=$token"
+  }
   // Scoped for testing
   private[connect] val runner = StreamingPythonRunner(
     listener,

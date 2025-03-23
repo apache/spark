@@ -176,8 +176,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         }
       });
     } catch (Exception e) {
-      logger.error("Error while invoking RpcHandler#receive() on RPC id {}", e,
-        MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId));
+      logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
+        MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId),
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     } finally {
       req.body().release();
@@ -262,8 +263,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         respond(new RpcResponse(req.requestId,
           new NioManagedBuffer(blockPushNonFatalFailure.getResponse())));
       } else {
-        logger.error("Error while invoking RpcHandler#receive() on RPC id {}", e,
-          MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId));
+        logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
+          MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
         respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
       }
       // We choose to totally fail the channel, rather than trying to recover as we do in other
@@ -279,7 +281,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     try {
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer());
     } catch (Exception e) {
-      logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
+      logger.error("Error while invoking RpcHandler#receive() for one-way message from {}.", e,
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
     } finally {
       req.body().release();
     }
@@ -304,9 +307,10 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       });
     } catch (Exception e) {
       logger.error("Error while invoking receiveMergeBlockMetaReq() for appId {} shuffleId {} "
-        + "reduceId {}", e, MDC.of(LogKeys.APP_ID$.MODULE$, req.appId),
+        + "reduceId {} from {}", e, MDC.of(LogKeys.APP_ID$.MODULE$, req.appId),
           MDC.of(LogKeys.SHUFFLE_ID$.MODULE$, req.shuffleId),
-          MDC.of(LogKeys.REDUCE_ID$.MODULE$, req.reduceId));
+          MDC.of(LogKeys.REDUCE_ID$.MODULE$, req.reduceId),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     }
   }

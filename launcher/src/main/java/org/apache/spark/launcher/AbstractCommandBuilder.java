@@ -235,9 +235,8 @@ abstract class AbstractCommandBuilder {
           addToClassPath(cp, f.toString());
         }
       }
-      // If we're in 'spark.local.connect', it should create a Spark Classic Spark Context
-      // that launches Spark Connect server.
-      if (isRemote && System.getenv("SPARK_LOCAL_CONNECT") == null) {
+
+      if (isRemote) {
         for (File f: new File(jarsDir).listFiles()) {
           // Exclude Spark Classic SQL and Spark Connect server jars
           // if we're in Spark Connect Shell. Also exclude Spark SQL API and

@@ -17,252 +17,374 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{ArrayDeque, ArrayList, HashSet}
+import java.util.{ArrayDeque, HashSet}
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{Resolver => NameComparator, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  AttributeSeq,
-  Expression,
-  NamedExpression
-}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSeq, ExprId, NamedExpression}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * The [[NameScope]] is used during the analysis to control the visibility of names: plan names
- * and output attributes. New [[NameScope]] can be created both in the [[Resolver]] and in
- * the [[ExpressionResolver]] using the [[NameScopeStack]] api. The name resolution for identifiers
- * is case-insensitive.
+ * The [[NameScope]] is used to control the resolution of names (table, column, alias identifiers).
+ * It's a part of the [[Resolver]]'s state, and is used to manage the output of SQL query/DataFrame
+ * program operators.
  *
- * In this example:
+ * The [[NameScope]] output is immutable. If it's necessary to update the output,
+ * [[NameScopeStack]] methods are used ([[overwriteTop]] or [[withNewScope]]). The [[NameScope]]
+ * is always used through the [[NameScopeStack]].
+ *
+ * The resolution of identifiers is case-insensitive.
+ *
+ * Name resolution priority is as follows:
+ *
+ *  1. Resolution of local references:
+ *    - column reference
+ *    - struct field or map key reference
+ *  2. Resolution of lateral column aliases (if enabled).
+ *
+ *  For example, in a query like:
+ *
+ *  {{{ SELECT 1 AS col1, col1 FROM VALUES (2) }}}
+ *
+ * Because column resolution has a higher priority than LCA resolution, the result will be [1, 2]
+ * and not [1, 1].
+ *
+ * Approximate tree of [[NameScope]] manipulations is shown in the following example:
  *
  * {{{
- * WITH table_1_cte AS (
- *   SELECT
- *     col1,
- *     col2,
- *     col2
- *   FROM
- *     table_1
- * )
+ * CREATE TABLE IF NOT EXISTS t1 (col1 INT, col2 INT, col3 STRING);
+ *
  * SELECT
- *   table_1_cte.col1,
- *   table_2.col1
+ *   col1, col2 as alias1
  * FROM
- *   table_1_cte
- * INNER JOIN
- *   table_2
- * ON
- *   table_1_cte.col2 = table_2.col3
+ *   (SELECT * FROM VALUES (1, 2))
+ *   UNION
+ *   (SELECT t2.col1, t2.col2 FROM (SELECT col1, col2 FROM t1) AS t2)
  * ;
  * }}}
  *
- * there are two named subplans in the scope: table_1_cte -> [col1, col2, col2] and
- * table_2 -> [col1, col3].
+ * ->
  *
- * State breakout:
- * - `planOutputs`: list of named plan outputs. Order matters here (e.g. to correctly expand `*`).
- *   Can contain duplicate names, since it's possible to select same column twice, or to select
- *   columns with the same name from different relations. [[OptionalIdentifierMap]] is used here,
- *   since some plans don't have an explicit name, so output attributes from those plans will reside
- *   under the `None` key.
- *   In our example it will be {{{ [(table_1_cte, [col1, col2, col2]), (table_2, [col1, col3])] }}}
+ * {{{
+ * unionAttributes = withNewScope {
+ *   lhsOutput = withNewScope {
+ *     expandedStar = withNewScope {
+ *       scope.overwriteTop(localRelation.output)
+ *       scope.expandStar(star)
+ *     }
+ *     scope.overwriteTop(expandedStar)
+ *     scope.output
+ *   }
+ *   rhsOutput = withNewScope {
+ *     subqueryAttributes = withNewScope {
+ *       scope.overwriteTop(t1.output)
+ *       scope.overwriteTop(prependQualifier(scope.output, "t2"))
+ *       [scope.matchMultiPartName("t2", "col1"), scope.matchMultiPartName("t2", "col2")]
+ *     }
+ *     scope.overwriteTop(subqueryAttributes)
+ *     scope.output
+ *   }
+ *   scope.overwriteTop(coerce(lhsOutput, rhsOutput))
+ *   [scope.matchMultiPartName("col1"), alias(scope.matchMultiPartName("col2"), "alias1")]
+ * }
+ * scope.overwriteTop(unionAttributes)
+ * }}}
  *
- * - `planNameToOffset`: mapping from plan output names to their offsets in the `planOutputs` array.
- *   It's used to lookup attributes by plan output names (multipart names are not supported yet).
- *   In our example it will be {{{ [table_1_cte -> 0, table_2 -> 1] }}}
+ * @param output These are the attributes visible for lookups in the current scope.
+ *   These may be:
+ *   - Transformed outputs of lower scopes (e.g. type-coerced outputs of [[Union]]'s children).
+ *   - Output of a current operator that is being resolved (leaf nodes like [[Relations]]).
  */
-class NameScope extends SQLConfHelper {
-  private val planOutputs = new ArrayList[PlanOutput]()
-  private val planNameToOffset = new OptionalIdentifierMap[Int]
+class NameScope(val output: Seq[Attribute] = Seq.empty) extends SQLConfHelper {
+
+  /**
+   * [[nameComparator]] is a function that is used to compare two identifiers. Its implementation
+   * depends on the "spark.sql.caseSensitive" configuration - whether to respect case sensitivity
+   * or not.
+   */
   private val nameComparator: NameComparator = conf.resolver
-  private val existingAliases = new HashSet[String]
 
   /**
-   * Register the named plan output in this [[NameScope]]. The named plan is usually a
-   * [[NamedRelation]]. `attributes` sequence can contain duplicate names both for this named plan
-   * and for the scope in general, despite the fact that their further resolution _may_ throw an
-   * error in case of ambiguous reference. After calling this method, the code can lookup the
-   * attributes using `get*` methods of this [[NameScope]].
-   *
-   * Duplicate plan names are merged into the same [[PlanOutput]]. For example, this query:
-   *
-   * {{{ SELECT t.* FROM (SELECT * FROM VALUES (1)) as t, (SELECT * FROM VALUES (2)) as t; }}}
-   *
-   * will have the following output schema:
-   *
-   * {{{ [col1, col1] }}}
-   *
-   * Same logic applies for the unnamed plan outputs. This query:
-   *
-   * {{{ SELECT * FROM (SELECT * FROM VALUES (1)), (SELECT * FROM VALUES (2)); }}}
-   *
-   * will have the same output schema:
-   *
-   * {{{ [col1, col1] }}}
-   *
-   * @param name The name of this named plan.
-   * @param attributes The output of this named plan. Can contain duplicate names.
+   * [[attributesForResolution]] is an [[AttributeSeq]] that is used for resolution of
+   * multipart attribute names. It's created from the `attributes` when [[NameScope]] is updated.
    */
-  def update(name: String, attributes: Seq[Attribute]): Unit = {
-    update(attributes, Some(name))
+  private val attributesForResolution: AttributeSeq = AttributeSeq.fromNormalOutput(output)
+
+  /**
+   * [[attributesByName]] is used to look up attributes by one-part name from the operator's output.
+   * This is a lazy val, since in most of the cases [[ExpressionResolver]] doesn't need it and
+   * accesses a generic [[attributesForResolution]] in [[resolveMultipartName]].
+   */
+  private lazy val attributesByName = createAttributesByName(output)
+
+  /**
+   * Expression IDs from `output`. See [[hasAttributeWithId]] for more details.
+   */
+  private lazy val attributeIds = createAttributeIds(output)
+
+  private val isLcaEnabled = conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)
+  lazy val lcaRegistry: LateralColumnAliasRegistry = if (isLcaEnabled) {
+    new LateralColumnAliasRegistryImpl(output)
+  } else {
+    new LateralColumnAliasProhibitedRegistry
   }
 
   /**
-   * Register the unnamed plan output in this [[NameScope]]. Some examples of the unnamed plan are
-   * [[Project]] and [[Aggregate]].
+   * Expand the [[UnresolvedStar]]. The expected use case for this method is star expansion inside
+   * [[Project]].
    *
-   * See the [[update]] method for more details.
+   * Star without a target:
    *
-   * @param attributes The output of the unnamed plan. Can contain duplicate names.
-   */
-  def +=(attributes: Seq[Attribute]): Unit = {
-    update(attributes)
-  }
-
-  /**
-   * Get all the attributes from all the plans registered in this [[NameScope]]. The output can
-   * contain duplicate names. This is used for star (`*`) resolution.
-   */
-  def getAllAttributes: Seq[Attribute] = {
-    val attributes = new mutable.ArrayBuffer[Attribute]
-
-    planOutputs.forEach(planOutput => {
-      attributes.appendAll(planOutput.attributes)
-    })
-
-    attributes.toSeq
-  }
-
-  /**
-   * Expand the [[UnresolvedStar]] using `planOutputs`. The expected use case for this method is
-   * star expansion inside [[Project]]. Since [[Project]] has only one child, we assert that the
-   * size of `planOutputs` is 1, otherwise the query is malformed.
+   * {{{
+   * -- Here the star will be expanded to [a, b, c].
+   * SELECT * FROM VALUES (1, 2, 3) AS t(a, b, c);
+   * }}}
    *
-   * Some examples of queries with a star:
+   * Star with a multipart name target:
    *
-   *  - Star without a target:
-   *  {{{ SELECT * FROM VALUES (1,  2,  3) AS t(a, b, c); }}}
-   *  - Star with a multipart name target:
-   *  {{{ SELECT catalog1.database1.table1.* FROM catalog1.database1.table1; }}}
-   *  - Star with a struct target:
-   *  {{{ SELECT d.* FROM VALUES (named_struct('a', 1, 'b', 2)) AS t(d); }}}
-   *  - Star as an argument to a function:
-   *  {{{ SELECT concat_ws('', *) AS result FROM VALUES (1, 2, 3) AS t(a, b, c); }}}
+   * {{{
+   * USE CATALOG catalog1;
+   * USE DATABASE database1;
    *
-   * It is resolved by correctly resolving the star qualifier.
-   * Please check [[UnresolvedStarBase.expandStar]] for more details.
+   * CREATE TABLE IF NOT EXISTS table1 (col1 INT, col2 INT);
    *
-   * @param unresolvedStar [[UnresolvedStar]] to expand.
-   * @return The output of a plan expanded from the star.
+   * -- Here the star will be expanded to [col1, col2].
+   * SELECT catalog1.database1.table1.* FROM catalog1.database1.table1;
+   * }}}
+   *
+   * Star with a struct target:
+   *
+   * {{{
+   * -- Here the star will be expanded to [field1, field2].
+   * SELECT d.* FROM VALUES (named_struct('field1', 1, 'field2', 2)) AS t(d);
+   * }}}
+   *
+   * Star as an argument to a function:
+   *
+   * {{{
+   * -- Here the star will be expanded to [col1, col2, col3] and those would be passed as
+   * -- arguments to `concat_ws`.
+   * SELECT concat_ws('', *) AS result FROM VALUES (1, 2, 3);
+   * }}}
+   *
+   * Also, see [[UnresolvedStarBase.expandStar]] for more details.
    */
   def expandStar(unresolvedStar: UnresolvedStar): Seq[NamedExpression] = {
-    if (planOutputs.size != 1) {
-      throw QueryCompilationErrors.invalidStarUsageError("query", Seq(unresolvedStar))
-    }
-
-    planOutputs.get(0).expandStar(unresolvedStar)
+    unresolvedStar.expandStar(
+      childOperatorOutput = output,
+      childOperatorMetadataOutput = Seq.empty,
+      resolve =
+        (nameParts, nameComparator) => attributesForResolution.resolve(nameParts, nameComparator),
+      suggestedAttributes = output,
+      resolver = nameComparator,
+      cleanupNestedAliasesDuringStructExpansion = true
+    )
   }
 
   /**
-   * Get all matched attributes by a multipart name. It returns [[Attribute]]s when we resolve a
-   * simple column or an alias name from a lower operator. However this function can also return
-   * [[Alias]]es in case we access a struct field or a map value using some key.
+   * Resolve multipart name into a [[NameTarget]]. [[NameTarget]]'s `candidates` may contain
+   * simple [[AttributeReference]]s if it's a column or alias, or [[ExtractValue]] expressions if
+   * it's a struct field, map value or array value. The `aliasName` will optionally be set to the
+   * proposed alias name for the value extracted from a struct, map or array.
    *
-   * Example that contains those major use-cases:
-   *
-   * {{{
-   *  SELECT col1, a, col2.field, col3.struct.field, col4.key
-   *  FROM (SELECT *, col5 AS a FROM t);
-   * }}}
-   *
-   * has a Project list that looks like this:
+   * Example that demonstrates those major use-cases:
    *
    * {{{
-   *   AttributeReference(col1),
-   *   AttributeReference(a),
-   *   Alias(col2.field, field),
-   *   Alias(col3.struct.field, field),
-   *   Alias(col4[CAST(key AS INT)], key)
+   * CREATE TABLE IF NOT EXISTS t (
+   *   col1 INT,
+   *   col2 STRUCT<field: INT>,
+   *   col3 STRUCT<struct: STRUCT<field: INT>>,
+   *   col4 MAP<STRING: INT>,
+   *   col5 STRING
+   * );
+   *
+   * -- For the SELECT below the top Project list will be resolved using this method like this:
+   * -- AttributeReference(col1),
+   * -- AttributeReference(a),
+   * -- GetStructField(col2, field),
+   * -- GetStructField(GetStructField(col3, struct), field),
+   * -- GetMapValue(col4, key)
+   * SELECT
+   *   col1, a, col2.field, col3.struct.field, col4.key
+   * FROM
+   *   (SELECT *, col5 AS a FROM t);
    * }}}
+   *
+   * Since there can be several expressions that matched the same multipart name, this method may
+   * return a [[NameTarget]] with the following `candidates`:
+   * - 0 values: No matched expressions
+   * - 1 value: Unique expression matched
+   * - 1+ values: Ambiguity, several expressions matched
+   *
+   * Some examples of ambiguity:
+   *
+   * {{{
+   * CREATE TABLE IF NOT EXISTS t1 (c1 INT, c2 INT);
+   * CREATE TABLE IF NOT EXISTS t2 (c2 INT, c3 INT);
+   *
+   * -- Identically named columns from different tables.
+   * -- This will fail with AMBIGUOUS_REFERENCE error.
+   * SELECT c2 FROM t1, t2;
+   * }}}
+   *
+   * {{{
+   * CREATE TABLE IF NOT EXISTS foo (c1 INT);
+   * CREATE TABLE IF NOT EXISTS bar (foo STRUCT<c1: INT>);
+   *
+   * -- Ambiguity between a column in a table and a field in a struct.
+   * -- This will succeed, and column will win over the struct field.
+   * SELECT foo.c1 FROM foo, bar;
+   * }}}
+   *
+   * The candidates are deduplicated by expression ID (not by attribute name!):
+   *
+   * {{{
+   * CREATE TABLE IF NOT EXISTS t1 (col1 STRING);
+   *
+   * -- No ambiguity here, since we are selecting the same column (same expression ID).
+   * SELECT col1 FROM (SELECT col1, col1 FROM t);
+   * }}}
+   *
+   * The case of the `multipartName` takes precedence over the original name case, so the candidates
+   * will have names that are case-identical to the `multipartName`:
+   *
+   * {{{
+   * CREATE TABLE IF NOT EXISTS t1 (col1 STRING);
+   *
+   * -- The output schema of this query is [COL1], despite the fact that the column is in
+   * -- lower-case.
+   * SELECT COL1 FROM t;
+   * }}}
+   *
+   * We are relying on the [[AttributeSeq]] to perform that work, since it requires complex
+   * resolution logic involving nested field extraction and multipart name matching.
    *
    * Also, see [[AttributeSeq.resolve]] for more details.
-   *
-   * Since there can be several identical attribute names for several named plans, this function
-   * can return multiple values:
-   * - 0 values: No matched attributes
-   * - 1 value: Unique attribute matched
-   * - 1+ values: Ambiguity, several attributes matched
-   *
-   * One example of a query with an attribute that has a multipart name:
-   *
-   * {{{ SELECT catalog1.database1.table1.col1 FROM catalog1.database1.table1; }}}
-   *
-   * @param multipartName Multipart attribute name. Can be of several forms:
-   *   - `catalog.database.table.column`
-   *   - `database.table.column`
-   *   - `table.column`
-   *   - `column`
-   * @return All the attributes matched by the `multipartName`, encapsulated in a [[NameTarget]].
    */
-  def matchMultipartName(multipartName: Seq[String]): NameTarget = {
-    val candidates = new mutable.ArrayBuffer[Expression]
-    val allAttributes = new mutable.ArrayBuffer[Attribute]
-    var aliasName: Option[String] = None
+  def resolveMultipartName(
+      multipartName: Seq[String],
+      canLaterallyReferenceColumn: Boolean = true): NameTarget = {
+    val (candidates, nestedFields) =
+      attributesForResolution.getCandidatesForResolution(multipartName, nameComparator)
 
-    planOutputs.forEach(planOutput => {
-      allAttributes.appendAll(planOutput.attributes)
-      val nameTarget = planOutput.matchMultipartName(multipartName)
-      if (nameTarget.aliasName.isDefined) {
-        aliasName = nameTarget.aliasName
+    val (candidatesWithLCAs: Seq[Attribute], referencedAttribute: Option[Attribute]) =
+      if (candidates.isEmpty && canLaterallyReferenceColumn) {
+        getLcaCandidates(multipartName)
+      } else {
+        (candidates, None)
       }
-      candidates.appendAll(nameTarget.candidates)
-    })
 
-    NameTarget(candidates.toSeq, aliasName, allAttributes.toSeq)
+    val resolvedCandidates = attributesForResolution.resolveCandidates(
+      multipartName,
+      nameComparator,
+      candidatesWithLCAs,
+      nestedFields
+    )
+
+    resolvedCandidates match {
+      case Seq(Alias(child, aliasName)) =>
+        NameTarget(
+          candidates = Seq(child),
+          aliasName = Some(aliasName),
+          lateralAttributeReference = referencedAttribute,
+          output = output
+        )
+      case other =>
+        NameTarget(
+          candidates = other,
+          lateralAttributeReference = referencedAttribute,
+          output = output
+        )
+    }
   }
 
   /**
-   * Add an alias, by name, to the list of existing aliases.
+   * Find attributes in this [[NameScope]] that match a provided one-part `name`.
+   *
+   * This method is simpler and more lightweight than [[resolveMultipartName]], because here we
+   * just return all the attributes matched by the one-part `name`. This is only suitable
+   * for situations where name _resolution_ is not required (e.g. accessing struct fields
+   * from the lower operator's output).
+   *
+   * For example, this method is used to look up attributes to match a specific [[View]] schema.
+   * See [[ExpressionResolver.resolveGetViewColumnByNameAndOrdinal]] for more info on view column
+   * lookup.
+   *
+   * We are relying on a simple [[IdentifierMap]] to perform that work, since we just need to match
+   * one-part name from the lower operator's output here.
    */
-  def addAlias(aliasName: String): Unit = existingAliases.add(aliasName.toLowerCase())
+  def findAttributesByName(name: String): Seq[Attribute] = {
+    attributesByName.get(name) match {
+      case Some(attributes) => attributes.toSeq
+      case None => Seq.empty
+    }
+  }
 
   /**
-   * Returns whether an alias exists in the current scope.
+   * Check if `output` contains attributes with `expressionId`. This is used to disable missing
+   * attribute propagation for DataFrames, because we don't support it yet.
    */
-  def isExistingAlias(aliasName: String): Boolean =
-    existingAliases.contains(aliasName.toLowerCase())
+  def hasAttributeWithId(expressionId: ExprId): Boolean = {
+    attributeIds.contains(expressionId)
+  }
 
-  private def update(attributes: Seq[Attribute], name: Option[String] = None): Unit = {
-    planNameToOffset.get(name) match {
-      case Some(index) =>
-        val prevPlanOutput = planOutputs.get(index)
-        planOutputs.set(
-          index,
-          new PlanOutput(prevPlanOutput.attributes ++ attributes, name, nameComparator)
-        )
-      case None =>
-        val index = planOutputs.size
-        planOutputs.add(new PlanOutput(attributes, name, nameComparator))
-        planNameToOffset += (name -> index)
+  /**
+   * If a candidate was not found from output attributes, returns the candidate from lateral
+   * columns. Here we do [[AttributeSeq.fromNormalOutput]] because a struct field can also be
+   * laterally referenced and we need to properly resolve [[GetStructField]] node.
+   */
+  private def getLcaCandidates(multipartName: Seq[String]): (Seq[Attribute], Option[Attribute]) = {
+    val referencedAttribute = lcaRegistry.getAttribute(multipartName.head)
+    if (referencedAttribute.isDefined) {
+      val attributesForResolution = AttributeSeq.fromNormalOutput(Seq(referencedAttribute.get))
+      val (newCandidates, _) =
+        attributesForResolution.getCandidatesForResolution(multipartName, nameComparator)
+      (newCandidates, Some(referencedAttribute.get))
+    } else {
+      (Seq.empty, None)
     }
+  }
+
+  private def createAttributesByName(
+      attributes: Seq[Attribute]): IdentifierMap[mutable.ArrayBuffer[Attribute]] = {
+    val result = new IdentifierMap[mutable.ArrayBuffer[Attribute]]
+    for (attribute <- attributes) {
+      result.get(attribute.name) match {
+        case Some(attributesForThisName) =>
+          attributesForThisName += attribute
+        case None =>
+          val attributesForThisName = new mutable.ArrayBuffer[Attribute]
+          attributesForThisName += attribute
+
+          result += (attribute.name, attributesForThisName)
+      }
+    }
+
+    result
+  }
+
+  private def createAttributeIds(attributes: Seq[Attribute]): HashSet[ExprId] = {
+    val result = new HashSet[ExprId]
+    for (attribute <- attributes) {
+      result.add(attribute.exprId)
+    }
+
+    result
   }
 }
 
 /**
- * The [[NameScopeStack]] is a stack of [[NameScope]]s managed by the [[Resolver]] and the
- * [[ExpressionResolver]]. Usually a top scope is used for name resolution, but in case of
- * correlated subqueries we can lookup names in the parent scopes. Low-level scope creation is
- * managed internally, and only high-level api like [[withNewScope]] is available to the resolvers.
- * Freshly-created [[NameScopeStack]] contains an empty root [[NameScope]].
+ * The [[NameScopeStack]] is a stack of [[NameScope]]s managed by the [[Resolver]]. Usually a top
+ * scope is used for name resolution, but in case of correlated subqueries we can lookup names in
+ * the parent scopes. Low-level scope creation is managed internally, and only high-level api like
+ * [[withNewScope]] is available to the resolvers. Freshly-created [[NameScopeStack]] contains an
+ * empty root [[NameScope]], which in the context of [[Resolver]] corresponds to the query output.
  */
 class NameScopeStack extends SQLConfHelper {
   private val stack = new ArrayDeque[NameScope]
-  push()
+  stack.push(new NameScope)
 
   /**
    * Get the top scope, which is a default choice for name resolution.
@@ -272,122 +394,74 @@ class NameScopeStack extends SQLConfHelper {
   }
 
   /**
-   * Completely overwrite the top scope state with a named plan output.
+   * Completely overwrite the top scope state with operator `output`.
    *
-   * See [[NameScope.update]] for more details.
+   * This method is called by the [[Resolver]] when we've calculated the output of an operator that
+   * is being resolved. The new output is calculated based on the outputs of operator's children.
+   *
+   * Example for [[SubqueryAlias]], here we rewrite the top [[NameScope]]'s attributes to prepend
+   * subquery qualifier to their names:
+   *
+   * {{{
+   * val qualifier = sa.identifier.qualifier :+ sa.alias
+   * scope.overwriteTop(scope.output.map(attribute => attribute.withQualifier(qualifier)))
+   * }}}
+   *
+   * Trivially, we would call this method for every operator in the query plan,
+   * however some operators just propagate the output of their children without any changes, so
+   * we can omit this call for them (e.g. [[Filter]]).
+   *
+   * This method should be preferred over [[withNewScope]].
    */
-  def overwriteTop(name: String, attributes: Seq[Attribute]): Unit = {
-    val newScope = new NameScope
-    newScope.update(name, attributes)
+  def overwriteTop(output: Seq[Attribute]): Unit = {
+    val newScope = new NameScope(output)
 
     stack.pop()
     stack.push(newScope)
   }
 
   /**
-   * Completely overwrite the top scope state with an unnamed plan output.
+   * Execute `body` in a context of a fresh scope.
    *
-   * See [[NameScope.+=]] for more details.
-   */
-  def overwriteTop(attributes: Seq[Attribute]): Unit = {
-    val newScope = new NameScope
-    newScope += attributes
-
-    stack.pop()
-    stack.push(newScope)
-  }
-
-  /**
-   * Execute `body` in a context of a fresh scope. It's used during the [[Project]] or the
-   * [[Aggregate]] resolution to avoid calling [[push]] and [[pop]] explicitly.
+   * This method is called by the [[Resolver]] before recursing into the operator's child
+   * resolution _only_ in cases where a fresh scope is required.
+   *
+   * For example, [[Project]] or [[Aggregate]] introduce their own scopes semantically, so that a
+   * lower resolution can lookup correlated names:
+   *
+   * {{{
+   * CREATE TABLE IF NOT EXISTS t1 (col1 INT, col2 STRING);
+   * CREATE TABLE IF NOT EXISTS t2 (col1 INT, col2 STRING);
+   *
+   * -- Here we need a scope for the upper [[Project]], and a separate scope for the correlated
+   * -- subquery, because its [[Filter]] need to lookup `t1.col1` from the upper scope.
+   * -- Those scopes have to be independent to avoid polluting each other's attributes.
+   * SELECT col1, (SELECT col2 FROM t2 WHERE t2.col1 == t1.col1 LIMIT 1) FROM t1;
+   * }}}
+   *
+   * Also, we need separate scopes for the operators with multiple children, so that the next
+   * child's resolution wouldn't try to work with the data from it's sibling's scope, to avoid
+   * all kinds of undefined behavior:
+   *
+   * {{{
+   * val resolvedLeftChild = withNewScope {
+   *    resolve(unresolvedExcept.left)
+   * }
+   *
+   * // Right child should not see the left child's resolution data to avoid subtle bugs, so we
+   * // create a fresh scope here.
+   *
+   * val resolvedRightChild = withNewScope {
+   *    resolve(unresolvedExcept.right)
+   * }
+   * }}}
    */
   def withNewScope[R](body: => R): R = {
-    push()
+    stack.push(new NameScope)
     try {
       body
     } finally {
-      pop()
+      stack.pop()
     }
-  }
-
-  /**
-   * Push a new scope to the stack. Introduced by the [[Project]] or the [[Aggregate]].
-   */
-  private def push(): Unit = {
-    stack.push(new NameScope)
-  }
-
-  /**
-   * Pop a scope from the stack. Called when the resolution process for the pushed scope is done.
-   */
-  private def pop(): Unit = {
-    stack.pop()
-  }
-}
-
-/**
- * [[PlanOutput]] represents a sequence of attributes from a plan ([[NamedRelation]], [[Project]],
- * [[Aggregate]], etc).
- *
- * It is created from `attributes`, which is an output of a named plan, optional plan `name` and a
- * resolver provided by the [[NameScopeStack]].
- *
- * @param attributes Plan output. Can contain duplicate names.
- * @param name Plan name. Non-empty for named plans like [[NamedRelation]] or [[SubqueryAlias]],
- *   `None` otherwise.
- */
-class PlanOutput(
-    val attributes: Seq[Attribute],
-    val name: Option[String],
-    val nameComparator: NameComparator) {
-
-  /**
-   * attributesForResolution is an [[AttributeSeq]] that is used for resolution of
-   * multipart attribute names. It's created from the `attributes` when [[NameScope]] is updated.
-   */
-  private val attributesForResolution: AttributeSeq =
-    AttributeSeq.fromNormalOutput(attributes)
-
-  /**
-   * Find attributes by the multipart name.
-   *
-   * See [[NameScope.matchMultipartName]] for more details.
-   *
-   * @param multipartName Multipart attribute name.
-   * @return Matched attributes or [[Seq.empty]] otherwise.
-   */
-  def matchMultipartName(multipartName: Seq[String]): NameTarget = {
-    val (candidates, nestedFields) =
-      attributesForResolution.getCandidatesForResolution(multipartName, nameComparator)
-    val resolvedCandidates = attributesForResolution.resolveCandidates(
-      multipartName,
-      nameComparator,
-      candidates,
-      nestedFields
-    )
-    resolvedCandidates match {
-      case Seq(Alias(child, aliasName)) =>
-        NameTarget(Seq(child), Some(aliasName))
-      case other =>
-        NameTarget(other, None)
-    }
-  }
-
-  /**
-   * Method to expand an unresolved star. See [[NameScope.expandStar]] for more details.
-   *
-   * @param unresolvedStar Star to resolve.
-   * @return Attributes expanded from the star.
-   */
-  def expandStar(unresolvedStar: UnresolvedStar): Seq[NamedExpression] = {
-    unresolvedStar.expandStar(
-      childOperatorOutput = attributes,
-      childOperatorMetadataOutput = Seq.empty,
-      resolve =
-        (nameParts, nameComparator) => attributesForResolution.resolve(nameParts, nameComparator),
-      suggestedAttributes = attributes,
-      resolver = nameComparator,
-      cleanupNestedAliasesDuringStructExpansion = true
-    )
   }
 }
