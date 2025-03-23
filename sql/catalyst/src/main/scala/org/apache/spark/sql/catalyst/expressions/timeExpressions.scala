@@ -277,7 +277,7 @@ case class HoursOfTime(child: Expression)
     _FUNC_(expr) - Returns the hour component of the given expression.
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
-    it returns the minute of that timestamp.
+    it returns the hour of that timestamp.
     If `expr` is a TIME type (since 4.1.0), it returns the hour of the time-of-day.
   """,
   examples = """

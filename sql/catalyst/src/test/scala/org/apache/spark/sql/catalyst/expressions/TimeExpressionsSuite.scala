@@ -75,7 +75,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // test non TIME-typed child should build hour
     val tsExpr = Literal("2007-09-03 10:45:23")
-    val builtExprForTs = MinuteExpressionBuilder.build("hour", Seq(tsExpr))
+    val builtExprForTs = HourExpressionBuilder.build("hour", Seq(tsExpr))
     assert(builtExprForTs.isInstanceOf[Hour])
     assert(builtExprForTs.asInstanceOf[Hour].child eq tsExpr)
   }
