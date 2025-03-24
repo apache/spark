@@ -120,6 +120,28 @@ class CatalogSuite extends SparkFunSuite {
     assert(catalog.tableExists(testIdent))
   }
 
+  test("createTable: non-partitioned table using schema") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+
+    val schema = new StructType().add("id", IntegerType).add("data", StringType)
+    val tableInfo = new TableInfo.Builder()
+      .withSchema(schema)
+      .withPartitions(emptyTrans)
+      .withProperties(emptyProps)
+      .build()
+    val table = catalog.createTable(testIdent, tableInfo)
+
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+    assert(parsed == Seq("test", "`", ".", "test_table"))
+    assert(table.columns === columns)
+    assert(table.schema() === schema)
+    assert(table.properties.asScala == Map())
+
+    assert(catalog.tableExists(testIdent))
+  }
+
   test("createTable: partitioned table") {
     val partCatalog = new InMemoryPartitionTableCatalog
     partCatalog.initialize("test", CaseInsensitiveStringMap.empty())

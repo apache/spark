@@ -16,8 +16,10 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.collect.Maps;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.types.StructType;
 
 import java.util.Collections;
 import java.util.Map;
@@ -42,6 +44,10 @@ public class TableInfo {
     return columns;
   }
 
+  public StructType schema() {
+    return CatalogV2Util.v2ColumnsToStructType(columns);
+  }
+
   public Map<String, String> properties() {
     return properties;
   }
@@ -60,6 +66,11 @@ public class TableInfo {
       return this;
     }
 
+    public Builder withSchema(StructType schema) {
+      this.columns = CatalogV2Util.structTypeToV2Columns(schema);
+      return this;
+    }
+
     public Builder withProperties(Map<String, String> properties) {
       this.properties = Maps.newHashMap();
       this.properties.putAll(properties);
@@ -72,8 +83,8 @@ public class TableInfo {
     }
 
     public TableInfo build() {
+      checkNotNull(columns, "columns should not be null");
       return new TableInfo(this);
     }
   }
 }
-
