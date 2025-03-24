@@ -503,8 +503,7 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
-      // TODO: test file source V2 after write path is fixed.
-      Seq(true).foreach { useV1 =>
+      Seq(true, false).foreach { useV1 =>
         val useV1List = if (useV1) {
           "csv,json,orc,parquet"
         } else {
@@ -572,8 +571,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
-    // TODO: test file source V2 after write path is fixed.
-    Seq(true).foreach { useV1 =>
+    Seq(true, false).foreach { useV1 =>
       val useV1List = if (useV1) {
         "csv,orc,parquet"
       } else {
