@@ -596,7 +596,7 @@ trait StateStoreProvider {
 object StateStoreProvider extends Logging {
 
   @GuardedBy("this")
-  var stateStoreCoordinatorRef: StateStoreCoordinatorRef = null
+  private var stateStoreCoordinatorRef: StateStoreCoordinatorRef = _
 
   /**
    * Return a instance of the given provider class name. The instance will not be initialized.
@@ -672,8 +672,8 @@ object StateStoreProvider extends Logging {
   }
 
   /**
-   * Create the state store coordinator reference which will be reused across state stores within
-   * the executor JVM process.
+   * Create the state store coordinator reference which will be reused across state store providers
+   * in the executor.
    */
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
