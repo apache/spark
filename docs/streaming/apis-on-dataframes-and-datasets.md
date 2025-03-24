@@ -517,7 +517,7 @@ old windows correctly, as illustrated below.
 However, to run this query for days, it's necessary for the system to bound the amount of
 intermediate in-memory state it accumulates. This means the system needs to know when an old
 aggregate can be dropped from the in-memory state because the application is not going to receive
-late data for that aggregate any more. To enable this, in Spark 2.1, we have introduced
+late data for that aggregate anymore. To enable this, in Spark 2.1, we have introduced
 **watermarking**, which lets the engine automatically track the current event time in the data
 and attempt to clean up old state accordingly. You can define the watermark of a query by
 specifying the event time column and the threshold on how late the data is expected to be in terms of
@@ -1567,7 +1567,7 @@ joined
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
 
-- *With watermark* - If there is an upper bound on how late a duplicate record may arrive, then you can define a watermark on an event time column and deduplicate using both the guid and the event time columns. The query will use the watermark to remove old state data from past records that are not expected to get any duplicates any more. This bounds the amount of the state the query has to maintain.
+- *With watermark* - If there is an upper bound on how late a duplicate record may arrive, then you can define a watermark on an event time column and deduplicate using both the guid and the event time columns. The query will use the watermark to remove old state data from past records that are not expected to get any duplicates anymore. This bounds the amount of the state the query has to maintain.
 
 - *Without watermark* - Since there are no bounds on when a duplicate record may arrive, the query stores the data from all the past records as state.
 
