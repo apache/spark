@@ -223,7 +223,7 @@
 | org.apache.spark.sql.catalyst.expressions.Md5 | md5 | SELECT md5('Spark') | struct<md5(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.MicrosToTimestamp | timestamp_micros | SELECT timestamp_micros(1230219000123123) | struct<timestamp_micros(1230219000123123):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MillisToTimestamp | timestamp_millis | SELECT timestamp_millis(1230219000123) | struct<timestamp_millis(1230219000123):timestamp> |
-| org.apache.spark.sql.catalyst.expressions.Minute | minute | SELECT minute('2009-07-30 12:58:59') | struct<minute(2009-07-30 12:58:59):int> |
+| org.apache.spark.sql.catalyst.expressions.MinuteExpressionBuilder | minute | SELECT minute('2009-07-30 12:58:59') | struct<minute(2009-07-30 12:58:59):int> |
 | org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID | monotonically_increasing_id | SELECT monotonically_increasing_id() | struct<monotonically_increasing_id():bigint> |
 | org.apache.spark.sql.catalyst.expressions.Month | month | SELECT month('2016-07-30') | struct<month(2016-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.MonthName | monthname | SELECT monthname('2008-02-20') | struct<monthname(2008-02-20):string> |
