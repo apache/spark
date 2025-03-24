@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.TimeType
 
 class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   import testImplicits._
@@ -420,6 +421,24 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             .option("ignoreCorruptFiles", value = true)
             .orc(basePath), Row(0L, 1))
         }
+      }
+    }
+  }
+
+  test("SPARK-51590: unsupported the TIME data types in Hive ORC") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("select time'12:01:02' as t")
+              .write.format("orc").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`t`",
+            "columnType" -> s"\"${TimeType().sql}\"",
+            "format" -> "ORC"))
       }
     }
   }

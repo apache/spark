@@ -3086,6 +3086,22 @@ abstract class AvroSuite
       }
     }
   }
+
+  test("SPARK-51590: unsupported the TIME data types in Avro") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select time'12:01:02' as t")
+            .write.format("avro").mode("overwrite").save(tempDir)
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`t`",
+          "columnType" -> s"\"${TimeType().sql}\"",
+          "format" -> "Avro"))
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
