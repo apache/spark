@@ -28,7 +28,6 @@ from pyspark.errors.exceptions.base import AnalysisException
 from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.session import SparkSession
-from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -229,11 +228,7 @@ class BaseTracebackSqlTestsMixin:
 
 
 class TracebackSqlClassicTests(BaseTracebackSqlTestsMixin, ReusedSQLTestCase):
-    ...
-
-
-class TracebackSqlConnectTests(BaseTracebackSqlTestsMixin, ReusedConnectTestCase):
-    ...
+    pass
 
 
 if __name__ == "__main__":

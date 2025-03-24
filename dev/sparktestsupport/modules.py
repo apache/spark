@@ -1466,6 +1466,8 @@ pyspark_errors = Module(
     python_test_goals=[
         # unittests
         "pyspark.errors.tests.test_errors",
+        "pyspark.errors.tests.test_traceback",
+        "pyspark.errors.tests.connect.test_parity_traceback",
     ],
 )
 
