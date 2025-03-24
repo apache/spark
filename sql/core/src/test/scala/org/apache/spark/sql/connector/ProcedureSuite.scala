@@ -388,26 +388,26 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("SHOW PROCEDURES IN ns"),
-        Row("cat", null, "ns", "abc") ::
-          Row("cat", null, "ns", "foo") :: Nil)
+        Row("cat", Array("ns"), "ns", "abc") ::
+          Row("cat", Array("ns"), "ns", "foo") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES IN cat.ns"),
-        Row("cat", null, "ns", "abc") ::
-          Row("cat", null, "ns", "foo") :: Nil)
+        Row("cat", Array("ns"), "ns", "abc") ::
+          Row("cat", Array("ns"), "ns", "foo") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat.ns"),
-        Row("cat", null, "ns", "abc") ::
-          Row("cat", null, "ns", "foo") :: Nil)
+        Row("cat", Array("ns"), "ns", "abc") ::
+          Row("cat", Array("ns"), "ns", "foo") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ``"),
-        Row("cat", null, "", "xyz") :: Nil)
+        Row("cat", Array(""), "", "xyz") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat.``"),
-        Row("cat", null, "", "xyz") :: Nil)
+        Row("cat", Array(""), "", "xyz") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat2.ns_1.db_1"),
@@ -419,8 +419,8 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("SHOW PROCEDURES IN cat.ns"),
-        Row("cat", null, "ns", "abc") ::
-          Row("cat", null, "ns", "foo") :: Nil)
+        Row("cat", Array("ns"), "ns", "abc") ::
+          Row("cat", Array("ns"), "ns", "foo") :: Nil)
 
       checkAnswer(
         // uses default catalog and ns
@@ -439,11 +439,11 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ``"),
-        Row("cat2", null, "", "foo") :: Nil)
+        Row("cat2", Array(""), "", "foo") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat2.``"),
-        Row("cat2", null, "", "foo") :: Nil)
+        Row("cat2", Array(""), "", "foo") :: Nil)
 
       // Switch catalog back to 'cat' before clean up.
       sql("USE cat")

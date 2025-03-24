@@ -36,7 +36,7 @@ case class ShowProceduresCommand(
     child: LogicalPlan,
     override val output: Seq[Attribute] = Seq(
       AttributeReference("catalog", StringType, nullable = false)(),
-      AttributeReference("namespace", ArrayType(StringType, containsNull = true))(),
+      AttributeReference("namespace", ArrayType(StringType, containsNull = false))(),
       AttributeReference("schema", StringType)(),
       AttributeReference("procedure_name", StringType, nullable = false)()
     )) extends UnaryRunnableCommand {
@@ -48,7 +48,7 @@ case class ShowProceduresCommand(
         val procedures = procedureCatalog.listProcedures(ns.toArray)
 
         procedures.toSeq.map{ p =>
-          val nsField = if (p.namespace().length > 1) {
+          val nsField = if (p.namespace().length > 0) {
             p.namespace()
           } else {
             null
