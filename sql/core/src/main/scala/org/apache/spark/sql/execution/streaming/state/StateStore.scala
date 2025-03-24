@@ -679,17 +679,15 @@ object StateStoreProvider extends Logging {
     val env = SparkEnv.get
     if (env != null) {
       val isDriver = env.executorId == SparkContext.DRIVER_IDENTIFIER
-      // If running locally, then the coordinator reference in stateStoreCoordinatorRef may be have
+      // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
       // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
       // driver, always recreate the reference.
       if (isDriver || stateStoreCoordinatorRef == null) {
         logDebug("Getting StateStoreCoordinatorRef")
-        if (isDriver || stateStoreCoordinatorRef == null) {
-          stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(SparkEnv.get)
-          logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-            log"${MDC(LogKeys.STATE_STORE_ID, stateStoreCoordinatorRef)}")
-        }
+        stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(env)
       }
+      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
+        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
       Some(stateStoreCoordinatorRef)
     } else {
       stateStoreCoordinatorRef = null
@@ -1173,14 +1171,6 @@ object StateStore extends Logging {
     } else {
       false
     }
-  }
-
-  private[state] def reportSnapshotUploaded(
-      providerId: StateStoreProviderId,
-      snapshotVersion: Long): Unit = {
-    // Attach the current timestamp of uploaded snapshot and send the message to the coordinator
-    val currentTime = System.currentTimeMillis()
-    coordinatorRef.foreach(_.snapshotUploaded(providerId, snapshotVersion, currentTime))
   }
 
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {

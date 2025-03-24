@@ -219,7 +219,7 @@ private class StateStoreCoordinator(
   // Stores the time and latest version of the query run's start.
   // Queries that started recently should not have their state stores reported as lagging
   // since we may not have all the information yet.
-  private val queryRunStartingPoint = new mutable.HashMap[UUID, (Long, Long)]
+  private val queryRunStartingPoint = new mutable.HashMap[UUID, QueryStartInfo]
 
   def coordinatorLagReportInterval: Long = {
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
@@ -277,7 +277,7 @@ private class StateStoreCoordinator(
       // Mark the query run's starting timestamp and latest version if the coordinator
       // has never seen this query run before.
       if (!queryRunStartingPoint.contains(queryRunId)) {
-        queryRunStartingPoint.put(queryRunId, (currentTimestamp, latestVersion))
+        queryRunStartingPoint.put(queryRunId, QueryStartInfo(latestVersion, currentTimestamp))
       } else {
         // Only log lagging instances if the snapshot report upload is enabled,
         // otherwise all instances will be considered lagging.
@@ -372,10 +372,10 @@ private class StateStoreCoordinator(
     // the time requirement for lagging instances.
     // Similarly, the run is also considered too recent if not enough versions have passed
     // since the start of the run.
-    val (runStartingTimeMs, runStartingVersion) = queryRunStartingPoint(queryRunId)
+    val queryStartInfo = queryRunStartingPoint(queryRunId)
 
-    if (referenceTimestamp - runStartingTimeMs <= minTimeDeltaForLogging ||
-        referenceVersion - runStartingVersion <= minVersionDeltaForLogging) {
+    if (referenceTimestamp - queryStartInfo.startTimestamp <= minTimeDeltaForLogging ||
+        referenceVersion - queryStartInfo.version <= minVersionDeltaForLogging) {
       return Seq.empty
     }
     // Look for active state store providers that are lagging behind in snapshot uploads
@@ -417,3 +417,5 @@ case class SnapshotUploadEvent(
     s"SnapshotUploadEvent(version=$version, timestamp=$timestamp)"
   }
 }
+
+case class QueryStartInfo(version: Long, startTimestamp: Long)
