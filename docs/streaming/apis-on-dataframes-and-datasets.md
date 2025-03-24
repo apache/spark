@@ -621,8 +621,8 @@ is considered "too late" and therefore ignored. Note that after every trigger,
 the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by
 the Update mode.
 
-Some sinks (e.g. files) may not supported fine-grained updates that Update Mode requires. To work
-with them, we have also support Append Mode, where only the *final counts* are written to sink.
+Some sinks (e.g. files) may not support fine-grained updates that Update Mode requires. To work
+with them, we also support Append Mode, where only the *final counts* are written to sink.
 This is illustrated below.
 
 Note that using `withWatermark` on a non-streaming Dataset is no-op. As the watermark should not affect
@@ -983,7 +983,7 @@ as well as another streaming Dataset/DataFrame. The result of the streaming join
 incrementally, similar to the results of streaming aggregations in the previous section. In this
 section we will explore what type of joins (i.e. inner, outer, semi, etc.) are supported in the above
 cases. Note that in all the supported join types, the result of the join with a streaming
-Dataset/DataFrame will be the exactly the same as if it was with a static Dataset/DataFrame
+Dataset/DataFrame will be exactly same as if it was with a static Dataset/DataFrame
 containing the same data in the stream.
 
 
@@ -1211,7 +1211,7 @@ A watermark delay of "2 hours" guarantees that the engine will never drop any da
 ##### Outer Joins with Watermarking
 While the watermark + event-time constraints is optional for inner joins, for outer joins
 they must be specified. This is because for generating the NULL results in outer join, the
-engine must know when an input row is not going to match with anything in future. Hence, the
+engine must know when an input row is not going to match with anything in the future. Hence, the
 watermark + event-time constraints must be specified for generating correct results. Therefore,
 a query with outer-join will look quite like the ad-monetization example earlier, except that
 there will be an additional parameter specifying it to be an outer-join.
@@ -1850,7 +1850,7 @@ Here are the configs regarding to RocksDB instance of the state store provider:
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.resetStatsOnLoad</td>
-    <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
+    <td>Whether we reset all ticker and histogram stats for RocksDB on load.</td>
     <td>True</td>
   </tr>
   <tr>
