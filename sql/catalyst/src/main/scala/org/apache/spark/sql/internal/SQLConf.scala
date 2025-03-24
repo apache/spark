@@ -31,6 +31,7 @@ import scala.util.matching.Regex
 import org.apache.avro.file.CodecFactory
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.OutputCommitter
+import org.slf4j.event.Level
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -240,6 +241,15 @@ object SQLConf {
     }
   }
 
+  val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
+    buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
+    .internal()
+    .doc(
+      "When this conf is enabled, AddMetadataColumns rule should only add necessary metadata " +
+      "columns and only if those columns are not already present in the project list.")
+    .booleanConf
+    .createWithDefault(true)
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -362,17 +372,22 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  private val VALID_LOG_LEVELS: Array[String] = Level.values.map(_.toString)
+
+  private def isValidLogLevel(level: String): Boolean =
+    VALID_LOG_LEVELS.contains(level.toUpperCase(Locale.ROOT))
+
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
-      "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
-      "'warn', or 'error'. The default log level is 'trace'.")
+      s"plan after a rule or batch is applied. The value can be " +
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
+    .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.planChangeLog.level'. Valid values are " +
-        "'trace', 'debug', 'info', 'warn' and 'error'.")
+        s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("trace")
 
   val PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.planChangeLog.rules")
@@ -403,13 +418,13 @@ object SQLConf {
     .internal()
     .doc("Configures the log level for logging the change from the unresolved expression tree to " +
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
-      "'trace', 'debug', 'info', 'warn', or 'error'. The default log level is 'trace'.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
+    .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.expressionTreeChangeLog.level'. Valid values are " +
-        "'trace', 'debug', 'info', 'warn' and 'error'.")
+        s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("trace")
 
   val LIGHTWEIGHT_PLAN_CHANGE_VALIDATION = buildConf("spark.sql.lightweightPlanChangeValidation")
@@ -780,11 +795,13 @@ object SQLConf {
   val ADAPTIVE_EXECUTION_LOG_LEVEL = buildConf("spark.sql.adaptive.logLevel")
     .internal()
     .doc("Configures the log level for adaptive execution logging of plan changes. The value " +
-      "can be 'trace', 'debug', 'info', 'warn', or 'error'. The default log level is 'debug'.")
+      s"can be ${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR"))
+    .checkValue(isValidLogLevel,
+      "Invalid value for 'spark.sql.adaptive.logLevel'. Valid values are " +
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("debug")
 
   val ADVISORY_PARTITION_SIZE_IN_BYTES =
@@ -1812,15 +1829,15 @@ object SQLConf {
   val DATAFRAME_CACHE_LOG_LEVEL = buildConf("spark.sql.dataframeCache.logLevel")
     .internal()
     .doc("Configures the log level of Dataframe cache operations, including adding and removing " +
-      "entries from Dataframe cache, hit and miss on cache application. The default log " +
-      "level is 'trace'. This log should only be used for debugging purposes and not in the " +
-      "production environment, since it generates a large amount of logs.")
+      "entries from Dataframe cache, hit and miss on cache application. This log should only be " +
+      "used for debugging purposes and not in the production environment, since it generates a " +
+      "large amount of logs.")
     .version("4.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
+    .checkValue(isValidLogLevel,
       "Invalid value for 'spark.sql.dataframeCache.logLevel'. Valid values are " +
-        "'trace', 'debug', 'info', 'warn' and 'error'.")
+      s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .createWithDefault("trace")
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
@@ -2019,6 +2036,18 @@ object SQLConf {
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val CODEGEN_LOG_LEVEL = buildConf("spark.sql.codegen.logLevel")
+    .internal()
+    .doc("Configures the log level for logging of codegen. " +
+      s"The value can be ${VALID_LOG_LEVELS.mkString(", ")}.")
+    .version("4.1.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(isValidLogLevel,
+      "Invalid value for 'spark.sql.codegen.logLevel'. Valid values are " +
+       s"${VALID_LOG_LEVELS.mkString(", ")}.")
+    .createWithDefault("DEBUG")
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
@@ -4722,6 +4751,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.python.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to Python datasource, at the cost of running " +
+      "Python worker one additional time during planning.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -5777,13 +5813,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
+  def planChangeLogLevel: Level = Level.valueOf(getConf(PLAN_CHANGE_LOG_LEVEL))
 
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
 
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
-  def expressionTreeChangeLogLevel: String = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
+  def expressionTreeChangeLogLevel: Level = Level.valueOf(getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL))
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
@@ -6013,6 +6049,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def codegenFactoryMode: String = getConf(CODEGEN_FACTORY_MODE)
 
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
+
+  def codegenLogLevel: Level = Level.valueOf(getConf(CODEGEN_LOG_LEVEL))
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
@@ -6508,6 +6546,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   def useListFilesFileSystemList: String = getConf(SQLConf.USE_LISTFILES_FILESYSTEM_LIST)
+
+  def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 

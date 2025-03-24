@@ -1588,15 +1588,24 @@ object TestSettings {
     fork := true,
     // Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
     // launched by the tests have access to the correct test-time classpath.
-    (Test / envVars) ++= Map(
-      "SPARK_DIST_CLASSPATH" ->
-        (Test / fullClasspath).value.files.map(_.getAbsolutePath)
-          .mkString(File.pathSeparator).stripSuffix(File.pathSeparator),
-      "SPARK_PREPEND_CLASSES" -> "1",
-      "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
-      "SPARK_TESTING" -> "1",
-      "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
-      "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"),
+    (Test / envVars) ++= {
+      val baseEnvVars = Map(
+        "SPARK_DIST_CLASSPATH" ->
+          (Test / fullClasspath).value.files.map(_.getAbsolutePath)
+            .mkString(File.pathSeparator).stripSuffix(File.pathSeparator),
+        "SPARK_PREPEND_CLASSES" -> "1",
+        "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
+        "SPARK_TESTING" -> "1",
+        "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
+        "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"
+      )
+
+      if (sys.props("os.name").contains("Mac OS X")) {
+        baseEnvVars + ("OBJC_DISABLE_INITIALIZE_FORK_SAFETY" -> "YES")
+      } else {
+        baseEnvVars
+      }
+    },
 
     // Copy system properties to forked JVMs so that tests know proxy settings
     (Test / javaOptions) ++= {

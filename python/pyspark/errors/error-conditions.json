@@ -189,9 +189,19 @@
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_EXTRANEOUS_FILTERS": {
+    "message": [
+      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
+    ]
+  },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
     "message": [
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
+    ]
+  },
+  "DATA_SOURCE_PUSHDOWN_DISABLED": {
+    "message": [
+      "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
     ]
   },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
@@ -202,6 +212,11 @@
   "DATA_SOURCE_TYPE_MISMATCH": {
     "message": [
       "Expected <expected>, but got <actual>."
+    ]
+  },
+  "DATA_SOURCE_UNSUPPORTED_FILTER": {
+    "message": [
+      "Unexpected filter <name>."
     ]
   },
   "DIFFERENT_PANDAS_DATAFRAME": {

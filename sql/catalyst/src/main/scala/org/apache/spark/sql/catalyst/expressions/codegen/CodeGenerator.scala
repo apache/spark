@@ -1537,11 +1537,11 @@ object CodeGenerator extends Logging {
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    logDebug({
+    logBasedOnLevel(SQLConf.get.codegenLogLevel) {
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      s"\n${CodeFormatter.format(code)}"
-    })
+      log"\n${MDC(LogKeys.CODE, CodeFormatter.format(code))}"
+    }
 
     val codeStats = try {
       evaluator.cook("generated.java", code.body)

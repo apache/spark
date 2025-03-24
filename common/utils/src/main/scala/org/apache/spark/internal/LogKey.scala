@@ -139,6 +139,7 @@ private[spark] object LogKeys {
   case object CLUSTER_LABEL extends LogKey
   case object CLUSTER_LEVEL extends LogKey
   case object CLUSTER_WEIGHT extends LogKey
+  case object CODE extends LogKey
   case object CODEC_LEVEL extends LogKey
   case object CODEC_NAME extends LogKey
   case object CODEGEN_STAGE_ID extends LogKey
