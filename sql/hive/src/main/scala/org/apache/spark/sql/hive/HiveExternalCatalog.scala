@@ -271,7 +271,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         ignoreIfExists)
     } else {
       val tableWithDataSourceProps = tableDefinition.copy(
-        schema = hiveCompatibleSchema,
+        schema = hiveCompatibleSchema match {
+          // Spark-created views do not have to be Hive compatible. If the data type is not
+          // Hive compatible, we can set schema to empty so that Spark can still read this
+          // view as the schema is also encoded in the table properties.
+          case schema if schema.exists(f => !isHiveCompatibleDataType(f.dataType)) &&
+              tableDefinition.tableType == CatalogTableType.VIEW =>
+            EMPTY_DATA_SCHEMA
+          case other => other
+        },
         // We can't leave `locationUri` empty and count on Hive metastore to set a default table
         // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
         // table location for tables in default database, while we expect to use the location of
