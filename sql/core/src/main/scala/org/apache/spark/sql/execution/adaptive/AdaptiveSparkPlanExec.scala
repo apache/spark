@@ -352,8 +352,9 @@ case class AdaptiveSparkPlanExec(
           val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
           if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-            logOnLevel("Plan changed:\n" +
-              sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n"))
+            lazy val plans = sideBySide(
+              currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
+            logOnLevel("Plan changed:\n" + plans)
             cleanUpTempTags(newPhysicalPlan)
             currentPhysicalPlan = newPhysicalPlan
             currentLogicalPlan = newLogicalPlan
