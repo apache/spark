@@ -240,7 +240,7 @@ head(join(src, hint(records, "broadcast"), src$key == records$key))
 <div data-lang="SQL" markdown="1">
 ```sql
 -- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
-SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
+SELECT /*+ BROADCAST(r) */ * FROM src s JOIN records r ON s.key = r.key
 ```
 </div>
 </div>
