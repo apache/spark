@@ -478,6 +478,6 @@ def recover_python_exception(e: T) -> T:
         tb = Traceback.from_string(python_exception_string)
         tb.populate_linecache()
         return e.with_traceback(tb.as_traceback())
-    except Exception:
+    except BaseException:
         # Parsing the stacktrace is best effort.
         return e
