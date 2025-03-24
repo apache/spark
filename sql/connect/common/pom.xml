@@ -40,44 +40,8 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-unsafe_${scala.binary.version}</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-tags_${scala.binary.version}</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-reflect</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${connect.guava.version}</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -85,39 +49,43 @@
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
-            <artifactId>grpc-api</artifactId>
+            <artifactId>grpc-netty</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-protobuf</artifactId>
+            <version>${io.grpc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-services</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-stub</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.google.api.grpc</groupId>
-            <artifactId>proto-google-common-protos</artifactId>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-inprocess</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-format</artifactId>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http2</artifactId>
+            <version>${netty.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-vector</artifactId>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler-proxy</artifactId>
+            <version>${netty.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-memory-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.json4s</groupId>
-            <artifactId>json4s-core_${scala.binary.version}</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.json4s</groupId>
-            <artifactId>json4s-ast_${scala.binary.version}</artifactId>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-native-unix-common</artifactId>
+            <version>${netty.version}</version>
         </dependency>
         <dependency> <!-- necessary for Java 9+ -->
             <groupId>org.apache.tomcat</groupId>
@@ -146,50 +114,6 @@
         </extensions>
         <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <configuration>
-                        <ignoredUsedUndeclaredDependencies>
-                            <ignoredUsedUndeclaredDependency>
-                                org.apache.spark:spark-connect-shims_${scala.binary.version}
-                            </ignoredUsedUndeclaredDependency>
-                        </ignoredUsedUndeclaredDependencies>
-                        <ignoredUnusedDeclaredDependencies>
-                            <ignoredUnusedDeclaredDependency>
-                                org.spark-project.spark:unused
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                org.apache.tomcat:annotations-api
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                org.apache.spark:spark-tags_${scala.binary.version}:test-jar
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                org.scalatest:scalatest_${scala.binary.version}
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                org.scalatestplus:scalacheck-1-18_${scala.binary.version}
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                org.scalatestplus:mockito-5-12_${scala.binary.version}
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                org.scalatestplus:selenium-4-21_${scala.binary.version}
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                org.junit.jupiter:junit-jupiter
-                            </ignoredUnusedDeclaredDependency>
-                            <ignoredUnusedDeclaredDependency>
-                                com.github.sbt.junit:jupiter-interface
-                            </ignoredUnusedDeclaredDependency>
-                        </ignoredUnusedDeclaredDependencies>
-                    </configuration>
-                </plugin>
-            </plugins>
-        </pluginManagement>
         <plugins>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -218,26 +142,8 @@
                         <includes>
                             <include>org.spark-project.spark:unused</include>
                             <include>org.apache.tomcat:annotations-api</include>
-                            <include>com.google.guava:*</include>
                         </includes>
                     </artifactSet>
-                    <filters>
-                        <filter>
-                            <artifact>com.google.guava:guava</artifact>
-                            <excludes>
-                                <exclude>com/google/thirdparty/**</exclude>
-                            </excludes>
-                        </filter>
-                    </filters>
-                    <relocations>
-                        <relocation>
-                            <pattern>com.google.common</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-                            <includes>
-                                <include>com.google.common.**</include>
-                            </includes>
-                      </relocation>
-                    </relocations>
                 </configuration>
                 <executions>
                     <execution>
