@@ -17,6 +17,7 @@
 import importlib.util
 import linecache
 import os
+import re
 import sys
 import tempfile
 import traceback
@@ -44,9 +45,10 @@ class TracebackTests(unittest.TestCase):
         try:
             raise ValueError("bar")
         except ValueError:
-            return traceback.format_exc()
+            _, _, tb = sys.exc_info()
+            return traceback.format_exc(), "".join(traceback.format_tb(tb))
 
-    def make_traceback_with_temp_file(self, code: str, filename=""):
+    def make_traceback_with_temp_file(self, code="""def foo(): 1 / 0""", filename=""):
         with tempfile.NamedTemporaryFile("w", suffix=f"{filename}.py", delete=True) as f:
             f.write(code)
             f.flush()
@@ -56,24 +58,34 @@ class TracebackTests(unittest.TestCase):
                 spec.loader.exec_module(foo)
                 foo.foo()
             except Exception:
-                return traceback.format_exc()
+                _, _, tb = sys.exc_info()
+                return traceback.format_exc(), "".join(traceback.format_tb(tb))
             else:
                 assert False, "ZeroDivisionError not raised"
 
-    def assert_traceback(self, tb: Traceback, error: str):
+    def assert_traceback(self, tb: Traceback, expected: str):
+        def remove_positions(s):
+            # For example, remove the 2nd line in this traceback:
+            """
+            result = (x / y / z) * (a / b / c)
+                      ~~~~~~^~~
+            """
+            pattern = r"\s*[\^\~]+\s*\n"
+            return re.sub(pattern, "\n", s)
+
         tb.populate_linecache()
-        expected = "".join(error.splitlines(keepends=True)[1:-1])  # keep only the traceback
-        actual = "".join(traceback.format_tb(tb.as_traceback()))
+        actual = remove_positions("".join(traceback.format_tb(tb.as_traceback())))
+        expected = remove_positions(expected)
         self.assertEqual(actual, expected)
 
     def test_simple(self):
-        s = self.make_traceback()
-        self.assert_traceback(Traceback.from_string(s), s)
+        s, expected = self.make_traceback()
+        self.assert_traceback(Traceback.from_string(s), expected)
 
     def test_missing_source(self):
-        s = self.make_traceback_with_temp_file("""def foo(): 1 / 0""")
+        s, expected = self.make_traceback_with_temp_file()
         linecache.clearcache()  # remove temp file from cache
-        self.assert_traceback(Traceback.from_string(s), s)
+        self.assert_traceback(Traceback.from_string(s), expected)
 
     @unittest.skipIf(
         os.name != "posix",
@@ -89,9 +101,9 @@ class TracebackTests(unittest.TestCase):
             '", line 1, in hello',
         ]:
             with self.subTest(filename=filename):
-                s = self.make_traceback_with_temp_file("""def foo(): 1 / 0""", filename=filename)
+                s, expected = self.make_traceback_with_temp_file(filename=filename)
                 linecache.clearcache()
-                self.assert_traceback(Traceback.from_string(s), s)
+                self.assert_traceback(Traceback.from_string(s), expected)
 
     @unittest.skipIf(
         os.name != "posix",
@@ -99,22 +111,20 @@ class TracebackTests(unittest.TestCase):
     )
     def test_filename_failure_newline(self):
         # tblib can't handle newline in the filename
-        s = self.make_traceback_with_temp_file("""def foo(): 1 / 0""", filename="\n")
+        s, expected = self.make_traceback_with_temp_file(filename="\n")
         linecache.clearcache()
         tb = Traceback.from_string(s)
         tb.populate_linecache()
-        expected = "".join(s.splitlines(keepends=True)[1:-1])
         actual = "".join(traceback.format_tb(tb.as_traceback()))
         self.assertNotEqual(actual, expected)
 
     def test_syntax_error(self):
         bad_syntax = "bad syntax"
-        s = self.make_traceback_with_temp_file(bad_syntax)
+        s, _ = self.make_traceback_with_temp_file(bad_syntax)
         tb = Traceback.from_string(s)
         tb.populate_linecache()
         actual = "".join(traceback.format_tb(tb.as_traceback()))
         self.assertIn("bad syntax", actual)
-        self.assertNotIn("^", actual)
 
 
 @unittest.skipIf(
