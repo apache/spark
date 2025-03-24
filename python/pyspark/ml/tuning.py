@@ -56,8 +56,7 @@ from pyspark.ml.util import (
     JavaMLWriter,
     try_remote_write,
     try_remote_read,
-    _get_temp_dfs_path,
-    _remove_dfs_dir,
+    _cache_spark_dataset,
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql import functions as F
@@ -851,39 +850,21 @@ class CrossValidator(
 
         datasets = self._kFold(dataset)
 
-        tmp_dfs_path = _get_temp_dfs_path()
-        spark_session = dataset._session
         for i in range(nFolds):
             validation = datasets[i][1]
             train = datasets[i][0]
 
-            if tmp_dfs_path:
-                validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
-                validation.write.save(validation_tmp_path)
-                validation = spark_session.read.load(validation_tmp_path)
-                train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
-                train.write.save(train_tmp_path)
-                train = spark_session.read.load(train_tmp_path)
-            else:
-                validation.cache()
-                train.cache()
-
-            tasks = map(
-                inheritable_thread_target(dataset.sparkSession),
-                _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
-            )
-            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-                metrics_all[i][j] = metric
-                if collectSubModelsParam:
-                    assert subModels is not None
-                    subModels[i][j] = subModel
-
-            if tmp_dfs_path:
-                _remove_dfs_dir(validation_tmp_path, spark_session)
-                _remove_dfs_dir(train_tmp_path, spark_session)
-            else:
-                validation.unpersist()
-                train.unpersist()
+            with _cache_spark_dataset(train) as train, \
+                    _cache_spark_dataset(validation) as validation:
+                tasks = map(
+                    inheritable_thread_target(dataset.sparkSession),
+                    _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
+                )
+                for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                    metrics_all[i][j] = metric
+                    if collectSubModelsParam:
+                        assert subModels is not None
+                        subModels[i][j] = subModel
 
         metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
 
@@ -1500,42 +1481,24 @@ class TrainValidationSplit(
         validation = df.filter(condition)
         train = df.filter(~condition)
 
-        tmp_dfs_path = _get_temp_dfs_path()
-        spark_session = dataset._session
-        if tmp_dfs_path:
-            validation_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
-            validation.write.save(validation_tmp_path)
-            validation = spark_session.read.load(validation_tmp_path)
-            train_tmp_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
-            train.write.save(train_tmp_path)
-            train = spark_session.read.load(train_tmp_path)
-        else:
-            validation.cache()
-            train.cache()
-
-        subModels = None
-        collectSubModelsParam = self.getCollectSubModels()
-        if collectSubModelsParam:
-            subModels = [None for i in range(numModels)]
-
-        tasks = map(
-            inheritable_thread_target(dataset.sparkSession),
-            _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
-        )
-        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = [None] * numModels
-        for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-            metrics[j] = metric
+        with _cache_spark_dataset(train) as train, \
+                _cache_spark_dataset(validation) as validation:
+            subModels = None
+            collectSubModelsParam = self.getCollectSubModels()
             if collectSubModelsParam:
-                assert subModels is not None
-                subModels[j] = subModel
+                subModels = [None for i in range(numModels)]
 
-        if tmp_dfs_path:
-            _remove_dfs_dir(validation_tmp_path, spark_session)
-            _remove_dfs_dir(train_tmp_path, spark_session)
-        else:
-            train.unpersist()
-            validation.unpersist()
+            tasks = map(
+                inheritable_thread_target(dataset.sparkSession),
+                _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
+            )
+            pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+            metrics = [None] * numModels
+            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                metrics[j] = metric
+                if collectSubModelsParam:
+                    assert subModels is not None
+                    subModels[j] = subModel
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(cast(List[float], metrics))

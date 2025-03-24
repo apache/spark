@@ -34,6 +34,7 @@ from typing import (
     TYPE_CHECKING,
     Union,
 )
+from contextlib import contextmanager
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
@@ -1126,3 +1127,23 @@ def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
         wrapper = JavaWrapper(_java_obj)
         wrapper._call_java("handleOverwrite", path, True, spark_session._jsparkSession)
+
+
+@contextmanager
+def _cache_spark_dataset(dataset):
+    spark_session = dataset._session
+    tmp_dfs_path = os.environ.get(_SPARKML_TEMP_DFS_PATH)
+
+    if tmp_dfs_path:
+        tmp_cache_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+        dataset.write.save(tmp_cache_path)
+        try:
+            yield spark_session.read.load(tmp_cache_path)
+        finally:
+            _remove_dfs_dir.unpersist()
+    else:
+        dataset.cache()
+        try:
+            yield dataset
+        finally:
+            dataset.unpersist()
