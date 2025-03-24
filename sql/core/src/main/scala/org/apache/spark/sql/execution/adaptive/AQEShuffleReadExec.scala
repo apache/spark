@@ -204,6 +204,7 @@ case class AQEShuffleReadExec private(
       val y = child match {
         case s: ShuffleQueryStageExec =>
           s.mapStats.map(stats => stats.bytesByPartitionId.count(_ == 0)).getOrElse(0)
+        case _ => 0
       }
       numEmptyPartitionsMetric.set(y)
       driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x,
