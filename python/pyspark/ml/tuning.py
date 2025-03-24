@@ -17,7 +17,6 @@
 
 import os
 import sys
-import uuid
 import itertools
 from multiprocessing.pool import ThreadPool
 from typing import (
@@ -854,8 +853,9 @@ class CrossValidator(
             validation = datasets[i][1]
             train = datasets[i][0]
 
-            with _cache_spark_dataset(train) as train, \
-                    _cache_spark_dataset(validation) as validation:
+            with _cache_spark_dataset(train) as train, _cache_spark_dataset(
+                validation
+            ) as validation:
                 tasks = map(
                     inheritable_thread_target(dataset.sparkSession),
                     _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
@@ -1481,8 +1481,7 @@ class TrainValidationSplit(
         validation = df.filter(condition)
         train = df.filter(~condition)
 
-        with _cache_spark_dataset(train) as train, \
-                _cache_spark_dataset(validation) as validation:
+        with _cache_spark_dataset(train) as train, _cache_spark_dataset(validation) as validation:
             subModels = None
             collectSubModelsParam = self.getCollectSubModels()
             if collectSubModelsParam:

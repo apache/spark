@@ -25,6 +25,7 @@ from typing import (
     Callable,
     Dict,
     Generic,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
+    from pyspark.sql import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
     from pyspark.ml.evaluation import JavaEvaluator
@@ -1130,7 +1132,7 @@ def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
 
 
 @contextmanager
-def _cache_spark_dataset(dataset):
+def _cache_spark_dataset(dataset: DataFrame) -> Iterator[Any]:
     spark_session = dataset._session
     tmp_dfs_path = os.environ.get(_SPARKML_TEMP_DFS_PATH)
 
@@ -1140,7 +1142,7 @@ def _cache_spark_dataset(dataset):
         try:
             yield spark_session.read.load(tmp_cache_path)
         finally:
-            _remove_dfs_dir.unpersist()
+            _remove_dfs_dir(tmp_cache_path, spark_session)
     else:
         dataset.cache()
         try:
