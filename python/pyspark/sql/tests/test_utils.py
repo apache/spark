@@ -1803,7 +1803,8 @@ class UtilsTestsMixin:
         self.assertTrue(exception_thrown)
 
     def test_assert_schema_equal_with_decimal_types(self):
-        """Test assertSchemaEqual with decimal types of different precision and scale (SPARK-51062)."""
+        """Test assertSchemaEqual with decimal types of different precision and scale
+        (SPARK-51062)."""
         from pyspark.sql.types import StructType, StructField, DecimalType
 
         # Same precision and scale - should pass
