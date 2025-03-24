@@ -213,7 +213,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
-                self._release_thread_pool.submit(target)
+                thread_pool = self._release_thread_pool
+                if not thread_pool._shutdown:
+                    thread_pool.submit(target)
 
     def _release_all(self) -> None:
         """
@@ -238,7 +240,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
-                self._release_thread_pool.submit(target)
+                thread_pool = self._release_thread_pool
+                if not thread_pool._shutdown:
+                    thread_pool.submit(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:
