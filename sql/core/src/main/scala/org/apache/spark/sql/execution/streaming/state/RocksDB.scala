@@ -66,18 +66,16 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  */
 class RocksDB(
+    dfsRootDir: String,
     val conf: RocksDBConf,
-    stateStoreId: StateStoreId,
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
+    loggingId: String = "",
     useColumnFamilies: Boolean = false,
-    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
+    enableStateStoreCheckpointIds: Boolean = false,
+    partitionId: Int = 0) extends Logging {
 
   import RocksDB._
-
-  private val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
-  private val loggingId = s"StateStoreId(opId=${stateStoreId.operatorId}," +
-    s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
 
   @volatile private var lastSnapshotVersion = 0L
 
@@ -1236,7 +1234,7 @@ class RocksDB(
    */
   private def getLatestCheckpointInfo: StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(
-      stateStoreId.partitionId,
+      partitionId,
       loadedVersion,
       lastCommittedStateStoreCkptId,
       lastCommitBasedStateStoreCkptId)

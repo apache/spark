@@ -3344,10 +3344,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       val db = new RocksDB(
+        remoteDir,
         conf = dbConf,
-        stateStoreId = StateStoreId(remoteDir, 0, 0),
         localRootDir = Utils.createTempDir(),
         hadoopConf = new Configuration(),
+        loggingId = s"[Thread-${Thread.currentThread.getId}]",
         useColumnFamilies = false
       )
       try {
@@ -3499,13 +3500,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   class RocksDBCheckpointFormatV2(
+      dfsRootDir: String,
       conf: RocksDBConf,
-      stateStoreId: StateStoreId,
       localRootDir: File = Utils.createTempDir(),
       hadoopConf: Configuration = new Configuration,
+      loggingId: String = "",
       useColumnFamilies: Boolean = false,
       val versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String]())
-    extends RocksDB(conf, stateStoreId, localRootDir, hadoopConf,
+    extends RocksDB(dfsRootDir, conf, localRootDir, hadoopConf, loggingId,
       useColumnFamilies, enableStateStoreCheckpointIds = true) {
 
     override def load(
@@ -3551,18 +3553,20 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     try {
       db = if (enableStateStoreCheckpointIds) {
         new RocksDBCheckpointFormatV2(
+          remoteDir,
           conf = conf,
-          stateStoreId = StateStoreId(remoteDir, 0, 0),
           localRootDir = localDir,
           hadoopConf = hadoopConf,
+          loggingId = s"[Thread-${Thread.currentThread.getId}]",
           useColumnFamilies = useColumnFamilies,
           versionToUniqueId = versionToUniqueId)
       } else {
         new RocksDB(
+          remoteDir,
           conf = conf,
-          stateStoreId = StateStoreId(remoteDir, 0, 0),
           localRootDir = localDir,
           hadoopConf = hadoopConf,
+          loggingId = s"[Thread-${Thread.currentThread.getId}]",
           useColumnFamilies = useColumnFamilies)
       }
       db.load(version, versionToUniqueId.get(version))
@@ -3653,9 +3657,10 @@ object RocksDBSuite {
   def withSingletonDB[T](func: => T): T = {
     try {
       singleton = new RocksDB(
+        dfsRootDir = Utils.createTempDir().getAbsolutePath,
         conf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
-        stateStoreId = StateStoreId(Utils.createTempDir().getAbsolutePath, 0, 0),
-        hadoopConf = new Configuration())
+        hadoopConf = new Configuration(),
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
 
       func
     } finally {

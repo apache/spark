@@ -230,12 +230,12 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    var checkpointInfo: StateStoreCheckpointInfo = _
+    var checkpointInfo: Option[StateStoreCheckpointInfo] = None
     override def commit(): Long = synchronized {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         val (newVersion, newCheckpointInfo) = rocksDB.commit()
-        checkpointInfo = newCheckpointInfo
+        checkpointInfo = Some(newCheckpointInfo)
         state = COMMITTED
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
@@ -337,11 +337,10 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
-      if (checkpointInfo == null) {
-        throw StateStoreErrors.stateStoreOperationOutOfOrder(
+      checkpointInfo match {
+        case Some(info) => info
+        case None => throw StateStoreErrors.stateStoreOperationOutOfOrder(
           "Cannot get checkpointInfo without committing the store")
-      } else {
-        checkpointInfo
       }
     }
 
@@ -526,12 +525,13 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
 
   private[sql] lazy val rocksDB = {
+    val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    new RocksDB(RocksDBConf(storeConf), stateStoreId, localRootDir, hadoopConf,
-      useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
+    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId)
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
