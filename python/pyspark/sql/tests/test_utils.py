@@ -1807,21 +1807,27 @@ class UtilsTestsMixin:
         from pyspark.sql.types import StructType, StructField, DecimalType
 
         # Same precision and scale - should pass
-        s1 = StructType([
-            StructField("price", DecimalType(10, 2), True),
-        ])
+        s1 = StructType(
+            [
+                StructField("price", DecimalType(10, 2), True),
+            ]
+        )
 
-        s1_copy = StructType([
-            StructField("price", DecimalType(10, 2), True),
-        ])
+        s1_copy = StructType(
+            [
+                StructField("price", DecimalType(10, 2), True),
+            ]
+        )
 
         # This should pass
         assertSchemaEqual(s1, s1_copy)
 
         # Different precision and scale - should fail
-        s2 = StructType([
-            StructField("price", DecimalType(12, 4), True),
-        ])
+        s2 = StructType(
+            [
+                StructField("price", DecimalType(12, 4), True),
+            ]
+        )
 
         # This should fail
         with self.assertRaises(PySparkAssertionError):
