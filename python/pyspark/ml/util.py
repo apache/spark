@@ -1132,7 +1132,7 @@ def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
 
 
 @contextmanager
-def _cache_spark_dataset(dataset: DataFrame) -> Iterator[Any]:
+def _cache_spark_dataset(dataset: "DataFrame") -> Iterator[Any]:
     spark_session = dataset._session
     tmp_dfs_path = os.environ.get(_SPARKML_TEMP_DFS_PATH)
 
