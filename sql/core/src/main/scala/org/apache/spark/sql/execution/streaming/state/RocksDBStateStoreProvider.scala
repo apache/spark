@@ -978,6 +978,13 @@ private[state] case class RocksDBEventListener(queryRunId: String, stateStoreId:
    */
   def reportSnapshotUploaded(version: Long): Unit = {
     // Report the state store provider ID and the version to the coordinator
-    StateStore.reportSnapshotUploaded(providerId, version)
+    val currentTimestamp = System.currentTimeMillis()
+    StateStoreProvider.coordinatorRef.foreach(
+      _.snapshotUploaded(
+        providerId,
+        version,
+        currentTimestamp
+      )
+    )
   }
 }

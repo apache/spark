@@ -593,7 +593,10 @@ trait StateStoreProvider {
   def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = Seq.empty
 }
 
-object StateStoreProvider {
+object StateStoreProvider extends Logging {
+
+  @GuardedBy("this")
+  var stateStoreCoordinatorRef: StateStoreCoordinatorRef = null
 
   /**
    * Return a instance of the given provider class name. The instance will not be initialized.
@@ -665,6 +668,32 @@ object StateStoreProvider {
     } else {
       assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
       UUID.randomUUID().toString
+    }
+  }
+
+  /**
+   * Create the state store coordinator reference which will be reused across state stores within
+   * the executor JVM process.
+   */
+  private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
+    val env = SparkEnv.get
+    if (env != null) {
+      val isDriver = env.executorId == SparkContext.DRIVER_IDENTIFIER
+      // If running locally, then the coordinator reference in stateStoreCoordinatorRef may be have
+      // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
+      // driver, always recreate the reference.
+      if (isDriver || stateStoreCoordinatorRef == null) {
+        logDebug("Getting StateStoreCoordinatorRef")
+        if (isDriver || stateStoreCoordinatorRef == null) {
+          stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(SparkEnv.get)
+          logInfo(log"Retrieved reference to StateStoreCoordinator: " +
+            log"${MDC(LogKeys.STATE_STORE_ID, stateStoreCoordinatorRef)}")
+        }
+      }
+      Some(stateStoreCoordinatorRef)
+    } else {
+      stateStoreCoordinatorRef = null
+      None
     }
   }
 }

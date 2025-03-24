@@ -218,7 +218,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               .option("checkpointLocation", checkpointLocation.toString)
               .start()
             // Add, commit, and wait multiple times to force snapshot versions and time difference
-            (0 until 2).foreach { _ =>
+            (0 until 4).foreach { _ =>
               inputData.addData(1, 2, 3)
               query.processAllAvailable()
               Thread.sleep(1000)
@@ -282,7 +282,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               .option("checkpointLocation", checkpointLocation.toString)
               .start()
             // Add, commit, and wait multiple times to force snapshot versions and time difference
-            (0 until 3).foreach { _ =>
+            (0 until 4).foreach { _ =>
               inputData.addData(1, 2, 3)
               query.processAllAvailable()
               Thread.sleep(1000)
@@ -354,7 +354,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               .option("checkpointLocation", checkpointLocation.toString)
               .start()
             // Add, commit, and wait multiple times to force snapshot versions and time difference
-            (0 until 5).foreach { _ =>
+            (0 until 7).foreach { _ =>
               input1.addData(1, 5)
               input2.addData(1, 5, 10)
               query.processAllAvailable()
@@ -425,7 +425,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               .option("checkpointLocation", checkpointLocation.toString)
               .start()
             // Add, commit, and wait multiple times to force snapshot versions and time difference
-            (0 until 6).foreach { _ =>
+            (0 until 7).foreach { _ =>
               input1.addData(1, 5)
               input2.addData(1, 5, 10)
               query.processAllAvailable()

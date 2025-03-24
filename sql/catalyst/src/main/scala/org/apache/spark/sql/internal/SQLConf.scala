@@ -2266,9 +2266,9 @@ object SQLConf {
         "times this multiplier."
       )
       .version("4.1.0")
-      .intConf
-      .checkValue(k => k >= 1, "Must be greater than or equal to 1")
-      .createWithDefault(5)
+      .longConf
+      .checkValue(k => k >= 1L, "Must be greater than or equal to 1")
+      .createWithDefault(5L)
 
   val STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG =
     buildConf("spark.sql.streaming.stateStore.multiplierForMinTimeDiffToLog")
@@ -2279,9 +2279,9 @@ object SQLConf {
         "current time by the configured maintenance interval, times this multiplier."
       )
       .version("4.1.0")
-      .intConf
-      .checkValue(k => k >= 1, "Must be greater than or equal to 1")
-      .createWithDefault(10)
+      .longConf
+      .checkValue(k => k >= 1L, "Must be greater than or equal to 1")
+      .createWithDefault(10L)
 
   val STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG =
     buildConf("spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag")
@@ -5864,8 +5864,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
     getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
 
+  def stateStoreCoordinatorMultiplierForMinVersionDiffToLog: Long =
+    getConf(STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG)
+
+  def stateStoreCoordinatorMultiplierForMinTimeDiffToLog: Long =
+    getConf(STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG)
+
   def stateStoreCoordinatorReportSnapshotUploadLag: Boolean =
     getConf(STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG)
+
+  def stateStoreCoordinatorSnapshotLagReportInterval: Long =
+    getConf(STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
+
+  def stateStoreCoordinatorMaxLaggingStoresToReport: Int =
+    getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

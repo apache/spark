@@ -221,6 +221,10 @@ private class StateStoreCoordinator(
   // since we may not have all the information yet.
   private val queryRunStartingPoint = new mutable.HashMap[UUID, (Long, Long)]
 
+  def coordinatorLagReportInterval: Long = {
+    sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
+  }
+
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId, providerIdsToCheck) =>
       logDebug(s"Reported state store $id is active at $executorId")
@@ -274,55 +278,53 @@ private class StateStoreCoordinator(
       // has never seen this query run before.
       if (!queryRunStartingPoint.contains(queryRunId)) {
         queryRunStartingPoint.put(queryRunId, (currentTimestamp, latestVersion))
-      }
-      // Only log lagging instances if the snapshot report upload is enabled,
-      // otherwise all instances will be considered lagging.
-      val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
-      if (laggingStores.nonEmpty) {
-        logWarning(
-          log"StateStoreCoordinator Snapshot Lag Report for " +
-          log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
-          log"Number of state stores falling behind: " +
-          log"${MDC(LogKeys.NUM_LAGGING_STORES, laggingStores.size)}"
-        )
-        // Report all stores that are behind in snapshot uploads.
-        // Only report the list of providers lagging behind if the last reported time
-        // is not recent for this query run. The lag report interval denotes the minimum
-        // time between these full reports.
-        val coordinatorLagReportInterval =
-          sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
-        val timeSinceLastReport =
-          currentTimestamp - lastFullSnapshotLagReportTimeMs.getOrElse(queryRunId, 0L)
-        if (timeSinceLastReport > coordinatorLagReportInterval) {
-          // Mark timestamp of the report and log the lagging instances
-          lastFullSnapshotLagReportTimeMs.put(queryRunId, currentTimestamp)
-          // Only report the stores that are lagging the most behind in snapshot uploads.
-          laggingStores
-            .sortBy(stateStoreLatestUploadedSnapshot.getOrElse(_, defaultSnapshotUploadEvent))
-            .take(sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT))
-            .foreach { providerId =>
-              val logMessage = stateStoreLatestUploadedSnapshot.get(providerId) match {
-                case Some(snapshotEvent) =>
-                  val versionDelta = latestVersion - Math.max(snapshotEvent.version, 0)
-                  val timeDelta = currentTimestamp - snapshotEvent.timestamp
+      } else {
+        // Only log lagging instances if the snapshot report upload is enabled,
+        // otherwise all instances will be considered lagging.
+        val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
+        if (laggingStores.nonEmpty) {
+          logWarning(
+            log"StateStoreCoordinator Snapshot Lag Report for " +
+            log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
+            log"Number of state stores falling behind: " +
+            log"${MDC(LogKeys.NUM_LAGGING_STORES, laggingStores.size)}"
+          )
+          // Report all stores that are behind in snapshot uploads.
+          // Only report the list of providers lagging behind if the last reported time
+          // is not recent for this query run. The lag report interval denotes the minimum
+          // time between these full reports.
+          val timeSinceLastReport =
+            currentTimestamp - lastFullSnapshotLagReportTimeMs.getOrElse(queryRunId, 0L)
+          if (timeSinceLastReport > coordinatorLagReportInterval) {
+            // Mark timestamp of the report and log the lagging instances
+            lastFullSnapshotLagReportTimeMs.put(queryRunId, currentTimestamp)
+            // Only report the stores that are lagging the most behind in snapshot uploads.
+            laggingStores
+              .sortBy(stateStoreLatestUploadedSnapshot.getOrElse(_, defaultSnapshotUploadEvent))
+              .take(sqlConf.stateStoreCoordinatorMaxLaggingStoresToReport)
+              .foreach { providerId =>
+                val baseLogMessage =
+                  log"StateStoreCoordinator Snapshot Lag Detected for " +
+                  log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
+                  log"Store ID: ${MDC(LogKeys.STATE_STORE_ID, providerId.storeId)} " +
+                  log"(Latest batch ID: ${MDC(LogKeys.BATCH_ID, latestVersion)}"
 
-                  log"StateStoreCoordinator Snapshot Lag Detected for " +
-                  log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
-                  log"Store ID: ${MDC(LogKeys.STATE_STORE_ID, providerId.storeId)} " +
-                  log"(Latest batch ID: ${MDC(LogKeys.BATCH_ID, latestVersion)}, " +
-                  log"latest snapshot: ${MDC(LogKeys.SNAPSHOT_EVENT, snapshotEvent)}, " +
-                  log"version delta: " +
-                  log"${MDC(LogKeys.SNAPSHOT_EVENT_VERSION_DELTA, versionDelta)}, " +
-                  log"time delta: ${MDC(LogKeys.SNAPSHOT_EVENT_TIME_DELTA, timeDelta)}ms)"
-                case None =>
-                  log"StateStoreCoordinator Snapshot Lag Detected for " +
-                  log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +
-                  log"Store ID: ${MDC(LogKeys.STATE_STORE_ID, providerId.storeId)} " +
-                  log"(Latest batch ID: ${MDC(LogKeys.BATCH_ID, latestVersion)}, " +
-                  log"latest snapshot: no upload for query run)"
+                val logMessage = stateStoreLatestUploadedSnapshot.get(providerId) match {
+                  case Some(snapshotEvent) =>
+                    val versionDelta = latestVersion - Math.max(snapshotEvent.version, 0)
+                    val timeDelta = currentTimestamp - snapshotEvent.timestamp
+
+                    baseLogMessage + log", " +
+                    log"latest snapshot: ${MDC(LogKeys.SNAPSHOT_EVENT, snapshotEvent)}, " +
+                    log"version delta: " +
+                    log"${MDC(LogKeys.SNAPSHOT_EVENT_VERSION_DELTA, versionDelta)}, " +
+                    log"time delta: ${MDC(LogKeys.SNAPSHOT_EVENT_TIME_DELTA, timeDelta)}ms)"
+                  case None =>
+                    baseLogMessage + log", latest snapshot: no upload for query run)"
+                }
+                logWarning(logMessage)
               }
-              logWarning(logMessage)
-            }
+          }
         }
       }
       context.reply(true)
@@ -349,17 +351,16 @@ private class StateStoreCoordinator(
       referenceVersion: Long,
       referenceTimestamp: Long): Seq[StateStoreProviderId] = {
     // Do not report any instance as lagging if report snapshot upload is disabled.
-    if (!sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG)) {
+    if (!sqlConf.stateStoreCoordinatorReportSnapshotUploadLag) {
       return Seq.empty
     }
 
     // Determine alert thresholds from configurations for both time and version differences.
     val snapshotVersionDeltaMultiplier =
-      sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG)
-    val maintenanceIntervalMultiplier =
-      sqlConf.getConf(SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG)
-    val minDeltasForSnapshot = sqlConf.getConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
-    val maintenanceInterval = sqlConf.getConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL)
+      sqlConf.stateStoreCoordinatorMultiplierForMinVersionDiffToLog
+    val maintenanceIntervalMultiplier = sqlConf.stateStoreCoordinatorMultiplierForMinTimeDiffToLog
+    val minDeltasForSnapshot = sqlConf.stateStoreMinDeltasForSnapshot
+    val maintenanceInterval = sqlConf.streamingMaintenanceInterval
 
     // Use the configured multipliers to determine the proper alert thresholds
     val minVersionDeltaForLogging = snapshotVersionDeltaMultiplier * minDeltasForSnapshot

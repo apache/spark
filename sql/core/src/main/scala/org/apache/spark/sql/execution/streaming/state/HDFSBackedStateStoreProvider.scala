@@ -680,7 +680,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     // Report snapshot upload event to the coordinator, and include the store ID with the message.
     if (storeConf.stateStoreCoordinatorReportSnapshotUploadLag) {
       val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
-      StateStore.reportSnapshotUploaded(StateStoreProviderId(stateStoreId, runId), version)
+      val currentTimestamp = System.currentTimeMillis()
+      StateStoreProvider.coordinatorRef.foreach(
+        _.snapshotUploaded(
+          StateStoreProviderId(stateStoreId, runId),
+          version,
+          currentTimestamp
+        )
+      )
     }
   }
 
