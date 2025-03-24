@@ -25,6 +25,7 @@ from typing import (
     Callable,
     Dict,
     Generic,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -34,6 +35,7 @@ from typing import (
     TYPE_CHECKING,
     Union,
 )
+from contextlib import contextmanager
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
@@ -47,6 +49,7 @@ if TYPE_CHECKING:
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
+    from pyspark.sql import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
     from pyspark.ml.evaluation import JavaEvaluator
@@ -1110,3 +1113,45 @@ def try_remote_functions(f: FuncT) -> FuncT:
             return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+_SPARKML_TEMP_DFS_PATH = "SPARKML_TEMP_DFS_PATH"
+
+
+def _get_temp_dfs_path() -> Optional[str]:
+    return os.environ.get(_SPARKML_TEMP_DFS_PATH)
+
+
+def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
+    from pyspark.ml.wrapper import JavaWrapper
+    from pyspark.sql import is_remote
+
+    if is_remote():
+        from pyspark.ml.util import ML_CONNECT_HELPER_ID
+
+        helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+        helper._call_java("handleOverwrite", path, True)
+    else:
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
+        wrapper = JavaWrapper(_java_obj)
+        wrapper._call_java("handleOverwrite", path, True, spark_session._jsparkSession)
+
+
+@contextmanager
+def _cache_spark_dataset(dataset: "DataFrame") -> Iterator[Any]:
+    spark_session = dataset._session
+    tmp_dfs_path = os.environ.get(_SPARKML_TEMP_DFS_PATH)
+
+    if tmp_dfs_path:
+        tmp_cache_path = os.path.join(tmp_dfs_path, uuid.uuid4().hex)
+        dataset.write.save(tmp_cache_path)
+        try:
+            yield spark_session.read.load(tmp_cache_path)
+        finally:
+            _remove_dfs_dir(tmp_cache_path, spark_session)
+    else:
+        dataset.cache()
+        try:
+            yield dataset
+        finally:
+            dataset.unpersist()
