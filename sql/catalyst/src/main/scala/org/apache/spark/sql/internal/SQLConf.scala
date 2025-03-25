@@ -124,8 +124,8 @@ object SQLConf {
    * configs and only be able to change non-static configs.
    */
   private[sql] def mergeNonStaticSQLConfigs(
-                                             sqlConf: SQLConf,
-                                             configs: Map[String, String]): Unit = {
+      sqlConf: SQLConf,
+      configs: Map[String, String]): Unit = {
     for ((k, v) <- configs if !staticConfKeys.contains(k)) {
       sqlConf.setConfString(k, v)
     }
@@ -262,13 +262,13 @@ object SQLConf {
       .internal()
       .doc(
         "When true, use the single-pass Resolver instead of the fixed-point Analyzer. " +
-          "This is an alternative Analyzer framework, which resolves the parsed logical plan in a " +
-          "single post-order traversal. It uses ExpressionResolver to resolve expressions and " +
-          "NameScope to control the visibility of names. In contrast to the current fixed-point " +
-          "framework, subsequent in-tree traversals are disallowed. Most of the fixed-point " +
-          "Analyzer code is reused in the form of specific node transformation functions " +
-          "(AliasResolution.resolve, FunctionResolution.resolveFunction, etc). " +
-          "This feature is currently under development."
+        "This is an alternative Analyzer framework, which resolves the parsed logical plan in a " +
+        "single post-order traversal. It uses ExpressionResolver to resolve expressions and " +
+        "NameScope to control the visibility of names. In contrast to the current fixed-point " +
+        "framework, subsequent in-tree traversals are disallowed. Most of the fixed-point " +
+        "Analyzer code is reused in the form of specific node transformation functions " +
+        "(AliasResolution.resolve, FunctionResolution.resolveFunction, etc). " +
+        "This feature is currently under development."
       )
       .version("4.0.0")
       .booleanConf
@@ -279,8 +279,8 @@ object SQLConf {
       .internal()
       .doc(
         "When true, run both analyzers to check if single-pass Analyzer correctly produces " +
-          "the same analyzed plan as the fixed-point Analyzer for the existing set of features " +
-          "defined in the ResolverGuard"
+        "the same analyzed plan as the fixed-point Analyzer for the existing set of features " +
+        "defined in the ResolverGuard"
       )
       .version("4.0.0")
       .booleanConf
@@ -291,8 +291,8 @@ object SQLConf {
       .internal()
       .doc(
         "When true, return the result of the single-pass resolver as the result of the dual run " +
-          "analysis (which is used if the ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER flag " +
-          "value is true). Otherwise, return the result of the fixed-point analyzer."
+        "analysis (which is used if the ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER flag " +
+        "value is true). Otherwise, return the result of the fixed-point analyzer."
       )
       .version("4.0.0")
       .booleanConf
@@ -303,9 +303,9 @@ object SQLConf {
       .internal()
       .doc(
         "When true, validate the Resolver output with ResolutionValidator. " +
-          "The ResolutionValidator validates the resolved logical plan tree in one pass " +
-          "and asserts the internal contracts. It uses the ExpressionResolutionValidator " +
-          "internally to validate resolved expression trees in the same manner."
+        "The ResolutionValidator validates the resolved logical plan tree in one pass " +
+        "and asserts the internal contracts. It uses the ExpressionResolutionValidator " +
+        "internally to validate resolved expression trees in the same manner."
       )
       .version("4.0.0")
       .booleanConf
@@ -316,13 +316,13 @@ object SQLConf {
       .internal()
       .doc(
         "When set to true, the single-pass Resolver will reuse the relation metadata that was " +
-          "previously resolved in fixed-point run. This makes sense only in " +
-          "ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER mode. In that case HybridAnalyzer " +
-          "enables the AnalyzerBridgeState and passes it to the single-pass Analyzer after the " +
-          "fixed-point run is complete. Single-pass Resolver uses this AnalyzerBridgeState to " +
-          "construct a special RelationMetadataProvider implementation - " +
-          "BridgedRelationMetadataProvider. This component simply reuses cached relation metadata " +
-          "and avoids any blocking calls (catalog RPCs or table metadata reads)."
+        "previously resolved in fixed-point run. This makes sense only in " +
+        "ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER mode. In that case HybridAnalyzer " +
+        "enables the AnalyzerBridgeState and passes it to the single-pass Analyzer after the " +
+        "fixed-point run is complete. Single-pass Resolver uses this AnalyzerBridgeState to " +
+        "construct a special RelationMetadataProvider implementation - " +
+        "BridgedRelationMetadataProvider. This component simply reuses cached relation metadata " +
+        "and avoids any blocking calls (catalog RPCs or table metadata reads)."
       )
       .version("4.0.0")
       .booleanConf
@@ -880,8 +880,8 @@ object SQLConf {
       .internal()
       .doc(
         "Object level collations feature is under development and its use should be done " +
-          "under this feature flag. The feature allows setting default collation for all " +
-          "underlying columns within that object, except the ones that were previously created."
+        "under this feature flag. The feature allows setting default collation for all " +
+        "underlying columns within that object, except the ones that were previously created."
       )
       .version("4.0.0")
       .booleanConf
@@ -1116,17 +1116,17 @@ object SQLConf {
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
-      "otherwise the schema is picked from the summary file or a random data file " +
-      "if no summary file is available.")
+         "otherwise the schema is picked from the summary file or a random data file " +
+         "if no summary file is available.")
     .version("1.5.0")
     .booleanConf
     .createWithDefault(false)
 
   val PARQUET_SCHEMA_RESPECT_SUMMARIES = buildConf("spark.sql.parquet.respectSummaryFiles")
     .doc("When true, we make assumption that all part-files of Parquet are consistent with " +
-      "summary files and we will ignore them when merging schema. Otherwise, if this is " +
-      "false, which is the default, we will merge all part-files. This should be considered " +
-      "as expert-only option, and shouldn't be enabled before knowing what it means exactly.")
+         "summary files and we will ignore them when merging schema. Otherwise, if this is " +
+         "false, which is the default, we will merge all part-files. This should be considered " +
+         "as expert-only option, and shouldn't be enabled before knowing what it means exactly.")
     .version("1.5.0")
     .booleanConf
     .createWithDefault(false)
@@ -1223,13 +1223,13 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.string.startsWith")
-      .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
-        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
-        "enabled.")
-      .version("2.4.0")
-      .internal()
-      .booleanConf
-      .createWithDefault(true)
+    .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
+      s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+      "enabled.")
+    .version("2.4.0")
+    .internal()
+    .booleanConf
+    .createWithDefault(true)
 
   val PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.stringPredicate")
@@ -1296,7 +1296,7 @@ object SQLConf {
   val PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
     buildConf("spark.sql.parquet.enableNestedColumnVectorizedReader")
       .doc("Enables vectorized Parquet decoding for nested columns (e.g., struct, list, map). " +
-        s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
+          s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -1429,7 +1429,7 @@ object SQLConf {
   val HIVE_METASTORE_DROP_PARTITION_BY_NAME =
     buildConf("spark.sql.hive.dropPartitionByName.enabled")
       .doc("When true, Spark will get partition name rather than partition object " +
-        "to drop partition, which can improve the performance of drop partition.")
+           "to drop partition, which can improve the performance of drop partition.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -1437,7 +1437,7 @@ object SQLConf {
   val HIVE_METASTORE_PARTITION_PRUNING =
     buildConf("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
-        "unmatching partitions can be eliminated earlier.")
+           "unmatching partitions can be eliminated earlier.")
       .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
@@ -1480,10 +1480,10 @@ object SQLConf {
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
-        "This includes both datasource and converted Hive tables. When partition management " +
-        "is enabled, datasource tables store partition in the Hive metastore, and use the " +
-        s"metastore to prune partitions during query planning when " +
-        s"${HIVE_METASTORE_PARTITION_PRUNING.key} is set to true.")
+           "This includes both datasource and converted Hive tables. When partition management " +
+           "is enabled, datasource tables store partition in the Hive metastore, and use the " +
+           s"metastore to prune partitions during query planning when " +
+           s"${HIVE_METASTORE_PARTITION_PRUNING.key} is set to true.")
       .version("2.1.1")
       .booleanConf
       .createWithDefault(true)
@@ -1491,8 +1491,8 @@ object SQLConf {
   val HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE =
     buildConf("spark.sql.hive.filesourcePartitionFileCacheSize")
       .doc("When nonzero, enable caching of partition file metadata in memory. All tables share " +
-        "a cache that can use up to specified num bytes for file metadata. This conf only " +
-        "has an effect when hive filesource partition management is enabled.")
+           "a cache that can use up to specified num bytes for file metadata. This conf only " +
+           "has an effect when hive filesource partition management is enabled.")
       .version("2.1.1")
       .longConf
       .createWithDefault(250 * 1024 * 1024)
@@ -1635,13 +1635,13 @@ object SQLConf {
     .createWithDefault(false)
 
   val GATHER_FASTSTAT = buildConf("spark.sql.hive.gatherFastStats")
-    .internal()
-    .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
-      " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
-      " metastore.")
-    .version("2.0.1")
-    .booleanConf
-    .createWithDefault(true)
+      .internal()
+      .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
+        " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
+        " metastore.")
+      .version("2.0.1")
+      .booleanConf
+      .createWithDefault(true)
 
   /**
    * Output style for binary data.
@@ -1742,7 +1742,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
+   val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
     buildConf("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
       .doc("Whether to allow storage-partition join in the case where join keys are " +
         "a subset of the partition keys of the source tables. At planning time, " +
@@ -1843,14 +1843,14 @@ object SQLConf {
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
-      "explicit CROSS JOIN syntax.")
+        "explicit CROSS JOIN syntax.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
-      "When false, the ordinal numbers in order/sort by clause are ignored.")
+         "When false, the ordinal numbers in order/sort by clause are ignored.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
@@ -2001,12 +2001,12 @@ object SQLConf {
 
   val WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME =
     buildConf("spark.sql.codegen.useIdInClassName")
-      .internal()
-      .doc("When true, embed the (whole-stage) codegen stage ID into " +
-        "the class name of the generated class as a suffix")
-      .version("2.3.1")
-      .booleanConf
-      .createWithDefault(true)
+    .internal()
+    .doc("When true, embed the (whole-stage) codegen stage ID into " +
+      "the class name of the generated class as a suffix")
+    .version("2.3.1")
+    .booleanConf
+    .createWithDefault(true)
 
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
@@ -2331,14 +2331,14 @@ object SQLConf {
 
   val RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT =
     buildConf("spark.sql.streaming.ratioExtraSpaceAllowedInCheckpoint")
-      .internal()
-      .doc("The ratio of extra space allowed for batch deletion of files when maintenance is" +
-        "invoked. When value > 0, it optimizes the cost of discovering and deleting old checkpoint " +
-        "versions. The minimum number of stale versions we retain in checkpoint location for batch " +
-        "deletion is calculated by minBatchesToRetain * ratioExtraSpaceAllowedInCheckpoint.")
-      .version("4.0.0")
-      .doubleConf
-      .createWithDefault(0.3)
+    .internal()
+    .doc("The ratio of extra space allowed for batch deletion of files when maintenance is" +
+      "invoked. When value > 0, it optimizes the cost of discovering and deleting old checkpoint " +
+      "versions. The minimum number of stale versions we retain in checkpoint location for batch " +
+      "deletion is calculated by minBatchesToRetain * ratioExtraSpaceAllowedInCheckpoint.")
+    .version("4.0.0")
+    .doubleConf
+    .createWithDefault(0.3)
 
   val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
     .internal()
@@ -2451,13 +2451,13 @@ object SQLConf {
 
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
     buildConf("spark.sql.streaming.stopActiveRunOnRestart")
-      .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
-        "If we find a concurrent active run for a streaming query (in the same or different " +
-        "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
-        "query run to start the new one.")
-      .version("3.0.0")
-      .booleanConf
-      .createWithDefault(true)
+    .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
+      "If we find a concurrent active run for a streaming query (in the same or different " +
+      "SparkSessions on the same cluster) and this flag is true, we will stop the old streaming " +
+      "query run to start the new one.")
+    .version("3.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
@@ -2574,15 +2574,15 @@ object SQLConf {
    * the state was corrupted on disk or if we had an issue with the state iterators.
    */
   val STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS =
-    buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
-      .internal()
-      .doc("When true, this config will skip null values in hash based stream-stream joins. " +
-        "The number of skipped null values will be shown as custom metric of stream join operator. " +
-        "If the streaming query was started with Spark 3.5 or above, please exercise caution " +
-        "before enabling this config since it may hide potential data loss/corruption issues.")
-      .version("3.3.0")
-      .booleanConf
-      .createWithDefault(false)
+  buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
+    .internal()
+    .doc("When true, this config will skip null values in hash based stream-stream joins. " +
+      "The number of skipped null values will be shown as custom metric of stream join operator. " +
+      "If the streaming query was started with Spark 3.5 or above, please exercise caution " +
+      "before enabling this config since it may hide potential data loss/corruption issues.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val ASYNC_LOG_PURGE =
     buildConf("spark.sql.streaming.asyncLogPurge.enabled")
@@ -3303,7 +3303,7 @@ object SQLConf {
     buildConf("spark.sql.execution.rangeExchange.sampleSizePerPartition")
       .internal()
       .doc("Number of points to sample per partition in order to determine the range boundaries" +
-        " for range partitioning, typically used in global sorting (without limit).")
+          " for range partitioning, typically used in global sorting (without limit).")
       .version("2.3.0")
       .intConf
       .createWithDefault(100)
@@ -3376,7 +3376,7 @@ object SQLConf {
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
       .doc(
         s"Same as ${Python.PYTHON_WORKER_FAULTHANLDER_ENABLED.key} for Python execution with " +
-          "DataFrame and SQL. It can change during runtime.")
+        "DataFrame and SQL. It can change during runtime.")
       .version("4.0.0")
       .fallbackConf(Python.PYTHON_WORKER_FAULTHANLDER_ENABLED)
 
@@ -3497,7 +3497,7 @@ object SQLConf {
     buildConf("spark.sql.execution.python.udf.buffer.size")
       .doc(
         s"Same as `${BUFFER_SIZE.key}` but only applies to Python UDF executions. If it is not " +
-          s"set, the fallback is `${BUFFER_SIZE.key}`.")
+        s"set, the fallback is `${BUFFER_SIZE.key}`.")
       .version("4.0.0")
       .fallbackConf(BUFFER_SIZE)
 
@@ -3505,9 +3505,9 @@ object SQLConf {
     buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
         s"Same as `${BUFFER_SIZE.key}` but only applies to Pandas UDF executions. If it is not " +
-          s"set, the fallback is `${BUFFER_SIZE.key}`. Note that Pandas execution requires more " +
-          "than 4 bytes. Lowering this value could make small Pandas UDF batch iterated and " +
-          "pipelined; however, it might degrade performance. See SPARK-27870.")
+        s"set, the fallback is `${BUFFER_SIZE.key}`. Note that Pandas execution requires more " +
+        "than 4 bytes. Lowering this value could make small Pandas UDF batch iterated and " +
+        "pipelined; however, it might degrade performance. See SPARK-27870.")
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
@@ -3515,13 +3515,13 @@ object SQLConf {
     buildConf("spark.sql.execution.pandas.structHandlingMode")
       .doc(
         "The conversion mode of struct type when creating pandas DataFrame. " +
-          "When \"legacy\", " +
-          "1. when Arrow optimization is disabled, convert to Row object, " +
-          "2. when Arrow optimization is enabled, convert to dict or raise an Exception " +
-          "if there are duplicated nested field names. " +
-          "When \"row\", convert to Row object regardless of Arrow optimization. " +
-          "When \"dict\", convert to dict and use suffixed key names, e.g., a_0, a_1, " +
-          "if there are duplicated nested field names, regardless of Arrow optimization."
+        "When \"legacy\", " +
+        "1. when Arrow optimization is disabled, convert to Row object, " +
+        "2. when Arrow optimization is enabled, convert to dict or raise an Exception " +
+        "if there are duplicated nested field names. " +
+        "When \"row\", convert to Row object regardless of Arrow optimization. " +
+        "When \"dict\", convert to dict and use suffixed key names, e.g., a_0, a_1, " +
+        "if there are duplicated nested field names, regardless of Arrow optimization."
       )
       .version("3.5.0")
       .stringConf
@@ -3541,8 +3541,8 @@ object SQLConf {
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
       .doc(
         "When true, the traceback from Python UDFs is simplified. It hides " +
-          "the Python worker, (de)serialization, etc from PySpark in tracebacks, and only " +
-          "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
+        "the Python worker, (de)serialization, etc from PySpark in tracebacks, and only " +
+        "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
@@ -4074,7 +4074,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled")
       .internal()
       .doc("If enabled, revert to legacy incorrect behavior for certain EXISTS/IN subqueries " +
-        "with COUNT or similar aggregates.")
+           "with COUNT or similar aggregates.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -4118,9 +4118,9 @@ object SQLConf {
     buildConf("spark.sql.optimizer.wrapExistsInAggregateFunction")
       .internal()
       .doc("When true, the optimizer will wrap newly introduced `exists` attributes in an " +
-        "aggregate function to ensure that Aggregate nodes preserve semantic invariant that each " +
-        "variable among agg expressions appears either in grouping expressions or belongs to " +
-        "and aggregate function.")
+      "aggregate function to ensure that Aggregate nodes preserve semantic invariant that each " +
+      "variable among agg expressions appears either in grouping expressions or belongs to " +
+      "and aggregate function.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -4145,8 +4145,8 @@ object SQLConf {
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
-        "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
-        " in memory, otherwise do a global sort which spills to disk if necessary.")
+          "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
+          " in memory, otherwise do a global sort which spills to disk if necessary.")
       .version("2.4.0")
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
@@ -5151,10 +5151,10 @@ object SQLConf {
 
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
-      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
-      .version("3.2.0")
-      .booleanConf
-      .createWithDefault(false)
+     .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
+     .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val LEGACY_EMPTY_CURRENT_DB_IN_CLI =
     buildConf("spark.sql.legacy.emptyCurrentDBInCli")
@@ -5550,7 +5550,7 @@ object SQLConf {
     .internal()
     .doc(
       "Enable the DataFrame query context. This feature is enabled by default, but has a " +
-        "non-trivial performance overhead because of the stack trace collection.")
+      "non-trivial performance overhead because of the stack trace collection.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
@@ -5609,10 +5609,10 @@ object SQLConf {
     .internal()
     .doc(
       "When set to true, Except/Intersect/Union operator's output will be a lazy val. It " +
-        "is a performance optimization for querires with a large number of stacked set operators. " +
-        "This is because of rules like WidenSetOperationTypes that traverse the logical plan tree " +
-        "and call output on each Except/Intersect/Union node. Such traversal has quadratic " +
-        "complexity: O(number_of_nodes * (1 + 2 + 3  + ... + number_of_nodes))."
+      "is a performance optimization for querires with a large number of stacked set operators. " +
+      "This is because of rules like WidenSetOperationTypes that traverse the logical plan tree " +
+      "and call output on each Except/Intersect/Union node. Such traversal has quadratic " +
+      "complexity: O(number_of_nodes * (1 + 2 + 3  + ... + number_of_nodes))."
     )
     .version("4.0.0")
     .booleanConf
@@ -5744,10 +5744,10 @@ object SQLConf {
         "It was removed to prevent errors like SPARK-23549 for non-default value."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
         "The config was deprecated since Spark 2.3. " +
-          s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
+        s"Use '${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}' instead of it."),
       RemovedConfig("spark.sql.execution.pandas.respectSessionTimeZone", "3.0.0", "true",
         "The non-default behavior is considered as a bug, see SPARK-22395. " +
-          "The config was deprecated since Spark 2.3."),
+        "The config was deprecated since Spark 2.3."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.level", "3.1.0", "trace",
         s"Please use `${PLAN_CHANGE_LOG_LEVEL.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
@@ -6880,4 +6880,3 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     containsConfigKey(key) && !isStaticConfigKey(key)
   }
 }
-
