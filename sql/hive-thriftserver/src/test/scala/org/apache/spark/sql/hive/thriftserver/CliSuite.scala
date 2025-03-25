@@ -455,7 +455,7 @@ class CliSuite extends SparkFunSuite {
     assume(jarFile.exists)
     runCliWithin(
       1.minute,
-      Seq("--jars", s"$jarFile"))(
+      Seq("--jars", s"${jarFile.getCanonicalPath}"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
       "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
@@ -468,7 +468,7 @@ class CliSuite extends SparkFunSuite {
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
       2.minutes,
-      Seq("--jars", s"$jarFile", "--conf",
+      Seq("--jars", s"${jarFile.getCanonicalPath}", "--conf",
         s"spark.hadoop.hive.aux.jars.path=$hiveContribJar"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
