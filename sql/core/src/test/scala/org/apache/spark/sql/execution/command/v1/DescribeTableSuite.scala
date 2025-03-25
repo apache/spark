@@ -436,12 +436,14 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |  id INT
            |)
            |USING parquet COMMENT 'table_comment'
+           |DEFAULT COLLATION UTF8_BINARY
            |""".stripMargin
       spark.sql(tableCreationStr)
 
       val descriptionDf = spark.sql(s"DESC EXTENDED $t AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
+      System.out.print("\n *** jsonValue: " + jsonValue + "\n")
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
       val expectedOutput = DescribeTableJson(
@@ -458,6 +460,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         storage_properties = None,
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
@@ -468,6 +471,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         } else {
           None
         },
+        // table_properties should not include collation
         table_properties = None
       )
       assert(parsedOutput.location.isDefined)
@@ -858,6 +862,7 @@ case class DescribeTableJson(
     last_access: Option[String] = None,
     created_by: Option[String] = None,
     `type`: Option[String] = None,
+    collation: Option[String] = None,
     provider: Option[String] = None,
     bucket_columns: Option[List[String]] = Some(Nil),
     sort_columns: Option[List[String]] = Some(Nil),
@@ -890,7 +895,6 @@ case class TableColumn(
 case class Type(
    name: String,
    collation: Option[String] = None,
-   length: Option[Int] = None,
    fields: Option[List[Field]] = None,
    `type`: Option[Type] = None,
    element_type: Option[Type] = None,
