@@ -82,7 +82,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Hour with TIME type") {
     // A few test times in microseconds since midnight:
-    //   time in microseconds -> expected minute
+    //   time in microseconds -> expected hour
     val testTimes = Seq(
       localTime() -> 0,
       localTime(1) -> 1,
@@ -94,7 +94,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
 
     // Create a literal with TimeType() for each test microsecond value
-    // evaluate MinutesOfTime(...), and check that the result matches the expected minute.
+    // evaluate HoursOfTime(...), and check that the result matches the expected hour.
     testTimes.foreach { case (micros, expectedHour) =>
       checkEvaluation(
         HoursOfTime(Literal(micros, TimeType())),

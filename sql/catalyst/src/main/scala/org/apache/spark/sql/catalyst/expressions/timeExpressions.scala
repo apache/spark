@@ -270,7 +270,6 @@ case class HoursOfTime(child: Expression)
   }
 }
 
-
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns the hour component of the given expression.
