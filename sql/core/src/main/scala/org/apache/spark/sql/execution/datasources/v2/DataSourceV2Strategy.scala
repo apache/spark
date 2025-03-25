@@ -170,6 +170,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       val continuousStream = r.stream.asInstanceOf[ContinuousStream]
       val scanExec = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
+      // initialize partitions
+      scanExec.inputPartitions
 
       // Add a Project here to make sure we produce unsafe rows.
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil

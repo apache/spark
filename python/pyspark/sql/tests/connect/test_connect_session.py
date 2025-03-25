@@ -27,12 +27,12 @@ from pyspark.errors import (
     RetriesExceeded,
 )
 from pyspark.sql import SparkSession as PySparkSession
-
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,
     connect_requirement_message,
 )
+from pyspark.testing.utils import timeout
 
 if should_test_connect:
     import grpc
@@ -85,6 +85,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
 
+    @timeout(3)
     def test_stop_session(self):
         df = self.spark.sql("select 1 as a, 2 as b")
         catalog = self.spark.catalog

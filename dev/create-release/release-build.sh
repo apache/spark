@@ -137,12 +137,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
-  svn update "pyspark-client-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark-client-$RELEASE_VERSION.tar.gz.asc"
-  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+  svn update "pyspark_client-$RELEASE_VERSION.tar.gz"
+  svn update "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+  twine upload -u __token__ -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark-client-$RELEASE_VERSION.tar.gz" \
-    "pyspark-client-$RELEASE_VERSION.tar.gz.asc"
+    "pyspark_client-$RELEASE_VERSION.tar.gz" \
+    "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -337,7 +337,7 @@ if [[ "$1" == "package" ]]; then
         --detach-sig $PYTHON_CONNECT_DIST_NAME
       shasum -a 512 $PYTHON_CONNECT_DIST_NAME > $PYTHON_CONNECT_DIST_NAME.sha512
 
-      PYTHON_CLIENT_DIST_NAME=pyspark-client-$PYSPARK_VERSION.tar.gz
+      PYTHON_CLIENT_DIST_NAME=pyspark_client-$PYSPARK_VERSION.tar.gz
       cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_CLIENT_DIST_NAME .
 
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \

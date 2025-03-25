@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{StringType, TimeType}
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {
@@ -50,5 +51,60 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expression = new ToTime(Literal("100:50"), Literal("mm:HH")),
       condition = "CANNOT_PARSE_TIME",
       parameters = Map("input" -> "'100:50'", "format" -> "'mm:HH'"))
+  }
+
+  test("MinuteExpressionBuilder") {
+    // Empty expressions list
+    checkError(
+      exception = intercept[AnalysisException] {
+        MinuteExpressionBuilder.build("minute", Seq.empty)
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`minute`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
+
+    // test TIME-typed child should build MinutesOfTime
+    val timeExpr = Literal(localTime(12, 58, 59), TimeType())
+    val builtExprForTime = MinuteExpressionBuilder.build("minute", Seq(timeExpr))
+    assert(builtExprForTime.isInstanceOf[MinutesOfTime])
+    assert(builtExprForTime.asInstanceOf[MinutesOfTime].child eq timeExpr)
+
+    // test non TIME-typed child should build Minute
+    val tsExpr = Literal("2009-07-30 12:58:59")
+    val builtExprForTs = MinuteExpressionBuilder.build("minute", Seq(tsExpr))
+    assert(builtExprForTs.isInstanceOf[Minute])
+    assert(builtExprForTs.asInstanceOf[Minute].child eq tsExpr)
+  }
+
+  test("Minute with TIME type") {
+    // A few test times in microseconds since midnight:
+    //   time in microseconds -> expected minute
+    val testTimes = Seq(
+      localTime() -> 0,
+      localTime(1) -> 0,
+      localTime(0, 59) -> 59,
+      localTime(14, 30) -> 30,
+      localTime(12, 58, 59) -> 58,
+      localTime(23, 0, 1) -> 0,
+      localTime(23, 59, 59, 999999) -> 59
+    )
+
+    // Create a literal with TimeType() for each test microsecond value
+    // evaluate MinutesOfTime(...), and check that the result matches the expected minute.
+    testTimes.foreach { case (micros, expectedMinute) =>
+      checkEvaluation(
+        MinutesOfTime(Literal(micros, TimeType())),
+        expectedMinute)
+    }
+
+    // Verify NULL handling
+    checkEvaluation(
+      MinutesOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
+      null
+    )
   }
 }

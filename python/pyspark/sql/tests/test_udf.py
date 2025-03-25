@@ -50,7 +50,7 @@ from pyspark.testing.sqlutils import (
     test_compiled,
     test_not_compiled_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, timeout
 
 
 class BaseUDFTestsMixin(object):
@@ -1258,6 +1258,21 @@ class BaseUDFTestsMixin(object):
             errorClass="NOT_INT",
             messageParameters={"arg_name": "evalType", "arg_type": "str"},
         )
+
+    def test_timeout_util_with_udf(self):
+        @udf
+        def f(x):
+            time.sleep(10)
+            return str(x)
+
+        @timeout(1)
+        def timeout_func():
+            self.spark.range(1).select(f("id")).show()
+
+        # causing a py4j.protocol.Py4JNetworkError in pyspark classic
+        # causing a TimeoutError in pyspark connect
+        with self.assertRaises(Exception):
+            timeout_func()
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

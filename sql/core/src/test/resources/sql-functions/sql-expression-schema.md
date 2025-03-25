@@ -223,7 +223,7 @@
 | org.apache.spark.sql.catalyst.expressions.Md5 | md5 | SELECT md5('Spark') | struct<md5(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.MicrosToTimestamp | timestamp_micros | SELECT timestamp_micros(1230219000123123) | struct<timestamp_micros(1230219000123123):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MillisToTimestamp | timestamp_millis | SELECT timestamp_millis(1230219000123) | struct<timestamp_millis(1230219000123):timestamp> |
-| org.apache.spark.sql.catalyst.expressions.Minute | minute | SELECT minute('2009-07-30 12:58:59') | struct<minute(2009-07-30 12:58:59):int> |
+| org.apache.spark.sql.catalyst.expressions.MinuteExpressionBuilder | minute | SELECT minute('2009-07-30 12:58:59') | struct<minute(2009-07-30 12:58:59):int> |
 | org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID | monotonically_increasing_id | SELECT monotonically_increasing_id() | struct<monotonically_increasing_id():bigint> |
 | org.apache.spark.sql.catalyst.expressions.Month | month | SELECT month('2016-07-30') | struct<month(2016-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.MonthName | monthname | SELECT monthname('2008-02-20') | struct<monthname(2008-02-20):string> |
@@ -367,6 +367,7 @@
 | org.apache.spark.sql.catalyst.expressions.TrySubtract | try_subtract | SELECT try_subtract(2, 1) | struct<try_subtract(2, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.TryToBinary | try_to_binary | SELECT try_to_binary('abc', 'utf-8') | struct<try_to_binary(abc, utf-8):binary> |
 | org.apache.spark.sql.catalyst.expressions.TryToNumber | try_to_number | SELECT try_to_number('454', '999') | struct<try_to_number(454, 999):decimal(3,0)> |
+| org.apache.spark.sql.catalyst.expressions.TryToTimeExpressionBuilder | try_to_time | SELECT try_to_time('00:12:00.001') | struct<try_to_time(to_time(00:12:00.001)):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TryToTimestampExpressionBuilder | try_to_timestamp | SELECT try_to_timestamp('2016-12-31 00:12:00') | struct<try_to_timestamp(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.TryUrlDecode | try_url_decode | SELECT try_url_decode('https%3A%2F%2Fspark.apache.org') | struct<try_url_decode(https%3A%2F%2Fspark.apache.org):string> |
 | org.apache.spark.sql.catalyst.expressions.TryValidateUTF8 | try_validate_utf8 | SELECT try_validate_utf8('Spark') | struct<try_validate_utf8(Spark):string> |
