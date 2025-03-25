@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
-  protected val queryExecutionMeter = QueryExecutionMetering()
+  protected val queryExecutionMeter = QueryExecutionMetering.INSTANCE
 
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
