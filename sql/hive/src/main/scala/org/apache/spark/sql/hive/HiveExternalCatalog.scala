@@ -239,7 +239,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       tableDefinition.storage.locationUri
     }
 
-    val hiveCompatibleSchema = tryGetHiveCompatibleSchema(tableDefinition.schema)
+    val schemaWithNoCollation = removeCollation(tableDefinition.schema)
 
     if (DDLUtils.isDatasourceTable(tableDefinition)) {
       // To work around some hive metastore issues, e.g. not case-preserving, bad decimal type
@@ -262,7 +262,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // we have to set the table schema here so that the table schema JSON
       // string in the table properties still uses the original schema
       val hiveTable = tableDefinition.copy(
-        schema = hiveCompatibleSchema,
+        schema = schemaWithNoCollation,
         properties = tableDefinition.properties ++ tableProperties
       )
 
@@ -270,6 +270,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         hiveTable.withNewStorage(locationUri = tableLocation),
         ignoreIfExists)
     } else {
+      val hiveCompatibleSchema = schemaWithNoCollation match {
+        // Spark-created views do not have to be Hive compatible. If the data type is not
+        // Hive compatible, we can set schema to empty so that Spark can still read this
+        // view as the schema is also encoded in the table properties.
+        case schema if tableDefinition.tableType == CatalogTableType.VIEW &&
+            schema.exists(f => !isHiveCompatibleDataType(f.dataType)) =>
+          EMPTY_DATA_SCHEMA
+        case other => other
+      }
       val tableWithDataSourceProps = tableDefinition.copy(
         schema = hiveCompatibleSchema,
         // We can't leave `locationUri` empty and count on Hive metastore to set a default table
@@ -285,7 +294,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       try {
         client.createTable(tableWithDataSourceProps, ignoreIfExists)
       } catch {
-        case NonFatal(e) if (tableDefinition.tableType == CatalogTableType.VIEW) =>
+        case NonFatal(e) if tableDefinition.tableType == CatalogTableType.VIEW &&
+            hiveCompatibleSchema != EMPTY_DATA_SCHEMA =>
           // If for some reason we fail to store the schema we store it as empty there
           // since we already store the real schema in the table properties. This try-catch
           // should only be necessary for Spark views which are incompatible with Hive
@@ -684,7 +694,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schemaProps =
       tableMetaToTableProps(oldTable, StructType(newDataSchema ++ oldTable.partitionSchema)).toMap
 
-    val hiveSchema = tryGetHiveCompatibleSchema(newDataSchema)
+    val hiveSchema = removeCollation(newDataSchema)
 
     if (isDatasourceTable(oldTable)) {
       // For data source tables, first try to write it with the schema set; if that does not work,
@@ -707,11 +717,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  /**
-   * Tries to fix the schema so that all column data types are Hive-compatible
-   * ie. the types are converted to the types that Hive supports.
-   */
-  private def tryGetHiveCompatibleSchema(schema: StructType): StructType = {
+  private def removeCollation(schema: StructType): StructType = {
     // Since collated strings do not exist in Hive as a type we need to replace them with
     // the the regular string type. However, as we save the original schema in the table
     // properties we will be able to restore the original schema when reading back the table.
