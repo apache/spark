@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -36,8 +36,8 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
-
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -1594,6 +1594,62 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val df = spark.read.parquet(dir.getCanonicalPath)
         assert(df.inputFiles.head.contains("apachespark"))
         checkAnswer(spark.read.parquet(dir.getCanonicalPath), Row(0))
+      }
+    }
+  }
+
+  test("Read TimeType for the logical TIME type") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,false));
+        |}
+      """.stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          record.add(0, 1000000L) // micros
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            StructType(
+              StructField("time_micros", TimeType(), nullable = true) ::
+              Nil
+            )
+          }
+
+          val ntz_value = LocalTime.of(0, 0, 1)
+          val exp = (0 until numRecords).map { _ => (ntz_value) }.toDF()
+
+          checkAnswer(df, exp)
+        }
+      }
+    }
+  }
+
+  ignore("TODO: Write TimestampNTZ type") {
+    // The configuration PARQUET_INFER_TIMESTAMP_NTZ_ENABLED doesn't affect the behavior of writes.
+    Seq(true, false).foreach { inferTimestampNTZ =>
+      withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> inferTimestampNTZ.toString) {
+        withTempPath { dir =>
+          val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
+          data.write.parquet(dir.getCanonicalPath)
+          assertResult(spark.read.parquet(dir.getCanonicalPath).schema) {
+            StructType(
+              StructField("col", TimestampNTZType, nullable = true) ::
+                Nil
+            )
+          }
+        }
       }
     }
   }
