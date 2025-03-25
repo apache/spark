@@ -396,6 +396,7 @@ class CliSuite extends SparkFunSuite {
 
   test("list jars") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(jarFile != null)
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
       s"LIST JARS;" -> "TestUDTF.jar"
@@ -404,6 +405,7 @@ class CliSuite extends SparkFunSuite {
 
   test("list jar <jarfile>") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(jarFile != null)
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
       s"List JAR $jarFile;" -> "TestUDTF.jar"
@@ -450,6 +452,7 @@ class CliSuite extends SparkFunSuite {
 
   test("SPARK-28840 test --jars command") {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    assume(jarFile.exists)
     runCliWithin(
       1.minute,
       Seq("--jars", s"$jarFile"))(
@@ -461,6 +464,7 @@ class CliSuite extends SparkFunSuite {
 
   test("SPARK-28840 test --jars and hive.aux.jars.path command") {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    assume(jarFile.exists)
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
       2.minutes,
