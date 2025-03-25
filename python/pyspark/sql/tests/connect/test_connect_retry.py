@@ -26,7 +26,6 @@ from pyspark.testing.connectutils import (
 
 if should_test_connect:
     import grpc
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client.core import Retrying
     from pyspark.sql.connect.client.retries import RetryPolicy
 
