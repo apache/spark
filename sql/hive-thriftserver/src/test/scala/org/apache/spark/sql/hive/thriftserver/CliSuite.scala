@@ -451,7 +451,7 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-28840 test --jars command") {
-    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar")
     assume(jarFile.exists)
     runCliWithin(
       1.minute,
@@ -463,7 +463,7 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-28840 test --jars and hive.aux.jars.path command") {
-    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar")
     assume(jarFile.exists)
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(

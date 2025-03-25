@@ -1004,7 +1004,7 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
     withMultipleConnectionJdbcStatement("test_udtf")(
       { statement =>
         val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-        assume(jarPath.exists)
+        assume(new File(jarPath).exists)
         val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
         // Configurations and temporary functions added in this session should be visible to all
