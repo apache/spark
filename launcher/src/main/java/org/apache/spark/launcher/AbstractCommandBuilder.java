@@ -306,6 +306,13 @@ abstract class AbstractCommandBuilder {
     return false;
   }
 
+  /**
+   * Checks if a JAR file with the specified prefix is present in `SPARK_DIST_CLASSPATH`.
+   *
+   * @param jarNamePrefix the prefix of the JAR file name to search for
+   * @return true if a JAR file with the specified prefix is found in the
+   *         `SPARK_DIST_CLASSPATH`, false otherwise
+   */
   private boolean isJarSparkDistClassPath(String jarNamePrefix) {
     String sparkDistClasspath = getenv("SPARK_DIST_CLASSPATH");
     if (isEmpty(sparkDistClasspath)) {
