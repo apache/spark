@@ -48,17 +48,12 @@ case class ShowProceduresCommand(
         val procedures = procedureCatalog.listProcedures(ns.toArray)
 
         procedures.toSeq.map{ p =>
-          val nsField = if (p.namespace().length > 0) {
-            p.namespace()
-          } else {
-            null
-          }
           val schema = if (p.namespace() != null && p.namespace().nonEmpty) {
             p.namespace().last
           } else {
             null
           }
-          Row(catalog.name, nsField, schema, p.name)
+          Row(catalog.name, p.namespace(), schema, p.name)
         }
     }
   }

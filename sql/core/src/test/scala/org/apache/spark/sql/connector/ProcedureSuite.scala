@@ -384,7 +384,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkAnswer(
         // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat", null, null, "xxx") :: Nil)
+        Row("cat", ArraySeq(), null, "xxx") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES IN ns"),
@@ -425,7 +425,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkAnswer(
         // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat2", null, null, "bar") :: Nil)
+        Row("cat2", ArraySeq(), null, "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ns_1.db_1"),
