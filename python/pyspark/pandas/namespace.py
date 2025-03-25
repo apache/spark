@@ -1253,7 +1253,7 @@ def read_excel(
     if isinstance(sampled, dict):
         return {sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in sampled.items()}
     else:
-        return read_excel_on_spark(sampled, sheet_name)
+        return read_excel_on_spark(cast(Union[pd.DataFrame, pd.Series], sampled), sheet_name)
 
 
 def read_html(
