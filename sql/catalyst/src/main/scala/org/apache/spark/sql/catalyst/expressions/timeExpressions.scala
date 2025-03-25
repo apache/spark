@@ -234,17 +234,6 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-@ExpressionDescription(
-  usage = """
-    _FUNC_(time_expr) - Returns the hour component of the given time.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(TIME'11:35:35.999999');
-       11
-  """,
-  since = "4.1.0",
-  group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class HoursOfTime(child: Expression)
   extends RuntimeReplaceable
