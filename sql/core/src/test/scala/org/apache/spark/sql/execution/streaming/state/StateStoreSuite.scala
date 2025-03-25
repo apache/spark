@@ -142,7 +142,7 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
   override def stateStoreId: StateStoreId = id
 
   override def close(): Unit = {
-    closeThreadNames :+ Thread.currentThread.getName
+    closeThreadNames = Thread.currentThread.getName :: closeThreadNames
   }
 
   override def getStore(version: Long, uniqueId: Option[String]): StateStore = null
@@ -151,7 +151,7 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
 }
 
 private object FakeStateStoreProviderTracksCloseThread {
-  val closeThreadNames: List[String] = Nil
+  var closeThreadNames: List[String] = Nil
 }
 
 @ExtendedSQLTest
@@ -595,9 +595,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           StateStore.get(storeProviderId2, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
             0, None, None, useColumnFamilies = false, storeConf, hadoopConf)
-          // TODO(livia): Add a timeout
-          assert(!StateStore.isLoaded(storeProviderId1))
-          assert(StateStore.isLoaded(storeProviderId2))
+          // Close runs asynchronously, so we need to call eventually with a small timeout
+          eventually(timeout(5.seconds)) {
+            assert(!StateStore.isLoaded(storeProviderId1))
+            assert(StateStore.isLoaded(storeProviderId2))
+          }
         }
       }
 
@@ -1115,7 +1117,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 }
 
 abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
-  extends StateStoreCodecsTest with PrivateMethodTester {
+  extends StateStoreCodecsTest with PrivateMethodTester with BeforeAndAfter {
   import StateStoreTestsHelper._
 
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
@@ -1752,6 +1754,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   test("SPARK-51596: unloading only occurs on maintenance thread but occurs promptly") {
+    // Reset closeThreadNames
+    FakeStateStoreProviderTracksCloseThread.closeThreadNames = Nil
+
     val sqlConf = getDefaultSQLConf(
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
@@ -1766,7 +1771,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     val conf = new SparkConf().setMaster("local").setAppName("test")
 
-    withSpark(new SparkContext(conf)) { sc =>
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
         val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-48997"
         val providerId =
@@ -1781,8 +1786,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           0, None, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
         )
 
-        // Deactivate query run, instance should be unloaded
-        coordinatorRef.deactivateInstances(providerId.queryRunId)
+        // Report instance active on another executor
+        coordinatorRef.reportActiveInstance(providerId, "otherhost", "otherexec", Seq.empty)
 
         // Load another provider to trigger task unload
         StateStore.get(
@@ -1796,7 +1801,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         eventually(timeout(5.seconds)) {
           assert(FakeStateStoreProviderTracksCloseThread.closeThreadNames.size == 1)
           FakeStateStoreProviderTracksCloseThread.closeThreadNames.foreach { name =>
-            assert(name.contains("state-store-maintenance-task"))}
+            assert(name.contains("state-store-maintenance-thread"))}
         }
       }
     }
