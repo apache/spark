@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, 
 // import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
+import org.apache.spark.sql.connector.read.SupportsBroadcastVarPushdownFiltering
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -43,7 +43,7 @@ object BroadcastHashJoinUtil {
       buildJoinKeys: Seq[Expression],
       streamPlan: SparkPlan,
       buildPlan: SparkPlan,
-      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _],
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _],
       buildLegsBlockingPushFromAncestors: java.util.IdentityHashMap[SparkPlan, _])
       : Seq[BroadcastVarPushDownData] = {
     if (conf.pushBroadcastedJoinKeysASFilterToScan && isBuildPlanPrunable(
@@ -78,7 +78,7 @@ object BroadcastHashJoinUtil {
     val dataTypesArray = buildKeysCanonicalized.map(_.dataType).toArray
     pushDownData.foreach { bcData =>
       val streamJoinLeafColName = getColNameFromUnderlyingScan(
-        bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeV2Filtering],
+        bcData.targetBatchScanExec.getBroadcastVarPushDownSupportingInstance.get,
         bcData.streamsideLeafJoinAttribIndex)
       val actualData = new BroadcastedJoinKeysWrapperImpl(
         bcRelation,
@@ -88,23 +88,23 @@ object BroadcastHashJoinUtil {
       val dt = ObjectType(classOf[BroadcastedJoinKeysWrapperImpl])
       val embedAsLiteral = Literal.create(actualData, dt)
       val filter = org.apache.spark.sql.sources.In(streamJoinLeafColName, Array(embedAsLiteral))
-      bcData.targetBatchScanExec.scan
-        .asInstanceOf[SupportsRuntimeV2Filtering]
+      bcData.targetBatchScanExec.getBroadcastVarPushDownSupportingInstance.get
         .filter(Array(filter.toV2))
     }
     pushDownData.headOption.foreach(_.targetBatchScanExec.resetFilteredPartitionsAndInputRdd())
   }
 
-  def getColNameFromUnderlyingScan(scan: SupportsRuntimeV2Filtering, index: Int): String = {
+  def getColNameFromUnderlyingScan(scan: SupportsBroadcastVarPushdownFiltering[_], index: Int):
+  String = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     scan.allAttributes()(index).fieldNames().toSeq.quoted
   }
 
   def partitionBatchScansToReadyAndUnready(
       stage: QueryStageExec,
-      cachedBatchScans: mutable.Map[Int, Seq[BatchScanExec]])
-      : (Seq[BatchScanExec], Seq[BatchScanExec]) = cachedBatchScans
-    .getOrElseUpdate(stage.id, getAllBatchScansForStage(stage))
+      cachedBatchScans: mutable.Map[Int, Seq[WrapsBroadcastVarPushDownSupporter]])
+      : (Seq[WrapsBroadcastVarPushDownSupporter], Seq[WrapsBroadcastVarPushDownSupporter]) =
+    cachedBatchScans.getOrElseUpdate(stage.id, getAllBatchScansForStage(stage))
     .partition(isBatchScanReady)
 
   // Not to be invoked for Stage. this is used only for join condition
@@ -121,7 +121,7 @@ object BroadcastHashJoinUtil {
 
   def isStageReadyForMaterialization(
       stage: QueryStageExec,
-      cachedBatchScans: mutable.Map[Int, Seq[BatchScanExec]]): Boolean =
+      cachedBatchScans: mutable.Map[Int, Seq[WrapsBroadcastVarPushDownSupporter]]): Boolean =
     cachedBatchScans
       .getOrElseUpdate(stage.id, getAllBatchScansForStage(stage))
       .forall(isBatchScanReady)
@@ -161,8 +161,9 @@ object BroadcastHashJoinUtil {
       })
   }
 
-  def isBatchScanReady(batchScanExec: BatchScanExec): Boolean = batchScanExec.scan match {
-    case sr: SupportsRuntimeV2Filtering =>
+  def isBatchScanReady(batchScanExec: WrapsBroadcastVarPushDownSupporter): Boolean =
+    batchScanExec.getBroadcastVarPushDownSupportingInstance match {
+    case Some(sr) =>
       val totalBCVars = batchScanExec.proxyForPushedBroadcastVar.fold(0)(_.foldLeft(0) {
         case (num, proxy) => num + proxy.joiningKeysData.size
       })
@@ -172,7 +173,7 @@ object BroadcastHashJoinUtil {
   }
 
   def convertJoinKeyDataToPushDownData(
-      bs: BatchScanExec,
+      bs: WrapsBroadcastVarPushDownSupporter,
       jkd: JoiningKeyData): BroadcastVarPushDownData = BroadcastVarPushDownData(
     jkd.streamsideLeafJoinAttribIndex,
     bs,
@@ -209,7 +210,7 @@ object BroadcastHashJoinUtil {
       streamPlan: SparkPlan,
       buildPlan: SparkPlan,
       buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _],
-      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _])
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _])
       : Seq[BroadcastVarPushDownData] = {
     val streamKeysStart = streamJoinKeys.zipWithIndex.filter { case (streamJk, _) =>
       streamJk.isInstanceOf[Attribute]
@@ -224,7 +225,7 @@ object BroadcastHashJoinUtil {
       val filteredBatchScansOfInterest =
         batchScansOfInterest.flatMap { case (currentStreamKey, runtimeFilteringBatchScan) =>
           val underlyingRuntimeFilteringScan =
-            runtimeFilteringBatchScan.scan.asInstanceOf[SupportsRuntimeV2Filtering]
+            runtimeFilteringBatchScan.getBroadcastVarPushDownSupportingInstance.get
           val streamKey = currentStreamKey
           val streamsideLeafJoinAttribIndex = runtimeFilteringBatchScan.output.indexWhere(
             _.canonicalized == streamKey.canonicalized)
@@ -281,7 +282,8 @@ object BroadcastHashJoinUtil {
 
   private def isBuildPlanPrunable(
       buildPlan: SparkPlan,
-      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _]): Boolean = {
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _])
+  : Boolean = {
     val plansToCheck = mutable.ListBuffer[SparkPlan](buildPlan)
     val considerPushedBCVarAsPrunability =
       buildPlan.conf.considerPushedBroadcastvarOnBatchscanAsPrunablity
@@ -319,7 +321,7 @@ object BroadcastHashJoinUtil {
       streamKeyStart: Attribute,
       streamPlan: SparkPlan,
       buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _],
-      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _])
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _])
       : Seq[(Attribute, BatchScanExec)] = {
     var currentStreamKey = streamKeyStart
     var currentStreamPlan = streamPlan
@@ -429,7 +431,7 @@ object BroadcastHashJoinUtil {
 
 case class BroadcastVarPushDownData(
     streamsideLeafJoinAttribIndex: Int,
-    targetBatchScanExec: BatchScanExec,
+    targetBatchScanExec: WrapsBroadcastVarPushDownSupporter,
     joiningColDataType: DataType,
     joinKeyIndexInJoiningKeys: Int,
     requiresDPPRemoval: Boolean = false)

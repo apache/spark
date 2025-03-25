@@ -27,11 +27,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.PushedBroadcastFilterData
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastedJoinKeysWrapperImpl, BroadcastHashJoinExec, BroadcastHashJoinUtil, HashedRelation}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
@@ -215,9 +214,9 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     }
   }
 
-  private def checkForWarning(batchScanOpt: Option[BatchScanExec]): Unit = {
+  private def checkForWarning(batchScanOpt: Option[WrapsBroadcastVarPushDownSupporter]): Unit = {
     if (batchScanOpt.isDefined) {
-      val sr = batchScanOpt.get.scan.asInstanceOf[SupportsRuntimeV2Filtering]
+      val sr = batchScanOpt.get.getBroadcastVarPushDownSupportingInstance.get
       val allAttribs = sr.allAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
       val partitionColNames =
         sr.partitionAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
@@ -237,26 +236,27 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   }
 
   private def getPushedBroadcastVarFilters
-  : (Option[BatchScanExec], scala.collection.Seq[PushedBroadcastFilterData]) = {
+  : (Option[WrapsBroadcastVarPushDownSupporter], scala.collection.Seq[PushedBroadcastFilterData]) =
+  {
     val batchScanOpt = this.child match {
-      case bs: BatchScanExec
-        if bs.scan.isInstanceOf[SupportsRuntimeV2Filtering] &&
-          bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastFiltersCount > 0 =>
+      case bs: WrapsBroadcastVarPushDownSupporter
+        if bs.getBroadcastVarPushDownSupportingInstance.isDefined &&
+          bs.getBroadcastVarPushDownSupportingInstance.get.getPushedBroadcastFiltersCount() > 0 =>
         Option(bs)
 
-      case InputAdapter(bs: BatchScanExec)
-        if bs.scan.isInstanceOf[SupportsRuntimeV2Filtering] &&
-          bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastFiltersCount > 0 =>
+      case InputAdapter(bs: WrapsBroadcastVarPushDownSupporter)
+        if bs.getBroadcastVarPushDownSupportingInstance.isDefined &&
+          bs.getBroadcastVarPushDownSupportingInstance.get.getPushedBroadcastFiltersCount() > 0 =>
         Option(bs)
 
       case _ => None
     }
     val pushedBroadcastFilters = batchScanOpt
       .map(bs => {
-        val sr = bs.scan.asInstanceOf[SupportsRuntimeV2Filtering]
+        val sr = bs.getBroadcastVarPushDownSupportingInstance.get
         import scala.jdk.CollectionConverters._
 
-        val allPushedBCvar = sr.getPushedBroadcastFilters.asScala
+        val allPushedBCvar = sr.getPushedBroadcastFilters().asScala
         val partitionColNames =
           sr.partitionAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
         // identify non partition filters

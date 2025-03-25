@@ -1875,7 +1875,7 @@ abstract class BroadcastVarPushdownV2Suite extends DynamicPartitionPruningV2Suit
           }
           BroadcastHashJoinUtil.canPushBroadcastedKeysAsFilter(df.sqlContext.conf,
             streamKeys, buildKeys, streamPlan, buildPlan,
-            new java.util.IdentityHashMap[BatchScanExec, Any](),
+            new java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, Any](),
             new java.util.IdentityHashMap[SparkPlan, Any]()).nonEmpty
         } else {
           false
@@ -1902,7 +1902,7 @@ abstract class BroadcastVarPushdownV2Suite extends DynamicPartitionPruningV2Suit
           }.foreach(plansToCheck += _)
         }
         assert(allPushableLeaves.exists(_.scan.asInstanceOf[SupportsRuntimeV2Filtering].
-          hasPushedBroadCastFilter))
+          hasPushedBroadCastFilter()))
       } else {
         super.checkPartitionPruningPredicate(df, withSubquery, withBroadcast)
       }

@@ -92,7 +92,7 @@ class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils
       .filter(x =>
         x.scan.isInstanceOf[SupportsRuntimeV2Filtering] && x.scan
           .asInstanceOf[SupportsRuntimeV2Filtering]
-          .hasPushedBroadCastFilter)
+          .hasPushedBroadCastFilter())
       .map(bs =>
         batchScansWithoutBCVar
           .find(x => x.table.name == bs.table.name && x.schema == bs.schema)

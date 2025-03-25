@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparabl
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.execution.WrapsBroadcastVarPushDownSupporter
 import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
 import org.apache.spark.util.ArrayImplicits._
 
@@ -44,7 +45,7 @@ case class BatchScanExec(
     @transient table: Table,
     spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams(),
     @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] =
-        None) extends DataSourceV2ScanExecBase {
+        None) extends DataSourceV2ScanExecBase  with WrapsBroadcastVarPushDownSupporter {
 
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
   @transient @volatile private var filteredPartitions: Seq[Seq[InputPartition]] = _
@@ -70,6 +71,13 @@ case class BatchScanExec(
     case _ => false
   }
 
+  def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering[_]] =
+    this.scan match {
+      case x: SupportsBroadcastVarPushdownFiltering[_] => Some(x)
+
+      case _ => None
+    }
+
   override def hashCode(): Int = {
     val batchHashCode = scan match {
       case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
@@ -91,7 +99,7 @@ case class BatchScanExec(
 
     val pushFiltersAndRefreshIter = dataSourceFilters.nonEmpty ||
       (scan.isInstanceOf[SupportsRuntimeV2Filtering] &&
-        scan.asInstanceOf[SupportsRuntimeV2Filtering].hasPushedBroadCastFilter)
+        scan.asInstanceOf[SupportsRuntimeV2Filtering].hasPushedBroadCastFilter())
 
     if (pushFiltersAndRefreshIter) {
       val originalPartitioning = outputPartitioning
@@ -358,10 +366,20 @@ case class BatchScanExec(
     this.filteredPartitions = null
     this.inputRDDCached = null
   }
+
+  def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]],
+      runtimeFilters: Seq[Expression]): WrapsBroadcastVarPushDownSupporter =
+    this.copy(proxyForPushedBroadcastVar = proxy, runtimeFilters = runtimeFilters)
+
+  def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]):
+  WrapsBroadcastVarPushDownSupporter = this.copy(proxyForPushedBroadcastVar = proxy)
+
+  def getRuntimeFilters(): Seq[Expression] = this.runtimeFilters
 }
 
 object BatchScanExec {
-  val PRESERVE_BATCH_EXEC_TO_USE = TreeNodeTag[BatchScanExec]("preserve_batch_scan_exec")
+  val PRESERVE_BATCH_EXEC_TO_USE =
+    TreeNodeTag[WrapsBroadcastVarPushDownSupporter]("preserve_batch_scan_exec")
 }
 
 case class StoragePartitionJoinParams(

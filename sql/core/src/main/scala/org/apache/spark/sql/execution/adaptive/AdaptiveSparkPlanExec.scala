@@ -256,7 +256,7 @@ case class AdaptiveSparkPlanExec(
     newPlan: SparkPlan,
     allChildStagesMaterialized: Boolean,
     newStages: Seq[QueryStageExec],
-    orphanBatchScansWithProxyVar: Seq[BatchScanExec])
+    orphanBatchScansWithProxyVar: Seq[WrapsBroadcastVarPushDownSupporter])
 
   def executedPlan: SparkPlan = currentPhysicalPlan
 
@@ -322,7 +322,7 @@ case class AdaptiveSparkPlanExec(
       var currentLogicalPlan = inputPlan.logicalLink.get
       val doBroadcastVarPush = conf.pushBroadcastedJoinKeysASFilterToScan
       var allStages = Map[Int, QueryStageExec]()
-      val cachedBatchScansForStage = mutable.Map[Int, Seq[BatchScanExec]]()
+      val cachedBatchScansForStage = mutable.Map[Int, Seq[WrapsBroadcastVarPushDownSupporter]]()
       val stageIdToBuildsideJoinKeys = mutable.Map[Int, TupleBuildLpProxyVarCanonBuildKeys]()
       var allStageIdsProcessed = Set[Int]()
 
@@ -330,7 +330,7 @@ case class AdaptiveSparkPlanExec(
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
       var delayedStages = Set[Int]()
-      var orphanBatchScans = Set[BatchScanExec]()
+      var orphanBatchScans = Set[WrapsBroadcastVarPushDownSupporter]()
       var result =
         createQueryStages(currentPhysicalPlan, stageIdToBuildsideJoinKeys, OrphanBSCollect.orphan)
       var loopCount = 0
@@ -494,7 +494,7 @@ case class AdaptiveSparkPlanExec(
             stagesToReplace = Seq.empty[QueryStageExec]
             // remove all the remaining orphans as there batchscan instances may have been re
             // created and that too without proxyBCVar.
-            orphanBatchScans = Set.empty[BatchScanExec]
+            orphanBatchScans = Set.empty[WrapsBroadcastVarPushDownSupporter]
             // also at this point we would want to recollect the orphans if any
             // once the BroadcastFilterPushdown rule is added for re optimized plan.
             collectOrphans = OrphanBSCollect.no_collect
@@ -581,8 +581,8 @@ case class AdaptiveSparkPlanExec(
       stageIdToBuildsideJoinKeys: Map[Int, TupleBuildLpProxyVarCanonBuildKeys],
       allStageIdsProcessed: Set[Int],
       delayedStages: Set[Int],
-      cachedBatchScansForStage: mutable.Map[Int, Seq[BatchScanExec]],
-      anyOtherUnsatisfiedBatchScans: Set[BatchScanExec] = Set.empty): Unit = {
+      cachedBatchScansForStage: mutable.Map[Int, Seq[WrapsBroadcastVarPushDownSupporter]],
+      anyOtherUnsatisfiedBatchScans: Set[WrapsBroadcastVarPushDownSupporter] = Set.empty): Unit = {
     val delayedStagesBatchscans = delayedStages.flatMap(id =>
       BroadcastHashJoinUtil
         .partitionBatchScansToReadyAndUnready(allStages(id), cachedBatchScansForStage)
@@ -598,7 +598,7 @@ case class AdaptiveSparkPlanExec(
 
   private def getDelayedStagesNowReady(
       allStages: Map[Int, QueryStageExec],
-      cachedBatchScansForStage: mutable.Map[Int, Seq[BatchScanExec]],
+      cachedBatchScansForStage: mutable.Map[Int, Seq[WrapsBroadcastVarPushDownSupporter]],
       delayedStages: Set[Int]): Seq[QueryStageExec] = delayedStages.flatMap(id => {
         val stage = allStages(id)
         if (BroadcastHashJoinUtil.isStageReadyForMaterialization(stage, cachedBatchScansForStage)
@@ -634,13 +634,14 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def pushBroadcastVarToUnreadyBatchScans(
-      allUnreadyBatchScans: Seq[BatchScanExec],
+      allUnreadyBatchScans: Seq[WrapsBroadcastVarPushDownSupporter],
       stageIdToBuildsideJoinKeys: Map[Int, TupleBuildLpProxyVarCanonBuildKeys],
       allStages: Map[Int, QueryStageExec],
       allProcessedStageIds: Set[Int]): Unit = {
-    val identityHashMap = new util.IdentityHashMap[BatchScanExec, java.util.Set[java.lang.Long]]()
+    val identityHashMap =
+      new util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, java.util.Set[java.lang.Long]]()
     allUnreadyBatchScans
-      .map(bs => bs -> bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastVarIds)
+      .map(bs => bs -> bs.getBroadcastVarPushDownSupportingInstance.get.getPushedBroadcastVarIds())
       .foreach { case (bs, set) =>
         identityHashMap.put(bs, set)
       }
@@ -671,7 +672,8 @@ case class AdaptiveSparkPlanExec(
                           proxy.buildLegProxyBroadcastVarAndStageIdentifiers.contains)))
                 }) {
                   proxy.joiningKeysData.flatMap { jkd =>
-                    joinLegAndKeysOpt.fold(Seq.empty[(BatchScanExec, JoiningKeyData)]) {
+                    joinLegAndKeysOpt.fold(
+                      Seq.empty[(WrapsBroadcastVarPushDownSupporter, JoiningKeyData)]) {
                       case (_, _, exprs) =>
                         if (exprs.exists(_.canonicalized ==
                           jkd.buildSideJoinKeyAtJoin.canonicalized)) {
@@ -986,7 +988,7 @@ case class AdaptiveSparkPlanExec(
         newStages = results.flatMap(_.newStages),
         orphanBatchScansWithProxyVar = results.flatMap(_.orphanBatchScansWithProxyVar))
 
-    case bs: BatchScanExec if bs.proxyForPushedBroadcastVar.isDefined =>
+    case bs: WrapsBroadcastVarPushDownSupporter if bs.proxyForPushedBroadcastVar.isDefined =>
       // Because the LogicalNode for BatchScanExec might start from filter , we need to set
       // it recursively
       def setBatchExecPreserveRecursively(lp: LogicalPlan): Unit = {

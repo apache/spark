@@ -582,6 +582,16 @@ abstract class InMemoryBaseTable(
 
     override def partitionAttributes(): Array[NamedReference] =
       InMemoryBaseTable.this.partitioning.flatMap(_.references())
+
+    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering[Scan]):
+     Boolean = other match {
+      case ims: InMemoryBatchScan => this.readSchema == ims.readSchema &&
+        this.tableSchema == ims.tableSchema
+      case _ => false
+    }
+
+    override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(this.readSchema,
+      this.tableSchema)
   }
 
   abstract class InMemoryWriterBuilder(val info: LogicalWriteInfo)

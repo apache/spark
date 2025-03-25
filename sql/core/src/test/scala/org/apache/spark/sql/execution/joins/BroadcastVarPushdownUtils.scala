@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, PropagateEmptyRelation, PruneFilters, PushDownPredicates}
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTable}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
+import org.apache.spark.sql.execution.{SparkPlan, WrapsBroadcastVarPushDownSupporter}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.StructType
@@ -235,7 +235,8 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
     None,
     None)
 
-  val emptyBatchScanToBuildLegMap = new java.util.IdentityHashMap[BatchScanExec, Any]()
+  val emptyBatchScanToBuildLegMap =
+    new java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, Any]()
   val emptyBuildLegsBlockingPushFromAncestors = new java.util.IdentityHashMap[SparkPlan, Any]()
 
   def assertPushdownData(sparkPlan: SparkPlan, expected: Seq[BroadcastVarPushDownData]): Unit = {
@@ -266,14 +267,16 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
     case BuildLeft => BHJData(bhj.left, bhj.right, bhj.leftKeys, bhj.rightKeys)
   }
 
-  def getBatchScans(plan: SparkPlan, schema: StructType): Seq[BatchScanExec] = plan
+  def getBatchScans(plan: SparkPlan, schema: StructType): Seq[WrapsBroadcastVarPushDownSupporter] =
+    plan
     .collectLeaves()
-    .filter(leaf =>
-      leaf.isInstanceOf[BatchScanExec] && leaf
-        .asInstanceOf[BatchScanExec]
-        .scan
-        .readSchema == schema)
-    .map(_.asInstanceOf[BatchScanExec])
+    .filter(leaf => leaf match {
+      case wb: WrapsBroadcastVarPushDownSupporter =>
+        wb.getBroadcastVarPushDownSupportingInstance.exists(_.readSchema == schema)
+
+      case _ => false
+
+    }).map(_.asInstanceOf[WrapsBroadcastVarPushDownSupporter])
 
   protected def runWithDefaultConfig[T](func: => T): T = {
     withSQLConf(
