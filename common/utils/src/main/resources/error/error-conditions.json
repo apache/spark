@@ -2954,6 +2954,11 @@
         "message" : [
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
         ]
+      },
+      "PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION" : {
+        "message" : [
+          "You passed a lambda function to a parameter that does not accept it. Please check if lambda function argument is in the correct position."
+        ]
       }
     },
     "sqlState" : "42K0D"
@@ -3847,6 +3852,25 @@
       }
     },
     "sqlState" : "22023"
+  },
+  "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE" : {
+    "message" : [
+      "Malformed state in RatePerMicroBatch source."
+    ],
+    "subClass" : {
+      "INVALID_OFFSET" : {
+        "message" : [
+          "The offset value is invalid: startOffset should less than or equal to the endOffset, but startOffset(<startOffset>) > endOffset(<endOffset>)."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp value is invalid: startTimestamp should less than or equal to the endTimestamp, but startTimestamp(<startTimestamp>) > endTimestamp(<endTimestamp>).",
+          "This could happen when the streaming query is restarted with a newer `startingTimestamp` and reprocess the first batch (i.e. batch 0). Please consider using a new checkpoint location."
+        ]
+      }
+    },
+    "sqlState" : "22000"
   },
   "MALFORMED_VARIANT" : {
     "message" : [

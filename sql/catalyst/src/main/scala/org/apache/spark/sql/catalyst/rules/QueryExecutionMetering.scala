@@ -108,6 +108,10 @@ case class QueryExecutionMetering() {
   }
 }
 
+object QueryExecutionMetering {
+  val INSTANCE: QueryExecutionMetering = QueryExecutionMetering()
+}
+
 case class QueryExecutionMetrics(
     time: Long,
     numRuns: Long,
