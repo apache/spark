@@ -66,11 +66,6 @@ public class TableInfo {
       return this;
     }
 
-    public Builder withSchema(StructType schema) {
-      this.columns = CatalogV2Util.structTypeToV2Columns(schema);
-      return this;
-    }
-
     public Builder withProperties(Map<String, String> properties) {
       this.properties = Maps.newHashMap();
       this.properties.putAll(properties);
