@@ -178,9 +178,12 @@ abstract class AbstractCommandBuilder {
             "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
             "assembly.");
         }
-        boolean shouldPrePendSparkHive = isJarAvailable(jarsDir, "spark-hive_");
+        boolean isSparkHiveInSparkDistClasspath = isJarSparkDistClassPath("spark-hive_");
+        boolean shouldPrePendSparkHive =
+          isSparkHiveInSparkDistClasspath ||  isJarAvailable(jarsDir, "spark-hive_");
         boolean shouldPrePendSparkHiveThriftServer =
-          shouldPrePendSparkHive && isJarAvailable(jarsDir, "spark-hive-thriftserver_");
+          isSparkHiveInSparkDistClasspath ||
+          (shouldPrePendSparkHive && isJarAvailable(jarsDir, "spark-hive-thriftserver_"));
         for (String project : projects) {
           // Do not use locally compiled class files for Spark server because it should use shaded
           // dependencies.
@@ -298,6 +301,20 @@ abstract class AbstractCommandBuilder {
         if (f.getName().startsWith(jarNamePrefix)) {
           return true;
         }
+      }
+    }
+    return false;
+  }
+
+  private boolean isJarSparkDistClassPath(String jarNamePrefix) {
+    String sparkDistClasspath = getenv("SPARK_DIST_CLASSPATH");
+    if (isEmpty(sparkDistClasspath)) {
+      return false;
+    }
+    String[] entries = sparkDistClasspath.split(Pattern.quote(File.pathSeparator));
+    for (String entry : entries) {
+      if (!isEmpty(entry) && entry.contains(jarNamePrefix) && entry.endsWith(".jar")) {
+        return true;
       }
     }
     return false;
