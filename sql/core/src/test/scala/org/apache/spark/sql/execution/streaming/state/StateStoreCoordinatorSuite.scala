@@ -218,10 +218,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               .option("checkpointLocation", checkpointLocation.toString)
               .start()
             // Add, commit, and wait multiple times to force snapshot versions and time difference
-            (0 until 4).foreach { _ =>
+            (0 until 6).foreach { _ =>
               inputData.addData(1, 2, 3)
               query.processAllAvailable()
-              Thread.sleep(1000)
+              Thread.sleep(500)
             }
             val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
             val stateCheckpointDir = streamingQuery.lastExecution.checkpointLocation
@@ -282,10 +282,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               .option("checkpointLocation", checkpointLocation.toString)
               .start()
             // Add, commit, and wait multiple times to force snapshot versions and time difference
-            (0 until 4).foreach { _ =>
+            (0 until 6).foreach { _ =>
               inputData.addData(1, 2, 3)
               query.processAllAvailable()
-              Thread.sleep(1000)
+              Thread.sleep(500)
             }
             val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
             val stateCheckpointDir = streamingQuery.lastExecution.checkpointLocation
@@ -456,6 +456,84 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
             assert(laggingStores.forall(_.storeId.partitionId <= 1))
         }
       }
+  }
+
+  test("SPARK-51358: Verify coordinator properly handles simultaneous query runs") {
+    withCoordinatorAndSQLConf(
+      sc,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName,
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
+      SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
+    ) {
+      case (coordRef, spark) =>
+        import spark.implicits._
+        implicit val sqlContext = spark.sqlContext
+
+        // Start and run two queries together with some data to force snapshot uploads
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+        val dedupe1 = input1.toDF().dropDuplicates()
+        val dedupe2 = input2.toDF().dropDuplicates()
+        val checkpointLocation1 = Utils.createTempDir().getAbsoluteFile
+        val checkpointLocation2 = Utils.createTempDir().getAbsoluteFile
+        val query1 = dedupe1.writeStream
+          .format("memory")
+          .outputMode("update")
+          .queryName("query1")
+          .option("checkpointLocation", checkpointLocation1.toString)
+          .start()
+        val query2 = dedupe2.writeStream
+          .format("memory")
+          .outputMode("update")
+          .queryName("query2")
+          .option("checkpointLocation", checkpointLocation2.toString)
+          .start()
+        // Go through several rounds of input to force snapshot uploads for both queries
+        (0 until 3).foreach { _ =>
+          input1.addData(1, 2, 3)
+          input2.addData(1, 2, 3)
+          query1.processAllAvailable()
+          query2.processAllAvailable()
+          // Process twice the amount of data for the first query
+          input1.addData(1, 2, 3)
+          query1.processAllAvailable()
+          Thread.sleep(1000)
+        }
+        // Verify that the coordinator logged the correct lagging stores for the first query
+        val streamingQuery1 = query1.asInstanceOf[StreamingQueryWrapper].streamingQuery
+        val latestVersion1 = streamingQuery1.lastProgress.batchId + 1
+        val laggingStores1 = coordRef.getLaggingStoresForTesting(query1.runId, latestVersion1)
+
+        assert(laggingStores1.size == 2)
+        assert(laggingStores1.forall(_.storeId.partitionId <= 1))
+        assert(laggingStores1.forall(_.queryRunId == query1.runId))
+
+        // Verify that the second query run hasn't reported anything yet due to lack of data
+        val streamingQuery2 = query2.asInstanceOf[StreamingQueryWrapper].streamingQuery
+        var latestVersion2 = streamingQuery2.lastProgress.batchId + 1
+        var laggingStores2 = coordRef.getLaggingStoresForTesting(query2.runId, latestVersion2)
+        assert(laggingStores2.isEmpty)
+
+        // Process some more data for the second query to force lag reports
+        input2.addData(1, 2, 3)
+        query2.processAllAvailable()
+        Thread.sleep(500)
+
+        // Verify that the coordinator logged the correct lagging stores for the second query
+        latestVersion2 = streamingQuery2.lastProgress.batchId + 1
+        laggingStores2 = coordRef.getLaggingStoresForTesting(query2.runId, latestVersion2)
+
+        assert(laggingStores2.size == 2)
+        assert(laggingStores2.forall(_.storeId.partitionId <= 1))
+        assert(laggingStores2.forall(_.queryRunId == query2.runId))
+    }
   }
 
   test(

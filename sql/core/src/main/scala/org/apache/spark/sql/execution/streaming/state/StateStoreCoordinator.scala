@@ -221,6 +221,39 @@ private class StateStoreCoordinator(
   // since we may not have all the information yet.
   private val queryRunStartingPoint = new mutable.HashMap[UUID, QueryStartInfo]
 
+  def shouldCoordinatorReportSnapshotLag(
+      runId: UUID,
+      referenceVersion: Long,
+      referenceTimestamp: Long): Boolean = {
+    // Definitely do not report if it is disabled or the corresponding run id did not start yet.
+    if (!sqlConf.stateStoreCoordinatorReportSnapshotUploadLag ||
+        !queryRunStartingPoint.contains(runId)) {
+      false
+    } else {
+      // Determine alert thresholds from configurations for both time and version differences.
+      val snapshotVersionDeltaMultiplier =
+        sqlConf.stateStoreCoordinatorMultiplierForMinVersionDiffToLog
+      val maintenanceIntervalMultiplier = sqlConf.stateStoreCoordinatorMultiplierForMinTimeDiffToLog
+      val minDeltasForSnapshot = sqlConf.stateStoreMinDeltasForSnapshot
+      val maintenanceInterval = sqlConf.streamingMaintenanceInterval
+
+      // Use the configured multipliers to determine the proper alert thresholds
+      val minVersionDeltaForLogging = snapshotVersionDeltaMultiplier * minDeltasForSnapshot
+      val minTimeDeltaForLogging = maintenanceIntervalMultiplier * maintenanceInterval
+
+      // Do not report any instance as lagging if this query run started recently, since the
+      // coordinator may be missing some information from the state stores.
+      // A run is considered recent if the time between now and the start of the run does not pass
+      // the time requirement for lagging instances.
+      // Similarly, the run is also considered too recent if not enough versions have passed
+      // since the start of the run.
+      val queryStartInfo = queryRunStartingPoint(runId)
+
+      referenceTimestamp - queryStartInfo.timestamp > minTimeDeltaForLogging &&
+      referenceVersion - queryStartInfo.version > minVersionDeltaForLogging
+    }
+  }
+
   def coordinatorLagReportInterval: Long = {
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
   }
@@ -258,6 +291,9 @@ private class StateStoreCoordinator(
       instances --= storeIdsToRemove
       // Also remove these instances from snapshot upload event tracking
       stateStoreLatestUploadedSnapshot --= storeIdsToRemove
+      // Remove the corresponding run id entries for report time and starting time
+      lastFullSnapshotLagReportTimeMs -= runId
+      queryRunStartingPoint -= runId
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
@@ -278,7 +314,7 @@ private class StateStoreCoordinator(
       // has never seen this query run before.
       if (!queryRunStartingPoint.contains(queryRunId)) {
         queryRunStartingPoint.put(queryRunId, QueryStartInfo(latestVersion, currentTimestamp))
-      } else {
+      } else if (shouldCoordinatorReportSnapshotLag(queryRunId, latestVersion, currentTimestamp)) {
         // Only log lagging instances if the snapshot report upload is enabled,
         // otherwise all instances will be considered lagging.
         val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
@@ -336,9 +372,14 @@ private class StateStoreCoordinator(
 
     case GetLaggingStoresForTesting(queryRunId, latestVersion) =>
       val currentTimestamp = System.currentTimeMillis()
-      val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
-      logDebug(s"Got lagging state stores: ${laggingStores.mkString(", ")}")
-      context.reply(laggingStores)
+      // Only report if the corresponding run has all the necessary information to start reporting
+      if (shouldCoordinatorReportSnapshotLag(queryRunId, latestVersion, currentTimestamp)) {
+        val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
+        logDebug(s"Got lagging state stores: ${laggingStores.mkString(", ")}")
+        context.reply(laggingStores)
+      } else {
+        context.reply(Seq.empty)
+      }
 
     case StopCoordinator =>
       stop() // Stop before replying to ensure that endpoint name has been deregistered
@@ -350,11 +391,6 @@ private class StateStoreCoordinator(
       queryRunId: UUID,
       referenceVersion: Long,
       referenceTimestamp: Long): Seq[StateStoreProviderId] = {
-    // Do not report any instance as lagging if report snapshot upload is disabled.
-    if (!sqlConf.stateStoreCoordinatorReportSnapshotUploadLag) {
-      return Seq.empty
-    }
-
     // Determine alert thresholds from configurations for both time and version differences.
     val snapshotVersionDeltaMultiplier =
       sqlConf.stateStoreCoordinatorMultiplierForMinVersionDiffToLog
@@ -366,18 +402,6 @@ private class StateStoreCoordinator(
     val minVersionDeltaForLogging = snapshotVersionDeltaMultiplier * minDeltasForSnapshot
     val minTimeDeltaForLogging = maintenanceIntervalMultiplier * maintenanceInterval
 
-    // Do not report any instance as lagging if this query run started recently, since the
-    // coordinator may be missing some information from the state stores.
-    // A run is considered recent if the time between now and the start of the run does not pass
-    // the time requirement for lagging instances.
-    // Similarly, the run is also considered too recent if not enough versions have passed
-    // since the start of the run.
-    val queryStartInfo = queryRunStartingPoint(queryRunId)
-
-    if (referenceTimestamp - queryStartInfo.startTimestamp <= minTimeDeltaForLogging ||
-        referenceVersion - queryStartInfo.version <= minVersionDeltaForLogging) {
-      return Seq.empty
-    }
     // Look for active state store providers that are lagging behind in snapshot uploads
     instances.keys.filter { storeProviderId =>
       // Only consider providers that are part of this specific query run
@@ -392,11 +416,13 @@ private class StateStoreCoordinator(
         // Stores that didn't upload a snapshot will be treated as a store with a snapshot of
         // version 0.
         referenceVersion - Math.max(latestSnapshot.version, 0) > minVersionDeltaForLogging &&
-        referenceTimestamp - latestSnapshot.timestamp > minTimeDeltaForLogging
+          referenceTimestamp - latestSnapshot.timestamp > minTimeDeltaForLogging
       )
     }.toSeq
   }
 }
+
+case class QueryStartInfo(version: Long, timestamp: Long)
 
 case class SnapshotUploadEvent(
     version: Long,
@@ -417,5 +443,3 @@ case class SnapshotUploadEvent(
     s"SnapshotUploadEvent(version=$version, timestamp=$timestamp)"
   }
 }
-
-case class QueryStartInfo(version: Long, startTimestamp: Long)
