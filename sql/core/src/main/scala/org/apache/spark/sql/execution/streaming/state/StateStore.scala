@@ -554,7 +554,11 @@ trait StateStoreProvider {
    */
   def stateStoreId: StateStoreId
 
-  /** Called when the provider instance is unloaded from the executor */
+  /**
+   * Called when the provider instance is unloaded from the executor
+   * WARNING: IF PROVIDER FROM [[StateStore.loadedProviders]],
+   * CLOSE MUST ONLY BE CALLED FROM MAINTENANCE THREAD!
+   */
   def close(): Unit
 
   /**
@@ -960,14 +964,31 @@ object StateStore extends Logging {
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
       val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
-      providerIdsToUnload.foreach(unload(_))
+      providerIdsToUnload.foreach(id => {
+        loadedProviders.get(id).foreach( provider => {
+          // Trigger maintenance thread to immediately do maintenance on and unload the provider.
+          // Doing maintenance first allows us to do maintenance for a constantly-moving state
+          // store.
+          logInfo(log"Task thread trigger maintenance on " +
+            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}")
+          doMaintenanceOnProvider(id, provider)
+        })
+      })
       provider
     }
   }
 
-  /** Unload a state store provider */
-  def unload(storeProviderId: StateStoreProviderId): Unit = loadedProviders.synchronized {
-    loadedProviders.remove(storeProviderId).foreach(_.close())
+  /**
+   * Unload a state store provider.
+   * WARNING: CAN ONLY BE CALLED FROM MAINTENANCE THREAD!
+   */
+  def unload(storeProviderId: StateStoreProviderId): Unit = {
+    // Copy provider to a local list so we can release loadedProviders lock when closing.
+    val removedProvidersList: List[StateStoreProvider] = Nil
+    loadedProviders.synchronized {
+      loadedProviders.remove(storeProviderId).foreach(removedProvidersList :+ _)
+    }
+    removedProvidersList.foreach(_.close())
   }
 
   /** Unload all state store providers: unit test purpose */
@@ -1050,53 +1071,58 @@ object StateStore extends Logging {
     loadedProviders.synchronized {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
-      if (processThisPartition(id)) {
-        maintenanceThreadPool.execute(() => {
-          val startTime = System.currentTimeMillis()
-          try {
-            provider.doMaintenance()
-            if (!verifyIfStoreInstanceActive(id)) {
-              unload(id)
-              logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}")
-            }
-          } catch {
-            case NonFatal(e) =>
-              logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
-                log"unloading state store provider", e)
-              // When we get a non-fatal exception, we just unload the provider.
-              //
-              // By not bubbling the exception to the maintenance task thread or the query execution
-              // thread, it's possible for a maintenance thread pool task to continue failing on
-              // the same partition. Additionally, if there is some global issue that will cause
-              // all maintenance thread pool tasks to fail, then bubbling the exception and
-              // stopping the pool is faster than waiting for all tasks to see the same exception.
-              //
-              // However, we assume that repeated failures on the same partition and global issues
-              // are rare. The benefit to unloading just the partition with an exception is that
-              // transient issues on a given provider do not affect any other providers; so, in
-              // most cases, this should be a more performant solution.
-              unload(id)
-          } finally {
-            val duration = System.currentTimeMillis() - startTime
-            val logMsg =
-              log"Finished maintenance task for " +
-                log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}" +
-                log" in elapsed_time=${MDC(LogKeys.TIME_UNITS, duration)}\n"
-            if (duration > 5000) {
-              logInfo(logMsg)
-            } else {
-              logDebug(logMsg)
-            }
-            maintenanceThreadPoolLock.synchronized {
-              maintenancePartitions.remove(id)
-            }
+      doMaintenanceOnProvider(id, provider)
+    }
+  }
+
+  private def doMaintenanceOnProvider(
+    id: StateStoreProviderId, provider: StateStoreProvider): Unit = {
+    if (processThisPartition(id)) {
+      maintenanceThreadPool.execute(() => {
+        val startTime = System.currentTimeMillis()
+        try {
+          provider.doMaintenance()
+          if (!verifyIfStoreInstanceActive(id)) {
+            unload(id)
+            logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}")
           }
-        })
-      } else {
-        logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
-          log"for maintenance because it is currently " +
-          log"being processed")
-      }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
+              log"unloading state store provider", e)
+            // When we get a non-fatal exception, we just unload the provider.
+            //
+            // By not bubbling the exception to the maintenance task thread or the query execution
+            // thread, it's possible for a maintenance thread pool task to continue failing on
+            // the same partition. Additionally, if there is some global issue that will cause
+            // all maintenance thread pool tasks to fail, then bubbling the exception and
+            // stopping the pool is faster than waiting for all tasks to see the same exception.
+            //
+            // However, we assume that repeated failures on the same partition and global issues
+            // are rare. The benefit to unloading just the partition with an exception is that
+            // transient issues on a given provider do not affect any other providers; so, in
+            // most cases, this should be a more performant solution.
+            unload(id)
+        } finally {
+          val duration = System.currentTimeMillis() - startTime
+          val logMsg =
+            log"Finished maintenance task for " +
+              log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}" +
+              log" in elapsed_time=${MDC(LogKeys.TIME_UNITS, duration)}\n"
+          if (duration > 5000) {
+            logInfo(logMsg)
+          } else {
+            logDebug(logMsg)
+          }
+          maintenanceThreadPoolLock.synchronized {
+            maintenancePartitions.remove(id)
+          }
+        }
+      })
+    } else {
+      logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
+        log"for maintenance because it is currently " +
+        log"being processed")
     }
   }
 
