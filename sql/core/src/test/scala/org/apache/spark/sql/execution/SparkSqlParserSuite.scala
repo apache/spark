@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1006,6 +1006,47 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
           fragment = sql,
           start = 0,
           stop = sql.length - 1))
+    }
+  }
+
+  private val keywords = Seq("NAMESPACES", "DATABASES", "SCHEMAS")
+
+  test("show namespaces in the current catalog") {
+    keywords.foreach { keyword =>
+      assertEqual(
+        s"SHOW $keyword",
+        ShowNamespacesCommand(UnresolvedNamespace(Seq.empty[String]), None))
+    }
+  }
+
+  test("show namespaces with a pattern") {
+    keywords.foreach { keyword =>
+      assertEqual(
+        s"SHOW $keyword LIKE 'defau*'",
+        ShowNamespacesCommand(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
+      // LIKE can be omitted.
+      assertEqual(
+        s"SHOW $keyword 'defau*'",
+        ShowNamespacesCommand(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
+    }
+  }
+
+  test("show namespaces in/from a namespace") {
+    keywords.foreach { keyword =>
+      assertEqual(
+        s"SHOW $keyword FROM testcat.ns1.ns2",
+        ShowNamespacesCommand(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
+      assertEqual(
+        s"SHOW $keyword IN testcat.ns1.ns2",
+        ShowNamespacesCommand(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
+    }
+  }
+
+  test("namespaces by a pattern from another namespace") {
+    keywords.foreach { keyword =>
+      assertEqual(
+        s"SHOW $keyword IN testcat.ns1 LIKE '*pattern*'",
+        ShowNamespacesCommand(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
     }
   }
 }

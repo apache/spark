@@ -657,24 +657,6 @@ case class SetNamespaceLocation(
 }
 
 /**
- * The logical plan of the SHOW NAMESPACES command.
- */
-case class ShowNamespaces(
-    namespace: LogicalPlan,
-    pattern: Option[String],
-    override val output: Seq[Attribute] = ShowNamespaces.getOutputAttrs) extends UnaryCommand {
-  override def child: LogicalPlan = namespace
-  override protected def withNewChildInternal(newChild: LogicalPlan): ShowNamespaces =
-    copy(namespace = newChild)
-}
-
-object ShowNamespaces {
-  def getOutputAttrs: Seq[Attribute] = {
-    Seq(AttributeReference("namespace", StringType, nullable = false)())
-  }
-}
-
-/**
  * The logical plan of the DESCRIBE relation_name command.
  */
 case class DescribeRelation(
