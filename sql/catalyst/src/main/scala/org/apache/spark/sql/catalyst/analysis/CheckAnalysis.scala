@@ -345,6 +345,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
+          case hof: HigherOrderFunction if hof.arguments.exists {
+            case LambdaFunction(_, _, _) => true
+            case _ => false
+          } =>
+            throw new AnalysisException(
+              errorClass =
+                "INVALID_LAMBDA_FUNCTION_CALL.PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION",
+              messageParameters = Map.empty,
+              origin = hof.origin
+            )
           // Check argument data types of higher-order functions downwards first.
           // If the arguments of the higher-order functions are resolved but the type check fails,
           // the argument functions will not get resolved, but we should report the argument type

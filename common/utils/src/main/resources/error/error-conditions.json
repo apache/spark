@@ -2954,6 +2954,11 @@
         "message" : [
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
         ]
+      },
+      "PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION" : {
+        "message" : [
+          "You passed a lambda function to a parameter that does not accept it. Please check if lambda function argument is in the correct position."
+        ]
       }
     },
     "sqlState" : "42K0D"
