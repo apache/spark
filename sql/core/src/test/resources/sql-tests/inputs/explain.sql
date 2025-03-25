@@ -96,6 +96,15 @@ EXPLAIN FORMATTED
   )
   SELECT * FROM cte1 a, cte1 b WHERE a.key = b.key;
 
+-- Recursion
+EXPLAIN FORMATTED
+  WITH RECURSIVE r(level) AS (
+    VALUES 0
+    UNION ALL
+    SELECT level + 1 FROM r WHERE level < 9
+  )
+SELECT * FROM r;
+
 -- A spark plan which has innerChildren other than subquery
 EXPLAIN FORMATTED
   CREATE VIEW explain_view AS

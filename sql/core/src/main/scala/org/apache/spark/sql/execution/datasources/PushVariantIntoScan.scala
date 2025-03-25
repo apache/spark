@@ -289,13 +289,13 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       relation: LogicalRelation,
       hadoopFsRelation: HadoopFsRelation): LogicalPlan = {
     val variants = new VariantInRelation
-    val defaultValues = ResolveDefaultColumns.existenceDefaultValues(hadoopFsRelation.schema)
-    // I'm not aware of any case that an attribute `relation.output` can have a different data type
-    // than the corresponding field in `hadoopFsRelation.schema`. Other code seems to prefer using
-    // the data type in `hadoopFsRelation.schema`, let's also stick to it.
-    val schemaWithAttributes = hadoopFsRelation.schema.fields.zip(relation.output)
-    for (((f, attr), defaultValue) <- schemaWithAttributes.zip(defaultValues)) {
-      variants.addVariantFields(attr.exprId, f.dataType, defaultValue, Nil)
+
+    val schemaAttributes = relation.resolve(hadoopFsRelation.dataSchema,
+      hadoopFsRelation.sparkSession.sessionState.analyzer.resolver)
+    val defaultValues = ResolveDefaultColumns.existenceDefaultValues(StructType(
+      schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
+    for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
+      variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
     }
     if (variants.mapping.isEmpty) return originalPlan
 
@@ -304,24 +304,28 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     // `collectRequestedFields` may have removed all variant columns.
     if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
 
-    val (newFields, newOutput) = schemaWithAttributes.map {
-      case (f, attr) =>
-        if (variants.mapping.get(attr.exprId).exists(_.nonEmpty)) {
-          val newType = variants.rewriteType(attr.exprId, f.dataType, Nil)
-          val newAttr = AttributeReference(f.name, newType, f.nullable, f.metadata)()
-          (f.copy(dataType = newType), newAttr)
-        } else {
-          (f, attr)
-        }
-    }.unzip
+    val attributeMap = schemaAttributes.map { a =>
+      if (variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
+        val newType = variants.rewriteType(a.exprId, a.dataType, Nil)
+        val newAttr = AttributeReference(a.name, newType, a.nullable, a.metadata)(
+          qualifier = a.qualifier)
+        (a.exprId, newAttr)
+      } else {
+        // `relation.resolve` actually returns `Seq[AttributeReference]`, although the return type
+        // is `Seq[Attribute]`.
+        (a.exprId, a.asInstanceOf[AttributeReference])
+      }
+    }.toMap
+    val newFields = schemaAttributes.map { a =>
+      val dataType = attributeMap(a.exprId).dataType
+      StructField(a.name, dataType, a.nullable, a.metadata)
+    }
+    val newOutput = relation.output.map(a => attributeMap.getOrElse(a.exprId, a))
 
     val newHadoopFsRelation = hadoopFsRelation.copy(dataSchema = StructType(newFields))(
       hadoopFsRelation.sparkSession)
     val newRelation = relation.copy(relation = newHadoopFsRelation, output = newOutput.toIndexedSeq)
 
-    val attributeMap = relation.output.zip(newOutput).map {
-      case (oldAttr, newAttr) => oldAttr.exprId -> newAttr
-    }.toMap
     val withFilter = if (filters.nonEmpty) {
       Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And), newRelation)
     } else {

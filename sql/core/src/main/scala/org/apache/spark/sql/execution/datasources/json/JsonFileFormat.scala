@@ -55,10 +55,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    parsedOptions.singleVariantColumn match {
-      case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
-      case None => JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
-    }
+    JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
   override def prepareWrite(
@@ -138,6 +135,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => true
 
+    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

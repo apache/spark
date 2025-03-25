@@ -831,4 +831,22 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     validateConvertedDefaults("c4", VariantType, "parse_json(null)", "CAST(NULL AS VARIANT)")
     validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
   }
+
+  test("SPARK-51119: Add fallback to process unresolved EXISTS_DEFAULT") {
+    val source = StructType(
+      Array(
+      StructField("c1", VariantType, true,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "parse_json(null)")
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "parse_json(null)")
+          .build()),
+      StructField("c0", StringType, true,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "current_catalog()")
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "current_catalog()")
+          .build())))
+    val res = ResolveDefaultColumns.existenceDefaultValues(source)
+    assert(res(0) == null)
+    assert(res(1) == UTF8String.fromString("spark_catalog"))
+  }
 }

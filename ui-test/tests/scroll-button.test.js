@@ -15,21 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.jobs
+
+import '../../core/src/main/resources/org/apache/spark/ui/static/jquery-3.5.1.min.js';
+import { addScrollButton } from '../../core/src/main/resources/org/apache/spark/ui/static/scroll-button.js';
+
+/* global $ */
 
 /**
- * Names of the CSS classes corresponding to each type of task detail. Used to allow users
- * to optionally show/hide columns.
+ * @jest-environment jsdom
  *
- * If new optional metrics are added here, they should also be added to the end of webui.css
- * to have the style set to "display: none;" by default.
+ * eslint-disable no-unused-vars
  */
-private[spark] object TaskDetailsClassNames {
-  val SCHEDULER_DELAY = "scheduler_delay"
-  val TASK_DESERIALIZATION_TIME = "deserialization_time"
-  val SHUFFLE_READ_FETCH_WAIT_TIME = "fetch_wait_time"
-  val SHUFFLE_READ_REMOTE_SIZE = "shuffle_read_remote"
-  val RESULT_SERIALIZATION_TIME = "serialization_time"
-  val GETTING_RESULT_TIME = "getting_result_time"
-  val PEAK_EXECUTION_MEMORY = "peak_execution_memory"
-}
+test('addScrollButton', function ()  {
+  addScrollButton();
+  expect($('.scroll-btn-container').length).toBe(1);
+  expect($('.scroll-btn-half').length).toBe(2);
+  expect($('.scroll-btn-top').length).toBe(1);
+  expect($('.scroll-btn-bottom').length).toBe(1);
+});

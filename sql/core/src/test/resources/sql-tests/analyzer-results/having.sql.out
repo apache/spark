@@ -35,8 +35,8 @@ Filter (sum(v)#xL > cast(2 as bigint))
 SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2
 -- !query analysis
 Project [count(k)#xL]
-+- Filter ((v#x + 1)#x = 2)
-   +- Aggregate [(v#x + 1)], [count(k#x) AS count(k)#xL, (v#x + 1) AS (v#x + 1)#x]
++- Filter ((v + 1)#x = 2)
+   +- Aggregate [(v#x + 1)], [count(k#x) AS count(k)#xL, (v#x + 1) AS (v + 1)#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
@@ -199,9 +199,9 @@ Sort [sum(v)#xL ASC NULLS FIRST], true
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v)
 -- !query analysis
 Project [k#x, sum(v)#xL]
-+- Sort [avg(v#x)#x ASC NULLS FIRST], true
++- Sort [avg(v)#x ASC NULLS FIRST], true
    +- Filter (sum(v)#xL > cast(2 as bigint))
-      +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v#x)#x]
+      +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v)#x]
          +- SubqueryAlias hav
             +- View (`hav`, [k#x, v#x])
                +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]

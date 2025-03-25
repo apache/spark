@@ -114,6 +114,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the minute value of a given TIME (TimeType) value.
+   */
+  def getMinutesOfTime(micros: Long): Int = {
+    microsToLocalTime(micros).getMinute
+  }
+
+  /**
    * Returns the second value of a given timestamp value. The timestamp is expressed in
    * microseconds since the epoch.
    */

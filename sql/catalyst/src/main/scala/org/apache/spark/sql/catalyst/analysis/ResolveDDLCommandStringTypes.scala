@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -45,17 +45,22 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
     table match {
       case createTable: CreateTable if createTable.tableSpec.collation.isDefined =>
         StringType(createTable.tableSpec.collation.get)
+
       case createView: CreateView if createView.collation.isDefined =>
         StringType(createView.collation.get)
+
       case alterTable: AlterTableCommand if alterTable.table.resolved =>
-        val collation = Option(alterTable
-          .table.asInstanceOf[ResolvedTable]
-          .table.properties.get(TableCatalog.PROP_COLLATION))
-        if (collation.isDefined) {
-          StringType(collation.get)
-        } else {
-          StringType(defaultCollation)
+        alterTable.table match {
+          case resolvedTbl: ResolvedTable =>
+            val collation = resolvedTbl.table.properties.getOrDefault(
+              TableCatalog.PROP_COLLATION, defaultCollation)
+            StringType(collation)
+
+          case _ =>
+            // As a safeguard, use the default collation for unknown cases.
+            StringType(defaultCollation)
         }
+
       case _ => StringType(defaultCollation)
     }
   }
@@ -100,11 +105,13 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
    * new type instead of the default string type.
    */
   private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
-    plan resolveExpressionsUp { expression =>
+    val transformedPlan = plan resolveExpressionsUp { expression =>
       transformExpression
         .andThen(_.apply(newType))
         .applyOrElse(expression, identity[Expression])
     }
+
+    castDefaultStringExpressions(transformedPlan, newType)
   }
 
   /**
@@ -119,6 +126,30 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+  }
+
+  /**
+   * Casts [[DefaultStringProducingExpression]] in the plan to the `newType`.
+   */
+  private def castDefaultStringExpressions(plan: LogicalPlan, newType: StringType): LogicalPlan = {
+    if (newType == StringType) return plan
+
+    def inner(ex: Expression): Expression = ex match {
+      // Skip if we already added a cast in the previous pass.
+      case cast @ Cast(e: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
+        cast.copy(child = e.withNewChildren(e.children.map(inner)))
+
+      // Add cast on top of [[DefaultStringProducingExpression]].
+      case e: DefaultStringProducingExpression =>
+        Cast(e.withNewChildren(e.children.map(inner)), newType)
+
+      case other =>
+        other.withNewChildren(other.children.map(inner))
+    }
+
+    plan resolveOperators { operator =>
+      operator.mapExpressions(inner)
+    }
   }
 
   private def hasDefaultStringType(dataType: DataType): Boolean =

@@ -187,14 +187,20 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       }
     }
 
+    private[this] val idleTimeoutMillis: Long = TimeUnit.SECONDS.toMillis(idleTimeoutSeconds)
     private[this] var pythonWorkerKilled: Boolean = false
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
       val buf = ByteBuffer.wrap(b, off, len)
       var n = 0
       while (n == 0) {
-        val selected = worker.selector.select(TimeUnit.SECONDS.toMillis(idleTimeoutSeconds))
-        if (selected == 0) {
+        val start = System.currentTimeMillis()
+        val selected = worker.selector.select(idleTimeoutMillis)
+        val end = System.currentTimeMillis()
+        if (selected == 0
+          // Avoid logging if no timeout or the selector doesn't wait for the idle timeout
+          // as it can return 0 in some case.
+          && idleTimeoutMillis > 0 && (end - start) >= idleTimeoutMillis) {
           if (pythonWorkerKilled) {
             logWarning(
               log"Waiting for Python planner worker process to terminate after idle timeout: " +

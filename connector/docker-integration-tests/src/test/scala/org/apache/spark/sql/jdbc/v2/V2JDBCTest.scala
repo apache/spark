@@ -806,8 +806,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def caseConvert(tableName: String): String = tableName
 
-  private def withOrWithout(isDistinct: Boolean): String = if (isDistinct) "with" else "without"
-
   Seq(true, false).foreach { isDistinct =>
     val distinct = if (isDistinct) "DISTINCT " else ""
     val withOrWithout = if (isDistinct) "with" else "without"

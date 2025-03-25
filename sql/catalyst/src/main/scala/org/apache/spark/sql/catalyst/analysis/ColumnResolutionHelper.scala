@@ -23,8 +23,10 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
+import org.apache.spark.sql.catalyst.parser.SqlScriptingLabelContext.isForbiddenLabelName
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -229,6 +231,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
+  /**
+   * Look up variable by nameParts.
+   * If in SQL Script, first check local variables, unless in EXECUTE IMMEDIATE
+   * (EXECUTE IMMEDIATE generated query cannot access local variables).
+   * if not found fall back to session variables.
+   * @param nameParts NameParts of the variable.
+   * @return Reference to the variable.
+   */
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
@@ -244,22 +254,41 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    if (maybeTempVariableName(nameParts)) {
-      val variableName = if (conf.caseSensitiveAnalysis) {
-        nameParts.last
-      } else {
-        nameParts.last.toLowerCase(Locale.ROOT)
-      }
-      catalogManager.tempVariableManager.get(variableName).map { varDef =>
+    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
+      nameParts
+    } else {
+      nameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    SqlScriptingLocalVariableManager.get()
+      // If we are in EXECUTE IMMEDIATE lookup only session variables.
+      .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
+      // If variable name is qualified with session.<varName> treat it as a session variable.
+      .filterNot(_ =>
+        nameParts.length > 2 || (nameParts.length == 2 && isForbiddenLabelName(nameParts.head)))
+      .flatMap(_.get(namePartsCaseAdjusted))
+      .map { varDef =>
         VariableReference(
           nameParts,
-          FakeSystemCatalog,
-          Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+          FakeLocalCatalog,
+          Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)
       }
-    } else {
-      None
-    }
+      .orElse(
+        if (maybeTempVariableName(nameParts)) {
+          catalogManager.tempVariableManager
+            .get(namePartsCaseAdjusted)
+            .map { varDef =>
+              VariableReference(
+                nameParts,
+                FakeSystemCatalog,
+                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
+                varDef
+              )}
+        } else {
+          None
+        }
+      )
   }
 
   // Resolves `UnresolvedAttribute` to its value.
@@ -377,7 +406,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // Lateral column alias does not have qualifiers. We always use the first name part to
           // look up lateral column aliases.
           val lowerCasedName = u.nameParts.head.toLowerCase(Locale.ROOT)
-          aliasMap.get(lowerCasedName).map {
+          aliasMap.get(lowerCasedName).filter {
+            // Do not resolve LCA with aliased `Generator`, as it will be rewritten by the rule
+            // `ExtractGenerator` with fresh output attribute IDs. The `Generator` will be pulled
+            // out and put in a `Generate` node below `Project`, so that we can resolve the column
+            // normally without LCA resolution.
+            case scala.util.Left(alias) => !alias.child.isInstanceOf[Generator]
+            case _ => true
+          }.map {
             case scala.util.Left(alias) =>
               if (alias.resolved) {
                 val resolvedAttr = resolveExpressionByPlanOutput(

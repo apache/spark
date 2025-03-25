@@ -242,6 +242,80 @@ to handle large data in production, make it distributed by configuring the defau
 See `Default Index Type <options.rst#default-index-type>`_ for more details about configuring default index.
 
 
+Handling index misalignment with ``distributed-sequence``
+----------------------------------------------------------
+
+While ``distributed-sequence`` ensures a globally sequential index, it does **not** guarantee that the same row-to-index mapping is maintained across different operations.
+Operations such as ``apply()``, ``groupby()``, or ``transform()`` may cause the index to be regenerated, leading to misalignment between rows and computed values.
+
+Issue example with ``apply()``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In the following example, we load a dataset where ``record_id`` acts as a unique identifier, and we compute the duration (number of business days) using an ``apply()`` function.
+However, due to ``distributed-sequence`` index regeneration during ``apply()``, the results may be assigned to incorrect rows.
+
+.. code-block:: python
+
+    import pyspark.pandas as ps
+    import numpy as np
+
+    ps.set_option('compute.default_index_type', 'distributed-sequence')
+
+    df = ps.DataFrame({
+        'record_id': ["RECORD_1001", "RECORD_1002"],
+        'start_date': ps.to_datetime(["2024-01-01", "2024-01-02"]),
+        'end_date': ps.to_datetime(["2024-01-01", "2024-01-03"])
+    })
+
+    df['duration'] = df.apply(lambda x: np.busday_count(x['start_date'].date(), x['end_date'].date()), axis=1)
+
+Expected output:
+
+.. code-block::
+
+    record_id    start_date    end_date     duration
+    RECORD_1001  2024-01-01    2024-01-01   0
+    RECORD_1002  2024-01-02    2024-01-03   1
+
+However, due to the ``distributed-sequence`` index being re-generated during ``apply()``, the resulting DataFrame might look like this:
+
+.. code-block::
+
+    record_id    start_date    end_date     duration
+    RECORD_1002  2024-01-02    2024-01-03   0   # Wrong mapping!
+    RECORD_1001  2024-01-01    2024-01-01   1   # Wrong mapping!
+
+Best practices to prevent index misalignment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To ensure the row-to-index mapping remains consistent, consider the following approaches:
+
+1. **Explicitly set an index column before applying functions:**
+
+   .. code-block:: python
+
+       df = df.set_index("record_id")  # Ensure the index is explicitly set
+       df['duration'] = df.apply(lambda x: np.busday_count(x['start_date'].date(), x['end_date'].date()), axis=1)
+
+2. **Persist the DataFrame before applying functions to maintain row ordering:**
+
+   .. code-block:: python
+
+       df = df.spark.persist()
+       df['duration'] = df.apply(lambda x: np.busday_count(x['start_date'].date(), x['end_date'].date()), axis=1)
+
+3. **Use the sequence index type instead (be aware of potential performance trade-offs):**
+
+   .. code-block:: python
+
+       ps.set_option('compute.default_index_type', 'sequence')
+
+If your application requires strict row-to-index mapping, consider using one of the above approaches rather than relying on the default ``distributed-sequence`` index.
+
+For more information, refer to `Default Index Type <options.rst#default-index-type>`_
+
+
+
 Reduce the operations on different DataFrame/Series
 ---------------------------------------------------
 

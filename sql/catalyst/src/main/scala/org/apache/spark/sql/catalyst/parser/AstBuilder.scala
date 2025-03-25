@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils, SparkParserUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -445,7 +445,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSearchedCaseStatementImpl(
       ctx: SearchedCaseStatementContext,
-      labelCtx: SqlScriptingLabelContext): CaseStatement = {
+      labelCtx: SqlScriptingLabelContext): SearchedCaseStatement = {
     val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
       SingleStatement(
         Project(
@@ -464,7 +464,7 @@ class AstBuilder extends DataTypeAstBuilder
           s" ${conditionalBodies.length} in case statement")
     }
 
-    CaseStatement(
+    SearchedCaseStatement(
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
@@ -475,30 +475,31 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSimpleCaseStatementImpl(
       ctx: SimpleCaseStatementContext,
-      labelCtx: SqlScriptingLabelContext): CaseStatement = {
-    // uses EqualTo to compare the case variable(the main case expression)
-    // to the WHEN clause expressions
-    val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
-      SingleStatement(
-        Project(
-          Seq(Alias(EqualTo(expression(ctx.caseVariable), expression(expr)), "condition")()),
-          OneRowRelation()))
-    })
+      labelCtx: SqlScriptingLabelContext): SimpleCaseStatement = {
+    val caseVariableExpr = withOrigin(ctx.caseVariable) {
+      expression(ctx.caseVariable)
+    }
+    val conditionExpressions =
+      ctx.conditionExpressions.asScala.toList
+        .map(exprCtx => withOrigin(exprCtx) {
+          expression(exprCtx)
+        })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
         body =>
           visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
       )
 
-    if (conditions.length != conditionalBodies.length) {
+    if (conditionExpressions.length != conditionalBodies.length) {
       throw SparkException.internalError(
-        s"Mismatched number of conditions ${conditions.length} and condition bodies" +
+        s"Mismatched number of conditions ${conditionExpressions.length} and condition bodies" +
           s" ${conditionalBodies.length} in case statement")
     }
 
-    CaseStatement(
-      conditions = conditions,
-      conditionalBodies = conditionalBodies,
+    SimpleCaseStatement(
+      caseVariableExpr,
+      conditionExpressions,
+      conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
         body =>
           visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx, isScope = false)
@@ -812,12 +813,15 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Parameters used for writing query to a table:
-   *   (table ident, options, tableColumnList, partitionKeys, ifPartitionNotExists, byName).
+   * Parameters used for writing query to a table.
    */
-  type InsertTableParams =
-    (IdentifierReferenceContext, Option[OptionsClauseContext], Seq[String],
-      Map[String, Option[String]], Boolean, Boolean)
+  case class InsertTableParams(
+      relationCtx: IdentifierReferenceContext,
+      options: Option[OptionsClauseContext],
+      userSpecifiedCols: Seq[String],
+      partitionSpec: Map[String, Option[String]],
+      ifPartitionNotExists: Boolean,
+      byName: Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -844,31 +848,36 @@ class AstBuilder extends DataTypeAstBuilder
       //   2. Write commands do not hold the table logical plan as a child, and we need to add
       //      additional resolution code to resolve identifiers inside the write commands.
       case table: InsertIntoTableContext =>
-        val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
-        = visitInsertIntoTable(table)
-        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
+        val insertParams = visitInsertIntoTable(table)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options, Seq(TableWritePrivilege.INSERT)),
-            partition,
-            cols,
-            otherPlans.head,
+            table = createUnresolvedRelation(
+              ctx = insertParams.relationCtx,
+              ident = ident,
+              optionsClause = insertParams.options,
+              writePrivileges = Seq(TableWritePrivilege.INSERT)),
+            partitionSpec = insertParams.partitionSpec,
+            userSpecifiedCols = insertParams.userSpecifiedCols,
+            query = otherPlans.head,
             overwrite = false,
-            ifPartitionNotExists,
-            byName)
+            ifPartitionNotExists = insertParams.ifPartitionNotExists,
+            byName = insertParams.byName)
         })
       case table: InsertOverwriteTableContext =>
-        val (relationCtx, options, cols, partition, ifPartitionNotExists, byName)
-        = visitInsertOverwriteTable(table)
-        withIdentClause(relationCtx, Seq(query), (ident, otherPlans) => {
+        val insertParams = visitInsertOverwriteTable(table)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
           InsertIntoStatement(
-            createUnresolvedRelation(relationCtx, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
-            partition,
-            cols,
-            otherPlans.head,
+            table = createUnresolvedRelation(
+              ctx = insertParams.relationCtx,
+              ident = ident,
+              optionsClause = insertParams.options,
+              writePrivileges = Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+            partitionSpec = insertParams.partitionSpec,
+            userSpecifiedCols = insertParams.userSpecifiedCols,
+            query = otherPlans.head,
             overwrite = true,
-            ifPartitionNotExists,
-            byName)
+            ifPartitionNotExists = insertParams.ifPartitionNotExists,
+            byName = insertParams.byName)
         })
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
@@ -895,8 +904,9 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitInsertIntoTable(
       ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
-    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
-    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
+    val userSpecifiedCols =
+      Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
+    val partitionSpec = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     blockBang(ctx.errorCapturingNot())
 
@@ -904,8 +914,13 @@ class AstBuilder extends DataTypeAstBuilder
       invalidStatement("INSERT INTO ... IF NOT EXISTS", ctx)
     }
 
-    (ctx.identifierReference, Option(ctx.optionsClause()), cols, partitionKeys, false,
-      ctx.NAME() != null)
+    InsertTableParams(
+      relationCtx = ctx.identifierReference(),
+      options = Option(ctx.optionsClause()),
+      userSpecifiedCols = userSpecifiedCols,
+      partitionSpec = partitionSpec,
+      ifPartitionNotExists = false,
+      byName = ctx.NAME() != null)
   }
 
   /**
@@ -914,19 +929,25 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitInsertOverwriteTable(
       ctx: InsertOverwriteTableContext): InsertTableParams = withOrigin(ctx) {
     assert(ctx.OVERWRITE() != null)
-    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
-    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
+    val userSpecifiedCols =
+      Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
+    val partitionSpec = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     blockBang(ctx.errorCapturingNot())
 
-    val dynamicPartitionKeys: Map[String, Option[String]] = partitionKeys.filter(_._2.isEmpty)
+    val dynamicPartitionKeys: Map[String, Option[String]] = partitionSpec.filter(_._2.isEmpty)
     if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
       operationNotAllowed("IF NOT EXISTS with dynamic partitions: " +
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (ctx.identifierReference, Option(ctx.optionsClause()), cols, partitionKeys,
-      ctx.EXISTS() != null, ctx.NAME() != null)
+    InsertTableParams(
+      relationCtx = ctx.identifierReference,
+      options = Option(ctx.optionsClause()),
+      userSpecifiedCols = userSpecifiedCols,
+      partitionSpec = partitionSpec,
+      ifPartitionNotExists = ctx.EXISTS() != null,
+      byName = ctx.NAME() != null)
   }
 
   /**
@@ -1516,11 +1537,16 @@ class AstBuilder extends DataTypeAstBuilder
       val newProjectList: Seq[NamedExpression] = if (isPipeOperatorSelect) {
         // If this is a pipe operator |> SELECT clause, add a [[PipeExpression]] wrapping
         // each alias in the project list, so the analyzer can check invariants later.
+        def withPipeExpression(node: UnaryExpression): NamedExpression = {
+          node.withNewChildren(Seq(
+              PipeExpression(node.child, isAggregate = false, PipeOperators.selectClause)))
+            .asInstanceOf[NamedExpression]
+        }
         namedExpressions.map {
           case a: Alias =>
-            a.withNewChildren(Seq(
-                PipeExpression(a.child, isAggregate = false, PipeOperators.selectClause)))
-              .asInstanceOf[NamedExpression]
+            withPipeExpression(a)
+          case u: UnresolvedAlias =>
+            withPipeExpression(u)
           case other =>
             other
         }
@@ -3132,7 +3158,9 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitFrameBound(ctx: FrameBoundContext): Expression = withOrigin(ctx) {
     def value: Expression = {
       val e = expression(ctx.expression)
-      validate(e.resolved && e.foldable, "Frame bound value must be a literal.", ctx)
+      validate(
+        e.resolved && e.foldable || e.isInstanceOf[Parameter],
+        "Frame bound value must be a literal.", ctx)
       e
     }
 
@@ -3326,6 +3354,7 @@ class AstBuilder extends DataTypeAstBuilder
         val zoneId = getZoneId(conf.sessionLocalTimeZone)
         val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
         specialDate.getOrElse(toLiteral(stringToDate, DateType))
+      case TIME => toLiteral(stringToTime, TimeType())
       case TIMESTAMP_NTZ =>
         convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
           .map(Literal(_, TimestampNTZType))

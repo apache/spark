@@ -134,4 +134,11 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
     val prettyString = ToPrettyString(child)
     assert(prettyString.sql === child.sql)
   }
+
+  test("Time as pretty strings") {
+    checkEvaluation(ToPrettyString(Literal(1000L, TimeType())), "00:00:00.001")
+    checkEvaluation(ToPrettyString(Literal(1L, TimeType())), "00:00:00.000001")
+    checkEvaluation(ToPrettyString(Literal(
+      (23 * 3600 + 59 * 60 + 59) * 1000000L, TimeType())), "23:59:59")
+  }
 }

@@ -57,7 +57,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -336,7 +336,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     TypeCoercion.typeCoercionRules
   }
 
-  override def batches: Seq[Batch] = Seq(
+  private def earlyBatches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
@@ -357,7 +357,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs),
+      KeepLegacyOutputs)
+  )
+
+  override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
@@ -387,6 +390,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTableSpec ::
       ValidateAndStripPipeExpressions ::
       ResolveSQLFunctions ::
+      ResolveSQLTableFunctions ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
@@ -408,7 +412,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      ResolveIdentifierClause ::
+      new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
       MoveParameterizedQueriesDown ::
@@ -451,6 +455,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
+    Batch("ReassignAliasNamesWithCollations", Once,
+      ReassignAliasNamesWithCollations),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
     Batch("HandleSpecialCommand", Once,
@@ -982,25 +988,30 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object AddMetadataColumns extends Rule[LogicalPlan] {
     import org.apache.spark.sql.catalyst.util._
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
-      AlwaysProcess.fn, ruleId) {
-      case hint: UnresolvedHint => hint
-      // Add metadata output to all node types
-      case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
-        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
-        if (metaCols.isEmpty) {
-          node
-        } else {
-          val newNode = node.mapChildren(addMetadataCol(_, metaCols.map(_.exprId).toSet))
-          // We should not change the output schema of the plan. We should project away the extra
-          // metadata columns if necessary.
-          if (newNode.sameOutput(node)) {
-            newNode
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val onlyUniqueAndNecessaryMetadataColumns =
+        conf.getConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS)
+      plan.resolveOperatorsDownWithPruning(AlwaysProcess.fn, ruleId) {
+        case hint: UnresolvedHint => hint
+        // Add metadata output to all node types
+        case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
+          val inputAttrs = AttributeSet(node.children.flatMap(_.output))
+          val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
+          if (metaCols.isEmpty) {
+            node
           } else {
-            Project(node.output, newNode)
+            val newNode = node.mapChildren(
+              addMetadataCol(_, metaCols.map(_.exprId).toSet, onlyUniqueAndNecessaryMetadataColumns)
+            )
+            // We should not change the output schema of the plan. We should project away the extra
+            // metadata columns if necessary.
+            if (newNode.sameOutput(node)) {
+              newNode
+            } else {
+              Project(node.output, newNode)
+            }
           }
-        }
+      }
     }
 
     private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
@@ -1028,18 +1039,32 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     private def addMetadataCol(
         plan: LogicalPlan,
-        requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
+        requiredAttrIds: Set[ExprId],
+        onlyUniqueAndNecessaryMetadataColumns: Boolean = true): LogicalPlan = plan match {
       case s: ExposesMetadataColumns if s.metadataOutput.exists( a =>
         requiredAttrIds.contains(a.exprId)) =>
         s.withMetadataColumns()
       case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
+        val uniqueMetadataColumns = if (onlyUniqueAndNecessaryMetadataColumns) {
+          val actualRequiredExprIds = new util.HashSet[ExprId](requiredAttrIds.asJava)
+          p.projectList.foreach(ne => actualRequiredExprIds.remove(ne.exprId))
+          p.metadataOutput.filter(attr => actualRequiredExprIds.contains(attr.exprId))
+        } else {
+          p.metadataOutput
+        }
+
         val newProj = p.copy(
           // Do not leak the qualified-access-only restriction to normal plan outputs.
-          projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
-          child = addMetadataCol(p.child, requiredAttrIds))
+          projectList = p.projectList ++ uniqueMetadataColumns.map(_.markAsAllowAnyAccess()),
+          child = addMetadataCol(p.child, requiredAttrIds, onlyUniqueAndNecessaryMetadataColumns)
+        )
         newProj.copyTagsFrom(p)
         newProj
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
+      case _ =>
+        plan.withNewChildren(
+          plan.children
+            .map(addMetadataCol(_, requiredAttrIds, onlyUniqueAndNecessaryMetadataColumns))
+        )
     }
   }
 
@@ -2655,6 +2680,93 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
   }
 
+  /*
+   * This rule resolves SQL table functions.
+   */
+  object ResolveSQLTableFunctions extends Rule[LogicalPlan] with AliasHelper {
+
+    /**
+     * Check if a subquery plan is subject to the COUNT bug that can cause wrong results.
+     * A lateral correlation can only be removed if the lateral subquery is not subject to
+     * the COUNT bug. Currently only lateral correlation can handle it correctly.
+     */
+    private def hasCountBug(sub: LogicalPlan): Boolean = sub.find {
+      // The COUNT bug occurs when there is an Aggregate that satisfies all the following
+      // conditions:
+      // 1) is on the correlation path
+      // 2) has non-empty group by expressions
+      // 3) has one or more output columns that evaluate to non-null values with empty input.
+      //    E.g: COUNT(empty row) = 0.
+      // For simplicity, we use a stricter criteria (1 and 2 only) to determine if a query
+      // is subject to the COUNT bug.
+      case a: Aggregate if a.groupingExpressions.nonEmpty => hasOuterReferences(a.child)
+      case _ => false
+    }.nonEmpty
+
+    /**
+     * Rewrite a resolved SQL table function plan by removing unnecessary lateral joins:
+     * Before:
+     *   LateralJoin lateral-subquery [a], Inner
+     *   :  +- Project [c1, c2]
+     *   :     +- Filter [outer(a) == c1]
+     *   :        +- Relation [c1, c2]
+     *   +- Project [1 AS a]
+     *      +- OneRowRelation
+     * After:
+     *   Project [c1, c2]
+     *   +- Filter [1 == c1]  <---- Replaced outer(a)
+     *      +- Relation [c1, c2]
+     */
+    private def rewrite(plan: LogicalPlan): LogicalPlan = {
+      (plan transformUp {
+        case j @ LateralJoin(Project(aliases, _: OneRowRelation), sub: LateralSubquery, Inner, None)
+            if j.resolved && aliases.forall(_.deterministic) =>
+          val attrMap = AttributeMap(aliases.collect { case a: Alias => a.toAttribute -> a.child })
+          val newPlan = sub.plan.transformAllExpressionsWithPruning(
+            _.containsPattern(OUTER_REFERENCE)) {
+            // Avoid replacing outer references that do not belong to the current outer plan.
+            // This can happen if the child of an alias also contains outer references (nested
+            // table function references). E.g:
+            // LateralJoin
+            // :  +- Filter [outer(a) == x]
+            // :     +- Relation [x, y]
+            // +- Project [outer(c) AS a]
+            //    +- OneRowRelation
+            case OuterReference(a: Attribute) if attrMap.contains(a) => attrMap(a) match {
+              case ne: NamedExpression => ne
+              case o => Alias(o, a.name)(exprId = a.exprId, qualifier = a.qualifier)
+            }
+          }
+          // Keep the original lateral join if the new plan is subject to the count bug.
+          if (hasCountBug(newPlan)) j else newPlan
+      }).transformWithPruning(_.containsPattern(ALIAS)) {
+        // As a result of the above rewriting, we may end-up introducing nested Aliases (i.e.,
+        // Aliases defined inside Aliases). This is problematic for the plan canonicalization as
+        // it doesn't expect nested Aliases. Therefore, here we remove non-top level Aliases.
+        case node => node.mapExpressions(trimNonTopLevelAliases)
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(SQL_TABLE_FUNCTION)) {
+      case SQLTableFunction(name, function, inputs, output) =>
+        // Resolve the SQL table function plan using its function context.
+        val conf = new SQLConf()
+        function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
+        val resolved = SQLConf.withExistingConf(conf) {
+          val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
+          SQLFunctionContext.withSQLFunction {
+            executeSameContext(plan)
+          }
+        }
+        // Remove unnecessary lateral joins that are used to resolve the SQL function.
+        val newPlan = rewrite(resolved)
+        // Fail the analysis eagerly if a SQL table function cannot be resolved using its input.
+        SimpleAnalyzer.checkAnalysis(newPlan)
+        newPlan
+    }
+  }
+
   /**
    * Turns projections that contain aggregate expressions into aggregations.
    */
@@ -2768,7 +2880,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         expr match {
           case ae: AggregateExpression =>
             val cleaned = trimTempResolvedColumn(ae)
-            val alias = Alias(cleaned, cleaned.toString)()
+            val alias = Alias(cleaned, toPrettySQL(cleaned))()
             aggExprList += alias
             alias.toAttribute
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
@@ -2777,7 +2889,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 aggExprList += ne
                 ne.toAttribute
               case other =>
-                val alias = Alias(other, other.toString)()
+                val alias = Alias(other, toPrettySQL(other))()
                 aggExprList += alias
                 alias.toAttribute
             }
@@ -2893,22 +3005,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
-    // We must wait until all expressions except for generator functions are resolved before
-    // rewriting generator functions in Project/Aggregate. This is necessary to make this rule
-    // stable for different execution orders of analyzer rules. See also SPARK-47241.
-    private def canRewriteGenerator(namedExprs: Seq[NamedExpression]): Boolean = {
-      namedExprs.forall { ne =>
-        ne.resolved || {
-          trimNonTopLevelAliases(ne) match {
-            case AliasedGenerator(_, _, _) => true
-            case _ => false
-          }
-        }
-      }
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(GENERATOR), ruleId) {
+      case p @ Project(Seq(UnresolvedStarWithColumns(_, _, _)), _) =>
+        // UnresolvedStarWithColumns should be resolved before extracting.
+        p
+
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
@@ -2921,8 +3023,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val generators = aggList.filter(hasGenerator).map(trimAlias)
         throw QueryCompilationErrors.moreThanOneGeneratorError(generators)
 
-      case Aggregate(groupList, aggList, child, _) if canRewriteGenerator(aggList) &&
-          aggList.exists(hasGenerator) =>
+      case Aggregate(groupList, aggList, child, _) if
+        aggList.forall {
+          case AliasedGenerator(_, _, _) => true
+          case other => other.resolved
+        } && aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
 
@@ -2967,8 +3072,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // first for replacing `Project` with `Aggregate`.
         p
 
-      case p @ Project(projectList, child) if canRewriteGenerator(projectList) &&
-          projectList.exists(hasGenerator) =>
+      // The star will be expanded differently if we insert `Generate` under `Project` too early.
+      case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
@@ -3534,7 +3639,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
         val projection = TableOutputResolver.resolveOutputColumns(
-          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
+          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
+          supportColDefaultValue = true)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
@@ -3564,55 +3670,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       hint: JoinHint): LogicalPlan = {
     import org.apache.spark.sql.catalyst.util._
 
-    val leftKeys = joinNames.map { keyName =>
-      left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw QueryCompilationErrors.unresolvedUsingColForJoinError(
-          keyName, left.schema.fieldNames.sorted.map(toSQLId).mkString(", "), "left")
-      }
-    }
-    val rightKeys = joinNames.map { keyName =>
-      right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw QueryCompilationErrors.unresolvedUsingColForJoinError(
-          keyName, right.schema.fieldNames.sorted.map(toSQLId).mkString(", "), "right")
-      }
-    }
-    val joinPairs = leftKeys.zip(rightKeys)
-
-    val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
-
-    // columns not in joinPairs
-    val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
-    val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
-
-    // the output list looks like: join keys, columns from left, columns from right
-    val (projectList, hiddenList) = joinType match {
-      case LeftOuter =>
-        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)),
-          rightKeys.map(_.withNullability(true)))
-      case LeftExistence(_) =>
-        (leftKeys ++ lUniqueOutput, Seq.empty)
-      case RightOuter =>
-        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput,
-          leftKeys.map(_.withNullability(true)))
-      case FullOuter =>
-        // In full outer join, we should return non-null values for the join columns
-        // if either side has non-null values for those columns. Therefore, for each
-        // join column pair, add a coalesce to return the non-null value, if it exists.
-        val joinedCols = joinPairs.map { case (l, r) =>
-          // Since this is a full outer join, either side could be null, so we explicitly
-          // set the nullability to true for both sides.
-          Alias(Coalesce(Seq(l.withNullability(true), r.withNullability(true))), l.name)()
-        }
-        (joinedCols ++
-          lUniqueOutput.map(_.withNullability(true)) ++
-          rUniqueOutput.map(_.withNullability(true)),
-          leftKeys.map(_.withNullability(true)) ++
-          rightKeys.map(_.withNullability(true)))
-      case _ : InnerLike =>
-        (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
-      case _ =>
-        throw QueryExecutionErrors.unsupportedNaturalJoinTypeError(joinType)
-    }
+    val (projectList, hiddenList, newCondition) =
+      NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
+        left,
+        left.output,
+        right,
+        right.output,
+        joinType,
+        joinNames,
+        condition,
+        (attributeName, keyName) => resolver(attributeName, keyName)
+      )
 
     // use Project to hide duplicated common keys
     // propagate hidden columns from nested USING/NATURAL JOINs

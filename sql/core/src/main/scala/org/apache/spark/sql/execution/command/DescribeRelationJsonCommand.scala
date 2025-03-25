@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.time.ZoneId
+import java.time.ZoneOffset
 
 import scala.collection.mutable
 
@@ -31,13 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, Se
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.{
-  quoteIfNeeded,
-  DateFormatter,
-  DateTimeUtils,
-  Iso8601TimestampFormatter,
-  LegacyDateFormats
-}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table
@@ -59,13 +53,8 @@ case class DescribeRelationJsonCommand(
         nullable = false,
         new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()
     )) extends UnaryRunnableCommand {
-  private lazy val timestampFormatter = new Iso8601TimestampFormatter(
-    pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'",
-    zoneId = ZoneId.of("UTC"),
-    locale = DateFormatter.defaultLocale,
-    legacyFormat = LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT,
-    isParsing = true
-  )
+  private lazy val timestampFormatter =
+    TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss'Z'", ZoneOffset.UTC, isParsing = false)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val jsonMap = mutable.LinkedHashMap[String, JValue]()
@@ -234,6 +223,12 @@ case class DescribeRelationJsonCommand(
           "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField))
         )
 
+      case stringType: StringType =>
+        JObject(
+          "name" -> JString("string"),
+          "collation" -> JString(stringType.collationName)
+        )
+
       case _ =>
         JObject("name" -> JString(dataType.simpleString))
     }
@@ -250,23 +245,17 @@ case class DescribeRelationJsonCommand(
   private def describeClusteringInfoJson(
       table: CatalogTable, jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
     table.clusterBySpec.foreach { clusterBySpec =>
-      val clusteringColumnsJson: JValue = JArray(
-        clusterBySpec.columnNames.map { fieldNames =>
-          val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
-          assert(nestedFieldOpt.isDefined,
-            "The clustering column " +
-              s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-              s"was not found in the table schema ${table.schema.catalogString}."
-          )
-          val (path, field) = nestedFieldOpt.get
-          JObject(
-            "name" -> JString((path :+ field.name).map(quoteIfNeeded).mkString(".")),
-            "type" -> jsonType(field.dataType),
-            "comment" -> field.getComment().map(JString).getOrElse(JNull)
-          )
-        }.toList
-      )
-      addKeyValueToMap("clustering_information", clusteringColumnsJson, jsonMap)
+      val clusteringColumnsJson = JArray(clusterBySpec.columnNames.map { fieldNames =>
+        val nestedFieldOpt = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+        assert(nestedFieldOpt.isDefined,
+          "The clustering column " +
+            s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
+            s"was not found in the table schema ${table.schema.catalogString}."
+        )
+        JString(fieldNames.fieldNames.map(quoteIfNeeded).mkString("."))
+      }.toList)
+
+      addKeyValueToMap("clustering_columns", clusteringColumnsJson, jsonMap)
     }
   }
 

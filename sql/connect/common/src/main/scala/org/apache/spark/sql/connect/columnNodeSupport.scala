@@ -216,7 +216,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         }
 
       case LazyExpression(child, _) =>
-        builder.getLazyExpressionBuilder.setChild(apply(child, e))
+        return apply(child, e)
 
       case SubqueryExpressionNode(relation, subqueryType, _) =>
         val b = builder.getSubqueryExpressionBuilder
