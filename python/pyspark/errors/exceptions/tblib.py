@@ -188,18 +188,18 @@ class Traceback:
         current: Optional[Traceback] = self
         top_tb = None
         tb = None
-        compiled = compile(
+        stub = compile(
             "raise __traceback_maker",
             "<string>",
             "exec",
         )
         while current:
             f_code = current.tb_frame.f_code
-            code = compiled.replace(
+            code = stub.replace(
                 co_firstlineno=current.tb_lineno,
                 co_argcount=0,
                 co_filename=f_code.co_filename,
-                co_name=f_code.co_name or compiled.co_name,
+                co_name=f_code.co_name or stub.co_name,
                 co_freevars=(),
                 co_cellvars=(),
             )
