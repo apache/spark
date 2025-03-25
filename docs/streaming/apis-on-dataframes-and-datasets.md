@@ -983,7 +983,7 @@ as well as another streaming Dataset/DataFrame. The result of the streaming join
 incrementally, similar to the results of streaming aggregations in the previous section. In this
 section we will explore what type of joins (i.e. inner, outer, semi, etc.) are supported in the above
 cases. Note that in all the supported join types, the result of the join with a streaming
-Dataset/DataFrame will be exactly same as if it was with a static Dataset/DataFrame
+Dataset/DataFrame will be exactly the same as if it was with a static Dataset/DataFrame
 containing the same data in the stream.
 
 
