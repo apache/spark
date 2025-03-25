@@ -57,7 +57,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Empty expressions list
     checkError(
       exception = intercept[AnalysisException] {
-        MinuteExpressionBuilder.build("hour", Seq.empty)
+        HourExpressionBuilder.build("hour", Seq.empty)
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
