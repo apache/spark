@@ -565,7 +565,7 @@ class SparkToParquetSchemaConverter(
       case IntegerType | _: YearMonthIntervalType =>
         Types.primitive(INT32, repetition).named(field.name)
 
-      case LongType | _: DayTimeIntervalType =>
+      case LongType | _: DayTimeIntervalType | _: TimeType =>
         Types.primitive(INT64, repetition).named(field.name)
 
       case FloatType =>

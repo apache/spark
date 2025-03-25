@@ -36,8 +36,8 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -1636,20 +1636,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  ignore("TODO: Write TimestampNTZ type") {
-    // The configuration PARQUET_INFER_TIMESTAMP_NTZ_ENABLED doesn't affect the behavior of writes.
-    Seq(true, false).foreach { inferTimestampNTZ =>
-      withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> inferTimestampNTZ.toString) {
-        withTempPath { dir =>
-          val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
-          data.write.parquet(dir.getCanonicalPath)
-          assertResult(spark.read.parquet(dir.getCanonicalPath).schema) {
-            StructType(
-              StructField("col", TimestampNTZType, nullable = true) ::
-                Nil
-            )
-          }
-        }
+  test("Write Time type") {
+    withTempPath { dir =>
+      val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
+      data.write.parquet(dir.getCanonicalPath)
+      assertResult(spark.read.parquet(dir.getCanonicalPath).schema) {
+        StructType(
+          StructField("col", TimeType(), nullable = true) ::
+            Nil
+        )
       }
     }
   }
