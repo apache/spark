@@ -984,9 +984,11 @@ object StateStore extends Logging {
    */
   def unload(storeProviderId: StateStoreProviderId): Unit = {
     // Copy provider to a local list so we can release loadedProviders lock when closing.
-    val removedProvidersList: List[StateStoreProvider] = Nil
+    var removedProvidersList: List[StateStoreProvider] = Nil
     loadedProviders.synchronized {
-      loadedProviders.remove(storeProviderId).foreach(removedProvidersList :+ _)
+      loadedProviders.remove(storeProviderId).foreach { provider =>
+        removedProvidersList = provider :: removedProvidersList
+      }
     }
     removedProvidersList.foreach(_.close())
   }
