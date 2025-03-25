@@ -161,7 +161,6 @@ class BaseTracebackSqlTestsMixin:
         raise ValueError("bar")
 
     def test_udf(self):
-
         @sf.udf()
         def foo():
             raise ValueError("bar")
@@ -220,7 +219,6 @@ class BaseTracebackSqlTestsMixin:
         self.assertIn("""raise ValueError("bar")""", s)
 
     def test_udtf_analysis(self):
-
         @sf.udtf()
         class MyUdtf:
             @staticmethod
@@ -242,7 +240,6 @@ class BaseTracebackSqlTestsMixin:
         self.assertIn("""raise ValueError("bar")""", s)
 
     def test_udtf_execution(self):
-
         @sf.udtf(returnType="x int")
         class MyUdtf:
             def eval(self):
