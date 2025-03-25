@@ -778,7 +778,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
           val pb = new ProcessBuilder(args: _*)
           // So don't exclude spark-sql jar in classpath
           pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
-          pb.environment().remove("SPARK_CONNECT_MODE")
+          pb.environment().put("SPARK_CONNECT_MODE", "0")
           pb.environment().put("SPARK_IDENT_STRING", serverId)
           pb.environment().put("HOSTNAME", "local")
           pb.environment().put("SPARK_CONNECT_AUTHENTICATE_TOKEN", token)

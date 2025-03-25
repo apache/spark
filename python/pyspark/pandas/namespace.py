@@ -65,6 +65,7 @@ from pyspark.sql.types import (
     StringType,
     DateType,
     StructType,
+    StructField,
     DataType,
 )
 from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
@@ -85,6 +86,7 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
 from pyspark.pandas.internal import (
     InternalFrame,
+    InternalField,
     DEFAULT_SERIES_NAME,
     HIDDEN_COLUMNS,
     SPARK_INDEX_NAME_FORMAT,
@@ -1186,9 +1188,28 @@ def read_excel(
                 pdf = pdf_or_pser
 
             psdf = cast(DataFrame, from_pandas(pdf))
-            return_schema = force_decimal_precision_scale(
-                as_nullable_spark_type(psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema)
-            )
+
+            raw_schema = psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
+            index_scol_names = psdf._internal.index_spark_column_names
+            nullable_fields = []
+            for field in raw_schema.fields:
+                if field.name in index_scol_names:
+                    nullable_fields.append(field)
+                else:
+                    nullable_fields.append(
+                        StructField(
+                            field.name,
+                            as_nullable_spark_type(field.dataType),
+                            nullable=True,
+                            metadata=field.metadata,
+                        )
+                    )
+            nullable_schema = StructType(nullable_fields)
+            return_schema = force_decimal_precision_scale(nullable_schema)
+
+            return_data_fields: Optional[List[InternalField]] = None
+            if psdf._internal.data_fields is not None:
+                return_data_fields = [f.normalize_spark_type() for f in psdf._internal.data_fields]
 
             def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
                 pdf = pd.concat([pd_read_excel(bin, sn=sn) for bin in pdf[pdf.columns[0]]])
@@ -1211,8 +1232,7 @@ def read_excel(
                 .select("content")
                 .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
             )
-
-            return DataFrame(psdf._internal.with_new_sdf(sdf))
+            return DataFrame(psdf._internal.with_new_sdf(sdf, data_fields=return_data_fields))
 
         if isinstance(pdf_or_psers, dict):
             return {

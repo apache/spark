@@ -1399,6 +1399,8 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
   }
   override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
     copy(child = newChild)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(OFFSET)
 }
 
 /**

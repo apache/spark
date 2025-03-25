@@ -193,7 +193,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     case _: VariantType => false
 
     case _: AnsiIntervalType => false
-
+    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

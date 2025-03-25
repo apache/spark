@@ -8,11 +8,11 @@ ABab
 
 
 -- !query
-SELECT listagg(DISTINCT c1 COLLATE utf8_binary) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+WITH t(c1) AS (SELECT listagg(DISTINCT col1 COLLATE utf8_binary) FROM (VALUES ('a'), ('A'), ('b'), ('B'))) SELECT len(c1), regexp_count(c1, 'a'), regexp_count(c1, 'b'), regexp_count(c1, 'A'), regexp_count(c1, 'B') FROM t
 -- !query schema
-struct<listagg(DISTINCT collate(c1, utf8_binary), NULL):string>
+struct<len(c1):int,regexp_count(c1, a):int,regexp_count(c1, b):int,regexp_count(c1, A):int,regexp_count(c1, B):int>
 -- !query output
-aAbB
+4	1	1	1	1
 
 
 -- !query
@@ -33,11 +33,11 @@ aabb
 
 
 -- !query
-SELECT lower(listagg(DISTINCT c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+WITH t(c1) AS (SELECT lower(listagg(DISTINCT col1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('A'), ('b'), ('B'))) SELECT len(c1), regexp_count(c1, 'a'), regexp_count(c1, 'b') FROM t
 -- !query schema
-struct<lower(listagg(DISTINCT collate(c1, utf8_lcase), NULL)):string collate UTF8_LCASE>
+struct<len(c1):int,regexp_count(c1, a):int,regexp_count(c1, b):int>
 -- !query output
-ab
+2	1	1
 
 
 -- !query
@@ -49,11 +49,11 @@ ab
 
 
 -- !query
-SELECT rtrim(listagg(DISTINCT c1 COLLATE unicode_rtrim)) FROM (VALUES ('xbc  '), ('xbc '), ('a'), ('xbc')) AS t(c1)
+WITH t(c1) AS (SELECT replace(listagg(DISTINCT col1 COLLATE unicode_rtrim) COLLATE utf8_binary, ' ', '') FROM (VALUES ('xbc  '), ('xbc '), ('a'), ('xbc'))) SELECT len(c1), regexp_count(c1, 'a'), regexp_count(c1, 'xbc') FROM t
 -- !query schema
-struct<rtrim(listagg(DISTINCT collate(c1, unicode_rtrim), NULL)):string collate UNICODE_RTRIM>
+struct<len(c1):int,regexp_count(c1, a):int,regexp_count(c1, xbc):int>
 -- !query output
-axbc
+4	1	1
 
 
 -- !query

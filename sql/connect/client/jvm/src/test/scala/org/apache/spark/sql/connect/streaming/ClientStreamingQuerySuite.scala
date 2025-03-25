@@ -103,7 +103,8 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           lastProgress.stateOperators.head.customMetrics.keySet().asScala == Set(
             "loadedMapCacheHitCount",
             "loadedMapCacheMissCount",
-            "stateOnCurrentVersionSizeBytes"))
+            "stateOnCurrentVersionSizeBytes",
+            "SnapshotLastUploaded.partition_0_default"))
         assert(lastProgress.sources.nonEmpty)
         assert(lastProgress.sink.description == "MemorySink")
         assert(lastProgress.observedMetrics.isEmpty)

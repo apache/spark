@@ -30,7 +30,7 @@
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
 #   SPARK_NO_DAEMONIZE   If set, will run the proposed command in the foreground. It will not output a PID file.
 ##
-
+export SPARK_CONNECT_MODE=0
 usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|submit|decommission|status) <spark-command> <spark-instance-number> <args...>"
 
 # if no args specified, show usage
