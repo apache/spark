@@ -23,7 +23,7 @@ import tempfile
 import traceback
 import unittest
 
-import pyspark.sql.functions as F
+import pyspark.sql.functions as sf
 from pyspark.errors import PythonException
 from pyspark.errors.exceptions.base import AnalysisException
 from pyspark.errors.exceptions.tblib import Traceback
@@ -48,7 +48,7 @@ class TracebackTests(unittest.TestCase):
             _, _, tb = sys.exc_info()
             return traceback.format_exc(), "".join(traceback.format_tb(tb))
 
-    def make_traceback_with_temp_file(self, code="""def foo(): 1 / 0""", filename=""):
+    def make_traceback_with_temp_file(self, code="def foo(): 1 / 0", filename=""):
         with tempfile.NamedTemporaryFile("w", suffix=f"{filename}.py", delete=True) as f:
             f.write(code)
             f.flush()
@@ -61,7 +61,7 @@ class TracebackTests(unittest.TestCase):
                 _, _, tb = sys.exc_info()
                 return traceback.format_exc(), "".join(traceback.format_tb(tb))
             else:
-                assert False, "ZeroDivisionError not raised"
+                self.fail("Error not raised")
 
     def assert_traceback(self, tb: Traceback, expected: str):
         def remove_positions(s):
@@ -86,6 +86,26 @@ class TracebackTests(unittest.TestCase):
         s, expected = self.make_traceback_with_temp_file()
         linecache.clearcache()  # remove temp file from cache
         self.assert_traceback(Traceback.from_string(s), expected)
+
+    def test_recursion(self):
+        """
+        Don't parse [Previous line repeated n times] because it's expensive for large n.
+        Since the input string is not necessarily a Python traceback, Traceback should keep runtime
+        linear to the input string length to be safe from malicious inputs.
+        """
+
+        def foo(depth):
+            if depth > 0:
+                return foo(depth - 1)
+            raise 1 / 0
+
+        try:
+            foo(100)
+        except ZeroDivisionError:
+            s = traceback.format_exc()
+        actual = "".join(traceback.format_tb(Traceback.from_string(s).as_traceback()))
+        self.assertIn("[Previous line repeated", s)
+        self.assertNotIn("[Previous line repeated", actual)
 
     @unittest.skipIf(
         os.name != "posix",
@@ -141,7 +161,8 @@ class BaseTracebackSqlTestsMixin:
         raise ValueError("bar")
 
     def test_udf(self):
-        @F.udf()
+
+        @sf.udf()
         def foo():
             raise ValueError("bar")
 
@@ -199,14 +220,15 @@ class BaseTracebackSqlTestsMixin:
         self.assertIn("""raise ValueError("bar")""", s)
 
     def test_udtf_analysis(self):
-        @F.udtf()
+
+        @sf.udtf()
         class MyUdtf:
             @staticmethod
             def analyze():
                 raise ValueError("bar")
 
             def eval(self):
-                ...
+                pass
 
         try:
             MyUdtf().show()
@@ -220,7 +242,8 @@ class BaseTracebackSqlTestsMixin:
         self.assertIn("""raise ValueError("bar")""", s)
 
     def test_udtf_execution(self):
-        @F.udtf(returnType="x int")
+
+        @sf.udtf(returnType="x int")
         class MyUdtf:
             def eval(self):
                 raise ValueError("bar")

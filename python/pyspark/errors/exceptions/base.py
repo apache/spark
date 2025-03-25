@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from pyspark.sql.types import Row
 
 
+T = TypeVar("T", bound="PySparkException")
+
+
 class PySparkException(Exception):
     """
     Base Exception for handling errors generated from PySpark.
@@ -449,9 +452,6 @@ class QueryContext(ABC):
         Summary of the exception cause.
         """
         ...
-
-
-T = TypeVar("T", bound=PySparkException)
 
 
 def recover_python_exception(e: T) -> T:

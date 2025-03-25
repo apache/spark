@@ -305,9 +305,10 @@ class Traceback:
             if frame_match:
                 frames.append(frame_match.groupdict())
                 if lines and lines[-1].startswith("    "):  # code for the frame
+                    code = lines.pop().strip()
                     filename = frame_match.group("co_filename")
                     lineno = int(frame_match.group("tb_lineno"))
-                    cached_lines.setdefault(filename, {}).setdefault(lineno, lines.pop().strip())
+                    cached_lines.setdefault(filename, {}).setdefault(lineno, code)
             elif line.startswith("  "):
                 pass
             elif strict:
