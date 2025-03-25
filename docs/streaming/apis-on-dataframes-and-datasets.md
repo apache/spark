@@ -517,7 +517,7 @@ old windows correctly, as illustrated below.
 However, to run this query for days, it's necessary for the system to bound the amount of
 intermediate in-memory state it accumulates. This means the system needs to know when an old
 aggregate can be dropped from the in-memory state because the application is not going to receive
-late data for that aggregate any more. To enable this, in Spark 2.1, we have introduced
+late data for that aggregate anymore. To enable this, in Spark 2.1, we have introduced
 **watermarking**, which lets the engine automatically track the current event time in the data
 and attempt to clean up old state accordingly. You can define the watermark of a query by
 specifying the event time column and the threshold on how late the data is expected to be in terms of
@@ -621,8 +621,8 @@ is considered "too late" and therefore ignored. Note that after every trigger,
 the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by
 the Update mode.
 
-Some sinks (e.g. files) may not supported fine-grained updates that Update Mode requires. To work
-with them, we have also support Append Mode, where only the *final counts* are written to sink.
+Some sinks (e.g. files) may not support fine-grained updates that Update Mode requires. To work
+with them, we also support Append Mode, where only the *final counts* are written to sink.
 This is illustrated below.
 
 Note that using `withWatermark` on a non-streaming Dataset is no-op. As the watermark should not affect
@@ -983,7 +983,7 @@ as well as another streaming Dataset/DataFrame. The result of the streaming join
 incrementally, similar to the results of streaming aggregations in the previous section. In this
 section we will explore what type of joins (i.e. inner, outer, semi, etc.) are supported in the above
 cases. Note that in all the supported join types, the result of the join with a streaming
-Dataset/DataFrame will be the exactly the same as if it was with a static Dataset/DataFrame
+Dataset/DataFrame will be exactly the same as if it was with a static Dataset/DataFrame
 containing the same data in the stream.
 
 
@@ -1211,7 +1211,7 @@ A watermark delay of "2 hours" guarantees that the engine will never drop any da
 ##### Outer Joins with Watermarking
 While the watermark + event-time constraints is optional for inner joins, for outer joins
 they must be specified. This is because for generating the NULL results in outer join, the
-engine must know when an input row is not going to match with anything in future. Hence, the
+engine must know when an input row is not going to match with anything in the future. Hence, the
 watermark + event-time constraints must be specified for generating correct results. Therefore,
 a query with outer-join will look quite like the ad-monetization example earlier, except that
 there will be an additional parameter specifying it to be an outer-join.
@@ -1567,7 +1567,7 @@ joined
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
 
-- *With watermark* - If there is an upper bound on how late a duplicate record may arrive, then you can define a watermark on an event time column and deduplicate using both the guid and the event time columns. The query will use the watermark to remove old state data from past records that are not expected to get any duplicates any more. This bounds the amount of the state the query has to maintain.
+- *With watermark* - If there is an upper bound on how late a duplicate record may arrive, then you can define a watermark on an event time column and deduplicate using both the guid and the event time columns. The query will use the watermark to remove old state data from past records that are not expected to get any duplicates anymore. This bounds the amount of the state the query has to maintain.
 
 - *Without watermark* - Since there are no bounds on when a duplicate record may arrive, the query stores the data from all the past records as state.
 
@@ -1850,7 +1850,7 @@ Here are the configs regarding to RocksDB instance of the state store provider:
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.resetStatsOnLoad</td>
-    <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
+    <td>Whether we reset all ticker and histogram stats for RocksDB on load.</td>
     <td>True</td>
   </tr>
   <tr>
