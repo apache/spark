@@ -18,31 +18,17 @@
 import unittest
 from collections import defaultdict
 
-from pyspark.util import is_remote_only
-from pyspark.errors import (
-    PySparkException,
-    PySparkValueError,
-    RetriesExceeded,
-)
-from pyspark.sql import SparkSession as PySparkSession
+from pyspark.errors import RetriesExceeded
 from pyspark.testing.connectutils import (
     should_test_connect,
-    ReusedConnectTestCase,
     connect_requirement_message,
 )
 
 if should_test_connect:
     import grpc
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import DefaultChannelBuilder, ChannelBuilder
-    from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
+    from pyspark.sql.connect.client.core import Retrying
     from pyspark.sql.connect.client.retries import RetryPolicy
-    from pyspark.errors.exceptions.connect import (
-        AnalysisException,
-        SparkConnectException,
-        SparkConnectGrpcException,
-        SparkUpgradeException,
-    )
 
 
 if should_test_connect:
