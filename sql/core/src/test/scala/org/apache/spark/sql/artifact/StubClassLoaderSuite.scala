@@ -26,7 +26,9 @@ class StubClassLoaderSuite extends SparkFunSuite {
   // TODO: Modify JAR to remove references to connect.
   // See connector/client/jvm/src/test/resources/StubClassDummyUdf for how the UDFs and jars are
   // created.
-  private val udfNoAJar = "src/test/resources/artifact-tests/udf_noA.jar"
+  private var udfNoJarFile = new File(
+    "src/test/resources/artifact-tests/udf_noA.jar")
+  private lazy val udfNoAJar = udfNoJarFile.toURI.toURL
   private val classDummyUdf = "org.apache.spark.sql.connect.client.StubClassDummyUdf"
   private val classA = "org.apache.spark.sql.connect.client.A"
 
@@ -72,22 +74,22 @@ class StubClassLoaderSuite extends SparkFunSuite {
       error)
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "test: stub missing class") {
+  test("stub missing class") {
+    assume(udfNoJarFile.exists)
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
     // Install artifact without class A.
-    val sessionClassLoader = new ChildFirstURLClassLoader(
-      Array(new File(udfNoAJar).toURI.toURL), stubClassLoader, sysClassLoader)
+    val sessionClassLoader =
+      new ChildFirstURLClassLoader(Array(udfNoAJar), stubClassLoader, sysClassLoader)
     // Load udf with A used in the same class.
     loadDummyUdf(sessionClassLoader)
     // Class A should be stubbed.
     assert(stubClassLoader.lastStubbed === classA)
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "test: unload stub class") {
+  test("unload stub class") {
+    assume(udfNoJarFile.exists)
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
@@ -102,7 +104,7 @@ class StubClassLoaderSuite extends SparkFunSuite {
 
     // Creating a new class loader will unpack the udf correctly.
     val cl2 = new ChildFirstURLClassLoader(
-      Array(new File(udfNoAJar).toURI.toURL),
+      Array(udfNoAJar),
       stubClassLoader, // even with the same stub class loader.
       sysClassLoader)
     // Should be able to load after the artifact is added

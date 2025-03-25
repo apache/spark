@@ -1572,8 +1572,9 @@ class TaskSetManagerSuite
     verify(taskSetManagerSpy, times(1)).addPendingTask(0, false, false)
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "test: SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
+  test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(jarPath != null)
     sc = new SparkContext("local", "test")
     val addedJarsPreTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet.size === 0)
@@ -1589,7 +1590,6 @@ class TaskSetManagerSuite
     assert(taskOption2.get.artifacts.jars === addedJarsPreTaskSet)
 
     // even with a jar added mid-TaskSet
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     sc.addJar(jarPath.toString)
     val addedJarsMidTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet !== addedJarsMidTaskSet)

@@ -118,6 +118,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def singleChunkArtifactTest(path: String): Unit = {
     test(s"Single Chunk Artifact - $path") {
       val artifactPath = artifactFilePath.resolve(path)
+      assume(artifactPath.toFile.exists)
       artifactManager.addArtifact(artifactPath.toString)
 
       val receivedRequests = service.getAndClearLatestAddArtifactRequests()
@@ -143,10 +144,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   singleChunkArtifactTest("smallClassFile.class")
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests") {
-    singleChunkArtifactTest("smallJar.jar")
-  }
+  singleChunkArtifactTest("smallJar.jar")
 
   private def readNextChunk(in: InputStream): ByteString = {
     val buf = new Array[Byte](CHUNK_SIZE)
@@ -180,9 +178,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Chunked Artifact - junitLargeJar.jar") {
+  test("Chunked Artifact - junitLargeJar.jar") {
     val artifactPath = artifactFilePath.resolve("junitLargeJar.jar")
+    assume(artifactPath.toFile.exists)
     artifactManager.addArtifact(artifactPath.toString)
     // Expected chunks = roundUp( file_size / chunk_size) = 12
     // File size of `junitLargeJar.jar` is 384581 bytes.
@@ -200,10 +198,11 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     checkChunksDataAndCrc(artifactPath, dataChunks)
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Batched SingleChunkArtifacts") {
+  test("Batched SingleChunkArtifacts") {
     val file1 = artifactFilePath.resolve("smallClassFile.class").toUri
-    val file2 = artifactFilePath.resolve("smallJar.jar").toUri
+    val path = artifactFilePath.resolve("smallJar.jar")
+    val file2 = path.toUri
+    assume(path.toFile.exists)
     artifactManager.addArtifacts(Seq(file1, file2))
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
     // Single request containing 2 artifacts.
@@ -223,12 +222,15 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assertFileDataEquality(artifacts.get(1).getData, Paths.get(file2))
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Mix of SingleChunkArtifact and chunked artifact") {
+  test("Mix of SingleChunkArtifact and chunked artifact") {
     val file1 = artifactFilePath.resolve("smallClassFile.class").toUri
-    val file2 = artifactFilePath.resolve("junitLargeJar.jar").toUri
+    val path2 = artifactFilePath.resolve("junitLargeJar.jar")
+    assume(path2.toFile.exists)
+    val file2 = path2.toUri
     val file3 = artifactFilePath.resolve("smallClassFileDup.class").toUri
-    val file4 = artifactFilePath.resolve("smallJar.jar").toUri
+    val path4 = artifactFilePath.resolve("smallJar.jar")
+    assume(path4.toFile.exists)
+    val file4 = path4.toUri
     artifactManager.addArtifacts(Seq(file1, file2, file3, file4))
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
     // There are a total of 14 requests.

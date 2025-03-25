@@ -169,14 +169,14 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAn
     assertContains("Array[java.lang.Long] = Array(0L, 2L, 4L, 6L, 8L)", output)
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Client-side JAR") {
+  test("Client-side JAR") {
+    // scalastyle:off classforname line.size.limit
     val sparkHome = IntegrationTestUtils.sparkHome
     val testJar = Paths
       .get(s"$sparkHome/sql/connect/client/jvm/src/test/resources/TestHelloV2_$scalaVersion.jar")
       .toFile
 
-    assert(testJar.exists(), "Missing TestHelloV2 jar!")
+    assume(testJar.exists(), "Missing TestHelloV2 jar!")
     val input = s"""
         |import java.nio.file.Paths
         |def classLoadingTest(x: Int): Int = {

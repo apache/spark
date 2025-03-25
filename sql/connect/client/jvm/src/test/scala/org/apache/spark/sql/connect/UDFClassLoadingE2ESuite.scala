@@ -22,14 +22,11 @@ import java.nio.file.{Files, Paths}
 import scala.util.Properties
 
 import com.google.protobuf.ByteString
-import org.scalatest.Ignore
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.ProtoDataTypes
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
-
-@Ignore
 class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   private val scalaVersion = Properties.versionNumberString
@@ -40,8 +37,8 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
   // See src/test/resources/StubClassDummyUdf for how the UDFs and jars are created.
   private val udfByteArray: Array[Byte] =
     Files.readAllBytes(Paths.get(s"src/test/resources/udf$scalaVersion"))
-  private val udfJar =
-    new File(s"src/test/resources/udf$scalaVersion.jar").toURI.toURL
+  private val udfJarFile = new File(s"src/test/resources/udf$scalaVersion.jar")
+  private lazy val udfJar = udfJarFile.toURI.toURL
 
   private def registerUdf(session: SparkSession): Unit = {
     val builder = proto.CommonInlineUserDefinedFunction
@@ -58,6 +55,7 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
   }
 
   test("update class loader after stubbing: new session") {
+    assume(udfJarFile.exists)
     // Session1 should stub the missing class, but fail to call methods on it
     val session1 = spark.newSession()
 
@@ -74,6 +72,7 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
   }
 
   test("update class loader after stubbing: same session") {
+    assume(udfJarFile.exists)
     // Session should stub the missing class, but fail to call methods on it
     val session = spark.newSession()
 

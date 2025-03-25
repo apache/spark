@@ -24,28 +24,33 @@ import org.apache.spark.util.Utils
 
 class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Executor classloader isolation with JobArtifactSet") {
-    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-
+  test("Executor classloader isolation with JobArtifactSet") {
     val scalaVersion = Properties.versionNumberString
       .split("\\.")
       .take(2)
       .mkString(".")
 
-    val jar1 = Thread.currentThread.getContextClassLoader.getResource("TestUDTF.jar").toString
+    val testJar1 = Thread.currentThread.getContextClassLoader.getResource("TestUDTF.jar")
+    assume(testJar1 != null)
+    val testJar2 = Thread.currentThread.getContextClassLoader
+      .getResource(s"TestHelloV2_$scalaVersion.jar")
+    assume(testJar2 != null)
+    val testJar3 = Thread.currentThread.getContextClassLoader
+      .getResource(s"TestHelloV3_$scalaVersion.jar")
+    assume(testJar3 != null)
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+    val jar1 = testJar1.toString
 
     // package com.example
     // object Hello { def test(): Int = 2 }
     // case class Hello(x: Int, y: Int)
-    val jar2 = Thread.currentThread.getContextClassLoader
-      .getResource(s"TestHelloV2_$scalaVersion.jar").toString
+    val jar2 = testJar2.toString
 
     // package com.example
     // object Hello { def test(): Int = 3 }
     // case class Hello(x: String)
-    val jar3 = Thread.currentThread.getContextClassLoader
-      .getResource(s"TestHelloV3_$scalaVersion.jar").toString
+    val jar3 = testJar3.toString
 
     sc.addJar(jar1)
     sc.addJar(jar2)
