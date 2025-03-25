@@ -940,9 +940,9 @@ def read_excel(
     comment: Optional[str] = None,
     skipfooter: int = 0,
     **kwds: Any,
-) -> Union[DataFrame, Dict[str, DataFrame]]:
+) -> Union[DataFrame, Series, Dict[str, Union[DataFrame, Series]]]:
     """
-    Read an Excel file into a pandas-on-Spark DataFrame.
+    Read an Excel file into a pandas-on-Spark DataFrame or Series.
 
     Support both `xls` and `xlsx` file extensions from a local filesystem or URL.
     Support an option to read a single sheet or a list of sheets.
@@ -1135,7 +1135,7 @@ def read_excel(
         io_or_bin: Any,
         sn: Union[str, int, List[Union[str, int]], None],
         nr: Optional[int] = None,
-    ) -> Union[pd.DataFrame, Dict[Any, pd.DataFrame]]:
+    ) -> pd.DataFrame:
         return pd.read_excel(
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
             sheet_name=sn,
@@ -1163,11 +1163,14 @@ def read_excel(
 
     if not isinstance(io, str):
         # When io is not a path, always need to load all data to python side
-        pdf_or_dict = pd_read_excel(io, sn=sheet_name, nr=nrows)
-        if isinstance(pdf_or_dict, dict):
-            return {sn: cast(DataFrame, from_pandas(pdf)) for sn, pdf in pdf_or_dict.items()}
+        pdf_or_psers = pd_read_excel(io, sn=sheet_name, nr=nrows)
+        if isinstance(pdf_or_psers, dict):
+            return {
+                sn: cast(Union[DataFrame, Series], from_pandas(pdf_or_pser))
+                for sn, pdf_or_pser in pdf_or_psers.items()
+            }
         else:
-            return cast(DataFrame, from_pandas(pdf_or_dict))
+            return cast(Union[DataFrame, Series], from_pandas(pdf_or_psers))
 
     spark = default_session()
 
@@ -1193,9 +1196,14 @@ def read_excel(
     sampled = pickle.loads(sampled[0])
 
     def read_excel_on_spark(
-        pdf: pd.DataFrame,
+        pdf_or_pser: Union[pd.DataFrame, pd.Series],
         sn: Union[str, int, List[Union[str, int]], None],
     ) -> Union[DataFrame, Series]:
+        if isinstance(pdf_or_pser, pd.Series):
+            pdf = pdf_or_pser.to_frame()
+        else:
+            pdf = pdf_or_pser
+
         psdf = cast(DataFrame, from_pandas(pdf))
 
         raw_schema = psdf._internal.spark_frame.drop(*HIDDEN_COLUMNS).schema
@@ -1243,7 +1251,7 @@ def read_excel(
         return DataFrame(psdf._internal.with_new_sdf(sdf, data_fields=return_data_fields))
 
     if isinstance(sampled, dict):
-        return {sn: read_excel_on_spark(pdf, sn) for sn, pdf in sampled.items()}
+        return {sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in sampled.items()}
     else:
         return read_excel_on_spark(sampled, sheet_name)
 
