@@ -9,66 +9,100 @@ Aggregate [listagg(c1#x, null, collate(c1#x, utf8_binary) ASC NULLS FIRST, 0, 0)
 
 
 -- !query
-SELECT listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+WITH t(c1) AS (SELECT listagg(DISTINCT col1 COLLATE utf8_binary) FROM (VALUES ('a'), ('A'), ('b'), ('B'))) SELECT len(c1), regexp_count(c1, 'a'), regexp_count(c1, 'b'), regexp_count(c1, 'A'), regexp_count(c1, 'B') FROM t
 -- !query analysis
-Aggregate [listagg(c1#x, null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST)#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(DISTINCT collate(col1, utf8_binary), NULL)#x AS c1#x]
+:        +- Aggregate [listagg(distinct collate(col1#x, utf8_binary), null, 0, 0) AS listagg(DISTINCT collate(col1, utf8_binary), NULL)#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(c1#x) AS len(c1)#x, regexp_count(c1#x, a) AS regexp_count(c1, a)#x, regexp_count(c1#x, b) AS regexp_count(c1, b)#x, regexp_count(c1#x, A) AS regexp_count(c1, A)#x, regexp_count(c1#x, B) AS regexp_count(c1, B)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
+
+
+-- !query
+WITH t(c1) AS (SELECT listagg(col1) WITHIN GROUP (ORDER BY col1) FROM (VALUES ('abc  '), ('abc '), ('abc\n'), ('abc'), ('x'))) SELECT replace(replace(c1, ' ', ''), '\n', '$') FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x AS c1#x]
+:        +- Aggregate [listagg(col1#x, null, col1#x ASC NULLS FIRST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [replace(replace(c1#x,  , ), 
+, $) AS replace(replace(c1,  , ), 
+, $)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
+
+
+-- !query
+SELECT lower(listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+-- !query analysis
+Aggregate [lower(listagg(c1#x, null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0)) AS lower(listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST))#x]
 +- SubqueryAlias t
    +- Project [col1#x AS c1#x]
       +- LocalRelation [col1#x]
 
 
 -- !query
-SELECT listagg(DISTINCT c1 COLLATE utf8_binary) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+WITH t(c1) AS (SELECT lower(listagg(DISTINCT col1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('A'), ('b'), ('B'))) SELECT len(c1), regexp_count(c1, 'a'), regexp_count(c1, 'b') FROM t
 -- !query analysis
-Aggregate [listagg(distinct collate(c1#x, utf8_binary), null, 0, 0) AS listagg(DISTINCT collate(c1, utf8_binary), NULL)#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [lower(listagg(DISTINCT collate(col1, utf8_lcase), NULL))#x AS c1#x]
+:        +- Aggregate [lower(listagg(distinct collate(col1#x, utf8_lcase), null, 0, 0)) AS lower(listagg(DISTINCT collate(col1, utf8_lcase), NULL))#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(c1#x) AS len(c1)#x, regexp_count(c1#x, a) AS regexp_count(c1, a)#x, regexp_count(c1#x, b) AS regexp_count(c1, b)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
+
+
+-- !query
+SELECT lower(listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('B'), ('b'), ('A')) AS t(c1)
+-- !query analysis
+Aggregate [lower(listagg(distinct collate(c1#x, utf8_lcase), null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0)) AS lower(listagg(DISTINCT collate(c1, utf8_lcase), NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST))#x]
 +- SubqueryAlias t
    +- Project [col1#x AS c1#x]
       +- LocalRelation [col1#x]
 
 
 -- !query
-SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
+WITH t(c1) AS (SELECT replace(listagg(DISTINCT col1 COLLATE unicode_rtrim) COLLATE utf8_binary, ' ', '') FROM (VALUES ('xbc  '), ('xbc '), ('a'), ('xbc'))) SELECT len(c1), regexp_count(c1, 'a'), regexp_count(c1, 'xbc') FROM t
 -- !query analysis
-Aggregate [listagg(distinct collate(c1#x, utf8_lcase), null, 0, 0) AS listagg(DISTINCT collate(c1, utf8_lcase), NULL)#x]
-+- SubqueryAlias t
-   +- Project [col1#x AS c1#x]
-      +- LocalRelation [col1#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [replace(collate(listagg(DISTINCT collate(col1, unicode_rtrim), NULL), utf8_binary),  , )#x AS c1#x]
+:        +- Aggregate [replace(collate(listagg(distinct collate(col1#x, unicode_rtrim), null, 0, 0), utf8_binary),  , ) AS replace(collate(listagg(DISTINCT collate(col1, unicode_rtrim), NULL), utf8_binary),  , )#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(c1#x) AS len(c1)#x, regexp_count(c1#x, a) AS regexp_count(c1, a)#x, regexp_count(c1#x, xbc) AS regexp_count(c1, xbc)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
 
 
 -- !query
-SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase) FROM (VALUES ('a'), ('B'), ('b'), ('A')) AS t(c1)
+WITH t(c1) AS (SELECT listagg(col1) WITHIN GROUP (ORDER BY col1 COLLATE unicode_rtrim) FROM (VALUES ('abc '), ('abc\n'), ('abc'), ('x'))) SELECT replace(replace(c1, ' ', ''), '\n', '$') FROM t
 -- !query analysis
-Aggregate [listagg(distinct collate(c1#x, utf8_lcase), null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT collate(c1, utf8_lcase), NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST)#x]
-+- SubqueryAlias t
-   +- Project [col1#x AS c1#x]
-      +- LocalRelation [col1#x]
-
-
--- !query
-SELECT listagg(DISTINCT c1 COLLATE unicode_rtrim) FROM (VALUES ('abc  '), ('abc '), ('x'), ('abc')) AS t(c1)
--- !query analysis
-Aggregate [listagg(distinct collate(c1#x, unicode_rtrim), null, 0, 0) AS listagg(DISTINCT collate(c1, unicode_rtrim), NULL)#x]
-+- SubqueryAlias t
-   +- Project [col1#x AS c1#x]
-      +- LocalRelation [col1#x]
-
-
--- !query
-SELECT listagg(c1) WITHIN GROUP (ORDER BY c1) FROM (VALUES ('abc  '), ('abc '), ('abc\n'), ('abc'), ('x')) AS t(c1)
--- !query analysis
-Aggregate [listagg(c1#x, null, c1#x ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY c1 ASC NULLS FIRST)#x]
-+- SubqueryAlias t
-   +- Project [col1#x AS c1#x]
-      +- LocalRelation [col1#x]
-
-
--- !query
-SELECT listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE unicode_rtrim) FROM (VALUES ('abc  '), ('abc '), ('abc\n'), ('abc'), ('x')) AS t(c1)
--- !query analysis
-Aggregate [listagg(c1#x, null, collate(c1#x, unicode_rtrim) ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, unicode_rtrim) ASC NULLS FIRST)#x]
-+- SubqueryAlias t
-   +- Project [col1#x AS c1#x]
-      +- LocalRelation [col1#x]
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col1, NULL) WITHIN GROUP (ORDER BY collate(col1, unicode_rtrim) ASC NULLS FIRST)#x AS c1#x]
+:        +- Aggregate [listagg(col1#x, null, collate(col1#x, unicode_rtrim) ASC NULLS FIRST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY collate(col1, unicode_rtrim) ASC NULLS FIRST)#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [replace(replace(c1#x,  , ), 
+, $) AS replace(replace(c1,  , ), 
+, $)#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
 
 
 -- !query

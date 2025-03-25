@@ -206,8 +206,8 @@ object VariantPathParser extends RegexParsers {
   // Parse key segment like `.name`, `['name']`, or `["name"]`.
   private def key: Parser[VariantPathSegment] =
     for {
-      key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']" |
-        "[\"" ~> "[^\\\"\\?]+".r <~ "\"]"
+      key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^']*".r <~ "']" |
+        "[\"" ~> """[^"]*""".r <~ "\"]"
     } yield {
       ObjectExtraction(key)
     }

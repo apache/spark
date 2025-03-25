@@ -21,6 +21,7 @@ import java.io._
 import java.net.URI
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
+import java.time.{LocalDate, LocalDateTime}
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
@@ -959,6 +960,36 @@ abstract class AvroSuite
         Seq(Row(1D),
           Row(-3.4028234663852886E38D), Row(1.401298464324817E-45D), Row(3.4028234663852886E38D),
           Row(Double.NaN), Row(Double.NegativeInfinity), Row(Double.PositiveInfinity))
+      )
+    }
+  }
+
+  test("SPARK-49082: Widening date to timestampNTZ in AvroDeserializer") {
+    withTempPath { tempPath =>
+      // Since timestampNTZ only supports timestamps from
+      // -290308-12-21 BCE 19:59:06 to +294247-01-10 CE 04:00:54,
+      // dates outside of this range cannot be widened to timestampNTZ
+      // and will throw an ArithmeticException.
+      val datePath = s"$tempPath/date_data"
+      val dateDf =
+        Seq(LocalDate.of(2024, 1, 1),
+          LocalDate.of(2024, 1, 2),
+          LocalDate.of(1312, 2, 27),
+          LocalDate.of(0, 1, 1),
+          LocalDate.of(-1, 12, 31),
+          LocalDate.of(-290308, 12, 22), // minimum timestampNTZ date
+          LocalDate.of(294247, 1, 10)) // maximum timestampNTZ date
+        .toDF("col")
+      dateDf.write.format("avro").save(datePath)
+      checkAnswer(
+        spark.read.schema("col TIMESTAMP_NTZ").format("avro").load(datePath),
+        Seq(Row(LocalDateTime.of(2024, 1, 1, 0, 0)),
+          Row(LocalDateTime.of(2024, 1, 2, 0, 0)),
+          Row(LocalDateTime.of(1312, 2, 27, 0, 0)),
+          Row(LocalDateTime.of(0, 1, 1, 0, 0)),
+          Row(LocalDateTime.of(-1, 12, 31, 0, 0)),
+          Row(LocalDateTime.of(-290308, 12, 22, 0, 0)),
+          Row(LocalDateTime.of(294247, 1, 10, 0, 0)))
       )
     }
   }
@@ -3084,6 +3115,22 @@ abstract class AvroSuite
         val df = spark.read.format("avro").load(file)
         assert(df.count() == 0)
       }
+    }
+  }
+
+  test("SPARK-51590: unsupported the TIME data types in Avro") {
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select time'12:01:02' as t")
+            .write.format("avro").mode("overwrite").save(tempDir)
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`t`",
+          "columnType" -> s"\"${TimeType().sql}\"",
+          "format" -> "Avro"))
     }
   }
 }

@@ -30,11 +30,9 @@ class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog with Pro
   protected val functions: util.Map[Identifier, UnboundFunction] =
     new ConcurrentHashMap[Identifier, UnboundFunction]()
 
-  override protected def allNamespaces: Seq[Seq[String]] = {
-    (tables.keySet.asScala.map(_.namespace.toSeq) ++
-      functions.keySet.asScala.map(_.namespace.toSeq) ++
-      namespaces.keySet.asScala).toSeq.distinct
-  }
+  override protected def allNamespaces: Seq[Seq[String]] =
+    (super.allNamespaces ++ functions.keySet.asScala.map(_.namespace.toSeq)).distinct
+
 
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {
     if (namespace.isEmpty || namespaceExists(namespace)) {

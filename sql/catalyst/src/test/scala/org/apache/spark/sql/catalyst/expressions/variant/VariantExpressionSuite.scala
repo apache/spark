@@ -455,7 +455,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         |"category":"fiction","reader":[{"age":25,"name":"bob"},{"age":26,"name":"jack"}],
         |"price":22.99,"isbn":"0-395-19395-8"}],"bicycle":{"price":19.95,"color":"red"}},
         |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
-        |"fb:testid":"1234"}
+        |"fb:testid":"1234","":"empty string","?":"Question Mark?"}
         |""".stripMargin
     testVariantGet(json, "$.store.bicycle", StringType, """{"color":"red","price":19.95}""")
     checkEvaluation(
@@ -469,6 +469,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
     testVariantGet(json, "$.store.bicycle.color", StringType, "red")
     testVariantGet(json, "$.store.bicycle.price", DoubleType, 19.95)
+    testVariantGet(json, "$[\"\"]", StringType, "empty string")
+    testVariantGet(json, "$['']", StringType, "empty string")
+    testVariantGet(json, "$[\"?\"]", StringType, "Question Mark?")
+    testVariantGet(json, "$['?']", StringType, "Question Mark?")
     testVariantGet(
       json,
       "$.store.book",
@@ -678,6 +682,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$1")
     checkInvalidPath("$[-1]")
     checkInvalidPath("""$['"]""")
+
+    checkInvalidPath("$[\"\"\"]")
+    checkInvalidPath("$[\"\\\"\"]")
   }
 
   test("cast from variant") {
