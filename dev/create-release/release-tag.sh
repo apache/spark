@@ -106,6 +106,8 @@ sed -i".tmp7" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$NEXT_VERSION"'/g' docs/_con
 sed -i".tmp8" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"'/g' docs/_config.yml
 # Update the version index of DocSearch as the short version
 sed -i".tmp9" "s/'facetFilters':.*$/'facetFilters': [\"version:$R_NEXT_VERSION\"]/g" docs/_config.yml
+# Remove test jars that do not beling to source releases.
+rm $(<dev/test-jars.txt)
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
