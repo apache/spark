@@ -4509,9 +4509,10 @@ object SQLConf {
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(mode => Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED", "OFF").contains(mode),
+    .checkValue(mode =>
+      Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED", "OFF").contains(mode),
       "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'simple', 'extended', " +
-        "'codegen', 'cost', 'formatted', and 'off'.")
+      "'codegen', 'cost', 'formatted', and 'off'.")
     .createWithDefault("formatted")
 
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
