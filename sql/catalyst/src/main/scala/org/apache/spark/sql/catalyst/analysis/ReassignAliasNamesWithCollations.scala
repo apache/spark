@@ -17,11 +17,21 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Literal}
+import java.util.HashMap
+
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  AttributeReference,
+  Cast,
+  Expression,
+  ExprId,
+  Literal
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.ALIAS
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ALIAS, ATTRIBUTE_REFERENCE}
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -41,21 +51,52 @@ import org.apache.spark.sql.types.StringType
  *
  * In the second case literal 'a' does not have "collate" information after it because
  * [[ResolveAliases]] runs before [[AnsiCombinedTypeCoercionRule]].
+ *
+ * After refenerating [[Alias]] names we have to reassign all the relevant [[AttributeReference]]s
+ * in the tree, because those still have the old alias names:
+ *
+ * {{{
+ * -- Reference after the star expansion needs to get new name as well
+ * SELECT * FROM (
+ *   SELECT CONCAT_WS('a', col1, col1) FROM VALUES ('a' COLLATE UTF8_LCASE);
+ * );
+ * }}}
  */
 object ReassignAliasNamesWithCollations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveExpressionsWithPruning(_.containsPattern(ALIAS)) {
-      case a: Alias
-          if a.resolved &&
-          a.metadata.contains(AUTO_GENERATED_ALIAS) &&
-          hasNonDefaultCollationInTheSubtree(a.child) =>
-        val newName = toPrettySQL(a.child)
-        if (newName != a.name) {
-          a.withName(newName)
-        } else {
-          a
-        }
+    if (!conf.getConf(SQLConf.REASSIGN_ALIAS_NAMES_WITH_COLLATIONS)) {
+      plan
+    } else {
+      reassignNames(plan)
     }
+  }
+
+  private def reassignNames(plan: LogicalPlan): LogicalPlan = {
+    val regeneratedAliasNames = new HashMap[ExprId, String]
+
+    val planWithRegeneratedAliases = plan
+      .resolveExpressionsWithPruning(_.containsPattern(ALIAS)) {
+        case a: Alias
+            if a.resolved &&
+            a.metadata.contains(AUTO_GENERATED_ALIAS) &&
+            hasNonDefaultCollationInTheSubtree(a.child) =>
+          val newName = toPrettySQL(a.child)
+          if (newName != a.name) {
+            regeneratedAliasNames.put(a.exprId, newName)
+            a.withName(newName)
+          } else {
+            a
+          }
+      }
+
+    planWithRegeneratedAliases
+      .resolveExpressionsWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
+        case attributeReference: AttributeReference =>
+          regeneratedAliasNames.get(attributeReference.exprId) match {
+            case null => attributeReference
+            case newName => attributeReference.withName(newName)
+          }
+      }
   }
 
   /**

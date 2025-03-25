@@ -5514,6 +5514,153 @@ kitten	sitTing
 
 
 -- !query
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select subq1.* from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+) AS subq1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+with cte as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+select * from cte
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select * from values (1) where exists (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+select (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+)
+-- !query schema
+struct<scalarsubquery():string collate UTF8_LCASE>
+-- !query output
+Something else. Nothing here. Something else. Nothing here.
+
+
+-- !query
+select (
+  with cte as (
+    select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  )
+  select * from cte limit 1
+)
+-- !query schema
+struct<scalarsubquery():string collate UTF8_LCASE>
+-- !query output
+Something else. Nothing here. Something else. Nothing here.
+
+
+-- !query
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 group by 1 order by 1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+a a
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+aBcDCbA aBcDCbA
+efd2 efd2
+Hello, world! Nice day. Hello, world! Nice day.
+İo  İo 
+i̇o i̇o
+sitTing sitTing
+Something else. Nothing here. Something else. Nothing here.
+SQL SQL
+
+
+-- !query
 drop table t5
 -- !query schema
 struct<>

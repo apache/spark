@@ -442,6 +442,39 @@ select RTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_bina
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5;
 select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
 
+-- ReassignAliasNamesWithCollations regenerates Alias and AttributeReference names
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5;
+
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+);
+
+select subq1.* from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+) AS subq1;
+
+with cte as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+select * from cte;
+
+select * from values (1) where exists (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+);
+
+select (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+);
+
+select (
+  with cte as (
+    select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  )
+  select * from cte limit 1
+);
+
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 group by 1 order by 1;
+
 drop table t5;
 drop table t6;
 drop table t7;

@@ -5651,6 +5651,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REASSIGN_ALIAS_NAMES_WITH_COLLATIONS =
+    buildConf("spark.sql.reassignAliasNamesWithCollations.enabled")
+      .internal()
+      .doc(
+        "When set to true, ReassignAliasNamesWithCollations rule runs at the end of Analyzer " +
+        "batches. This rule is necessary to have deterministic implicit alias names for collated " +
+        "expression trees. See SPARK-51428 for more details."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
