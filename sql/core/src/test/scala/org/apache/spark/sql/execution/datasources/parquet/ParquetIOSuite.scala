@@ -41,6 +41,7 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
@@ -1602,8 +1603,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val schema = MessageTypeParser.parseMessageType(
       """message root {
         |  required int64 time_micros(TIME(MICROS,false));
-        |}
-      """.stripMargin)
+        |}""".stripMargin)
 
     for (dictEnabled <- Seq(true, false)) {
       withTempDir { dir =>
@@ -1613,38 +1613,28 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
         (0 until numRecords).foreach { i =>
           val record = new SimpleGroup(schema)
-          record.add(0, 1000000L) // micros
+          record.add(0, localTime(23, 59, 59, 123456))
           writer.write(record)
         }
         writer.close
 
         withAllParquetReaders {
           val df = spark.read.parquet(tablePath.toString)
-          assertResult(df.schema) {
-            StructType(
-              StructField("time_micros", TimeType(), nullable = true) ::
-              Nil
-            )
-          }
-
-          val ntz_value = LocalTime.of(0, 0, 1)
-          val exp = (0 until numRecords).map { _ => (ntz_value) }.toDF()
-
-          checkAnswer(df, exp)
+          assertResult(df.schema) { new StructType().add("time_micros", TimeType()) }
+          val lt = LocalTime.of(23, 59, 59, 123456000)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
         }
       }
     }
   }
 
-  test("Write Time type") {
+  test("Write TimeType") {
     withTempPath { dir =>
       val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
       data.write.parquet(dir.getCanonicalPath)
       assertResult(spark.read.parquet(dir.getCanonicalPath).schema) {
-        StructType(
-          StructField("col", TimeType(), nullable = true) ::
-            Nil
-        )
+        new StructType().add("col", TimeType())
       }
     }
   }
