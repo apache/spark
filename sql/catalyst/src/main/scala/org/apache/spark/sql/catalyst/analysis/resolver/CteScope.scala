@@ -21,7 +21,13 @@ import java.util.{ArrayDeque, ArrayList}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
+import org.apache.spark.sql.catalyst.plans.logical.{
+  CTERelationDef,
+  LogicalPlan,
+  UnresolvedWith,
+  WithCTE
+}
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
 
 /**
  * The [[CteScope]] is responsible for keeping track of visible and known CTE definitions at a given
@@ -98,6 +104,67 @@ import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
  *    :  +- ...
  *    }}}
  *
+ *  - The [[WithCTE]] operator is placed on top of the resolved operator if one of the following
+ *    conditions are met:
+ *      1. We just resolved an [[UnresolvedWith]], which is the topmost [[UnresolvedWith]] of this
+ *         root query, view or an expression subquery.
+ *      2. In case there is no single topmost [[UnresolvedWith]], we pick the least common ancestor
+ *         of those branches. This is going to be a multi-child operator - [[Union]], [[Join]], etc.
+ *
+ *    Here's an example for the second case:
+ *
+ *    {{{
+ *    SELECT * FROM (
+ *      WITH cte AS (
+ *        SELECT 1
+ *      )
+ *      SELECT * FROM cte
+ *      UNION ALL
+ *      (
+ *        WITH cte AS (
+ *          SELECT 2
+ *        )
+ *        SELECT * FROM cte
+ *      )
+ *    )
+ *    }}}
+ *
+ *    ->
+ *
+ *    {{{
+ *    Project [1#60]
+ *    +- SubqueryAlias __auto_generated_subquery_name
+ *       +- WithCTE
+ *          :- CTERelationDef 30, false
+ *          :  +- ...
+ *          :- CTERelationDef 31, false
+ *          :  +- ...
+ *          +- Union false, false
+ *             :- Project [1#60]
+ *             :  +- ...
+ *             +- Project [2#61]
+ *                +- ...
+ *    }}}
+ *
+ *    Consider a different example though:
+ *
+ *    {{{
+ *    SELECT * FROM (
+ *      SELECT 1
+ *      UNION ALL
+ *      (
+ *        WITH cte AS (
+ *          SELECT 2
+ *        )
+ *        SELECT * FROM cte
+ *      )
+ *    )
+ *    }}}
+ *
+ *    The [[Union]] operator is not the least common ancestor of the [[UnresolvedWith]]s in the
+ *    query. In fact, there's just a single [[UnresolvedWith]], which is a proper place where we
+ *    need to place a [[WithCTE]].
+ *
  *  - However, if we have any expression subquery (scalar/IN/EXISTS...), the top
  *    [[CTERelationDef]]s and subquery's [[CTERelationDef]] won't be merged together (as they are
  *    separated by an expression tree):
@@ -168,6 +235,19 @@ class CteScope(val isRoot: Boolean, val isOpaque: Boolean) {
   private val visibleCtes = new IdentifierMap[CTERelationDef]
 
   /**
+   * Optionally put [[WithCTE]] on top of the `resolvedOperator`. This is done just for the root
+   * scopes in the context of a correct `unresolvedOperator`. Return the `resolvedOperator`
+   * otherwise.
+   */
+  def tryPutWithCTE(unresolvedOperator: LogicalPlan, resolvedOperator: LogicalPlan): LogicalPlan = {
+    if (!knownCtes.isEmpty && isRoot && isSuitableOperatorForWithCTE(unresolvedOperator)) {
+      WithCTE(resolvedOperator, knownCtes.asScala.toSeq)
+    } else {
+      resolvedOperator
+    }
+  }
+
+  /**
    * Register a new CTE definition in this scope. Since the scope is created per single WITH clause,
    * there can be no name conflicts, but this is validated by the Parser in [[AstBuilder]]
    * using [[QueryParsingErrors.duplicateCteDefinitionNamesError]]. This definition will be both
@@ -197,11 +277,17 @@ class CteScope(val isRoot: Boolean, val isOpaque: Boolean) {
   }
 
   /**
-   * Get all known (from this and child scopes) [[CTERelationDef]]s. This is used to construct
-   * [[WithCTE]] from a root scope.
+   * This predicate returns `true` if the `unresolvedOperator` is suitable to place a [[WithCTE]]
+   * on top of its resolved counterpart. This is the case for:
+   *  - [[UnresolvedWith]];
+   *  - Multi-child operators with [[UnresolvedWith]]s in multiple subtrees.
    */
-  def getKnownCtes: Seq[CTERelationDef] = {
-    knownCtes.asScala.toSeq
+  private def isSuitableOperatorForWithCTE(unresolvedOperator: LogicalPlan): Boolean = {
+    unresolvedOperator match {
+      case _: UnresolvedWith => true
+      case _ =>
+        CteRegistry.isSuitableMultiChildOperatorForWithCTE(unresolvedOperator)
+    }
   }
 }
 
@@ -214,6 +300,29 @@ class CteRegistry {
   stack.push(new CteScope(isRoot = true, isOpaque = true))
 
   def currentScope: CteScope = stack.peek()
+
+  /**
+   * This is a [[withNewScope]] variant specifically designed to be called above multi-child
+   * operator children resolution (e.g. for children of a [[Join]] or [[Union]]).
+   *
+   * The `isRoot` flag has to be propagated from the parent scope if all of the following
+   * conditions are met:
+   *  - The current scope is a root scope
+   *  - The multi-child `unresolvedOperator` IS NOT suitable to place a [[WithCTE]]
+   *  - Some operator in `unresolvedChild` subtree IS suitable to place a [[WithCTE]].
+   */
+  def withNewScopeUnderMultiChildOperator[R](
+      unresolvedOperator: LogicalPlan,
+      unresolvedChild: LogicalPlan
+  )(body: => R): R = {
+    withNewScope(
+      isRoot = currentScope.isRoot &&
+        !CteRegistry.isSuitableMultiChildOperatorForWithCTE(unresolvedOperator) &&
+        CteRegistry.hasSuitableOperatorForWithCTEInSubtree(unresolvedChild)
+    ) {
+      body
+    }
+  }
 
   /**
    * A RAII-wrapper for pushing/popping scopes. This is used by the [[Resolver]] to create a new
@@ -253,5 +362,21 @@ class CteRegistry {
     }
 
     result
+  }
+}
+
+object CteRegistry {
+
+  /**
+   * This predicate returns `true` if the `unresolvedOperator` is a multi-child operator that
+   * contains multiple [[UnresolvedWith]] operators in its subtrees. This way we determine if
+   * this operator is suitable to place a [[WithCTE]] on top of its resolved counterpart.
+   */
+  def isSuitableMultiChildOperatorForWithCTE(unresolvedOperator: LogicalPlan): Boolean = {
+    unresolvedOperator.children.count(hasSuitableOperatorForWithCTEInSubtree(_)) > 1
+  }
+
+  def hasSuitableOperatorForWithCTEInSubtree(unresolvedOperator: LogicalPlan): Boolean = {
+    unresolvedOperator.containsPattern(UNRESOLVED_WITH)
   }
 }

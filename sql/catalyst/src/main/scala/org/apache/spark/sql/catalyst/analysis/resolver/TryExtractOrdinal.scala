@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral}
 
 /**
- * Structure used to return results of the resolved project list.
- *  - expressions: The resolved expressions. It is resolved using the
- *                 `resolveExpressionTreeInOperator`.
- *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
- *                             expressions.
- *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
+ * Try to extract ordinal from an expression. Return `Some(ordinal)` if the type of the expression
+ * is [[IntegerLitera]], `None` otherwise.
  */
-case class ResolvedProjectList(
-    expressions: Seq[NamedExpression],
-    hasAggregateExpressions: Boolean,
-    hasLateralColumnAlias: Boolean)
+object TryExtractOrdinal {
+  def apply(expression: Expression): Option[Int] = {
+    expression match {
+      case IntegerLiteral(literal) =>
+        Some(literal)
+      case other => None
+    }
+  }
+}

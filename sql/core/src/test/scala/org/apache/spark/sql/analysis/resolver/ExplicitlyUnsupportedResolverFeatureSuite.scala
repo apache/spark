@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSparkSession {
-  import testImplicits._
-
   test("Unsupported table types") {
     withTable("csv_table") {
       spark.sql("CREATE TABLE csv_table (col1 INT) USING CSV;").collect()
@@ -68,14 +66,6 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     )
   }
 
-  test("Missing attribute propagation") {
-    val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
-    checkResolution(
-      df.select(df("name")).filter(df("id") === 0).queryExecution.logical,
-      shouldPass = false
-    )
-  }
-
   private def checkResolution(sqlText: String, shouldPass: Boolean = false): Unit = {
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
     checkResolution(unresolvedPlan, shouldPass)
@@ -92,7 +82,8 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
 
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
-      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+      extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
+      metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
     wrapper {
       resolver.lookupMetadataAndResolve(plan)

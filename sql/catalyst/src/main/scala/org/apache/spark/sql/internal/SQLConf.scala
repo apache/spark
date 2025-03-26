@@ -328,6 +328,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_THROW_FROM_RESOLVER_GUARD =
+    buildConf("spark.sql.analyzer.singlePassResolver.throwFromResolverGuard")
+      .internal()
+      .doc(
+        "When set to true, ResolverGuard will throw a descriptive error on unsupported features. " +
+        "This is used in during Shadow replay to properly evaluate coverage and feature gaps of " +
+        "the single-pass Analyzer."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()

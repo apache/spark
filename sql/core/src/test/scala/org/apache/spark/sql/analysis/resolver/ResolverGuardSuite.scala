@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
   ResolverGuard
 }
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project, Tail}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolverGuardSuite extends QueryTest with SharedSparkSession {
@@ -51,6 +52,30 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
   test("Where clause with a literal") {
     checkResolverGuard(
       "SELECT * FROM VALUES(1, 2, false), (3, 4, true) WHERE true",
+      shouldPass = true
+    )
+  }
+
+  test("Limit clause with a literal") {
+    checkResolverGuard(
+      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) LIMIT 1",
+      shouldPass = true
+    )
+  }
+
+  test("Offset clause with a literal") {
+    checkResolverGuard(
+      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) OFFSET 1",
+      shouldPass = true
+    )
+  }
+
+  test("Tail clause with a literal") {
+    checkResolverGuard(
+      Tail(
+        Literal(1),
+        sql("SELECT * FROM VALUES(1, 2, false), (3, 4, true)").queryExecution.logical
+      ),
       shouldPass = true
     )
   }
@@ -191,28 +216,57 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     checkResolverGuard("SELECT assert_true(true)", shouldPass = true)
   }
 
-  // Queries that shouldn't pass the OperatorResolverGuard
-
-  test("Scalar subquery") {
-    checkResolverGuard("SELECT (SELECT * FROM VALUES(1))", shouldPass = false)
+  test("Supported literal functions") {
+    checkResolverGuard("SELECT current_date", shouldPass = true)
+    checkResolverGuard("SELECT current_timestamp", shouldPass = true)
   }
 
-  test("EXISTS subquery") {
+  test("Group by") {
+    checkResolverGuard("SELECT col1 FROM VALUES(1) GROUP BY 1", shouldPass = true)
+    checkResolverGuard("SELECT col1, count(col1) FROM VALUES(1) GROUP BY ALL", shouldPass = true)
+    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) GROUP BY 1, col1", shouldPass = true)
+  }
+
+  test("Order by") {
+    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY 1", shouldPass = true)
+    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY ALL", shouldPass = true)
+    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) ORDER BY 1, col1", shouldPass = true)
+  }
+
+  test("Scalar subquery") {
     checkResolverGuard(
-      "SELECT * FROM VALUES (1) WHERE EXISTS (SELECT * FROM VALUES(1))",
-      shouldPass = false
+      "SELECT (SELECT col1 FROM VALUES (1)) + (SELECT col1 FROM VALUES (2))",
+      shouldPass = true
     )
   }
 
   test("IN subquery") {
     checkResolverGuard(
-      "SELECT * FROM VALUES (1) WHERE col1 IN (SELECT * FROM VALUES(1))",
-      shouldPass = false
+      "SELECT * FROM VALUES (1, 2) WHERE col1 IN (SELECT col1 FROM VALUES (3))",
+      shouldPass = true
     )
   }
 
-  test("Function without the braces") {
-    checkResolverGuard("SELECT current_date", shouldPass = false)
+  test("EXISTS subquery") {
+    checkResolverGuard(
+      """
+      SELECT * FROM
+        VALUES (1, 2) AS t1
+      WHERE
+        EXISTS (
+          SELECT * FROM VALUES (1, 3) AS t2 WHERE t1.col1 = t2.col1
+        )
+      """,
+      shouldPass = true
+    )
+  }
+
+  // Queries that shouldn't pass the OperatorResolverGuard
+
+  test("Unsupported literal functions") {
+    checkResolverGuard("SELECT current_user", shouldPass = false)
+    checkResolverGuard("SELECT session_user", shouldPass = false)
+    checkResolverGuard("SELECT user", shouldPass = false)
   }
 
   test("Session variables") {
@@ -298,7 +352,9 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
       case None =>
         new Resolver(
           catalogManager = spark.sessionState.catalogManager,
-          extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+          extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
+          metadataResolverExtensions =
+            spark.sessionState.analyzer.singlePassMetadataResolverExtensions
         )
       case Some(mock) => mock
     }

@@ -35,9 +35,10 @@ class AliasResolver(expressionResolver: ExpressionResolver)
    * resolution, after which they will be removed in the post-processing phase.
    */
   override def resolve(unresolvedAlias: UnresolvedAlias): NamedExpression =
-    scopes.top.lcaRegistry.withNewLcaScope {
+    scopes.current.lcaRegistry.withNewLcaScope {
       val aliasWithResolvedChildren =
-        withResolvedChildren(unresolvedAlias, expressionResolver.resolve)
+        withResolvedChildren(unresolvedAlias, expressionResolver.resolve _)
+          .asInstanceOf[UnresolvedAlias]
 
       val resolvedAlias =
         AliasResolution.resolve(aliasWithResolvedChildren).asInstanceOf[NamedExpression]
@@ -48,9 +49,7 @@ class AliasResolver(expressionResolver: ExpressionResolver)
             s"unsupported expression: ${multiAlias.getClass.getName}"
           )
         case alias: Alias =>
-          expressionResolver.getExpressionIdAssigner
-            .mapExpression(alias)
-            .asInstanceOf[Alias]
+          expressionResolver.getExpressionIdAssigner.mapExpression(alias)
       }
     }
 
@@ -59,11 +58,50 @@ class AliasResolver(expressionResolver: ExpressionResolver)
    * resolve its children and afterwards reassign exprId to the resulting [[Alias]].
    */
   def handleResolvedAlias(alias: Alias): Alias = {
-    scopes.top.lcaRegistry.withNewLcaScope {
-      val aliasWithResolvedChildren = withResolvedChildren(alias, expressionResolver.resolve)
-      expressionResolver.getExpressionIdAssigner
-        .mapExpression(aliasWithResolvedChildren)
-        .asInstanceOf[Alias]
+    val resolvedAlias = scopes.current.lcaRegistry.withNewLcaScope {
+      val aliasWithResolvedChildren =
+        withResolvedChildren(alias, expressionResolver.resolve _).asInstanceOf[Alias]
+
+      expressionResolver.getExpressionIdAssigner.mapExpression(aliasWithResolvedChildren)
     }
+
+    collapseAlias(resolvedAlias)
   }
+
+  /**
+   * In case where there are two explicit [[Alias]]es, one on top of the other, remove the bottom
+   * one. For the example bellow:
+   *
+   * - df.select($"column".as("alias_1").as("alias_2"))
+   *
+   * the plan is:
+   *
+   *   Project[
+   *     Alias("alias_2")(
+   *       Alias("alias_1")(id)
+   *     )
+   *   ]( ... )
+   *
+   * and after the `collapseAlias` call (removing the bottom one) it would be:
+   *
+   *   Project[
+   *     Alias("alias_2")(id)
+   *   ]( ... )
+   */
+  private def collapseAlias(alias: Alias): Alias =
+    alias.child match {
+      case innerAlias: Alias =>
+        val metadata = if (alias.metadata.isEmpty) {
+          None
+        } else {
+          Some(alias.metadata)
+        }
+        alias.copy(child = innerAlias.child)(
+          exprId = alias.exprId,
+          qualifier = alias.qualifier,
+          explicitMetadata = metadata,
+          nonInheritableMetadataKeys = alias.nonInheritableMetadataKeys
+        )
+      case _ => alias
+    }
 }
