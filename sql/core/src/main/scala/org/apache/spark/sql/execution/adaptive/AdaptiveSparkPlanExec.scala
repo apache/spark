@@ -314,7 +314,7 @@ case class AdaptiveSparkPlanExec(
       var orphanBatchScans = Set[WrapsBroadcastVarPushDownSupporter]()
       var result =
         createQueryStages(fun, currentPhysicalPlan, stageIdToBuildsideJoinKeys,
-          OrphanBSCollect.orphan, firstRun = true)
+          OrphanBSCollect.orphan, firstRun = true, doBroadcastVarPush = doBroadcastVarPush)
       var loopCount = 0
       var consecutiveNoDelayedStagesFound = 0
       orphanBatchScans ++= result.orphanBatchScansWithProxyVar
@@ -489,27 +489,11 @@ case class AdaptiveSparkPlanExec(
         }
         // Now that some stages have finished, we can try creating new stages.
         result = createQueryStages(fun, currentPhysicalPlan, stageIdToBuildsideJoinKeys,
-          collectOrphans, firstRun = false)
+          collectOrphans, firstRun = false, doBroadcastVarPush = doBroadcastVarPush)
         collectOrphans = OrphanBSCollect.no_collect
         loopCount += 1
-
-
-        // TODO: ensure at this stage no orphan is left
-        // now that all child statges are materialized, recheck if any newly materialized
-        // broadcast variables need to be pushed to the scans, which might have been missed
-        // when the stage got materialized while we were in the create query stage function
-        // Run the final plan when there's no more unfinished stages.
-
-
-
-        if (doBroadcastVarPush) {
-          BroadcastHashJoinUtil
-            .getAllBatchScansForSparkPlan(currentPhysicalPlan)
-            .filter(bs => bs.getBroadcastVarPushDownSupportingInstance.isDefined &&
-              BroadcastHashJoinUtil.isBatchScanReady(bs)).foreach(
-            _.getBroadcastVarPushDownSupportingInstance.get.postAllBroadcastVarsPushed())
-        }
       }
+
       _isFinalPlan = true
       finalPlanUpdate
       // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
@@ -841,6 +825,7 @@ case class AdaptiveSparkPlanExec(
       stageIdToBuildsideJoinKeys: mutable.Map[Int, TupleBuildLpProxyVarCanonBuildKeys],
       orphanBSCollect: OrphanBSCollect,
       hasStreamSidePushdownDependent: Boolean = false,
+      doBroadcastVarPush: Boolean,
       firstRun: Boolean): CreateStageResult = {
     plan match {
       // 1. ResultQueryStageExec is already created, no need to create non-result stages
@@ -873,7 +858,7 @@ case class AdaptiveSparkPlanExec(
         // 3. Create result stage
         if (allNewStages.isEmpty && allChildStagesMaterialized &&
           result.orphanBatchScansWithProxyVar.isEmpty) {
-          val resultStage = newResultQueryStage(resultHandler, newPlan)
+          val resultStage = newResultQueryStage(resultHandler, newPlan, doBroadcastVarPush)
           newPlan = resultStage
           allChildStagesMaterialized = false
           allNewStages :+= resultStage
@@ -1107,12 +1092,25 @@ case class AdaptiveSparkPlanExec(
 
   private def newResultQueryStage(
       resultHandler: SparkPlan => Any,
-      plan: SparkPlan): ResultQueryStageExec = {
+      plan: SparkPlan,
+      doBroadcastVarPush: Boolean): ResultQueryStageExec = {
     // Run the final plan when there's no more unfinished stages.
     val optimizedRootPlan = applyPhysicalRules(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
       Some((planChangeLogger, "AQE Post Stage Creation")))
+    // TODO: ensure at this stage no orphan is left
+    // now that all child statges are materialized, recheck if any newly materialized
+    // broadcast variables need to be pushed to the scans, which might have been missed
+    // when the stage got materialized while we were in the create query stage function
+    // Run the final plan when there's no more unfinished stages.
+    if (doBroadcastVarPush) {
+      BroadcastHashJoinUtil
+        .getAllBatchScansForSparkPlan(optimizedRootPlan)
+        .filter(bs => bs.getBroadcastVarPushDownSupportingInstance.isDefined &&
+          BroadcastHashJoinUtil.isBatchScanReady(bs)).foreach(
+        _.getBroadcastVarPushDownSupportingInstance.get.postAllBroadcastVarsPushed())
+    }
     val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(resultStage, plan)
