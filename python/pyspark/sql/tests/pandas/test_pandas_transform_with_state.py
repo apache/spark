@@ -267,7 +267,9 @@ class TransformWithStateInPandasTestsMixin:
                 Row(id="1", countAsString="2"),
             }
 
-        self._test_transform_with_state_in_pandas_basic(ListStateProcessor(), check_results, True)
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateProcessor(), check_results, True, "processingTime"
+        )
 
     # test list state with ttl has the same behavior as list state when state doesn't expire.
     def test_transform_with_state_in_pandas_list_state_large_ttl(self):
@@ -1733,11 +1735,16 @@ class ListStateProcessor(StatefulProcessor):
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema)
         self.list_state2 = handle.getListState("listState2", state_schema)
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        import datetime
+
         count = 0
+        time_list = []
         for pdf in rows:
             list_state_rows = [(120,), (20,)]
             self.list_state1.put(list_state_rows)
@@ -1748,6 +1755,11 @@ class ListStateProcessor(StatefulProcessor):
             self.list_state2.appendList(list_state_rows)
             pdf_count = pdf.count()
             count += pdf_count.get("temperature")
+            current_processing_time = datetime.datetime.fromtimestamp(
+                timerValues.getCurrentProcessingTimeInMs() / 1000
+            )
+            stored_time = current_processing_time + datetime.timedelta(minutes=1)
+            time_list.append((stored_time,))
         iter1 = self.list_state1.get()
         iter2 = self.list_state2.get()
         # Mixing the iterator to test it we can resume from the correct point
@@ -1772,6 +1784,9 @@ class ListStateProcessor(StatefulProcessor):
         assert next(iter1)[0] == self.dict[1]
         assert next(iter2)[0] == self.dict[1]
         assert next(iter3)[0] == self.dict[1]
+        if time_list:
+            # Validate timestamp type can work properly with arrow transmission
+            self.list_state_timestamp.put(time_list)
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:
@@ -1781,8 +1796,10 @@ class ListStateProcessor(StatefulProcessor):
 class ListStateLargeTTLProcessor(ListStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema, 30000)
         self.list_state2 = handle.getListState("listState2", state_schema, 30000)
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
 
 class MapStateProcessor(StatefulProcessor):
