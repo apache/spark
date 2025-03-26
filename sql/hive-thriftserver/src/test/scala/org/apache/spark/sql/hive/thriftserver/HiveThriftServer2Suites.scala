@@ -565,7 +565,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
     }
   }
 
-  test("SPARK-11595 ADD JAR with input path having URL scheme") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: SPARK-11595 ADD JAR with input path having URL scheme") {
     withJdbcStatement("test_udtf") { statement =>
       try {
         val jarPath = "../hive/src/test/resources/TestUDTF.jar"
@@ -999,7 +1000,8 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
   override protected def extraConf: Seq[String] =
     s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
 
-  test("share the temporary functions across JDBC connections") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement("test_udtf")(
       { statement =>
         val jarPath = "../hive/src/test/resources/TestUDTF.jar"
