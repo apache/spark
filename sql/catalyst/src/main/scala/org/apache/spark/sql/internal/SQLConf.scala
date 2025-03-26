@@ -5651,6 +5651,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val VARIABLES_UNDER_IDENTIFIER_IN_VIEW =
+    buildConf("spark.sql.legacy.allowSessionVariableInPersistedView")
+      .internal()
+      .doc(
+        "When set to true, variables can be found under identifiers in a view query. Throw " +
+        "otherwise."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
