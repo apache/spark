@@ -53,6 +53,7 @@ class PythonDataSourceV2 extends TableProvider {
   }
 
   private var readInfo: PythonDataSourceReadInfo = _
+
   def getOrCreateReadInfo(
       shortName: String,
       options: CaseInsensitiveStringMap,
