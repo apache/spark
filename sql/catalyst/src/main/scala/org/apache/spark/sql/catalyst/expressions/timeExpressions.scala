@@ -234,7 +234,6 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-// scalastyle:on line.size.limit
 case class HoursOfTime(child: Expression)
   extends RuntimeReplaceable
     with ExpectsInputTypes {
@@ -276,7 +275,6 @@ case class HoursOfTime(child: Expression)
   """,
   since = "1.5.0",
   group = "datetime_funcs")
-// scalastyle:on line.size.limit
 object HourExpressionBuilder extends ExpressionBuilder {
   override def build(name: String, expressions: Seq[Expression]): Expression = {
     if (expressions.isEmpty) {
