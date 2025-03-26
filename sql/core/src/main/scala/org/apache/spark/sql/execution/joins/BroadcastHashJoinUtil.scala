@@ -28,7 +28,6 @@ import org.apache.spark.sql.connector.read.SupportsBroadcastVarPushdownFiltering
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.dynamicpruning.PartitionPruning
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.window.WindowExec
@@ -111,9 +110,9 @@ object BroadcastHashJoinUtil {
   // identification. it goes below a query stage it it encounters one
   def getAllBatchScansForSparkPlan(
       plan: SparkPlan,
-      goInsideStageExec: Boolean = true): Seq[BatchScanExec] =
+      goInsideStageExec: Boolean = true): Seq[WrapsBroadcastVarPushDownSupporter] =
     plan.collectLeaves().flatMap {
-      case bs: BatchScanExec => Seq(bs)
+      case bs: WrapsBroadcastVarPushDownSupporter => Seq(bs)
       case qs: QueryStageExec if goInsideStageExec => getAllBatchScansForSparkPlan(qs.plan)
       case re: ReusedExchangeExec if goInsideStageExec => getAllBatchScansForSparkPlan(re.child)
       case _ => Seq.empty
@@ -135,7 +134,7 @@ object BroadcastHashJoinUtil {
     streamPlan
       .collectLeaves()
       .flatMap {
-        case bs: BatchScanExec => Seq(bs)
+        case bs: WrapsBroadcastVarPushDownSupporter => Seq(bs)
 
         case _ => Seq.empty
       }
@@ -227,7 +226,7 @@ object BroadcastHashJoinUtil {
           val underlyingRuntimeFilteringScan =
             runtimeFilteringBatchScan.getBroadcastVarPushDownSupportingInstance.get
           val streamKey = currentStreamKey
-          val streamsideLeafJoinAttribIndex = runtimeFilteringBatchScan.output.indexWhere(
+          val streamsideLeafJoinAttribIndex = runtimeFilteringBatchScan.output().indexWhere(
             _.canonicalized == streamKey.canonicalized)
           if (underlyingRuntimeFilteringScan.allAttributes().nonEmpty) {
             val streamsideJoinColName = getColNameFromUnderlyingScan(
@@ -238,7 +237,7 @@ object BroadcastHashJoinUtil {
             // TODO Asif: Fix completely the push downn of broadcast var for partitioning column
             // then the below condition should be removed.
             if (!partitionCols.contains(streamsideJoinColName)) {
-              if (runtimeFilteringBatchScan.runtimeFilters.isEmpty) {
+              if (runtimeFilteringBatchScan.getRuntimeFilters().isEmpty) {
                 Seq(
                   BroadcastVarPushDownData(
                     streamsideLeafJoinAttribIndex,
@@ -294,7 +293,7 @@ object BroadcastHashJoinUtil {
         case FilterExec(expr, _) if PartitionPruning.isLikelySelective(expr) =>
           isBuildPlanPrunable = true
 
-        case bs: BatchScanExec
+        case bs: WrapsBroadcastVarPushDownSupporter
             if bs.proxyForPushedBroadcastVar.isDefined ||
               (batchScansSelectedForBCPush.ne(null) && batchScansSelectedForBCPush.containsKey(
                 bs)) && considerPushedBCVarAsPrunability =>
@@ -322,10 +321,10 @@ object BroadcastHashJoinUtil {
       streamPlan: SparkPlan,
       buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _],
       batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _])
-      : Seq[(Attribute, BatchScanExec)] = {
+      : Seq[(Attribute, WrapsBroadcastVarPushDownSupporter)] = {
     var currentStreamKey = streamKeyStart
     var currentStreamPlan = streamPlan
-    var batchScanOfInterest = Seq.empty[(Attribute, BatchScanExec)]
+    var batchScanOfInterest = Seq.empty[(Attribute, WrapsBroadcastVarPushDownSupporter)]
     var keepGoing = true
     while (keepGoing) {
       currentStreamPlan match {
@@ -333,7 +332,7 @@ object BroadcastHashJoinUtil {
 
         case _: WindowExec => keepGoing = false
 
-        case batchScanExec: BatchScanExec =>
+        case batchScanExec: WrapsBroadcastVarPushDownSupporter =>
           batchScanOfInterest = Seq(currentStreamKey -> batchScanExec)
           keepGoing = false
 
@@ -415,8 +414,9 @@ object BroadcastHashJoinUtil {
   // This function will not go below a QueryStageExec if it exists in a tree and
   // it does not have to as the batch scans below a query stage under a top stage are
   // already materialized. as new stage gets created only when child stage is materialized
-  private def getAllBatchScansForStage(stage: QueryStageExec): Seq[BatchScanExec] =
-    stage.plan.collectLeaves().collect { case bs: BatchScanExec =>
+  private def getAllBatchScansForStage(stage: QueryStageExec):
+  Seq[WrapsBroadcastVarPushDownSupporter] =
+    stage.plan.collectLeaves().collect { case bs: WrapsBroadcastVarPushDownSupporter =>
       bs
     }
 

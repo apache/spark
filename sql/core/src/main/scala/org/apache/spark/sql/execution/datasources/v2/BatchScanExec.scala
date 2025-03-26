@@ -21,7 +21,7 @@ import com.google.common.base.Objects
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, KeyGroupedShuffleSpec, Partitioning, SinglePartition}
@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.WrapsBroadcastVarPushDownSupporter
 import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -375,6 +376,10 @@ case class BatchScanExec(
   WrapsBroadcastVarPushDownSupporter = this.copy(proxyForPushedBroadcastVar = proxy)
 
   def getRuntimeFilters(): Seq[Expression] = this.runtimeFilters
+
+  def getTableIdentifier(): TableIdentifier = TableIdentifier(table.name())
+
+  def getSchema(): StructType = this.schema
 }
 
 object BatchScanExec {

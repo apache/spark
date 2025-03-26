@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDi
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
@@ -454,8 +453,8 @@ case class AdaptiveSparkPlanExec(
           // plans. And each time before re-planning, we replace the corresponding nodes in the
           // current logical plan with logical query stages to make it semantically in sync with
           // the current physical plan. Once a new plan is adopted and both logical and physical
-          // plans are updated, we can clear the query stage list because at this point the two plans
-          // are semantically and physically in sync again.
+          // plans are updated, we can clear the query stage list because at this point the two
+          // plans are semantically and physically in sync again.
 
           if (delayedStages.isEmpty) {
             consecutiveNoDelayedStagesFound += 1
@@ -472,7 +471,8 @@ case class AdaptiveSparkPlanExec(
             if (newCost < origCost ||
               (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
               lazy val plans =
-                sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
+                sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).
+                  mkString("\n")
               logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
               cleanUpTempTags(newPhysicalPlan)
               currentPhysicalPlan = newPhysicalPlan
@@ -505,9 +505,9 @@ case class AdaptiveSparkPlanExec(
         if (doBroadcastVarPush) {
           BroadcastHashJoinUtil
             .getAllBatchScansForSparkPlan(currentPhysicalPlan)
-            .filter(bs => bs.isInstanceOf[SupportsRuntimeV2Filtering] &&
+            .filter(bs => bs.getBroadcastVarPushDownSupportingInstance.isDefined &&
               BroadcastHashJoinUtil.isBatchScanReady(bs)).foreach(
-            _.scan.asInstanceOf[SupportsRuntimeV2Filtering].postAllBroadcastVarsPushed())
+            _.getBroadcastVarPushDownSupportingInstance.get.postAllBroadcastVarsPushed())
         }
 
         executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
@@ -518,7 +518,8 @@ case class AdaptiveSparkPlanExec(
       finalPlanUpdate
       // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
       // false, which is expected. If we want to collect result again, we should invoke
-      // `withFinalPlanUpdate` and pass another result handler and we will create a new result stage.
+      // `withFinalPlanUpdate` and pass another result handler and we will create a new
+      // result stage.
       currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
         .get.asInstanceOf[T]
     }

@@ -324,7 +324,7 @@ case class ResultQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
     resultHandler: SparkPlan => Any) extends QueryStageExec {
-
+  val reuseSource: Option[Int] = None
   override def resetMetrics(): Unit = {
     plan.resetMetrics()
   }

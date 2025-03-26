@@ -610,6 +610,9 @@ case class Union(
 }
 
 object Join {
+  val PRESERVE_JOIN_WITH_SELF_PUSH_HASH =
+    TreeNodeTag[(BuildSide, LogicalPlan)]("buildside_original_build_plan_self_push")
+
   def computeOutput(
     joinType: JoinType,
     leftOutput: Seq[Attribute],
@@ -2223,9 +2226,4 @@ object AsOfJoin {
           Subtract(leftAsOf, rightAsOf), Subtract(rightAsOf, leftAsOf))
     }
   }
-}
-
-object Join {
-  val PRESERVE_JOIN_WITH_SELF_PUSH_HASH =
-    TreeNodeTag[(BuildSide, LogicalPlan)]("buildside_original_build_plan_self_push")
 }

@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.read.SupportsBroadcastVarPushdownFiltering
 import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
+import org.apache.spark.sql.types.StructType
 
 trait WrapsBroadcastVarPushDownSupporter {
   self: LeafExecNode =>
@@ -39,4 +41,10 @@ trait WrapsBroadcastVarPushDownSupporter {
   def getRuntimeFilters(): Seq[Expression]
 
   def setLogicalLink(logicalPlan: LogicalPlan): Unit
+
+  def output(): Seq[Attribute]
+
+  def getTableIdentifier(): TableIdentifier
+
+  def getSchema(): StructType
 }
