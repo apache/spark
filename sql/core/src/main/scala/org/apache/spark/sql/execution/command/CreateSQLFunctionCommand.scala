@@ -21,9 +21,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, SQLFunctionNode, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunctionErrors}
+import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LogicalPlan, OneRowRelation, Project, UnresolvedWith}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
@@ -65,12 +66,12 @@ case class CreateSQLFunctionCommand(
   import SQLFunction._
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val parser = sparkSession.sessionState.sqlParser
+    val parser: ParserInterface = sparkSession.sessionState.sqlParser
     val analyzer = sparkSession.sessionState.analyzer
     val catalog = sparkSession.sessionState.catalog
     val conf = sparkSession.sessionState.conf
 
-    val inputParam = inputParamText.map(parser.parseRoutineParam)
+    val inputParam = inputParamText.map(UserDefinedFunction.parseRoutineParam(_, parser))
     val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser)
 
     val function = SQLFunction(

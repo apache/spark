@@ -21,6 +21,7 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.Token
+import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
@@ -45,30 +46,40 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitSingleRoutineParam(ctx: SingleRoutineParamContext): StructType = {
-    withOrigin(ctx)(StructType(visitRoutineColDefinitionList(ctx.colDefinitionList)))
+  override def visitSingleRoutineParamList(ctx: SingleRoutineParamListContext): StructType = {
+    withOrigin(ctx)(StructType(visitRoutineParamList(ctx.routineParamList())))
   }
 
-  private def visitRoutineColDefinitionList(
-      ctx: ColDefinitionListContext): Seq[StructField] = withOrigin(ctx) {
-    ctx.colDefinition().asScala.map(visitRoutineParam).toSeq
-  }
-
-  private def visitRoutineParam(ctx: ColDefinitionContext): StructField =
+  override def visitRoutineParamList(ctx: RoutineParamListContext): Seq[StructField] =
     withOrigin(ctx) {
-      import ctx._
+      ctx.routineParam().asScala.map(visitRoutineParam).toSeq
+    }
+
+  override def visitRoutineParam(ctx: RoutineParamContext): StructField =
+    withOrigin(ctx) {
       val builder = new MetadataBuilder
-      ctx.colDefinitionOption().asScala.foreach { option =>
-        Option(option.defaultExpression()).foreach { expr =>
-          builder.putString("default", expr.toString)
-        }
+      Option(ctx.defaultExpression()).foreach { expr =>
+        builder.putString("default", verifyAndGetExpression(expr.expression()))
       }
+      val col = ctx.colType()
       StructField(
-        name = colName.getText,
-        dataType = typedVisit[DataType](dataType),
+        name = col.colName.getText,
+        dataType = typedVisit[DataType](col.dataType()),
         nullable = true,
         metadata = builder.build())
     }
+
+  private def verifyAndGetExpression(exprCtx: ExpressionContext): String = {
+    // Make sure it can be converted to Catalyst expressions.
+    typedVisit(exprCtx)
+    // Extract the raw expression text so that we can save the user provided text. We don't
+    // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
+    // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
+    // get the text from the underlying char stream instead.
+    val start = exprCtx.getStart.getStartIndex
+    val end = exprCtx.getStop.getStopIndex
+    exprCtx.getStart.getInputStream.getText(new Interval(start, end))
+  }
 
   override def visitStringLit(ctx: StringLitContext): Token = {
     if (ctx != null) {
