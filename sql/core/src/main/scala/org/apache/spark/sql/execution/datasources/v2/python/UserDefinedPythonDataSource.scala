@@ -22,10 +22,16 @@ import java.io.{DataInputStream, DataOutputStream}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import com.fasterxml.jackson.annotation.{JsonIgnore, JsonInclude}
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python._
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
@@ -34,9 +40,11 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -347,15 +355,85 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
   private case class SerializedFilter(
       name: String,
       columnPath: collection.Seq[String],
-      value: Int,
-      index: Int)
+      @JsonInclude(JsonInclude.Include.NON_ABSENT)
+      value: Option[VariantVal],
+      @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+      isNegated: Boolean,
+      @JsonIgnore
+      index: Int
+  )
+
+  private val mapper = new ObjectMapper().registerModules(DefaultScalaModule)
+
+  private def getField(attribute: String): (Seq[String], StructField) = {
+    val columnPath = CatalystSqlParser.parseMultipartIdentifier(attribute)
+    val (_, field) = schema
+      .findNestedField(columnPath, includeCollections = true)
+      .getOrElse(
+        throw QueryCompilationErrors.pythonDataSourceError(
+          action = "plan",
+          tpe = "filter",
+          msg = s"Cannot find field $columnPath in schema"
+        )
+      )
+    (columnPath, field)
+  }
 
   private val serializedFilters = filters.zipWithIndex.flatMap {
     case (filter, i) =>
-      filter match {
-        case filter @ org.apache.spark.sql.sources.EqualTo(_, value: Int) =>
-          val columnPath = filter.v2references.head
-          Some(SerializedFilter("EqualTo", columnPath, value, i))
+      // Unwrap Not filter
+      val (childFilter, isNegated) = filter match {
+        case sources.Not(f) => (f, true)
+        case _ => (filter, false)
+      }
+
+      def construct(
+          name: String,
+          attribute: String,
+          value: Option[Any],
+          mapDataType: DataType => DataType = identity): Option[SerializedFilter] = {
+        val (columnPath, field) = getField(attribute)
+        val dataType = mapDataType(field.dataType)
+        val variant = for (v <- value) yield {
+          val catalystValue = CatalystTypeConverters.convertToCatalyst(v)
+          try {
+            VariantExpressionEvalUtils.castToVariant(catalystValue, dataType)
+          } catch {
+            case _: MatchError =>
+              // filter is unsupported if we can't cast it to variant
+              return None
+          }
+        }
+        Some(SerializedFilter(name, columnPath, variant, isNegated, i))
+      }
+
+      childFilter match {
+        case sources.EqualTo(attribute, value) =>
+          construct("EqualTo", attribute, Some(value))
+        case sources.EqualNullSafe(attribute, value) =>
+          construct("EqualNullSafe", attribute, Some(value))
+        case sources.GreaterThan(attribute, value) =>
+          construct("GreaterThan", attribute, Some(value))
+        case sources.GreaterThanOrEqual(attribute, value) =>
+          construct("GreaterThanOrEqual", attribute, Some(value))
+        case sources.LessThan(attribute, value) =>
+          construct("LessThan", attribute, Some(value))
+        case sources.LessThanOrEqual(attribute, value) =>
+          construct("LessThanOrEqual", attribute, Some(value))
+        case sources.In(attribute, value) =>
+          construct("In", attribute, Some(value), ArrayType(_))
+        case sources.IsNull(attribute) =>
+          construct("IsNull", attribute, None)
+        case sources.IsNotNull(attribute) =>
+          construct("IsNotNull", attribute, None)
+        case sources.StringStartsWith(attribute, value) =>
+          construct("StringStartsWith", attribute, Some(value))
+        case sources.StringEndsWith(attribute, value) =>
+          construct("StringEndsWith", attribute, Some(value))
+        case sources.StringContains(attribute, value) =>
+          construct("StringContains", attribute, Some(value))
+        // collation aware filters are currently not supported
+        // And, Or are currently not supported
         case _ =>
           None
       }
@@ -374,16 +452,8 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     PythonWorkerUtils.writeUTF(schema.json, dataOut)
 
     // Send the filters
-    // For now only handle EqualTo filter on int
-    dataOut.writeInt(serializedFilters.length)
-    for (f <- serializedFilters) {
-      PythonWorkerUtils.writeUTF(f.name, dataOut)
-      dataOut.writeInt(f.columnPath.length)
-      for (path <- f.columnPath) {
-        PythonWorkerUtils.writeUTF(path, dataOut)
-      }
-      dataOut.writeInt(f.value)
-    }
+    // For now only handle EqualTo filter
+    PythonWorkerUtils.writeUTF(mapper.writeValueAsString(serializedFilters), dataOut)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
