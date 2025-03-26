@@ -209,14 +209,14 @@ private class StateStoreCoordinator(
     new mutable.HashMap[StateStoreProviderId, SnapshotUploadEvent]
 
   // Default snapshot upload event to use when a provider has never uploaded a snapshot
-  private val defaultSnapshotUploadEvent = SnapshotUploadEvent(-1, 0)
+  private val defaultSnapshotUploadEvent = SnapshotUploadEvent(0, 0)
 
   // Stores the last timestamp in milliseconds for each queryRunId indicating when the
   // coordinator did a report on instances lagging behind on snapshot uploads.
   // The initial timestamp is defaulted to 0 milliseconds.
   private val lastFullSnapshotLagReportTimeMs = new mutable.HashMap[UUID, Long]
 
-  // Stores the time and latest version of the query run's start.
+  // Stores the time and version registered at the query run's start.
   // Queries that started recently should not have their state stores reported as lagging
   // since we may not have all the information yet.
   private val queryRunStartingPoint = new mutable.HashMap[UUID, QueryStartInfo]
@@ -347,7 +347,7 @@ private class StateStoreCoordinator(
 
                 val logMessage = stateStoreLatestUploadedSnapshot.get(providerId) match {
                   case Some(snapshotEvent) =>
-                    val versionDelta = latestVersion - Math.max(snapshotEvent.version, 0)
+                    val versionDelta = latestVersion - snapshotEvent.version
                     val timeDelta = currentTimestamp - snapshotEvent.timestamp
 
                     baseLogMessage + log", " +
@@ -402,23 +402,23 @@ private class StateStoreCoordinator(
     val minVersionDeltaForLogging = snapshotVersionDeltaMultiplier * minDeltasForSnapshot
     val minTimeDeltaForLogging = maintenanceIntervalMultiplier * maintenanceInterval
 
-    // Look for active state store providers that are lagging behind in snapshot uploads
-    instances.keys.filter { storeProviderId =>
-      // Only consider providers that are part of this specific query run
-      val latestSnapshot = stateStoreLatestUploadedSnapshot.getOrElse(
-        storeProviderId,
-        defaultSnapshotUploadEvent
-      )
-      storeProviderId.queryRunId == queryRunId && (
+    // Look for active state store providers that are lagging behind in snapshot uploads.
+    // The coordinator should only consider providers that are part of this specific query run.
+    instances.view.keys
+      .filter(_.queryRunId == queryRunId)
+      .filter { storeProviderId =>
+        val latestSnapshot = stateStoreLatestUploadedSnapshot.getOrElse(
+          storeProviderId,
+          defaultSnapshotUploadEvent
+        )
         // Mark a state store as lagging if it's behind in both version and time.
         // A state store is considered lagging if it's behind in both version and time according
         // to the configured thresholds.
         // Stores that didn't upload a snapshot will be treated as a store with a snapshot of
-        // version 0.
-        referenceVersion - Math.max(latestSnapshot.version, 0) > minVersionDeltaForLogging &&
+        // version 0 and timestamp 0ms.
+        referenceVersion - latestSnapshot.version > minVersionDeltaForLogging &&
           referenceTimestamp - latestSnapshot.timestamp > minTimeDeltaForLogging
-      )
-    }.toSeq
+      }.toSeq
   }
 }
 

@@ -1475,7 +1475,7 @@ class RocksDB(
       // Compare and update with the version that was just uploaded.
       lastUploadedSnapshotVersion.updateAndGet(v => Math.max(snapshot.version, v))
       // Report snapshot upload event to the coordinator.
-      if (conf.stateStoreCoordinatorReportSnapshotUploadLag) {
+      if (conf.reportSnapshotUploadLag) {
         // Note that we still report uploads even when changelog checkpointing is disabled.
         // The coordinator needs a way to determine whether upload messages are disabled or not,
         // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
@@ -1730,7 +1730,7 @@ case class RocksDBConf(
     compressionCodec: String,
     allowFAllocate: Boolean,
     compression: String,
-    stateStoreCoordinatorReportSnapshotUploadLag: Boolean)
+    reportSnapshotUploadLag: Boolean)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -1914,7 +1914,7 @@ object RocksDBConf {
       storeConf.compressionCodec,
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
-      storeConf.stateStoreCoordinatorReportSnapshotUploadLag)
+      storeConf.reportSnapshotUploadLag)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

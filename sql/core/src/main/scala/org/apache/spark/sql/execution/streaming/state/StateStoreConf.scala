@@ -100,7 +100,7 @@ class StateStoreConf(
   /**
    * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
    */
-  val stateStoreCoordinatorReportSnapshotUploadLag: Boolean =
+  val reportSnapshotUploadLag: Boolean =
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
   /**
