@@ -320,7 +320,7 @@ case class AdaptiveSparkPlanExec(
       orphanBatchScans ++= result.orphanBatchScansWithProxyVar
       var collectOrphans = OrphanBSCollect.no_collect
 
-      /* && this.currentPhysicalPlan.children.nonEmpty*/
+      /* && this.currentPhysicalPlan.children.nonEmpty */
       while (!result.allChildStagesMaterialized ||
         (consecutiveNoDelayedStagesFound < 2 && loopCount > 0)) {
         if (Utils.isTesting) {
