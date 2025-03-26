@@ -85,7 +85,7 @@ reading, writing and processing data in the custom format. The plugins (`CustomC
 4. **Copy relevant JARs to the root of the unpacked Spark distribution**:
    ```bash
     cp \
-    <SPARK_HOME>/connect-examples/server-library-example/resources/spark-daria_2.13-1.2.3.jar \
+    <SPARK_HOME>/connect-examples/server-library-example/common/target/spark-daria_2.13-1.2.3.jar \
     <SPARK_HOME>/connect-examples/server-library-example/common/target/spark-server-library-example-common-1.0.0.jar \
     <SPARK_HOME>/connect-examples/server-library-example/server/target/spark-server-library-example-server-extension-1.0.0.jar \
     .
