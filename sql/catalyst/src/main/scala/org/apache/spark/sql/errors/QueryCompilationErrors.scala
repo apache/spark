@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils.ColumnPath
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -221,13 +222,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId(parameter),
         "invalidValue" -> toSQLExpr(invalidValue)))
-  }
-
-  def nullDataSourceOption(option: String): Throwable = {
-    new AnalysisException(
-      errorClass = "NULL_DATA_SOURCE_OPTION",
-      messageParameters = Map("option" -> option)
-    )
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
@@ -955,21 +949,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def joinStrategyHintParameterNotSupportedError(unsupported: Any): Throwable = {
+  def joinStrategyHintParameterNotSupportedError(unsupported: Expression): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1046",
       messageParameters = Map(
-        "unsupported" -> unsupported.toString,
+        "unsupported" -> toSQLExpr(unsupported),
         "class" -> unsupported.getClass.toString))
   }
 
   def invalidHintParameterError(
-      hintName: String, invalidParams: Seq[Any]): Throwable = {
+      hintName: String, invalidParams: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1047",
       messageParameters = Map(
         "hintName" -> hintName,
-        "invalidParams" -> invalidParams.mkString(", ")))
+        "invalidParams" -> invalidParams.map(toSQLExpr).mkString(", ")))
   }
 
   def invalidCoalesceHintParameterError(hintName: String): Throwable = {
@@ -3316,10 +3310,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new NoSuchTableException(ident)
   }
 
-  def unsupportedTableChangeInJDBCCatalogError(change: TableChange): Throwable = {
+  def unsupportedTableChangeInJDBCCatalogError(
+      change: TableChange, tableName: String): Throwable = {
+    val sanitizedTableName = tableName.replaceAll("\"", "")
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1305",
-      messageParameters = Map("change" -> change.toString))
+      errorClass = "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG",
+      messageParameters = Map(
+        "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
@@ -3706,15 +3703,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(implicitTypes: Seq[StringType]): Throwable = {
-    new AnalysisException(
-      errorClass = "COLLATION_MISMATCH.IMPLICIT",
-      messageParameters = Map(
-        "implicitTypes" -> implicitTypes.map(toSQLType).mkString(", ")
-      )
-    )
-  }
-
   def explicitCollationMismatchError(explicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
@@ -3724,10 +3712,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def indeterminateCollationError(): Throwable = {
+  def indeterminateCollationInExpressionError(expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map.empty
+      messageParameters = Map("expr" -> toSQLExpr(expr))
+    )
+  }
+
+  def indeterminateCollationInSchemaError(columnPaths: Seq[ColumnPath]): Throwable = {
+    new AnalysisException(
+      errorClass = "INDETERMINATE_COLLATION_IN_SCHEMA",
+      messageParameters = Map(
+        "columnPaths" -> columnPaths.map(_.toString).mkString(", ")
+      )
     )
   }
 
@@ -4104,6 +4101,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     throw new AnalysisException(
       errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
+  }
+
+  def sqlScriptInExecuteImmediate(sqlScriptString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",
+      messageParameters = Map("sqlString" -> toSQLStmt(sqlScriptString)))
   }
 
   def dataSourceTableSchemaMismatchError(

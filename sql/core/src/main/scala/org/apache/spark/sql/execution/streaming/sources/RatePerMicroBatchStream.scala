@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -94,9 +94,28 @@ class RatePerMicroBatchStream(
     val (startOffset, startTimestamp) = extractOffsetAndTimestamp(start)
     val (endOffset, endTimestamp) = extractOffsetAndTimestamp(end)
 
-    assert(startOffset <= endOffset, s"startOffset($startOffset) > endOffset($endOffset)")
-    assert(startTimestamp <= endTimestamp,
-      s"startTimestamp($startTimestamp) > endTimestamp($endTimestamp)")
+    if (startOffset > endOffset) {
+      // This should not happen.
+      throw new SparkRuntimeException(
+        errorClass = "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE.INVALID_OFFSET",
+        messageParameters =
+          Map("startOffset" -> startOffset.toString, "endOffset" -> endOffset.toString))
+    }
+    if (startTimestamp > endTimestamp) {
+      // This could happen in the following scenario:
+      //  1. query starts with startingTimestamp=t1
+      //  2. query checkpoints offset for batch 0 with timestamp=t1
+      //  3. query stops, batch 0 is not committed
+      //  4. query restarts but with a new startingTimestamp=t2 (t2 > t1) and resumes batch 0
+      // Now the start offset is (offset=0, timestamp=t2) and the end offset
+      // is (offset=x, timestamp=t1)
+      throw new SparkRuntimeException(
+        errorClass = "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE.INVALID_TIMESTAMP",
+        messageParameters = Map(
+          "startTimestamp" -> startTimestamp.toString,
+          "endTimestamp" -> endTimestamp.toString))
+    }
+
     logDebug(s"startOffset: $startOffset, startTimestamp: $startTimestamp, " +
       s"endOffset: $endOffset, endTimestamp: $endTimestamp")
 

@@ -24,13 +24,14 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, Dataset, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -100,7 +101,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue,
         timeZoneId,
-        true)
+        true,
+        false)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
@@ -477,7 +479,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true, false)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(

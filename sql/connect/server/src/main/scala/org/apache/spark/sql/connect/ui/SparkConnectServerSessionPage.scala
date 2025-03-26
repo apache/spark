@@ -43,7 +43,7 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
       store
         .getSession(sessionId)
         .map { sessionStat =>
-          generateBasicStats() ++
+          generateBasicStats(sessionId) ++
             <br/> ++
             <h4>
             User
@@ -64,9 +64,12 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
   }
 
   /** Generate basic stats of the Spark Connect Server */
-  private def generateBasicStats(): Seq[Node] = {
+  private def generateBasicStats(sessionId: String): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
     <ul class ="list-unstyled">
+      <li>
+        <strong>Session ID: </strong> {sessionId}
+      </li>
       <li>
         <strong>Started at: </strong> {formatDate(startTime)}
       </li>

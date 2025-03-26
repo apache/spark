@@ -97,6 +97,8 @@ to return the metadata pertaining to a partition or column respectively.
       "partition_values": {
         "<col_name>": "<val>"
       },
+      "partition_columns": ["col1", "col2"],
+      "clustering_columns": ["col1", "col2"],
       "location": "<path>",
       "view_text": "<view_text>",
       "view_original_text": "<view_original_text>",

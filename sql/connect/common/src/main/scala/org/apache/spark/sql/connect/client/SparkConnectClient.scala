@@ -110,6 +110,15 @@ private[sql] class SparkConnectClient(
     bstub.analyzePlan(request)
   }
 
+  private def isValidUUID(uuid: String): Boolean = {
+    try {
+      UUID.fromString(uuid)
+      true
+    } catch {
+      case _: IllegalArgumentException => false
+    }
+  }
+
   /**
    * Execute the plan and return response iterator.
    *
@@ -117,7 +126,9 @@ private[sql] class SparkConnectClient(
    * done. If you don't close it, it and the underlying data will be cleaned up once the iterator
    * is garbage collected.
    */
-  def execute(plan: proto.Plan): CloseableIterator[proto.ExecutePlanResponse] = {
+  def execute(
+      plan: proto.Plan,
+      operationId: Option[String] = None): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()
@@ -127,6 +138,13 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+    operationId.foreach { opId =>
+      require(
+        isValidUUID(opId),
+        s"Invalid operationId: $opId. The id must be an UUID string of " +
+          "the format `00112233-4455-6677-8899-aabbccddeeff`")
+      request.setOperationId(opId)
+    }
     if (configuration.useReattachableExecute) {
       bstub.executePlanReattachable(request.build())
     } else {
@@ -406,10 +424,6 @@ object SparkConnectClient {
   private val AUTH_TOKEN_META_DATA_KEY: Metadata.Key[String] =
     Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
 
-  private val AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG: String =
-    "Authentication token cannot be passed over insecure connections. " +
-      "Either remove 'token' or set 'use_ssl=true'"
-
   // for internal tests
   private[sql] def apply(channel: ManagedChannel): SparkConnectClient = {
     new SparkConnectClient(Configuration(), channel)
@@ -427,7 +441,6 @@ object SparkConnectClient {
     def configuration: Configuration = _configuration
 
     def userId(id: String): Builder = {
-      // TODO this is not an optional field!
       require(id != null && id.nonEmpty)
       _configuration = _configuration.copy(userId = id)
       this
@@ -468,8 +481,6 @@ object SparkConnectClient {
      * sc://localhost/;token=aaa;use_ssl=true
      * }}}
      *
-     * Throws exception if the token is set but use_ssl=false.
-     *
      * @param inputToken
      *   the user token.
      * @return
@@ -477,11 +488,7 @@ object SparkConnectClient {
      */
     def token(inputToken: String): Builder = {
       require(inputToken != null && inputToken.nonEmpty)
-      if (_configuration.isSslEnabled.contains(false)) {
-        throw new IllegalArgumentException(AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
-      }
-      _configuration =
-        _configuration.copy(token = Option(inputToken), isSslEnabled = Option(true))
+      _configuration = _configuration.copy(token = Option(inputToken))
       this
     }
 
@@ -499,7 +506,6 @@ object SparkConnectClient {
      *   this builder.
      */
     def disableSsl(): Builder = {
-      require(token.isEmpty, AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
       _configuration = _configuration.copy(isSslEnabled = Option(false))
       this
     }
@@ -620,8 +626,19 @@ object SparkConnectClient {
      * Configure the builder using the env SPARK_REMOTE environment variable.
      */
     def loadFromEnvironment(): Builder = {
+      lazy val isAPIModeConnect =
+        Option(System.getProperty(org.apache.spark.sql.SparkSessionBuilder.API_MODE_KEY))
+          .getOrElse("classic")
+          .toLowerCase(Locale.ROOT) == "connect"
       Option(System.getProperty("spark.remote")) // Set from Spark Submit
         .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+        .orElse {
+          if (isAPIModeConnect) {
+            Option(System.getProperty("spark.master")).orElse(sys.env.get("MASTER"))
+          } else {
+            None
+          }
+        }
         .foreach(connectionString)
       this
     }
@@ -706,12 +723,15 @@ object SparkConnectClient {
       s"os/$osName").mkString(" ")
   }
 
+  private lazy val sparkUser =
+    sys.env.getOrElse("SPARK_USER", System.getProperty("user.name", null))
+
   /**
    * Helper class that fully captures the configuration for a [[SparkConnectClient]].
    */
   private[sql] case class Configuration(
-      userId: String = null,
-      userName: String = null,
+      userId: String = sparkUser,
+      userName: String = sparkUser,
       host: String = "localhost",
       port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT,
       token: Option[String] = None,
@@ -726,6 +746,8 @@ object SparkConnectClient {
       grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
       grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT) {
 
+    private def isLocal = host.equals("localhost")
+
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
       if (userId != null) {
@@ -738,7 +760,7 @@ object SparkConnectClient {
     }
 
     def credentials: ChannelCredentials = {
-      if (isSslEnabled.contains(true)) {
+      if (isSslEnabled.contains(true) || (token.isDefined && !isLocal)) {
         token match {
           case Some(t) =>
             // With access token added in the http header.
@@ -754,10 +776,18 @@ object SparkConnectClient {
     }
 
     def createChannel(): ManagedChannel = {
-      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, credentials)
+      val creds = credentials
+      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, creds)
 
-      if (metadata.nonEmpty) {
-        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
+      // Workaround LocalChannelCredentials are added in
+      // https://github.com/grpc/grpc-java/issues/9900
+      var metadataWithOptionalToken = metadata
+      if (!isSslEnabled.contains(true) && isLocal && token.isDefined) {
+        metadataWithOptionalToken = metadata + (("Authorization", s"Bearer ${token.get}"))
+      }
+
+      if (metadataWithOptionalToken.nonEmpty) {
+        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadataWithOptionalToken))
       }
 
       interceptors.foreach(channelBuilder.intercept(_))

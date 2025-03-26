@@ -27,12 +27,12 @@ from pyspark.errors import (
     RetriesExceeded,
 )
 from pyspark.sql import SparkSession as PySparkSession
-
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,
     connect_requirement_message,
 )
+from pyspark.testing.utils import timeout
 
 if should_test_connect:
     import grpc
@@ -43,6 +43,7 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import (
         AnalysisException,
         SparkConnectException,
+        SparkConnectGrpcException,
         SparkUpgradeException,
     )
 
@@ -84,6 +85,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
 
+    @timeout(3)
     def test_stop_session(self):
         df = self.spark.sql("select 1 as a, 2 as b")
         catalog = self.spark.catalog
@@ -237,7 +239,13 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         class CustomChannelBuilder(ChannelBuilder):
             def toChannel(self):
-                return self._insecure_channel(endpoint)
+                creds = grpc.local_channel_credentials()
+
+                if self.token is not None:
+                    creds = grpc.composite_channel_credentials(
+                        creds, grpc.access_token_call_credentials(self.token)
+                    )
+                return self._secure_channel(endpoint, creds)
 
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
         session.sql("select 1 + 1")
@@ -280,6 +288,24 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         # Should not throw any error
         session.stop()
+
+    def test_api_mode(self):
+        session = (
+            PySparkSession.builder.config("spark.api.mode", "connect")
+            .master("sc://localhost")
+            .getOrCreate()
+        )
+        self.assertEqual(session.range(1).first()[0], 0)
+        self.assertIsInstance(session, RemoteSparkSession)
+
+    def test_authentication(self):
+        # All servers start with a default token of "deadbeef", so supply in invalid one
+        session = RemoteSparkSession.builder.remote("sc://localhost/;token=invalid").create()
+
+        with self.assertRaises(SparkConnectGrpcException) as e:
+            session.range(3).collect()
+
+        self.assertTrue("Invalid authentication token" in str(e.exception))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

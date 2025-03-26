@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   ResolverGuard
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{
   LocalRelation,
   LogicalPlan,
@@ -142,13 +143,12 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
         Seq(col1Integer),
         LocalRelation(Seq(col1Integer))
       )
-    assert(
+    assertPlansEqual(
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
         new ResolverGuard(spark.sessionState.catalogManager),
         new ValidatingResolver(bridgeRelations = true)
-      ).apply(plan, null)
-      ==
+      ).apply(plan, null),
       resolvedPlan
     )
   }
@@ -312,7 +312,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
       Seq(col1Integer),
       LocalRelation(Seq(col1Integer))
     )
-    assert(
+    assertPlansEqual(
       withSQLConf(
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false"
       ) {
@@ -324,8 +324,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
             bridgeRelations = false
           )
         ).apply(plan, null)
-      }
-      ==
+      },
       resolvedPlan
     )
   }
@@ -339,7 +338,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
       Seq(col1Integer),
       LocalRelation(Seq(col1Integer))
     )
-    assert(
+    assertPlansEqual(
       withSQLConf(
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true"
@@ -352,8 +351,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
           new ResolverGuard(spark.sessionState.catalogManager),
           new ValidatingResolver(bridgeRelations = false)
         ).apply(plan, null)
-      }
-      ==
+      },
       resolvedPlan
     )
   }
@@ -369,7 +367,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     )
 
     val nestedAnalysis = () => {
-      assert(
+      assertPlansEqual(
         withSQLConf(
           SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true"
@@ -382,13 +380,12 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
             new ResolverGuard(spark.sessionState.catalogManager),
             new ValidatingResolver(bridgeRelations = false)
           ).apply(plan, null)
-        }
-        ==
+        },
         resolvedPlan
       )
     }
 
-    assert(
+    assertPlansEqual(
       new HybridAnalyzer(
         new CustomAnalyzer(
           customCode = () => { nestedAnalysis() },
@@ -396,9 +393,12 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
         ),
         new ResolverGuard(spark.sessionState.catalogManager),
         new ValidatingResolver(bridgeRelations = true)
-      ).apply(plan, null)
-      ==
+      ).apply(plan, null),
       resolvedPlan
     )
+  }
+
+  private def assertPlansEqual(actualPlan: LogicalPlan, expectedPlan: LogicalPlan) = {
+    assert(NormalizePlan(actualPlan) == NormalizePlan(expectedPlan))
   }
 }

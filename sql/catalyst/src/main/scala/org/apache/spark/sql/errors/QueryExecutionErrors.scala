@@ -276,6 +276,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timeParseError(input: String, fmt: Option[String], e: Throwable): SparkDateTimeException = {
+    new SparkDateTimeException(
+      errorClass = "CANNOT_PARSE_TIME",
+      messageParameters = Map(
+        "input" -> toSQLValue(input, StringType),
+        "format" -> toSQLValue(
+          fmt.getOrElse("HH:mm:ss.SSSSSS"),
+          StringType)),
+      context = Array.empty,
+      summary = "",
+      cause = Some(e))
+  }
+
   def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS",
@@ -287,9 +300,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def invalidIntervalWithMicrosecondsAdditionError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
-      messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+    new SparkIllegalArgumentException(errorClass = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION")
   }
 
   def overflowInSumOfDecimalError(
@@ -846,6 +857,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def arrowDataTypeMismatchError(
+      operation: String,
+      outputTypes: Seq[DataType],
+      actualDataTypes: Seq[DataType]): Throwable = {
+    new SparkException(
+      errorClass = "ARROW_TYPE_MISMATCH",
+      messageParameters = Map(
+        "operation" -> operation,
+        "outputTypes" -> outputTypes.mkString(", "),
+        "actualDataTypes" -> actualDataTypes.mkString(", ")),
+      cause = null)
+  }
+
   def cannotReadFilesError(
       e: Throwable,
       path: String): Throwable = {
@@ -980,6 +1004,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkSQLException(
       errorClass = "_LEGACY_ERROR_TEMP_2083",
       messageParameters = Map("content" -> content))
+  }
+
+  def hintUnsupportedForJdbcDialectError(jdbcDialect: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
+      messageParameters = Map("jdbcDialect" -> jdbcDialect))
   }
 
   def unsupportedArrayElementTypeBasedOnBinaryError(dt: DataType): SparkIllegalArgumentException = {
@@ -2631,6 +2661,34 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def malformedLogFile(text: String): Throwable = {
+    new SparkIllegalStateException(
+      errorClass = "MALFORMED_LOG_FILE",
+      messageParameters = Map("text" -> text),
+      cause = null
+    )
+  }
+
+  def logVersionGreaterThanSupported(version: Int, maxSupportedVersion: Int): Throwable = {
+    new SparkIllegalStateException(
+      errorClass = "INVALID_LOG_VERSION.MAX_SUPPORTED_VERSION",
+      messageParameters = Map(
+        "version" -> version.toString,
+        "maxSupportedVersion" -> maxSupportedVersion.toString),
+      cause = null
+    )
+  }
+
+  def logVersionNotMatch(version: Int, matchVersion: Int): Throwable = {
+    new SparkIllegalStateException(
+      errorClass = "INVALID_LOG_VERSION.EXACT_MATCH_VERSION",
+      messageParameters = Map(
+        "version" -> version.toString,
+        "matchVersion" -> matchVersion.toString),
+      cause = null
+    )
+  }
+
   def invalidChangeLogReaderVersion(version: Long): Throwable = {
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",
@@ -2910,5 +2968,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "schema" -> toSQLType(schema)
       )
     )
+  }
+
+  def nullDataSourceOption(option: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "NULL_DATA_SOURCE_OPTION",
+      messageParameters = Map("option" -> option)
+    )
+  }
+
+  def notAbsolutePathError(path: Path): SparkException = {
+    SparkException.internalError(s"$path is not absolute path.")
   }
 }

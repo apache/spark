@@ -17,11 +17,12 @@
 
 package org.apache.spark
 
-import java.util.TimerTask
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.{ArrayList, Collections, TimerTask}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 import java.util.function.Consumer
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
@@ -53,8 +54,9 @@ private[spark] class BarrierCoordinator(
 
   // TODO SPARK-25030 Create a Timer() in the mainClass submitted to SparkSubmit makes it unable to
   // fetch result, we shall fix the issue.
-  private lazy val timer = ThreadUtils.newSingleThreadScheduledExecutor(
+  private lazy val timer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     "BarrierCoordinator barrier epoch increment timer")
+  private val timerFutures = Collections.synchronizedList(new ArrayList[ScheduledFuture[_]])
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
@@ -80,8 +82,10 @@ private[spark] class BarrierCoordinator(
       states.forEachValue(1, clearStateConsumer)
       states.clear()
       listenerBus.removeListener(listener)
-      ThreadUtils.shutdown(timer)
     } finally {
+      timerFutures.asScala.foreach(_.cancel(false))
+      timerFutures.clear()
+      ThreadUtils.shutdown(timer)
       super.onStop()
     }
   }
@@ -134,11 +138,8 @@ private[spark] class BarrierCoordinator(
 
     // Cancel the current active TimerTask and release resources.
     private def cancelTimerTask(): Unit = {
-      if (timerTask != null) {
-        timerTask.cancel()
-        timer.purge()
-        timerTask = null
-      }
+      timerFutures.asScala.foreach(_.cancel(false))
+      timerFutures.clear()
     }
 
     // Process the global sync request. The barrier() call succeed if collected enough requests
@@ -173,7 +174,8 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS)
+          val timerFuture = timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS)
+          timerFutures.add(timerFuture)
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester

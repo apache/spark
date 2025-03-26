@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Unpivot
 }
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.types.DataType
 
@@ -142,7 +143,9 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         case s @ Except(left, right, isAll)
             if s.childrenResolved &&
             left.output.length == right.output.length && !s.resolved =>
-          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
+            buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          }
           if (newChildren.isEmpty) {
             s -> Nil
           } else {
@@ -154,7 +157,9 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         case s @ Intersect(left, right, isAll)
             if s.childrenResolved &&
             left.output.length == right.output.length && !s.resolved =>
-          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
+            buildNewChildrenWithWiderTypes(left :: right :: Nil)
+          }
           if (newChildren.isEmpty) {
             s -> Nil
           } else {
@@ -166,7 +171,9 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         case s: Union
             if s.childrenResolved && !s.byName &&
             s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
-          val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
+          val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
+            buildNewChildrenWithWiderTypes(s.children)
+          }
           if (newChildren.isEmpty) {
             s -> Nil
           } else {

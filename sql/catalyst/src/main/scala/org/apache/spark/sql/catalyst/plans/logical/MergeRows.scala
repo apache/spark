@@ -49,6 +49,12 @@ case class MergeRows(
     AttributeSet.fromAttributeSets(usedExprs.map(_.references)) -- producedAttributes
   }
 
+  def instructions: Seq[Instruction] = {
+    matchedInstructions ++ notMatchedInstructions ++ notMatchedBySourceInstructions
+  }
+
+  def outputs: Seq[Seq[Expression]] = instructions.flatMap(_.outputs)
+
   override def simpleString(maxFields: Int): String = {
     s"MergeRows${truncatedString(output, "[", ", ", "]", maxFields)}"
   }

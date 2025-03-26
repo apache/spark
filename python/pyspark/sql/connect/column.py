@@ -27,6 +27,7 @@ from typing import (
     Any,
     Union,
     Optional,
+    Tuple,
 )
 
 from pyspark.sql.column import Column as ParentColumn
@@ -43,7 +44,6 @@ from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
     UnresolvedExtractValue,
-    LazyExpression,
     LiteralExpression,
     CaseWhen,
     SortOrder,
@@ -109,13 +109,11 @@ def _to_expr(v: Any) -> Expression:
 
 @with_origin_to_class(["to_plan"])
 class Column(ParentColumn):
-    def __new__(
-        cls,
-        expr: "Expression",
-    ) -> "Column":
-        self = object.__new__(cls)
-        self.__init__(expr)  # type: ignore[misc]
-        return self
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Column":
+        return object.__new__(cls)
+
+    def __getnewargs__(self) -> Tuple[Any, ...]:
+        return (self._expr,)
 
     def __init__(self, expr: "Expression") -> None:
         if not isinstance(expr, Expression):
@@ -460,7 +458,7 @@ class Column(ParentColumn):
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
     def outer(self) -> ParentColumn:
-        return Column(LazyExpression(self._expr))
+        return Column(self._expr)
 
     def isin(self, *cols: Any) -> ParentColumn:
         if len(cols) == 1 and isinstance(cols[0], (list, set)):

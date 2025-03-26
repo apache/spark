@@ -36,11 +36,12 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LocalRelation}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.exchange.{REQUIRED_BY_STATEFUL_OPERATOR, ReusedExchangeExec, ShuffleExchangeExec}
@@ -1496,7 +1497,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       override def schema: StructType = triggerDF.schema
       override def getOffset: Option[Offset] = Some(LongOffset(0))
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        sqlContext.internalCreateDataFrame(
+        sqlContext.sparkSession.internalCreateDataFrame(
           triggerDF.queryExecution.toRdd, triggerDF.schema, isStreaming = true)
       }
       override def stop(): Unit = {}

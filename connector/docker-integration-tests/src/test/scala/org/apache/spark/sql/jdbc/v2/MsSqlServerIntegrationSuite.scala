@@ -136,16 +136,19 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
     val df1 = sql("SELECT name FROM " +
       s"$catalogName.employee WHERE ((name LIKE 'am%') = (name LIKE '%y'))")
+    checkFilterPushed(df1)
     assert(df1.collect().length == 4)
 
     val df2 = sql("SELECT name FROM " +
       s"$catalogName.employee " +
       "WHERE ((name NOT LIKE 'am%') = (name NOT LIKE '%y'))")
+    checkFilterPushed(df2)
     assert(df2.collect().length == 4)
 
     val df3 = sql("SELECT name FROM " +
       s"$catalogName.employee " +
       "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
+    checkFilterPushed(df3)
     assert(df3.collect().length == 3)
   }
 
@@ -159,6 +162,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         |SELECT * FROM tbl
         |WHERE deptString = 'first'
         |""".stripMargin)
+    checkFilterPushed(df)
     assert(df.collect().length == 2)
   }
 
@@ -169,9 +173,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE IIF(("name" <> 'Wizard'), 1, 0) END = 1)  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE IIF(("name" <> 'Wizard'), 1, 0) END = 1)  """
     )
     // scalastyle:on
     df.collect()
@@ -184,9 +189,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE 1 END = 1)  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE 1 END = 1)  """
     )
     // scalastyle:on
     df.collect()
@@ -201,9 +207,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF((CASE WHEN ("name" = 'Elf') THEN IIF(("name" = 'Elrond'), 1, 0) ELSE IIF(("name" = 'Gandalf'), 1, 0) END = 1), 1, 0) ELSE IIF(("name" = 'Sauron'), 1, 0) END = 1)  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF((CASE WHEN ("name" = 'Elf') THEN IIF(("name" = 'Elrond'), 1, 0) ELSE IIF(("name" = 'Gandalf'), 1, 0) END = 1), 1, 0) ELSE IIF(("name" = 'Sauron'), 1, 0) END = 1)  """
     )
     // scalastyle:on
     df.collect()
@@ -218,11 +225,36 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |""".stripMargin
     )
 
+    checkFilterPushed(df)
     // scalastyle:off
     assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
-      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE ("name" IS NOT NULL) AND ((CASE WHEN "name" = 'Legolas' THEN CASE WHEN "name" = 'Elf' THEN 'Elf' ELSE 'Wizard' END ELSE 'Sauron' END) = "name")  """
+      """SELECT  "dept","name","salary","bonus" FROM "employee" WHERE ("name" IS NOT NULL) AND ((CASE WHEN "name" = 'Legolas' THEN CASE WHEN "name" = 'Elf' THEN 'Elf' ELSE 'Wizard' END ELSE 'Sauron' END) = "name")  """
     )
     // scalastyle:on
     df.collect()
+  }
+
+  test("SPARK-51321: SQLServer pushdown for RPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE rpad(name, 10, 'x') = 'amyxxxxxxx'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-51321: SQLServer pushdown for LPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE lpad(name, 10, 'x') = 'xxxxxxxamy'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    assert(rows(0).getString(0) === "amy")
   }
 }

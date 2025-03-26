@@ -54,6 +54,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
@@ -2439,11 +2440,18 @@ private[spark] object Utils
 
   /**
    * Returns the current user name. This is the currently logged in user, unless that's been
-   * overridden by the `SPARK_USER` environment variable.
+   * overridden by the `SPARK_USER` environment variable. In case of exceptions, returns the value
+   * of {@code System.getProperty("user.name", "<unknown>")}.
    */
   def getCurrentUserName(): String = {
-    Option(System.getenv("SPARK_USER"))
-      .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+    try {
+      Option(System.getenv("SPARK_USER"))
+        .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+    } catch {
+      // JEP 486: Permanently Disable the Security Manager
+      case e: UnsupportedOperationException if e.getMessage().contains("getSubject") =>
+        System.getProperty("user.name", "<unknown>")
+    }
   }
 
   val EMPTY_USER_GROUPS = Set.empty[String]
@@ -3087,6 +3095,18 @@ private[spark] object Utils
   }
 
   /**
+   * Create a resource uninterruptibly if we are in a task thread (i.e., TaskContext.get() != null).
+   * Otherwise, create the resource normally. This is mainly used in the situation where we want to
+   * create a multi-layer resource in a task thread. The uninterruptible behavior ensures we don't
+   * leak the underlying resources when there is a task cancellation request,
+   */
+  def createResourceUninterruptiblyIfInTaskThread[R <: Closeable](createResource: => R): R = {
+    Option(TaskContext.get()).map(_.createResourceUninterruptibly {
+      createResource
+    }).getOrElse(createResource)
+  }
+
+  /**
    * Return the median number of a long array
    *
    * @param sizes
@@ -3152,6 +3172,9 @@ private[util] object CallerContext extends Logging {
  * specific applications impacting parts of the Hadoop system and potential problems they may be
  * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
  * very helpful to track which upper level job issues it.
+ * The context information is also set in the audit context for cloud storage
+ * connectors. If supported, this gets marshalled as part of the HTTP Referrer header
+ * or similar field, and so ends up in the store service logs themselves.
  *
  * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
  *
@@ -3202,11 +3225,15 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[HadoopCallerContext]].
+   * [[HadoopCallerContext]], which is included in IPC calls,
+   * and the Hadoop audit context, which may be included in cloud storage
+   * requests.
    */
   def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
     val hdfsContext = new HadoopCallerContextBuilder(context).build()
     HadoopCallerContext.setCurrent(hdfsContext)
+    // set the audit context for to object stores, with the prefix "spark"
+    currentAuditContext.put("spark", context)
   }
 }
 

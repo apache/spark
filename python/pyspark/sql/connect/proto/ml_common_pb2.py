@@ -38,7 +38,7 @@ from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_e
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\x98\x01\n\x08MlParams\x12;\n\x06params\x18\x01 \x03(\x0b\x32#.spark.connect.MlParams.ParamsEntryR\x06params\x1aO\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12*\n\x05value\x18\x02 \x01(\x0b\x32\x14.spark.connect.ParamR\x05value:\x02\x38\x01"\xb6\x01\n\x05Param\x12=\n\x07literal\x18\x01 \x01(\x0b\x32!.spark.connect.Expression.LiteralH\x00R\x07literal\x12/\n\x06vector\x18\x02 \x01(\x0b\x32\x15.spark.connect.VectorH\x00R\x06vector\x12/\n\x06matrix\x18\x03 \x01(\x0b\x32\x15.spark.connect.MatrixH\x00R\x06matrixB\x0c\n\nparam_type"\xc9\x01\n\nMlOperator\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n\x03uid\x18\x02 \x01(\tR\x03uid\x12:\n\x04type\x18\x03 \x01(\x0e\x32&.spark.connect.MlOperator.OperatorTypeR\x04type"Y\n\x0cOperatorType\x12\x0f\n\x0bUNSPECIFIED\x10\x00\x12\r\n\tESTIMATOR\x10\x01\x12\x0f\n\x0bTRANSFORMER\x10\x02\x12\r\n\tEVALUATOR\x10\x03\x12\t\n\x05MODEL\x10\x04"\x1b\n\tObjectRef\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id"\xed\x01\n\x06Vector\x12\x33\n\x05\x64\x65nse\x18\x01 \x01(\x0b\x32\x1b.spark.connect.Vector.DenseH\x00R\x05\x64\x65nse\x12\x36\n\x06sparse\x18\x02 \x01(\x0b\x32\x1c.spark.connect.Vector.SparseH\x00R\x06sparse\x1a\x1d\n\x05\x44\x65nse\x12\x14\n\x05value\x18\x01 \x03(\x01R\x05value\x1aH\n\x06Sparse\x12\x12\n\x04size\x18\x01 \x01(\x05R\x04size\x12\x14\n\x05index\x18\x02 \x03(\x05R\x05index\x12\x14\n\x05value\x18\x03 \x03(\x01R\x05valueB\r\n\x0bvector_type"\xaf\x03\n\x06Matrix\x12\x33\n\x05\x64\x65nse\x18\x01 \x01(\x0b\x32\x1b.spark.connect.Matrix.DenseH\x00R\x05\x64\x65nse\x12\x36\n\x06sparse\x18\x02 \x01(\x0b\x32\x1c.spark.connect.Matrix.SparseH\x00R\x06sparse\x1ax\n\x05\x44\x65nse\x12\x19\n\x08num_rows\x18\x01 \x01(\x05R\x07numRows\x12\x19\n\x08num_cols\x18\x02 \x01(\x05R\x07numCols\x12\x14\n\x05value\x18\x03 \x03(\x01R\x05value\x12#\n\ris_transposed\x18\x04 \x01(\x08R\x0cisTransposed\x1a\xae\x01\n\x06Sparse\x12\x19\n\x08num_rows\x18\x01 \x01(\x05R\x07numRows\x12\x19\n\x08num_cols\x18\x02 \x01(\x05R\x07numCols\x12\x16\n\x06\x63olptr\x18\x03 \x03(\x05R\x06\x63olptr\x12\x1b\n\trow_index\x18\x04 \x03(\x05R\x08rowIndex\x12\x14\n\x05value\x18\x05 \x03(\x01R\x05value\x12#\n\ris_transposed\x18\x06 \x01(\x08R\x0cisTransposedB\r\n\x0bmatrix_typeB6\n\x1eorg.apache.spark.connect.protoP\x01Z\x12internal/generatedb\x06proto3'
+    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xa5\x01\n\x08MlParams\x12;\n\x06params\x18\x01 \x03(\x0b\x32#.spark.connect.MlParams.ParamsEntryR\x06params\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\x90\x02\n\nMlOperator\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n\x03uid\x18\x02 \x01(\tR\x03uid\x12:\n\x04type\x18\x03 \x01(\x0e\x32&.spark.connect.MlOperator.OperatorTypeR\x04type"\x9f\x01\n\x0cOperatorType\x12\x1d\n\x19OPERATOR_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n\x17OPERATOR_TYPE_ESTIMATOR\x10\x01\x12\x1d\n\x19OPERATOR_TYPE_TRANSFORMER\x10\x02\x12\x1b\n\x17OPERATOR_TYPE_EVALUATOR\x10\x03\x12\x17\n\x13OPERATOR_TYPE_MODEL\x10\x04"\x1b\n\tObjectRef\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02idB6\n\x1eorg.apache.spark.connect.protoP\x01Z\x12internal/generatedb\x06proto3'
 )
 
 _globals = globals()
@@ -54,27 +54,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_MLPARAMS_PARAMSENTRY"]._loaded_options = None
     _globals["_MLPARAMS_PARAMSENTRY"]._serialized_options = b"8\001"
     _globals["_MLPARAMS"]._serialized_start = 82
-    _globals["_MLPARAMS"]._serialized_end = 234
+    _globals["_MLPARAMS"]._serialized_end = 247
     _globals["_MLPARAMS_PARAMSENTRY"]._serialized_start = 155
-    _globals["_MLPARAMS_PARAMSENTRY"]._serialized_end = 234
-    _globals["_PARAM"]._serialized_start = 237
-    _globals["_PARAM"]._serialized_end = 419
-    _globals["_MLOPERATOR"]._serialized_start = 422
-    _globals["_MLOPERATOR"]._serialized_end = 623
-    _globals["_MLOPERATOR_OPERATORTYPE"]._serialized_start = 534
-    _globals["_MLOPERATOR_OPERATORTYPE"]._serialized_end = 623
-    _globals["_OBJECTREF"]._serialized_start = 625
-    _globals["_OBJECTREF"]._serialized_end = 652
-    _globals["_VECTOR"]._serialized_start = 655
-    _globals["_VECTOR"]._serialized_end = 892
-    _globals["_VECTOR_DENSE"]._serialized_start = 774
-    _globals["_VECTOR_DENSE"]._serialized_end = 803
-    _globals["_VECTOR_SPARSE"]._serialized_start = 805
-    _globals["_VECTOR_SPARSE"]._serialized_end = 877
-    _globals["_MATRIX"]._serialized_start = 895
-    _globals["_MATRIX"]._serialized_end = 1326
-    _globals["_MATRIX_DENSE"]._serialized_start = 1014
-    _globals["_MATRIX_DENSE"]._serialized_end = 1134
-    _globals["_MATRIX_SPARSE"]._serialized_start = 1137
-    _globals["_MATRIX_SPARSE"]._serialized_end = 1311
+    _globals["_MLPARAMS_PARAMSENTRY"]._serialized_end = 247
+    _globals["_MLOPERATOR"]._serialized_start = 250
+    _globals["_MLOPERATOR"]._serialized_end = 522
+    _globals["_MLOPERATOR_OPERATORTYPE"]._serialized_start = 363
+    _globals["_MLOPERATOR_OPERATORTYPE"]._serialized_end = 522
+    _globals["_OBJECTREF"]._serialized_start = 524
+    _globals["_OBJECTREF"]._serialized_end = 551
 # @@protoc_insertion_point(module_scope)

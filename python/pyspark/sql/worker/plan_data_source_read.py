@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import faulthandler
 import os
 import sys
 import functools
@@ -31,7 +32,7 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql import Row
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
+from pyspark.sql.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,
@@ -187,7 +188,13 @@ def main(infile: IO, outfile: IO) -> None:
     The partition values and the Arrow Batch are then serialized and sent back to the JVM
     via the socket.
     """
+    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
+        if faulthandler_log_path:
+            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+            faulthandler_log_file = open(faulthandler_log_path, "w")
+            faulthandler.enable(file=faulthandler_log_file)
+
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
@@ -243,6 +250,7 @@ def main(infile: IO, outfile: IO) -> None:
             "The maximum arrow batch size should be greater than 0, but got "
             f"'{max_arrow_batch_size}'"
         )
+        enable_pushdown = read_bool(infile)
 
         is_streaming = read_bool(infile)
 
@@ -260,6 +268,19 @@ def main(infile: IO, outfile: IO) -> None:
                     messageParameters={
                         "expected": "an instance of DataSourceReader",
                         "actual": f"'{type(reader).__name__}'",
+                    },
+                )
+            is_pushdown_implemented = (
+                getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
+            )
+            if is_pushdown_implemented and not enable_pushdown:
+                # Do not silently ignore pushFilters when pushdown is disabled.
+                # Raise an error to ask the user to enable pushdown.
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
+                    messageParameters={
+                        "type": type(reader).__name__,
+                        "conf": "spark.sql.python.filterPushdown.enabled",
                     },
                 )
 
@@ -351,6 +372,11 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
+    finally:
+        if faulthandler_log_path:
+            faulthandler.disable()
+            faulthandler_log_file.close()
+            os.remove(faulthandler_log_path)
 
     send_accumulator_updates(outfile)
 

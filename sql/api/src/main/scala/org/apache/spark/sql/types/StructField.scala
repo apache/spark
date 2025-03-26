@@ -122,7 +122,7 @@ case class StructField(
   }
 
   private def schemaCollationValue(dt: DataType): String = dt match {
-    case st: StringType =>
+    case st: StringType if st != IndeterminateStringType =>
       val collation = CollationFactory.fetchCollation(st.collationId)
       collation.identifier().toStringWithoutVersion()
     case _ =>
@@ -212,6 +212,10 @@ case class StructField(
     } else {
       None
     }
+  }
+
+  private[sql] def hasExistenceDefaultValue: Boolean = {
+    metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
   }
 
   private def getDDLDefault = getCurrentDefaultValue()

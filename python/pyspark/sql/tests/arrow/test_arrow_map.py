@@ -170,6 +170,11 @@ class MapInArrowTestsMixin(object):
 
         df.mapInArrow(func2, "id long", True).collect()
 
+    def test_negative_and_zero_batch_size(self):
+        for batch_size in [0, -1]:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                MapInArrowTests.test_map_in_arrow(self)
+
 
 class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -192,6 +197,15 @@ class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
+
+
+class MapInArrowWithArrowBatchSlicingTestsAndReducedBatchSizeTests(MapInArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        MapInArrowTests.setUpClass()
+        # Set it to a small odd value to exercise batching logic for all test cases
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxBytesPerBatch", "10")
 
 
 if __name__ == "__main__":

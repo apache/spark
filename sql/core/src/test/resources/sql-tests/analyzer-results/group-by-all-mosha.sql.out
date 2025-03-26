@@ -91,8 +91,8 @@ SELECT s AS s, COUNT(*) c FROM stuff GROUP BY ALL HAVING SUM(f) > 0 ORDER BY s
 -- !query analysis
 Sort [s#x ASC NULLS FIRST], true
 +- Project [s#x, c#xL]
-   +- Filter (sum(f#x)#x > cast(cast(0 as decimal(1,0)) as decimal(16,4)))
-      +- Aggregate [s#x], [s#x AS s#x, count(1) AS c#xL, sum(f#x) AS sum(f#x)#x]
+   +- Filter (sum(f)#x > cast(cast(0 as decimal(1,0)) as decimal(16,4)))
+      +- Aggregate [s#x], [s#x AS s#x, count(1) AS c#xL, sum(f#x) AS sum(f)#x]
          +- SubqueryAlias stuff
             +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
                +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]
