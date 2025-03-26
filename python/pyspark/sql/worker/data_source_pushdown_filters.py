@@ -15,17 +15,38 @@
 # limitations under the License.
 #
 
+import base64
 import faulthandler
+import json
 import os
 import sys
+import typing
 from dataclasses import dataclass, field
-from typing import IO, List
+from typing import IO, Type, Union
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkValueError
+from pyspark.errors.exceptions.base import PySparkNotImplementedError
 from pyspark.serializers import SpecialLengths, UTF8Deserializer, read_int, write_int
-from pyspark.sql.datasource import DataSource, DataSourceReader, EqualTo, Filter
-from pyspark.sql.types import StructType, _parse_datatype_json_string
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceReader,
+    EqualNullSafe,
+    EqualTo,
+    Filter,
+    GreaterThan,
+    GreaterThanOrEqual,
+    In,
+    IsNotNull,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Not,
+    StringContains,
+    StringEndsWith,
+    StringStartsWith,
+)
+from pyspark.sql.types import StructType, VariantVal, _parse_datatype_json_string
 from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
@@ -39,6 +60,25 @@ from pyspark.worker_util import (
 
 utf8_deserializer = UTF8Deserializer()
 
+BinaryFilter = Union[
+    EqualTo,
+    EqualNullSafe,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    In,
+    StringStartsWith,
+    StringEndsWith,
+    StringContains,
+]
+
+binary_filters = {cls.__name__: cls for cls in typing.get_args(BinaryFilter)}
+
+UnaryFilter = Union[IsNotNull, IsNull]
+
+unary_filters = {cls.__name__: cls for cls in typing.get_args(UnaryFilter)}
+
 
 @dataclass(frozen=True)
 class FilterRef:
@@ -47,6 +87,34 @@ class FilterRef:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", id(self.filter))
+
+
+def deserializeVariant(variantDict: dict) -> VariantVal:
+    value = base64.b64decode(variantDict["value"])
+    metadata = base64.b64decode(variantDict["metadata"])
+    return VariantVal(value, metadata)
+
+
+def deserializeFilter(jsonDict: dict) -> Filter:
+    name = jsonDict["name"]
+    filter: Filter
+    if name in binary_filters:
+        binary_filter_cls: Type[BinaryFilter] = binary_filters[name]
+        filter = binary_filter_cls(
+            attribute=tuple(jsonDict["columnPath"]),
+            value=deserializeVariant(jsonDict["value"]).toPython(),
+        )
+    elif name in unary_filters:
+        unary_filter_cls: Type[UnaryFilter] = unary_filters[name]
+        filter = unary_filter_cls(attribute=tuple(jsonDict["columnPath"]))
+    else:
+        raise PySparkNotImplementedError(
+            errorClass="UNSUPPORTED_FILTER",
+            messageParameters={"name": name},
+        )
+    if jsonDict["isNegated"]:
+        filter = Not(filter)
+    return filter
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -126,22 +194,9 @@ def main(infile: IO, outfile: IO) -> None:
             )
 
         # Receive the pushdown filters.
-        num_filters = read_int(infile)
-        filters: List[FilterRef] = []
-        for _ in range(num_filters):
-            name = utf8_deserializer.loads(infile)
-            if name == "EqualTo":
-                num_parts = read_int(infile)
-                column_path = tuple(utf8_deserializer.loads(infile) for _ in range(num_parts))
-                value = read_int(infile)
-                filters.append(FilterRef(EqualTo(column_path, value)))
-            else:
-                raise PySparkAssertionError(
-                    errorClass="DATA_SOURCE_UNSUPPORTED_FILTER",
-                    messageParameters={
-                        "name": name,
-                    },
-                )
+        json_str = utf8_deserializer.loads(infile)
+        filter_dicts = json.loads(json_str)
+        filters = [FilterRef(deserializeFilter(f)) for f in filter_dicts]
 
         # Push down the filters and get the indices of the unsupported filters.
         unsupported_filters = set(

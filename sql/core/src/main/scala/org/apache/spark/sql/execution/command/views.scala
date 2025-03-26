@@ -675,7 +675,7 @@ object ViewHelper extends SQLConfHelper with Logging {
       val tempVars = collectTemporaryVariables(child)
       tempVars.foreach { nameParts =>
         throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
-          name, nameParts.quoted)
+          name.nameParts, nameParts)
       }
     }
   }

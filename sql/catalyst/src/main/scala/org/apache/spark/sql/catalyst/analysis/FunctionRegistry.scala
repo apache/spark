@@ -640,7 +640,7 @@ object FunctionRegistry {
     expression[DayOfMonth]("dayofmonth"),
     expression[FromUnixTime]("from_unixtime"),
     expression[FromUTCTimestamp]("from_utc_timestamp"),
-    expression[Hour]("hour"),
+    expressionBuilder("hour", HourExpressionBuilder),
     expression[LastDay]("last_day"),
     expressionBuilder("minute", MinuteExpressionBuilder),
     expression[Month]("month"),

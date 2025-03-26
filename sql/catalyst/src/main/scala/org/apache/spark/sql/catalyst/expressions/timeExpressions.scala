@@ -233,3 +233,60 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
     }
   }
 }
+
+case class HoursOfTime(child: Expression)
+  extends RuntimeReplaceable
+    with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    IntegerType,
+    "getHoursOfTime",
+    Seq(child),
+    Seq(child.dataType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType())
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override def prettyName: String = "hour"
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+    copy(child = newChildren.head)
+  }
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the hour component of the given expression.
+
+    If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
+    it returns the hour of that timestamp.
+    If `expr` is a TIME type (since 4.1.0), it returns the hour of the time-of-day.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2018-02-14 12:58:59');
+       12
+      > SELECT _FUNC_(TIME'13:59:59.999999');
+       13
+  """,
+  since = "1.5.0",
+  group = "datetime_funcs")
+object HourExpressionBuilder extends ExpressionBuilder {
+  override def build(name: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.isEmpty) {
+      throw QueryCompilationErrors.wrongNumArgsError(name, Seq("> 0"), expressions.length)
+    } else {
+      val child = expressions.head
+      child.dataType match {
+        case _: TimeType =>
+          HoursOfTime(child)
+        case _ =>
+          Hour(child)
+      }
+    }
+  }
+}

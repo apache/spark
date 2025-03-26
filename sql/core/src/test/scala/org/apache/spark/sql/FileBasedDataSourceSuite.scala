@@ -1247,7 +1247,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-51590: unsupported the TIME data types in data sources") {
-    val datasources = allFileBasedDataSources :+ "xml"
+    val datasources = Seq("orc", "xml", "csv", "json", "text")
     Seq(true, false).foreach { useV1 =>
       val useV1List = if (useV1) {
         datasources.mkString(",")

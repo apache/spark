@@ -33,7 +33,6 @@ class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog with Pro
   override protected def allNamespaces: Seq[Seq[String]] =
     (super.allNamespaces ++ functions.keySet.asScala.map(_.namespace.toSeq)).distinct
 
-
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {
     if (namespace.isEmpty || namespaceExists(namespace)) {
       functions.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray

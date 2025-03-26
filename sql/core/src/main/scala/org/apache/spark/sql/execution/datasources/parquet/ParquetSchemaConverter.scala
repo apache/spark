@@ -284,7 +284,11 @@ class ParquetToSparkSchemaConverter(
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
             LongType
-          case _ => illegalType()
+          case time: TimeLogicalTypeAnnotation
+            if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
+            TimeType(TimeType.MICROS_PRECISION)
+          case _ =>
+            illegalType()
         }
 
       case INT96 =>
@@ -561,7 +565,7 @@ class SparkToParquetSchemaConverter(
       case IntegerType | _: YearMonthIntervalType =>
         Types.primitive(INT32, repetition).named(field.name)
 
-      case LongType | _: DayTimeIntervalType =>
+      case LongType | _: DayTimeIntervalType | _: TimeType =>
         Types.primitive(INT64, repetition).named(field.name)
 
       case FloatType =>

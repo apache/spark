@@ -158,6 +158,8 @@ public class ParquetVectorUpdaterFactory {
           return new LongUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
           return new LongToDecimalUpdater(descriptor, (DecimalType) sparkType);
+        } else if (sparkType instanceof TimeType) {
+          return new LongUpdater();
         }
       }
       case FLOAT -> {

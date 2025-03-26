@@ -400,15 +400,6 @@ trait GetTimeField extends UnaryExpression
   }
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('2009-07-30 12:58:59');
-       12
-  """,
-  group = "datetime_funcs",
-  since = "1.5.0")
 case class Hour(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
   override def withTimeZone(timeZoneId: String): Hour = copy(timeZoneId = Option(timeZoneId))
