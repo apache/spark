@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.descriptor
@@ -41,21 +42,17 @@ import google.protobuf.message
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.ml_common_pb2
 import pyspark.sql.connect.proto.relations_pb2
-import sys
 import typing
-
-if sys.version_info >= (3, 8):
-    import typing as typing_extensions
-else:
-    import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing.final
 class MlCommand(google.protobuf.message.Message):
     """Command for ML"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing.final
     class Fit(google.protobuf.message.Message):
         """Command for estimator.fit(dataset)"""
 
@@ -82,7 +79,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "dataset",
@@ -95,7 +92,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "dataset",
@@ -107,9 +104,10 @@ class MlCommand(google.protobuf.message.Message):
             ],
         ) -> None: ...
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
+            self, oneof_group: typing.Literal["_params", b"_params"]
+        ) -> typing.Literal["params"] | None: ...
 
+    @typing.final
     class Delete(google.protobuf.message.Message):
         """Command to delete the cached object which could be a model
         or summary evaluated by a model
@@ -125,18 +123,16 @@ class MlCommand(google.protobuf.message.Message):
             *,
             obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
-        ) -> None: ...
+        def HasField(self, field_name: typing.Literal["obj_ref", b"obj_ref"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing.Literal["obj_ref", b"obj_ref"]) -> None: ...
 
+    @typing.final
     class Write(google.protobuf.message.Message):
         """Command to write ML operator"""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        @typing.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -151,7 +147,7 @@ class MlCommand(google.protobuf.message.Message):
                 value: builtins.str = ...,
             ) -> None: ...
             def ClearField(
-                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+                self, field_name: typing.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
 
         OPERATOR_FIELD_NUMBER: builtins.int
@@ -160,6 +156,10 @@ class MlCommand(google.protobuf.message.Message):
         PATH_FIELD_NUMBER: builtins.int
         SHOULD_OVERWRITE_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
+        path: builtins.str
+        """(Required) Save the ML instance to the path"""
+        should_overwrite: builtins.bool
+        """(Optional) Overwrites if the output path already exists."""
         @property
         def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
             """Estimator or evaluator"""
@@ -169,10 +169,6 @@ class MlCommand(google.protobuf.message.Message):
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
             """(Optional) The parameters of operator which could be estimator/evaluator or a cached model"""
-        path: builtins.str
-        """(Required) Save the ML instance to the path"""
-        should_overwrite: builtins.bool
-        """(Optional) Overwrites if the output path already exists."""
         @property
         def options(
             self,
@@ -190,7 +186,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "_should_overwrite",
@@ -209,7 +205,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "_should_overwrite",
@@ -232,17 +228,18 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
+            self, oneof_group: typing.Literal["_params", b"_params"]
+        ) -> typing.Literal["params"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_should_overwrite", b"_should_overwrite"]
-        ) -> typing_extensions.Literal["should_overwrite"] | None: ...
+            self, oneof_group: typing.Literal["_should_overwrite", b"_should_overwrite"]
+        ) -> typing.Literal["should_overwrite"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["type", b"type"]
-        ) -> typing_extensions.Literal["operator", "obj_ref"] | None: ...
+            self, oneof_group: typing.Literal["type", b"type"]
+        ) -> typing.Literal["operator", "obj_ref"] | None: ...
 
+    @typing.final
     class Read(google.protobuf.message.Message):
         """Command to load ML operator."""
 
@@ -250,11 +247,11 @@ class MlCommand(google.protobuf.message.Message):
 
         OPERATOR_FIELD_NUMBER: builtins.int
         PATH_FIELD_NUMBER: builtins.int
+        path: builtins.str
+        """(Required) Load the ML instance from the input path"""
         @property
         def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
             """(Required) ML operator information"""
-        path: builtins.str
-        """(Required) Load the ML instance from the input path"""
         def __init__(
             self,
             *,
@@ -262,12 +259,13 @@ class MlCommand(google.protobuf.message.Message):
             path: builtins.str = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["operator", b"operator"]
+            self, field_name: typing.Literal["operator", b"operator"]
         ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["operator", b"operator", "path", b"path"]
+            self, field_name: typing.Literal["operator", b"operator", "path", b"path"]
         ) -> None: ...
 
+    @typing.final
     class Evaluate(google.protobuf.message.Message):
         """Command for evaluator.evaluate(dataset)"""
 
@@ -294,7 +292,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "dataset",
@@ -307,7 +305,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "dataset",
@@ -319,8 +317,8 @@ class MlCommand(google.protobuf.message.Message):
             ],
         ) -> None: ...
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
+            self, oneof_group: typing.Literal["_params", b"_params"]
+        ) -> typing.Literal["params"] | None: ...
 
     FIT_FIELD_NUMBER: builtins.int
     FETCH_FIELD_NUMBER: builtins.int
@@ -352,7 +350,7 @@ class MlCommand(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "command",
             b"command",
             "delete",
@@ -371,7 +369,7 @@ class MlCommand(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "command",
             b"command",
             "delete",
@@ -389,18 +387,18 @@ class MlCommand(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
-        typing_extensions.Literal["fit", "fetch", "delete", "write", "read", "evaluate"] | None
-    ): ...
+        self, oneof_group: typing.Literal["command", b"command"]
+    ) -> typing.Literal["fit", "fetch", "delete", "write", "read", "evaluate"] | None: ...
 
 global___MlCommand = MlCommand
 
+@typing.final
 class MlCommandResult(google.protobuf.message.Message):
     """The result of MlCommand"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing.final
     class MlOperatorInfo(google.protobuf.message.Message):
         """Represents an operator info"""
 
@@ -410,15 +408,15 @@ class MlCommandResult(google.protobuf.message.Message):
         NAME_FIELD_NUMBER: builtins.int
         UID_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
-        @property
-        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
-            """The cached object which could be a model or summary evaluated by a model"""
         name: builtins.str
         """Operator name"""
         uid: builtins.str
         """(Optional) the 'uid' of a ML object
         Note it is different from the 'id' of a cached object.
         """
+        @property
+        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
+            """The cached object which could be a model or summary evaluated by a model"""
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
             """(Optional) parameters"""
@@ -432,7 +430,7 @@ class MlCommandResult(google.protobuf.message.Message):
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "_uid",
@@ -451,7 +449,7 @@ class MlCommandResult(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal[
+            field_name: typing.Literal[
                 "_params",
                 b"_params",
                 "_uid",
@@ -470,25 +468,25 @@ class MlCommandResult(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_params", b"_params"]
-        ) -> typing_extensions.Literal["params"] | None: ...
+            self, oneof_group: typing.Literal["_params", b"_params"]
+        ) -> typing.Literal["params"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_uid", b"_uid"]
-        ) -> typing_extensions.Literal["uid"] | None: ...
+            self, oneof_group: typing.Literal["_uid", b"_uid"]
+        ) -> typing.Literal["uid"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["type", b"type"]
-        ) -> typing_extensions.Literal["obj_ref", "name"] | None: ...
+            self, oneof_group: typing.Literal["type", b"type"]
+        ) -> typing.Literal["obj_ref", "name"] | None: ...
 
     PARAM_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     OPERATOR_INFO_FIELD_NUMBER: builtins.int
+    summary: builtins.str
+    """Evaluate a Dataset in a model and return the cached ID of summary"""
     @property
     def param(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
         """The result of the attribute"""
-    summary: builtins.str
-    """Evaluate a Dataset in a model and return the cached ID of summary"""
     @property
     def operator_info(self) -> global___MlCommandResult.MlOperatorInfo:
         """Operator information"""
@@ -501,7 +499,7 @@ class MlCommandResult(google.protobuf.message.Message):
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "operator_info",
             b"operator_info",
             "param",
@@ -514,7 +512,7 @@ class MlCommandResult(google.protobuf.message.Message):
     ) -> builtins.bool: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
+        field_name: typing.Literal[
             "operator_info",
             b"operator_info",
             "param",
@@ -526,7 +524,7 @@ class MlCommandResult(google.protobuf.message.Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["param", "summary", "operator_info"] | None: ...
+        self, oneof_group: typing.Literal["result_type", b"result_type"]
+    ) -> typing.Literal["param", "summary", "operator_info"] | None: ...
 
 global___MlCommandResult = MlCommandResult
