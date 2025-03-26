@@ -36,6 +36,12 @@ public interface ProcedureCatalog extends CatalogPlugin {
   UnboundProcedure loadProcedure(Identifier ident);
 
   /**
+   * List all procedures.
+   *
+   */
+  Identifier[] listProcedures();
+
+  /**
    * List all procedures in the specified namespace.
    *
    */

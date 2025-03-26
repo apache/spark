@@ -382,9 +382,12 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         UnboundMultiResultProcedure)
 
       checkAnswer(
-        // uses default catalog and ns
+        // uses default catalog
         sql("SHOW PROCEDURES"),
-        Row("cat", ArraySeq(), null, "xxx") :: Nil)
+        Row("cat", ArraySeq(""), "", "xyz") ::
+        Row("cat", ArraySeq(), null, "xxx") ::
+        Row("cat", ArraySeq("ns"), "ns", "abc") ::
+        Row("cat", ArraySeq("ns"), "ns", "foo") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES IN ns"),
@@ -423,9 +426,12 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
           Row("cat", Array("ns"), "ns", "foo") :: Nil)
 
       checkAnswer(
-        // uses default catalog and ns
+        // uses default catalog
         sql("SHOW PROCEDURES"),
-        Row("cat2", ArraySeq(), null, "bar") :: Nil)
+        Row("cat2", ArraySeq(""), "", "foo") ::
+        Row("cat2", ArraySeq(), null, "bar") ::
+          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
+          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ns_1.db_1"),

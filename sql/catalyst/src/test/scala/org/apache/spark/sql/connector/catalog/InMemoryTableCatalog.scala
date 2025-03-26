@@ -277,6 +277,11 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     procedure
   }
 
+  override def listProcedures(): Array[Identifier] = {
+    val result = procedures.keySet.asScala
+    result.filter(!_.namespace.sameElements(Array("dummy"))).toArray
+  }
+
   override def listProcedures(namespace: Array[String]): Array[Identifier] = {
     val result =
       if (namespaceExists(namespace)) {

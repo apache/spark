@@ -45,7 +45,11 @@ case class ShowProceduresCommand(
     child match {
       case ResolvedNamespace(catalog, ns, _) =>
         val procedureCatalog = catalog.asProcedureCatalog
-        val procedures = procedureCatalog.listProcedures(ns.toArray)
+        val procedures = if (ns.isEmpty) {
+          procedureCatalog.listProcedures()
+        } else {
+          procedureCatalog.listProcedures(ns.toArray)
+        }
 
         procedures.toSeq.map{ p =>
           val schema = if (p.namespace() != null && p.namespace().nonEmpty) {

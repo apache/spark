@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -1181,11 +1181,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   override def visitShowProcedures(ctx: ShowProceduresContext): LogicalPlan = withOrigin(ctx) {
-    val ns = if (ctx.identifierReference != null) {
-      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
-    } else {
-      CurrentNamespace
-    }
-    ShowProceduresCommand(ns)
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowProceduresCommand(UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])))
   }
 }
