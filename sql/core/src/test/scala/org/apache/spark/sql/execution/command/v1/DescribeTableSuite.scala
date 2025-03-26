@@ -547,7 +547,9 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
                |""".stripMargin
           spark.sql(tableCreationStr)
           val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
-          spark.sql(s"SET spark.sql.ansi.enabled = true")
+          spark.sql("SET spark.sql.ansi.enabled = false") // non-default
+          spark.sql("SET spark.sql.parquet.enableVectorizedReader = true") // default
+          spark.sql("SET spark.sql.sources.fileCompressionFactor = 2.0") // non-default
           spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
           val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
           val firstRow = descriptionDf.select("json_metadata").head()
@@ -583,9 +585,13 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             serde_library = None,
             view_creation_confs = None
           ))
-          // assert view creation confs contains `spark.sql.ansi.enabled` setting
+          // assert output contains Spark confs set at view creation
           if (!isTemp) {
-            assert(parsedOutput.view_creation_confs.get("spark.sql.ansi.enabled") == "true")
+            assert(parsedOutput.view_creation_confs.get("spark.sql.ansi.enabled") == "false")
+            assert(parsedOutput.view_creation_confs
+              .get("spark.sql.parquet.enableVectorizedReader") == "true")
+            assert(parsedOutput.view_creation_confs
+              .get("spark.sql.sources.fileCompressionFactor") == "2.0")
           }
         }
       }
