@@ -459,7 +459,9 @@ object QueryTest extends Assertions {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         capturedQueryExecutions = capturedQueryExecutions :+ qe
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
+      }
     }
 
     spark.sparkContext.listenerBus.waitUntilEmpty(15000)
