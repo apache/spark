@@ -17,17 +17,28 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import java.util.LinkedHashMap
+
+import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
 
 /**
- * Structure used to return results of the resolved project list.
- *  - expressions: The resolved expressions. It is resolved using the
- *                 `resolveExpressionTreeInOperator`.
- *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
- *                             expressions.
- *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
+ * Pull out nondeterministic expressions in an expression tree and replace them with the
+ * corresponding attributes in the `nondeterministicToAttributes` map.
  */
-case class ResolvedProjectList(
-    expressions: Seq[NamedExpression],
-    hasAggregateExpressions: Boolean,
-    hasLateralColumnAlias: Boolean)
+object PullOutNondeterministicExpressionInExpressionTree {
+  def apply[ExpressionType <: Expression](
+      expression: ExpressionType,
+      nondeterministicToAttributes: LinkedHashMap[Expression, NamedExpression]): ExpressionType = {
+    expression
+      .transform {
+        case childExpression =>
+          nondeterministicToAttributes.get(childExpression) match {
+            case null =>
+              childExpression
+            case namedExpression =>
+              namedExpression.toAttribute
+          }
+      }
+      .asInstanceOf[ExpressionType]
+  }
+}
