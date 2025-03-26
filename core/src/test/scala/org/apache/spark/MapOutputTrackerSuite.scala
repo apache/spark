@@ -271,7 +271,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5, 100))
       }
       val senderAddress = RpcAddress("localhost", 12345)
       val rpcCallContext = mock(classOf[RpcCallContext])
@@ -578,7 +578,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5, 100))
       }
 
       val mapWorkerRpcEnv = createRpcEnv("spark-worker", "localhost", 0, new SecurityManager(conf))
@@ -625,7 +625,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5, 100))
       }
       masterTracker.registerMergeResult(20, 0, MergeStatus(BlockManagerId("999", "mps", 1000), 0,
         bitmap1, 1000L))
