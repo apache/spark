@@ -583,14 +583,15 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             table_properties = None,
             storage_properties = None,
             serde_library = None,
-            view_creation_confs = None
+            view_creation_spark_configuration = None
           ))
           // assert output contains Spark confs set at view creation
           if (!isTemp) {
-            assert(parsedOutput.view_creation_confs.get("spark.sql.ansi.enabled") == "false")
-            assert(parsedOutput.view_creation_confs
+            assert(parsedOutput.view_creation_spark_configuration
+              .get("spark.sql.ansi.enabled") == "false")
+            assert(parsedOutput.view_creation_spark_configuration
               .get("spark.sql.parquet.enableVectorizedReader") == "true")
-            assert(parsedOutput.view_creation_confs
+            assert(parsedOutput.view_creation_spark_configuration
               .get("spark.sql.sources.fileCompressionFactor") == "2.0")
           }
         }

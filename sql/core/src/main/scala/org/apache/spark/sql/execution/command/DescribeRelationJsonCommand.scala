@@ -251,7 +251,7 @@ case class DescribeRelationJsonCommand(
     val viewConfigsJson: JValue = JObject(viewConfigs.map { case (key, value) =>
       key -> JString(value)
     }.toList)
-    addKeyValueToMap("view_creation_confs", viewConfigsJson, jsonMap)
+    addKeyValueToMap("view_creation_spark_configuration", viewConfigsJson, jsonMap)
   }
 
   private def describeClusteringInfoJson(
