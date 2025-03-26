@@ -217,6 +217,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "jars/junitLargeJar.jar"
       val artifactPath = inputFilePath.resolve("junitLargeJar.jar")
+      assume(artifactPath.toFile.exists)
       addChunkedArtifact(handler, name, artifactPath)
       handler.onCompleted()
       val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -245,11 +246,15 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
         "classes/smallClassFileDup.class",
         "jars/smallJar.jar")
 
+      val path1 = inputFilePath.resolve("junitLargeJar.jar")
+      val path2 = inputFilePath.resolve("smallJar.jar")
       val artifactPaths = Seq(
         inputFilePath.resolve("smallClassFile.class"),
-        inputFilePath.resolve("junitLargeJar.jar"),
+        path1,
         inputFilePath.resolve("smallClassFileDup.class"),
-        inputFilePath.resolve("smallJar.jar"))
+        path2)
+      assume(path1.toFile.exists)
+      assume(path2.toFile.exists)
 
       addSingleChunkArtifact(handler, names.head, artifactPaths.head)
       addChunkedArtifact(handler, names(1), artifactPaths(1))

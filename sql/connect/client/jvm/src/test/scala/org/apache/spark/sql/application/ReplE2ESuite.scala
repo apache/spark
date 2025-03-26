@@ -176,7 +176,7 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAn
       .get(s"$sparkHome/sql/connect/client/jvm/src/test/resources/TestHelloV2_$scalaVersion.jar")
       .toFile
 
-    assert(testJar.exists(), "Missing TestHelloV2 jar!")
+    assume(testJar.exists(), "Missing TestHelloV2 jar!")
     val input = s"""
         |import java.nio.file.Paths
         |def classLoadingTest(x: Int): Int = {
