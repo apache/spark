@@ -60,23 +60,22 @@ to return the metadata pertaining to a partition or column respectively.
     The supplied column name may be optionally qualified. Parameters `partition_spec`
     and `col_name` are  mutually exclusive and can not be specified together. Currently
     nested columns are not allowed to be specified.
-    
+
     JSON format is not currently supported for individual columns.
-    
+  
     **Syntax:** `[ database_name. ] [ table_name. ] column_name`
 
 * **AS JSON**
 
-  An optional parameter to return the table metadata in JSON format. Only supported when `EXTENDED`
-  or `FORMATTED` format is specified (both produce equivalent JSON).
-
-  **Syntax:** `[ AS JSON ]`
-
-  **Schema:**
+    An optional parameter to return the table metadata in JSON format. Only supported when `EXTENDED`
+    or `FORMATTED` format is specified (both produce equivalent JSON).
+    **Syntax:** `[ AS JSON ]`
   
-  Below is the full JSON schema.
-  In actual output, null fields are omitted and the JSON is not pretty-printed (see Examples).
+    **Schema:**
   
+    Below is the full JSON schema.
+    In actual output, null fields are omitted and the JSON is not pretty-printed (see Examples).
+
   ```sql
     {
       "table_name": "<table_name>",
@@ -123,7 +122,8 @@ to return the metadata pertaining to a partition or column respectively.
       "created_time": "<yyyy-MM-dd'T'HH:mm:ss'Z'>",
       "created_by": "<created_by>",
       "last_access": "<yyyy-MM-dd'T'HH:mm:ss'Z'>",
-      "partition_provider": "<partition_provider>"
+      "partition_provider": "<partition_provider>",
+      "collation": "<default_collation>"
     }
   ```
   
@@ -138,7 +138,7 @@ to return the metadata pertaining to a partition or column respectively.
 | FloatType             | `{ "name" : "float" }`                                                                                                                                           |
 | DoubleType            | `{ "name" : "double" }`                                                                                                                                          |
 | DecimalType           | `{ "name" : "decimal", "precision": p, "scale": s }`                                                                                                             |
-| StringType            | `{ "name" : "string" }`                                                                                                                                          |
+| StringType            | `{ "name" : "string", "collation": "<collation>" }`                                                                                                                                          |
 | VarCharType           | `{ "name" : "varchar", "length": n }`                                                                                                                            |
 | CharType              | `{ "name" : "char", "length": n }`                                                                                                                               |
 | BinaryType            | `{ "name" : "binary" }`                                                                                                                                          |
