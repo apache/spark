@@ -394,7 +394,8 @@ class CliSuite extends SparkFunSuite {
       "" -> "This is a test for Spark-11624")
   }
 
-  test("list jars") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: list jars") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
@@ -402,7 +403,8 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  test("list jar <jarfile>") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: list jar <jarfile>") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
@@ -448,7 +450,8 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-28840 test --jars command") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: SPARK-28840 test --jars command") {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
     runCliWithin(
       1.minute,
@@ -459,7 +462,8 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-28840 test --jars and hive.aux.jars.path command") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "test: SPARK-28840 test --jars and hive.aux.jars.path command") {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
