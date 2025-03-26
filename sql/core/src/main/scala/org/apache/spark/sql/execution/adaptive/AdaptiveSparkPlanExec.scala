@@ -444,6 +444,12 @@ case class AdaptiveSparkPlanExec(
           delayedStages --= totalStagesReady.map(_.id)
         }
          */
+        if (delayedStages.isEmpty) {
+          consecutiveNoDelayedStagesFound += 1
+        } else {
+          consecutiveNoDelayedStagesFound = 0
+        }
+
         if (!currentPhysicalPlan.isInstanceOf[ResultQueryStageExec]) {
           // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
           // than that of the current plan; otherwise keep the current physical plan together with
@@ -457,11 +463,7 @@ case class AdaptiveSparkPlanExec(
           // plans are updated, we can clear the query stage list because at this point the two
           // plans are semantically and physically in sync again.
 
-          if (delayedStages.isEmpty) {
-            consecutiveNoDelayedStagesFound += 1
-          } else {
-            consecutiveNoDelayedStagesFound = 0
-          }
+
 
           val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
           val afterReOptimize = reOptimize(logicalPlan)
