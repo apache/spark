@@ -319,9 +319,10 @@ case class AdaptiveSparkPlanExec(
       var consecutiveNoDelayedStagesFound = 0
       orphanBatchScans ++= result.orphanBatchScansWithProxyVar
       var collectOrphans = OrphanBSCollect.no_collect
-      while ((!result.allChildStagesMaterialized ||
-        (consecutiveNoDelayedStagesFound < 2 && loopCount > 0)) &&
-        this.currentPhysicalPlan.children.nonEmpty) {
+
+      /* && this.currentPhysicalPlan.children.nonEmpty*/
+      while (!result.allChildStagesMaterialized ||
+        (consecutiveNoDelayedStagesFound < 2 && loopCount > 0)) {
         if (Utils.isTesting) {
           assertBroadcastPushPresenceInBHJ(result.newPlan)
         }
@@ -493,16 +494,15 @@ case class AdaptiveSparkPlanExec(
         collectOrphans = OrphanBSCollect.no_collect
         loopCount += 1
       }
-
-      _isFinalPlan = true
-      finalPlanUpdate
-      // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
-      // false, which is expected. If we want to collect result again, we should invoke
-      // `withFinalPlanUpdate` and pass another result handler and we will create a new
-      // result stage.
-      currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
-        .get.asInstanceOf[T]
     }
+    _isFinalPlan = true
+    finalPlanUpdate
+    // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
+    // false, which is expected. If we want to collect result again, we should invoke
+    // `withFinalPlanUpdate` and pass another result handler and we will create a new
+    // result stage.
+    currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
+      .get.asInstanceOf[T]
   }
 
   private def filterReusingStagesNowReady(
