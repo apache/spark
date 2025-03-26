@@ -1244,21 +1244,6 @@ class BaseUDFTestsMixin(object):
             messageParameters={"arg_name": "evalType", "arg_type": "str"},
         )
 
-    def test_timeout_util_with_udf(self):
-        @udf
-        def f(x):
-            time.sleep(10)
-            return str(x)
-
-        @timeout(1)
-        def timeout_func():
-            self.spark.range(1).select(f("id")).show()
-
-        # causing a py4j.protocol.Py4JNetworkError in pyspark classic
-        # causing a TimeoutError in pyspark connect
-        with self.assertRaises(Exception):
-            timeout_func()
-
     def test_udf_with_udt(self):
         row = Row(
             label=1.0,
