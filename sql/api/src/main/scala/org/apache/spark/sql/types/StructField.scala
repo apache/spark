@@ -218,7 +218,8 @@ case class StructField(
     metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
   }
 
-  private def getDDLDefault = getCurrentDefaultValue()
+  private def getDDLDefault = getDefault()
+    .orElse(getCurrentDefaultValue())
     .map(" DEFAULT " + _)
     .getOrElse("")
 

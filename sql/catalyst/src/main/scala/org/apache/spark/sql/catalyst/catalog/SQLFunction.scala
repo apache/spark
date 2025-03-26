@@ -207,7 +207,7 @@ object SQLFunction {
       val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser)
       SQLFunction(
         name = function.identifier,
-        inputParam = props.get(INPUT_PARAM).map(parseTableSchema(_, parser)),
+        inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser)),
         returnType = returnType.get,
         exprText = props.get(EXPRESSION),
         queryText = props.get(QUERY),

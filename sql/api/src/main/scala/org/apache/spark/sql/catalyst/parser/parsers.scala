@@ -51,7 +51,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
   }
 
   override def parseRoutineParam(sqlText: String): StructType = parse(sqlText) { parser =>
-    astBuilder.visitSingleRoutineParam(parser.singleRoutineParam())
+    astBuilder.visitSingleRoutineParamList(parser.singleRoutineParamList())
   }
 
   /** Get the builder (visitor) which converts a ParseTree into an AST. */

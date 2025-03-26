@@ -74,4 +74,17 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin), Seq(Row(2), Row(4)))
     }
   }
+
+  test("SQL scalar function with default value") {
+    withUserDefinedFunction("foo" -> false) {
+      sql(
+        """
+          |CREATE FUNCTION foo(x INT DEFAULT 7)
+          |RETURNS INT
+          |RETURN x + 1
+          |""".stripMargin)
+      checkAnswer(sql("SELECT foo()"), Row(8))
+      checkAnswer(sql("SELECT foo(1)"), Row(2))
+    }
+  }
 }
