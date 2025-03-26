@@ -216,8 +216,8 @@ case class CachedRDDBuilder(
   private val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
-    .getOrElse(cachedPlan.simpleStringWithNodeId())
-
+    .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
+	
   val supportsColumnarInput: Boolean = {
     cachedPlan.supportsColumnar &&
       serializer.supportsColumnarInput(cachedPlan.output)
