@@ -444,7 +444,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       val descriptionDf = spark.sql(s"DESC EXTENDED $t AS JSON")
       val firstRow = descriptionDf.select("json_metadata").head()
       val jsonValue = firstRow.getString(0)
-      System.out.print("\n *** jsonValue: " + jsonValue + "\n")
       val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
       val expectedOutput = DescribeTableJson(
@@ -548,6 +547,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
                |""".stripMargin
           spark.sql(tableCreationStr)
           val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
+          spark.sql(s"SET spark.sql.ansi.enabled = true")
           spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
           val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
           val firstRow = descriptionDf.select("json_metadata").head()
@@ -580,7 +580,13 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             created_time = None,
             table_properties = None,
             storage_properties = None,
-            serde_library = None))
+            serde_library = None,
+            view_creation_confs = None
+          ))
+          // assert view creation confs contains `spark.sql.ansi.enabled` setting
+          if (!isTemp) {
+            assert(parsedOutput.view_creation_confs.get("spark.sql.ansi.enabled") == "true")
+          }
         }
       }
     }
