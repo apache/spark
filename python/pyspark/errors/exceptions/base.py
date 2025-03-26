@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
 
+from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.errors.utils import ErrorClassesReader
 from pyspark.logger import PySparkLogger
 from pickle import PicklingError
@@ -464,8 +465,6 @@ def recover_python_exception(e: T) -> T:
     """
     python_exception_header = "Traceback (most recent call last):"
     try:
-        from pyspark.errors.exceptions.tblib import Traceback
-
         message = str(e)
         start = message.find(python_exception_header)
         if start == -1:
