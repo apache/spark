@@ -234,6 +234,14 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
         df2.writeTo("test").overwrite(lit(true))
       }
       assert(overwritePlan.metrics("numOutputRows").value === 1)
+
+      val failingPlan = captureWrite(session) {
+        assertThrows[IllegalStateException] {
+          val df3 = session.createDataFrame(Seq((3, "this-value-fails-the-write")))
+          df3.writeTo("test").overwrite(lit(true))
+        }
+      }
+      assert(failingPlan.metrics("numOutputRows").value === 1)
     } finally {
       SparkSession.setActiveSession(spark)
       SparkSession.setDefaultSession(spark)
@@ -435,7 +443,9 @@ class InMemoryTableWithV1Fallback(
           writeMetrics = Array(V1WriteTaskMetric("numOutputRows", rows.length))
 
           rows.groupBy(getPartitionValues).foreach { case (partition, elements) =>
-            if (dataMap.contains(partition) && mode == "append") {
+            if (elements.exists(_.toSeq.contains("this-value-fails-the-write"))) {
+              throw new IllegalStateException("Test only mock write failure")
+            } else if (dataMap.contains(partition) && mode == "append") {
               dataMap.put(partition, dataMap(partition) ++ elements)
             } else if (dataMap.contains(partition)) {
               throw new IllegalStateException("Partition was not removed properly")
