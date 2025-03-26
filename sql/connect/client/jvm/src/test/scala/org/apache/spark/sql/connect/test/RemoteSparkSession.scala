@@ -23,12 +23,12 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
+import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.time.SpanSugar._
-import org.scalactic.source.Position
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.scalatest.time.SpanSugar._ // scalastyle:ignore
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.connect.SparkSession
@@ -207,8 +207,9 @@ object SparkConnectServerUtils {
   }
 }
 
-trait RemoteSparkSession extends AnyFunSuite // scalastyle:ignore funsuite
-  with BeforeAndAfterAll { self: Suite =>
+trait RemoteSparkSession
+    extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll { self: Suite =>
   import SparkConnectServerUtils._
   var spark: SparkSession = _
   protected lazy val serverPort: Int = port
@@ -230,8 +231,8 @@ trait RemoteSparkSession extends AnyFunSuite // scalastyle:ignore funsuite
     super.afterAll()
   }
 
-  override protected def test(
-    testName: String, testTags: Tag*)(testFun: => Any)(implicit pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
     if (IntegrationTestUtils.isAssemblyJarsDirExists) {
       super.test(testName, testTags: _*)(testFun)
     } else {
