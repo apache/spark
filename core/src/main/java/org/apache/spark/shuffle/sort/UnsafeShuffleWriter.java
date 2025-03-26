@@ -25,6 +25,7 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 
 import scala.Option;
 import scala.Product2;
@@ -472,7 +473,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
                 partitionLengthInSpill);
             copyThrewException = false;
             spillInputChannelPositions[i] += partitionLengthInSpill;
-            writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
+            long writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - writeStartTime);
+            writeMetrics.incWriteTime(writeTime);
           }
         } finally {
           Closeables.close(resolvedChannel, copyThrewException);
