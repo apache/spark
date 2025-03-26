@@ -462,7 +462,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("HandleSpecialCommand", Once,
       HandleSpecialCommand),
     Batch("Remove watermark for batch query", Once,
-      EliminateEventTimeWatermark)
+      EliminateEventTimeWatermark),
+    Batch("ResolveUnresolvedHaving", Once, ResolveUnresolvedHaving)
   )
 
   /**
@@ -4184,6 +4185,21 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
         } else {
           t.child
         }
+    }
+  }
+}
+
+/**
+ * Rule that's used to handle `UnresolvedHaving` nodes with resolved `condition` and `child`.
+ * It's placed outside the main batch to avoid conflicts with other rules that resolve
+ * `UnresolvedHaving` in the main batch.
+ */
+object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_HAVING), ruleId) {
+      case u @ UnresolvedHaving(havingCondition, child)
+        if havingCondition.resolved && child.resolved =>
+        Filter(condition = havingCondition, child = child)
     }
   }
 }
