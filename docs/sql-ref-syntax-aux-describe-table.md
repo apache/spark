@@ -105,6 +105,11 @@ to return the metadata pertaining to a partition or column respectively.
       "view_schema_mode": "<view_schema_mode>",
       "view_catalog_and_namespace": "<view_catalog_and_namespace>",
       "view_query_output_columns": ["col1", "col2"],
+      // Spark SQL configurations captured at the time of permanent view creation
+      "view_creation_spark_configuration": {
+        "conf1": "<value1>",
+        "conf2": "<value2>"
+      },
       "comment": "<comment>",
       "table_properties": {
         "property1": "<property1>",
