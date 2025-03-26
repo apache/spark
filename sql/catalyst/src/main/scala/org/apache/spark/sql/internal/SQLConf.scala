@@ -5651,6 +5651,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NEED_TO_COPY_OBJECT_BEFORE_SHUFFLE =
+    buildConf("spark.sql.needToCopyObjectBeforeShuffle")
+      .internal()
+      .doc("When set to true, we will force copy object before shuffle for non-SortShuffleManager")
+      .version("3.5.1")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -6664,6 +6672,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyCodingErrorAction: Boolean = getConf(SQLConf.LEGACY_CODING_ERROR_ACTION)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
+
+  def needToCopyObjectsBeforeShuffle: Boolean = getConf(NEED_TO_COPY_OBJECT_BEFORE_SHUFFLE)
 
   /** ********************** SQLConf functionality methods ************ */
 
