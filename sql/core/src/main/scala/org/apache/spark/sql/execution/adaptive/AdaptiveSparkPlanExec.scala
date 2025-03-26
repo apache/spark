@@ -486,12 +486,12 @@ case class AdaptiveSparkPlanExec(
               collectOrphans = OrphanBSCollect.no_collect
             }
           }
-          // Now that some stages have finished, we can try creating new stages.
-          result = createQueryStages(fun, currentPhysicalPlan, stageIdToBuildsideJoinKeys,
-            collectOrphans, firstRun = false, doBroadcastVarPush = doBroadcastVarPush)
-          collectOrphans = OrphanBSCollect.no_collect
-          loopCount += 1
         }
+        // Now that some stages have finished, we can try creating new stages.
+        result = createQueryStages(fun, currentPhysicalPlan, stageIdToBuildsideJoinKeys,
+          collectOrphans, firstRun = false, doBroadcastVarPush = doBroadcastVarPush)
+        collectOrphans = OrphanBSCollect.no_collect
+        loopCount += 1
       }
 
       _isFinalPlan = true
