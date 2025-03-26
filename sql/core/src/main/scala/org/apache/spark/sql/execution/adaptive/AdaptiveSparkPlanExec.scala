@@ -501,7 +501,7 @@ case class AdaptiveSparkPlanExec(
         // Run the final plan when there's no more unfinished stages.
 
 
-        _isFinalPlan = true
+
         if (doBroadcastVarPush) {
           BroadcastHashJoinUtil
             .getAllBatchScansForSparkPlan(currentPhysicalPlan)
@@ -509,10 +509,6 @@ case class AdaptiveSparkPlanExec(
               BroadcastHashJoinUtil.isBatchScanReady(bs)).foreach(
             _.getBroadcastVarPushDownSupportingInstance.get.postAllBroadcastVarsPushed())
         }
-
-        executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
-        currentPhysicalPlan
-
       }
       _isFinalPlan = true
       finalPlanUpdate
