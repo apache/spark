@@ -399,8 +399,10 @@ class ArtifactManagerSuite extends SharedSparkSession {
         Paths.get("classes/Hello.class"), path.resolve("Hello.class"), None)
       artifactManager.addArtifact( // Python
         Paths.get("pyfiles/abc.zip"), randomFilePath, None, deleteStagedFile = false)
+      val jarPath = Paths.get("jars/udf_noA.jar")
+      assume(jarPath.toFile.exists)
       artifactManager.addArtifact( // JAR
-        Paths.get("jars/udf_noA.jar"), path.resolve("udf_noA.jar"), None)
+        jarPath, path.resolve("udf_noA.jar"), None)
       artifactManager.addArtifact( // Cached
         Paths.get("cache/test"), randomFilePath, None)
       assert(FileUtils.listFiles(artifactManager.artifactPath.toFile, null, true).size() === 3)

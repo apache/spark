@@ -566,9 +566,10 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
   }
 
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
+    val jarPath = "../hive/src/test/resources/TestUDTF.jar"
+    assume(new File(jarPath).exists)
     withJdbcStatement("test_udtf") { statement =>
       try {
-        val jarPath = "../hive/src/test/resources/TestUDTF.jar"
         val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
         Seq(
@@ -1003,6 +1004,7 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
     withMultipleConnectionJdbcStatement("test_udtf")(
       { statement =>
         val jarPath = "../hive/src/test/resources/TestUDTF.jar"
+        assume(new File(jarPath).exists)
         val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
         // Configurations and temporary functions added in this session should be visible to all

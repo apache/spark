@@ -77,16 +77,16 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   def pushdownFiltersInPython(
       pythonResult: PythonDataSourceCreationResult,
       outputSchema: StructType,
-      filters: Array[Filter]): PythonFilterPushdownResult = {
+      filters: Array[Filter]): Option[PythonFilterPushdownResult] = {
     val runner = new UserDefinedPythonDataSourceFilterPushdownRunner(
       createPythonFunction(pythonResult.dataSource),
       outputSchema,
       filters
     )
     if (runner.isAnyFilterSupported) {
-      runner.runInPython()
+      Some(runner.runInPython())
     } else {
-      PythonFilterPushdownResult(pythonResult.dataSource, filters.map(_ => false))
+      None
     }
   }
 
@@ -333,8 +333,9 @@ private class UserDefinedPythonDataSourceRunner(
  * @param isFilterPushed A sequence of bools indicating whether each filter is pushed down.
  */
 case class PythonFilterPushdownResult(
-    dataSource: Array[Byte],
-    isFilterPushed: collection.Seq[Boolean])
+    readInfo: PythonDataSourceReadInfo,
+    isFilterPushed: collection.Seq[Boolean]
+)
 
 /**
  * Push down filters to a Python data source.
@@ -452,20 +453,15 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     PythonWorkerUtils.writeUTF(schema.json, dataOut)
 
     // Send the filters
-    // For now only handle EqualTo filter
     PythonWorkerUtils.writeUTF(mapper.writeValueAsString(serializedFilters), dataOut)
+
+    // Send configurations
+    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
-    // Receive the picked data source or an exception raised in Python worker.
-    val length = dataIn.readInt()
-    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
-    }
-
-    // Receive the pickled data source.
-    val pickledDataSourceInstance: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+    // Receive the read function and the partitions. Also check for exceptions.
+    val readInfo = PythonDataSourceReadInfo.receive(dataIn)
 
     // Receive the pushed filters as a list of indices.
     val numFiltersPushed = dataIn.readInt()
@@ -476,7 +472,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     }
 
     PythonFilterPushdownResult(
-      dataSource = pickledDataSourceInstance,
+      readInfo = readInfo,
       isFilterPushed = isFilterPushed
     )
   }
@@ -485,6 +481,42 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
 case class PythonDataSourceReadInfo(
     func: Array[Byte],
     partitions: Seq[Array[Byte]])
+
+object PythonDataSourceReadInfo {
+  def receive(dataIn: DataInputStream): PythonDataSourceReadInfo = {
+    // Receive the picked reader or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "initialize",
+        tpe = "reader",
+        msg = msg
+      )
+    }
+
+    // Receive the pickled 'read' function.
+    val pickledFunction: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+
+    // Receive the list of partitions, if any.
+    val pickledPartitions = ArrayBuffer.empty[Array[Byte]]
+    val numPartitions = dataIn.readInt()
+    if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "generate",
+        tpe = "read partitions",
+        msg = msg
+      )
+    }
+    for (_ <- 0 until numPartitions) {
+      val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
+      pickledPartitions.append(pickledPartition)
+    }
+
+    PythonDataSourceReadInfo(func = pickledFunction, partitions = pickledPartitions.toSeq)
+  }
+}
 
 /**
  * Send information to a Python process to plan a Python data source read.
@@ -520,33 +552,7 @@ private class UserDefinedPythonDataSourceReadRunner(
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReadInfo = {
-    // Receive the picked reader or an exception raised in Python worker.
-    val length = dataIn.readInt()
-    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(
-        action = "initialize", tpe = "reader", msg = msg)
-    }
-
-    // Receive the pickled 'read' function.
-    val pickledFunction: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
-
-    // Receive the list of partitions, if any.
-    val pickledPartitions = ArrayBuffer.empty[Array[Byte]]
-    val numPartitions = dataIn.readInt()
-    if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(
-        action = "generate", tpe = "read partitions", msg = msg)
-    }
-    for (_ <- 0 until numPartitions) {
-      val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
-      pickledPartitions.append(pickledPartition)
-    }
-
-    PythonDataSourceReadInfo(
-      func = pickledFunction,
-      partitions = pickledPartitions.toSeq)
+    PythonDataSourceReadInfo.receive(dataIn)
   }
 }
 
