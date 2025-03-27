@@ -200,11 +200,11 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("Batched SingleChunkArtifacts") {
     val path1 = artifactFilePath.resolve("smallClassFile.class")
+    assume(path1.toFile.exists)
     val file1 = path1.toUri
     val path2 = artifactFilePath.resolve("smallJar.jar")
-    val file2 = path2.toUri
-    assume(path1.toFile.exists)
     assume(path2.toFile.exists)
+    val file2 = path2.toUri
     artifactManager.addArtifacts(Seq(file1, file2))
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
     // Single request containing 2 artifacts.
