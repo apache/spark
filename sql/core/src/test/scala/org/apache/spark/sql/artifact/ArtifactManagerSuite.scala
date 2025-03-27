@@ -248,8 +248,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val copyDir = Utils.createTempDir().toPath
       FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
       val stagingPath = copyDir.resolve("Hello.class")
-      assume(stagingPath.toFile.exists)
       val remotePath = Paths.get("classes/Hello.class")
+      assert(stagingPath.toFile.exists())
       session.artifactManager.addArtifact(remotePath, stagingPath, None)
     }
 
@@ -301,7 +301,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val copyDir = Utils.createTempDir().toPath
     FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("Hello.class")
-    assume(stagingPath.toFile.exists)
     val remotePath = Paths.get("classes/Hello.class")
 
     artifactManager.addArtifact(remotePath, stagingPath, None)
