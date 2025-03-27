@@ -323,29 +323,25 @@ function downloadPlanBlob(b, ext) {
 document.getElementById("plan-viz-download-btn").addEventListener("click", async function () {
   const format = document.getElementById("plan-viz-format-select").value;
   let blob;
-  switch (format) {
-    case "svg":
-      const svg = planVizContainer().select("svg").node().cloneNode(true);
-      let css = "";
-      try {
-        css = await fetch("/static/sql/spark-sql-viz.css").then((resp) => resp.text());
-      } catch (e) {
-        console.error("Failed to fetch CSS for SVG download", e);
-      }
-      d3.select(svg).insert("style", ":first-child").text(css);
-      const svgData = new XMLSerializer().serializeToString(svg);
-      blob = new Blob([svgData], { type: "image/svg+xml" });
-      break;
-    case "dot":
-      const dot = d3.select("#plan-viz-metadata .dot-file").text().trim();
-      blob = new Blob([dot], { type: "text/plain" });
-      break;
-    case "txt":
-      const txt = d3.select("#physical-plan-details pre").text().trim();
-      blob = new Blob([txt], { type: "text/plain" });
-      break;
-    default:
-      return;
+  if (format === "svg") {
+    const svg = planVizContainer().select("svg").node().cloneNode(true);
+    let css = "";
+    try {
+      css = await fetch("/static/sql/spark-sql-viz.css").then((resp) => resp.text());
+    } catch (e) {
+      console.error("Failed to fetch CSS for SVG download", e);
+    }
+    d3.select(svg).insert("style", ":first-child").text(css);
+    const svgData = new XMLSerializer().serializeToString(svg);
+    blob = new Blob([svgData], { type: "image/svg+xml" });
+  } else if (format === "dot") {
+    const dot = d3.select("#plan-viz-metadata .dot-file").text().trim();
+    blob = new Blob([dot], { type: "text/plain" });
+  } else if (format === "txt") {
+    const txt = d3.select("#physical-plan-details pre").text().trim();
+    blob = new Blob([txt], { type: "text/plain" });
+  } else {
+    return;
   }
   downloadPlanBlob(blob, format);
 });
