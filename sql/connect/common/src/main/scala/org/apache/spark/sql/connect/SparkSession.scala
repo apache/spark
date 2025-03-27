@@ -789,6 +789,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
         Option(System.getenv("SPARK_LOG_DIR"))
           .orElse(Option(System.getenv("SPARK_HOME")).map(p => Paths.get(p, "logs").toString))
           .foreach { p =>
+            Files.createDirectories(Paths.get(p))
             val logFile = Paths
               .get(
                 p,
