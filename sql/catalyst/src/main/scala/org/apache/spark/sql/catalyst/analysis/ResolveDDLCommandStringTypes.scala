@@ -115,7 +115,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
    * Transforms the given plan, by transforming all expressions in its operators to use the given
    * new type instead of the default string type.
    */
-  private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
+  def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     val transformedPlan = plan resolveExpressionsUp { expression =>
       transformExpression
         .andThen(_.apply(newType))
