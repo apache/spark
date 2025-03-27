@@ -388,6 +388,57 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       assertTableColumnCollation(testTable, "c4", "UTF8_BINARY")
     }
   }
+
+  test("CREATE OR REPLACE VIEW with DEFAULT COLLATION") {
+    withView(testView) {
+      // scalastyle:off
+      sql(
+        s"""CREATE OR REPLACE VIEW $testView
+           | (c1)
+           | DEFAULT COLLATION sr_ai
+           | AS SELECT 'Ć' as c1 WHERE 'Ć' = 'C'
+           |""".stripMargin)
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'Č'"), Row(1))
+      // scalastyle:on
+    }
+  }
+
+  test("CREATE VIEW with DEFAULT COLLATION") {
+    withView(testView) {
+      sql(
+        s"""CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE
+           | as SELECT 'a' as c1
+           |""".stripMargin)
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(1)))
+    }
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE)")
+      sql(s"INSERT INTO $testTable VALUES ('a'), ('A')")
+      withView(testView) {
+        withSQLConf() {
+          // scalastyle:off
+          sql(
+            s"""CREATE VIEW $testView DEFAULT COLLATION SR_AI_CI
+               | AS SELECT c1 FROM $testTable
+               | WHERE 'ć' = 'č'
+               |""".stripMargin)
+          // scalastyle:on
+          checkAnswer(sql(s"SELECT COUNT(*) FROM $testView"), Seq(Row(2)))
+          checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(2)))
+        }
+      }
+    }
+    withView(testView) {
+      sql(
+        s"""CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE
+           | AS SELECT 'a' AS c1,
+           | (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END)) AS c2
+           |""".stripMargin)
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(1)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'a'"), Seq(Row(1)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'b'"), Seq(Row(0)))
+    }
+  }
 }
 
 class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with DatasourceV2SQLBase {
@@ -407,6 +458,21 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
 
       assertTableColumnCollation(testTable, "c1", "UTF8_BINARY")
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2"), Seq(Row(0)))
+    }
+  }
+
+  test("CREATE OR REPLACE TABLE with DEFAULT COLLATION") {
+    withTable(testTable) {
+      sql(
+        s"""CREATE OR REPLACE TABLE $testTable
+           | (c1 STRING, c2 STRING COLLATE UTF8_LCASE)
+           | DEFAULT COLLATION sr_ai
+           |""".stripMargin)
+      // scalastyle:off
+      sql(s"INSERT INTO $testTable VALUES ('Ć', 'a'), ('Č', 'A'), ('C', 'b')")
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1 = 'Ć'"), Row(3))
+      // scalastyle:on
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2 = 'a'"), Row(2))
     }
   }
 }

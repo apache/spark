@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumnSpec, AlterColumns, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -45,6 +45,9 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
     table match {
       case createTable: CreateTable if createTable.tableSpec.collation.isDefined =>
         StringType(createTable.tableSpec.collation.get)
+
+      case replaceTable: ReplaceTable if replaceTable.tableSpec.collation.isDefined =>
+        StringType(replaceTable.tableSpec.collation.get)
 
       case createView: CreateView if createView.collation.isDefined =>
         StringType(createView.collation.get)
@@ -73,7 +76,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
     // For CREATE TABLE, only v2 CREATE TABLE command is supported.
     // Also, table DEFAULT COLLATION cannot be specified through CREATE TABLE AS SELECT command.
-    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
+    case _: V2CreateTablePlan | _: ReplaceTable | _: CreateView | _: AlterViewAs => true
     case _ => false
   }
 
@@ -104,7 +107,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
    * Transforms the given plan, by transforming all expressions in its operators to use the given
    * new type instead of the default string type.
    */
-  private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
+  def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     val transformedPlan = plan resolveExpressionsUp { expression =>
       transformExpression
         .andThen(_.apply(newType))
@@ -126,6 +129,16 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+
+    case subquery: SubqueryExpression =>
+      val plan = subquery.plan
+      newType =>
+        val newPlan = plan resolveExpressionsUp { expression =>
+          transformExpression
+            .andThen(_.apply(newType))
+            .applyOrElse(expression, identity[Expression])
+        }
+        subquery.withNewPlan(newPlan)
   }
 
   /**

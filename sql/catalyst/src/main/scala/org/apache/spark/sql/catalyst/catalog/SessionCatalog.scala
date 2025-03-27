@@ -21,15 +21,12 @@ import java.net.URI
 import java.util.Locale
 import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
-
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-
 import com.google.common.cache.{Cache, CacheBuilder}
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -49,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
-import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -987,9 +984,15 @@ class SessionCatalog(
           parser.parseQuery(viewText)
         }
     }
+    val plan = if (metadata.collation.isDefined) {
+      val newType = StringType(metadata.collation.get)
+      ResolveDDLCommandStringTypes.transformPlan(parsedPlan, newType)
+    } else {
+      parsedPlan
+    }
     val schemaMode = metadata.viewSchemaMode
     if (schemaMode == SchemaEvolution) {
-      View(desc = metadata, isTempView = isTempView, child = parsedPlan)
+      View(desc = metadata, isTempView = isTempView, child = plan)
     } else {
       val projectList = if (!isHiveCreatedView(metadata)) {
         val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
@@ -1038,7 +1041,7 @@ class SessionCatalog(
           castColToType(col, field, schemaMode)
         }
       }
-      View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
+      View(desc = metadata, isTempView = isTempView, child = Project(projectList, plan))
     }
   }
 
