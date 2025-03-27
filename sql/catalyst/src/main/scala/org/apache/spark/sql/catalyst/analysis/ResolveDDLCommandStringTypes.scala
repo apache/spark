@@ -46,6 +46,8 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
       case createTable: CreateTable if createTable.tableSpec.collation.isDefined =>
         StringType(createTable.tableSpec.collation.get)
 
+      // CreateView also handles CREATE OR REPLACE VIEW
+      // Unlike tables, it is not treated separately
       case createView: CreateView if createView.collation.isDefined =>
         StringType(createView.collation.get)
 
