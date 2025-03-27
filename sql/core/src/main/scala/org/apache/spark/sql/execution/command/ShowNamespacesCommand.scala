@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.StringType
 case class ShowNamespacesCommand(
     child: LogicalPlan,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowNamespacesCommand.output
-) extends UnaryRunnableCommand {
+    override val output: Seq[Attribute] = ShowNamespacesCommand.output)
+  extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val ResolvedNamespace(cat, ns, _) = child
@@ -45,7 +45,9 @@ case class ShowNamespacesCommand(
     }
 
     // The legacy SHOW DATABASES command does not quote the database names.
-    val namespaceNames = if (SQLConf.get.legacyOutputSchema && namespaces.forall(_.length == 1)) {
+    assert(output.length == 1)
+    val namespaceNames = if (output.head.name == "databaseName"
+      && namespaces.forall(_.length == 1)) {
       namespaces.map(_.head)
     } else {
       namespaces.map(_.quoted)
