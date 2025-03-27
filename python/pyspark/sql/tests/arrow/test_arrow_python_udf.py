@@ -214,6 +214,13 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
+    def test_udf_with_udt(self):
+        for fallback in [False, True]:
+            with self.subTest(fallback=fallback), self.sql_conf(
+                {"spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT": fallback}
+            ):
+                super().test_udf_with_udt()
+
 
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

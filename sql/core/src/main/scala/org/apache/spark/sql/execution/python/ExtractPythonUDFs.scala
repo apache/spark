@@ -237,7 +237,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
 
   private def correctEvalType(udf: PythonUDF): Int = {
     if (udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
-      if (containsUDT(udf.dataType) || udf.children.exists(expr => containsUDT(expr.dataType))) {
+      if (conf.pythonUDFArrowFallbackOnUDT &&
+        (containsUDT(udf.dataType) || udf.children.exists(expr => containsUDT(expr.dataType)))) {
         PythonEvalType.SQL_BATCHED_UDF
       } else {
         PythonEvalType.SQL_ARROW_BATCHED_UDF
