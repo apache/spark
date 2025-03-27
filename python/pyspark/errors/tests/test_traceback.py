@@ -160,22 +160,32 @@ class BaseTracebackSqlTestsMixin:
     def raise_exception():
         raise ValueError("bar")
 
+    def assertInOnce(self, needle: str, haystack: str):
+        """Assert that a string appears only once in another string."""
+        count = haystack.count(needle)
+        self.assertEqual(count, 1, f"{needle} appears more than once in {haystack}")
+
     def test_udf(self):
-        @sf.udf()
-        def foo():
-            raise ValueError("bar")
+        for jvm_stack_trace in [False, True]:
+            with self.subTest(jvm_stack_trace=jvm_stack_trace), self.sql_conf(
+                {"spark.sql.pyspark.jvmStacktrace.enabled": jvm_stack_trace}
+            ):
 
-        df = self.spark.range(1).select(foo())
-        try:
-            df.show()
-        except PythonException:
-            _, _, tb = sys.exc_info()
-        else:
-            self.fail("PythonException not raised")
+                @sf.udf()
+                def foo():
+                    raise ValueError("bar")
 
-        s = "".join(traceback.format_tb(tb))
-        self.assertIn("""df.show()""", s)
-        self.assertIn("""raise ValueError("bar")""", s)
+                df = self.spark.range(1).select(foo())
+                try:
+                    df.show()
+                except PythonException:
+                    _, _, tb = sys.exc_info()
+                else:
+                    self.fail("PythonException not raised")
+
+                s = "".join(traceback.format_tb(tb))
+                self.assertInOnce("""df.show()""", s)
+                self.assertInOnce("""raise ValueError("bar")""", s)
 
     def test_datasource_analysis(self):
         class MyDataSource(DataSource):
@@ -191,8 +201,8 @@ class BaseTracebackSqlTestsMixin:
             self.fail("AnalysisException not raised")
 
         s = "".join(traceback.format_tb(tb))
-        self.assertIn("""self.spark.read.format("MyDataSource").load().show()""", s)
-        self.assertIn("""raise ValueError("bar")""", s)
+        self.assertInOnce("""self.spark.read.format("MyDataSource").load().show()""", s)
+        self.assertInOnce("""raise ValueError("bar")""", s)
 
     def test_datasource_execution(self):
         class MyDataSource(DataSource):
@@ -215,8 +225,8 @@ class BaseTracebackSqlTestsMixin:
             self.fail("PythonException not raised")
 
         s = "".join(traceback.format_tb(tb))
-        self.assertIn("""self.spark.read.format("MyDataSource").load().show()""", s)
-        self.assertIn("""raise ValueError("bar")""", s)
+        self.assertInOnce("""self.spark.read.format("MyDataSource").load().show()""", s)
+        self.assertInOnce("""raise ValueError("bar")""", s)
 
     def test_udtf_analysis(self):
         @sf.udtf()
@@ -236,8 +246,8 @@ class BaseTracebackSqlTestsMixin:
             self.fail("AnalysisException not raised")
 
         s = "".join(traceback.format_tb(tb))
-        self.assertIn("""MyUdtf().show()""", s)
-        self.assertIn("""raise ValueError("bar")""", s)
+        self.assertInOnce("""MyUdtf().show()""", s)
+        self.assertInOnce("""raise ValueError("bar")""", s)
 
     def test_udtf_execution(self):
         @sf.udtf(returnType="x int")
@@ -253,8 +263,8 @@ class BaseTracebackSqlTestsMixin:
             self.fail("PythonException not raised")
 
         s = "".join(traceback.format_tb(tb))
-        self.assertIn("""MyUdtf().show()""", s)
-        self.assertIn("""raise ValueError("bar")""", s)
+        self.assertInOnce("""MyUdtf().show()""", s)
+        self.assertInOnce("""raise ValueError("bar")""", s)
 
 
 class TracebackSqlClassicTests(BaseTracebackSqlTestsMixin, ReusedSQLTestCase):
