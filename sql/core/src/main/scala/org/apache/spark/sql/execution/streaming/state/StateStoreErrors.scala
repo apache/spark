@@ -212,6 +212,10 @@ object StateStoreErrors {
     StateStoreInvalidVariableTypeChange = {
     new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
   }
+
+  def stateStoreOperationOutOfOrder(errorMsg: String): StateStoreOperationOutOfOrder = {
+    new StateStoreOperationOutOfOrder(errorMsg)
+  }
 }
 
 class StateStoreDuplicateStateVariableDefined(stateVarName: String)
@@ -424,3 +428,9 @@ class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
     messageParameters = Map("inputClass" -> inputClass))
+
+class StateStoreOperationOutOfOrder(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+    messageParameters = Map("errorMsg" -> errorMsg)
+  )
