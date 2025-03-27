@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 import java.math.BigDecimal
-import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
+import java.time.{Duration, LocalDateTime, LocalTime, Period, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -1166,6 +1166,18 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       val df = sql("select cast(value as struct<f1:array<double>,f2:array<int>>) AS value from tbl")
       val expected = Row(Row(Array(1.0d, 2.0d, 3.0d), Array(1, 1, 2))) :: Nil
       checkAnswer(df, expected)
+    }
+  }
+
+  test("create table with TIME") {
+    withTable("tbl") {
+      sql("create table tbl (c1 time(6), c2 time) using parquet")
+      sql("insert into tbl values (time'12:13:14.001001', time'23:59:59')")
+      sql("insert into tbl values (null, null)")
+      val expected = Seq(
+        (LocalTime.parse("12:13:14.001001"), LocalTime.parse("23:59:59")),
+        (null, null)).toDF()
+      checkAnswer(sql("select * from tbl"), expected)
     }
   }
 }
