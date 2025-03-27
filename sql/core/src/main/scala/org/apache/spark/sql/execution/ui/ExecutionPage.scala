@@ -122,6 +122,17 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </span>
       </div>
 
+      <div id="plan-viz-download-btn-container">
+        <select id="plan-viz-format-select">
+          <option value="svg">SVG</option>
+          <option value="dot">DOT</option>
+          <option value="txt">TXT</option>
+        </select>
+        <label for="plan-viz-format-select">
+          <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
+        </label>
+      </div>
+
       <div id="plan-viz-graph">
         <div>
           <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
