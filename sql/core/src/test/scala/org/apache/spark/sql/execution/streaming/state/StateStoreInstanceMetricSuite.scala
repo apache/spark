@@ -243,7 +243,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
               Execute { q =>
                 eventually(timeout(10.seconds)) {
                   // Make sure only smallest K active metrics are published.
-                  // There are 5 * 4 = 20 metrics in total because of join, but only 10
+                  // There are 3 * 4 = 12 metrics in total because of join, but only 10
                   // are published.
                   val instanceMetrics = q.lastProgress
                     .stateOperators(0)
