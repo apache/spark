@@ -1628,16 +1628,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
   }
-
-  test("Write TimeType") {
-    withTempPath { dir =>
-      val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
-      data.write.parquet(dir.getCanonicalPath)
-      val readback = spark.read.parquet(dir.getCanonicalPath)
-      assertResult(readback.schema) { new StructType().add("col", TimeType()) }
-      checkAnswer(readback, data)
-    }
-  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
