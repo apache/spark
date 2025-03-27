@@ -172,7 +172,7 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row(Row(1, 2))))
   }
 
-  test("Propagate StructField metadata when doing CreateNamedStruct.dataType") {
+  test("SPARK-51624: Propagate StructField metadata in CreateNamedStruct.dataType") {
     val metadata = new MetadataBuilder().putString("comment", "hello").build()
     val structRef = AttributeReference("s1",
       StructType(StructField("col1", StringType, false, metadata) :: Nil))()
