@@ -793,6 +793,40 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
     }
   }
 
+  test("SPARK-51552: Temporary variables under identifiers are not allowed in persisted view") {
+    sql("declare table_name = 'table';")
+    sql("create table identifier(table_name) (c1 int);")
+    sql("create view v_table_1 as select * from table")
+    sql("create view identifier('v_' || table_name || '_2') as select * from table")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("create view v_table_3 as select * from identifier(table_name)")
+      },
+      condition = "INVALID_TEMP_OBJ_REFERENCE",
+      parameters = Map(
+        "obj" -> "VIEW",
+        "objName" -> "`unknown`",
+        "tempObj" -> "VARIABLE",
+        "tempObjName" -> "`table_name`"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """create view identifier('v_' || table_name || '_4')
+            |as select * from identifier(table_name);
+            |""".stripMargin)
+      },
+      condition = "INVALID_TEMP_OBJ_REFERENCE",
+      parameters = Map(
+        "obj" -> "VIEW",
+        "objName" -> "`unknown`",
+        "tempObj" -> "VARIABLE",
+        "tempObjName" -> "`table_name`"
+      )
+    )
+  }
+
   def getShowCreateDDL(view: String, serde: Boolean = false): String = {
     val result = if (serde) {
       sql(s"SHOW CREATE TABLE $view AS SERDE")

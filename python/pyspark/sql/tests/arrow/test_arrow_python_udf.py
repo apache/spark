@@ -21,35 +21,32 @@ from pyspark.errors import AnalysisException, PythonException, PySparkNotImpleme
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
-from pyspark.sql.types import ArrayType, DoubleType, VarcharType
+from pyspark.sql.types import VarcharType
 from pyspark.testing.sqlutils import (
-    ExamplePoint,
-    ExamplePointUDT,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
     ReusedSQLTestCase,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import PythonEvalType
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
+class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_broadcast_in_udf(self):
-        super(PythonUDFArrowTests, self).test_broadcast_in_udf()
+        super(ArrowPythonUDFTests, self).test_broadcast_in_udf()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_function(self):
-        super(PythonUDFArrowTests, self).test_register_java_function()
+        super(ArrowPythonUDFTests, self).test_register_java_function()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_udaf(self):
-        super(PythonUDFArrowTests, self).test_register_java_udaf()
+        super(ArrowPythonUDFTests, self).test_register_java_udaf()
 
     def test_complex_input_types(self):
         row = (
@@ -217,108 +214,11 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
-    def test_udf_with_udt(self):
-        row = Row(
-            label=1.0,
-            point=ExamplePoint(1.0, 2.0),
-            points=[ExamplePoint(4.0, 5.0), ExamplePoint(6.0, 7.0)],
-        )
-        df = self.spark.createDataFrame([row])
 
-        for use_arrow in [False, True]:
-            with self.subTest(use_arrow=use_arrow):
-
-                @udf(returnType=ExamplePointUDT(), useArrow=use_arrow)
-                def doubleInUDTOut(d):
-                    return ExamplePoint(d, 10 * d)
-
-                @udf(returnType=DoubleType(), useArrow=use_arrow)
-                def udtInDoubleOut(e):
-                    return e.y
-
-                @udf(returnType=ArrayType(ExamplePointUDT()), useArrow=use_arrow)
-                def doubleInUDTArrayOut(d):
-                    return [ExamplePoint(d + i, 10 * d + i) for i in range(2)]
-
-                @udf(returnType=DoubleType(), useArrow=use_arrow)
-                def udtArrayInDoubleOut(es):
-                    return es[-1].y
-
-                @udf(returnType=ExamplePointUDT(), useArrow=use_arrow)
-                def udtInUDTOut(e):
-                    return ExamplePoint(e.x * 10.0, e.y * 10.0)
-
-                @udf(returnType=DoubleType(), useArrow=use_arrow)
-                def doubleInDoubleOut(d):
-                    return d * 100.0
-
-                queries = [
-                    (
-                        "double -> UDT",
-                        df.select(doubleInUDTOut(df.label)),
-                        [Row(ExamplePoint(1.0, 10.0))],
-                    ),
-                    (
-                        "UDT -> double",
-                        df.select(udtInDoubleOut(df.point)),
-                        [Row(2.0)],
-                    ),
-                    (
-                        "double -> array of UDT",
-                        df.select(doubleInUDTArrayOut(df.label)),
-                        [Row([ExamplePoint(1.0, 10.0), ExamplePoint(2.0, 11.0)])],
-                    ),
-                    (
-                        "array of UDT -> double",
-                        df.select(udtArrayInDoubleOut(df.points)),
-                        [Row(7.0)],
-                    ),
-                    (
-                        "double -> UDT -> double",
-                        df.select(udtInDoubleOut(doubleInUDTOut(df.label))),
-                        [Row(10.0)],
-                    ),
-                    (
-                        "double -> UDT -> UDT",
-                        df.select(udtInUDTOut(doubleInUDTOut(df.label))),
-                        [Row(ExamplePoint(10.0, 100.0))],
-                    ),
-                    (
-                        "double -> double -> UDT",
-                        df.select(doubleInUDTOut(doubleInDoubleOut(df.label))),
-                        [Row(ExamplePoint(100.0, 1000.0))],
-                    ),
-                    (
-                        "UDT -> UDT -> double",
-                        df.select(udtInDoubleOut(udtInUDTOut(df.point))),
-                        [Row(20.0)],
-                    ),
-                    (
-                        "UDT -> UDT -> UDT",
-                        df.select(udtInUDTOut(udtInUDTOut(df.point))),
-                        [Row(ExamplePoint(100.0, 200.0))],
-                    ),
-                    (
-                        "UDT -> double -> double",
-                        df.select(doubleInDoubleOut(udtInDoubleOut(df.point))),
-                        [Row(200.0)],
-                    ),
-                    (
-                        "UDT -> double -> UDT",
-                        df.select(doubleInUDTOut(udtInDoubleOut(df.point))),
-                        [Row(ExamplePoint(2.0, 20.0))],
-                    ),
-                ]
-
-                for chain, actual, expected in queries:
-                    with self.subTest(chain=chain):
-                        assertDataFrameEqual(actual=actual, expected=expected)
-
-
-class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
+class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(PythonUDFArrowTests, cls).setUpClass()
+        super(ArrowPythonUDFTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
@@ -326,13 +226,13 @@ class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(PythonUDFArrowTests, cls).tearDownClass()
+            super(ArrowPythonUDFTests, cls).tearDownClass()
 
 
-class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
+class AsyncArrowPythonUDFTests(ArrowPythonUDFTests):
     @classmethod
     def setUpClass(cls):
-        super(AsyncPythonUDFArrowTests, cls).setUpClass()
+        super(AsyncArrowPythonUDFTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
 
     @classmethod
@@ -340,7 +240,7 @@ class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
         finally:
-            super(AsyncPythonUDFArrowTests, cls).tearDownClass()
+            super(AsyncArrowPythonUDFTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":

@@ -86,7 +86,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
-          configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) })
+          configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) }) ++
+        <br/>
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }
@@ -114,8 +115,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     <div>
       <div>
         <span style="cursor: pointer;" onclick="togglePlanViz();">
-          <span id="plan-viz-graph-arrow" class="arrow-open"></span>
-          <a>Plan Visualization</a>
+          <h4>
+            <span id="plan-viz-graph-arrow" class="arrow-open"></span>
+            <a>Plan Visualization</a>
+          </h4>
         </span>
       </div>
 
@@ -141,8 +144,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>
       <span style="cursor: pointer;" onclick="clickPhysicalPlanDetails();">
-        <span id="physical-plan-details-arrow" class="arrow-closed"></span>
-        <a>Details</a>
+        <h4>
+          <span id="physical-plan-details-arrow" class="arrow-closed"></span>
+          <a>Plan Details</a>
+        </h4>
       </span>
     </div>
     <div id="physical-plan-details" style="display: none;">
@@ -154,7 +159,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
       }}
     </script>
-    <br/>
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
@@ -170,14 +174,15 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     <div>
       <span class="collapse-sql-properties collapse-table"
             onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
-        <span class="collapse-table-arrow arrow-closed"></span>
-        <a>SQL / DataFrame Properties</a>
+        <h4>
+          <span class="collapse-table-arrow arrow-closed"></span>
+          <a>SQL / DataFrame Properties</a>
+        </h4>
       </span>
       <div class="sql-properties collapsible-table collapsed">
         {configs}
       </div>
     </div>
-    <br/>
   }
 
   private def modifiedPandasOnSparkConfigs(
@@ -209,14 +214,15 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       <span class="collapse-pandas-on-spark-properties collapse-table"
             onClick="collapseTable('collapse-pandas-on-spark-properties',
              'pandas-on-spark-properties')">
-        <span class="collapse-table-arrow arrow-closed"></span>
-        <a>Pandas API Properties</a>
+        <h4>
+          <span class="collapse-table-arrow arrow-closed"></span>
+          <a>Pandas API Properties</a>
+        </h4>
       </span>
       <div class="pandas-on-spark-properties collapsible-table collapsed">
         {configs}
       </div>
     </div>
-    <br/>
   }
 
   private def propertyHeader = Seq("Name", "Value")
