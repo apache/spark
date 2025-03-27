@@ -117,6 +117,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
       .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
+      .set(config.DRIVER_BIND_ADDRESS.key, Utils.localHostName())
     sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
@@ -172,6 +173,20 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         assert(locations.map(_.port).contains(server.getPort),
           "external shuffle service port should be contained")
       }
+
+      val locationStatusForLocalHost =
+        sc.env.blockManager.master.getLocationsAndStatus(blockId, Utils.localHostName())
+      assert(locationStatusForLocalHost.isDefined)
+      assert(locationStatusForLocalHost.get.localDirs.isDefined)
+      assert(locationStatusForLocalHost.get.locations.head.executorId == "0")
+      assert(locationStatusForLocalHost.get.locations.head.host == Utils.localHostName())
+
+      val locationStatusForRemoteHost =
+        sc.env.blockManager.master.getLocationsAndStatus(blockId, "<invalid-host>")
+      assert(locationStatusForRemoteHost.isDefined)
+      assert(locationStatusForRemoteHost.get.localDirs.isEmpty)
+      assert(locationStatusForRemoteHost.get.locations.head.executorId == "0")
+      assert(locationStatusForRemoteHost.get.locations.head.host == Utils.localHostName())
 
       assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
 
