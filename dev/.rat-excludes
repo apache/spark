@@ -48,6 +48,7 @@ jquery.mustache.js
 pyspark-coverage-site/*
 cloudpickle/*
 join.py
+tblib.py
 SparkILoop.scala
 sbt
 sbt-launch-lib.bash
