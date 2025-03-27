@@ -199,10 +199,12 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("Batched SingleChunkArtifacts") {
-    val file1 = artifactFilePath.resolve("smallClassFile.class").toUri
-    val path = artifactFilePath.resolve("smallJar.jar")
-    val file2 = path.toUri
-    assume(path.toFile.exists)
+    val path1 = artifactFilePath.resolve("smallClassFile.class")
+    val file1 = path1.toUri
+    val path2 = artifactFilePath.resolve("smallJar.jar")
+    val file2 = path2.toUri
+    assume(path1.toFile.exists)
+    assume(path2.toFile.exists)
     artifactManager.addArtifacts(Seq(file1, file2))
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
     // Single request containing 2 artifacts.
@@ -223,11 +225,15 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("Mix of SingleChunkArtifact and chunked artifact") {
-    val file1 = artifactFilePath.resolve("smallClassFile.class").toUri
+    val path1 = artifactFilePath.resolve("smallClassFile.class")
+    assume(path1.toFile.exists)
+    val file1 = path1.toUri
     val path2 = artifactFilePath.resolve("junitLargeJar.jar")
     assume(path2.toFile.exists)
     val file2 = path2.toUri
-    val file3 = artifactFilePath.resolve("smallClassFileDup.class").toUri
+    val path3 = artifactFilePath.resolve("smallClassFileDup.class")
+    assume(path3.toFile.exists)
+    val file3 = path3.toUri
     val path4 = artifactFilePath.resolve("smallJar.jar")
     assume(path4.toFile.exists)
     val file4 = path4.toUri
@@ -298,6 +304,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("artifact with custom target") {
     val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    assume(artifactPath.toFile.exists)
     val target = "sub/package/smallClassFile.class"
     artifactManager.addArtifact(artifactPath.toString, target)
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
@@ -318,6 +325,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("in-memory artifact with custom target") {
     val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    assume(artifactPath.toFile.exists)
     val artifactBytes = Files.readAllBytes(artifactPath)
     val target = "sub/package/smallClassFile.class"
     artifactManager.addArtifact(artifactBytes, target)
@@ -341,6 +349,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     "When both source and target paths are given, extension conditions are checked " +
       "on target path") {
     val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    assume(artifactPath.toFile.exists)
     assertThrows[UnsupportedOperationException] {
       artifactManager.addArtifact(artifactPath.toString, "dummy.extension")
     }
