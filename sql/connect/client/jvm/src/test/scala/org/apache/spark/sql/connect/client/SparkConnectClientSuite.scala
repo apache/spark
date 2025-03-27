@@ -487,7 +487,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     val session = SparkSession.builder().client(client).create()
     val artifactFilePath = commonResourcePath.resolve("artifact-tests")
-    session.addArtifact(artifactFilePath.resolve("smallClassFile.class").toString)
+    val path = artifactFilePath.resolve("smallClassFile.class")
+    assume(path.toFile.exists)
+    session.addArtifact(path.toString)
   }
 
   private def buildPlan(query: String): proto.Plan = {

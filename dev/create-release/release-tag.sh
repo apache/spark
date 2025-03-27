@@ -75,7 +75,8 @@ git config user.email "$GIT_EMAIL"
 
 # Remove test jars that do not belong to source releases.
 rm $(<dev/test-jars.txt)
-git commit -a -m "Removing test jars"
+rm $(<dev/test-classes.txt)
+git commit -a -m "Removing test jars and class files"
 JAR_RM_REF=$(git rev-parse HEAD)
 
 # Create release version
