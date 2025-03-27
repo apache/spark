@@ -66,7 +66,7 @@ case class CreateSQLFunctionCommand(
   import SQLFunction._
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val parser: ParserInterface = sparkSession.sessionState.sqlParser
+    val parser = sparkSession.sessionState.sqlParser
     val analyzer = sparkSession.sessionState.analyzer
     val catalog = sparkSession.sessionState.catalog
     val conf = sparkSession.sessionState.conf
