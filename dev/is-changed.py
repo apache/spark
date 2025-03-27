@@ -70,12 +70,13 @@ def main():
         with open(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), "test-jars.txt")
         ) as jarlist:
-            inter = set((line.strip() for line in jarlist.readlines())).intersection(
+            itrsect = set((line.strip() for line in jarlist.readlines())).intersection(
                 set(changed_files)
             )
-            if len(inter) > 0:
+            if len(itrsect) > 0:
                 raise SystemExit(
-                    "Cannot include jars in source codes. If this has to be added temporarily, "
+                    f"Cannot include jars in source codes ({', '.join(itrsect)}). "
+                    "If they have to be added temporarily, "
                     "please add the file name into dev/test-jars.txt."
                 )
 
