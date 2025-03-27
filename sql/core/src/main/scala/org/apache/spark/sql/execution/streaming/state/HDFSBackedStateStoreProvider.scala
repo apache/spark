@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.util
-import java.util.Locale
+import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.{AtomicLong, LongAdder}
 
 import scala.collection.mutable
@@ -699,6 +699,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       log"for ${MDC(LogKeys.OP_TYPE, opType)}")
     // Compare and update with the version that was just uploaded.
     lastUploadedSnapshotVersion.updateAndGet(v => Math.max(version, v))
+    // Report snapshot upload event to the coordinator, and include the store ID with the message.
+    if (storeConf.reportSnapshotUploadLag) {
+      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+      val currentTimestamp = System.currentTimeMillis()
+      StateStoreProvider.coordinatorRef.foreach(
+        _.snapshotUploaded(
+          StateStoreProviderId(stateStoreId, runId),
+          version,
+          currentTimestamp
+        )
+      )
+    }
   }
 
   /**
