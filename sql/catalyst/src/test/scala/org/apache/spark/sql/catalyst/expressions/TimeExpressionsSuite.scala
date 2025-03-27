@@ -106,6 +106,9 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       HoursOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
       null
     )
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => HoursOfTime(child).replacement, TimeType())
   }
 
   test("MinuteExpressionBuilder") {
@@ -161,5 +164,8 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MinutesOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
       null
     )
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => MinutesOfTime(child).replacement, TimeType())
   }
 }
