@@ -30,6 +30,8 @@ on:
     - 'dev/spark-test-image/docs/Dockerfile'
     - 'dev/spark-test-image/lint/Dockerfile'
     - 'dev/spark-test-image/sparkr/Dockerfile'
+    - 'dev/spark-test-image/python-minimum/Dockerfile'
+    - 'dev/spark-test-image/python-ps-minimum/Dockerfile'
     - 'dev/spark-test-image/pypy-310/Dockerfile'
     - 'dev/spark-test-image/python-309/Dockerfile'
     - 'dev/spark-test-image/python-310/Dockerfile'
