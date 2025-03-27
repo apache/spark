@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumnSpec, AlterColumns, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -49,6 +49,9 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
       case createView: CreateView if createView.collation.isDefined =>
         StringType(createView.collation.get)
 
+      case replaceTable: ReplaceTable if replaceTable.tableSpec.collation.isDefined =>
+        StringType(replaceTable.tableSpec.collation.get)
+
       case alterTable: AlterTableCommand if alterTable.table.resolved =>
         alterTable.table match {
           case resolvedTbl: ResolvedTable =>
@@ -73,7 +76,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
     // For CREATE TABLE, only v2 CREATE TABLE command is supported.
     // Also, table DEFAULT COLLATION cannot be specified through CREATE TABLE AS SELECT command.
-    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
+    case _: V2CreateTablePlan | _: ReplaceTable | _: CreateView | _: AlterViewAs => true
     case _ => false
   }
 
