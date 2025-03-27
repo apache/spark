@@ -56,9 +56,15 @@ object CTESubstitution extends Rule[LogicalPlan] {
       return plan
     }
 
-    val commands = plan.collect {
-      case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => c
+    def collectCommands(p: LogicalPlan): Seq[LogicalPlan] = p match {
+      case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => Seq(c)
+      case u: UnresolvedWith =>
+        collectCommands(u.child) ++ u.cteRelations.flatMap {
+          case (_, relation) => collectCommands(relation)
+        }
+      case p => p.children.flatMap(collectCommands)
     }
+    val commands = collectCommands(plan)
     val forceInline = if (commands.length == 1) {
       if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
         // The legacy behavior always inlines the CTE relations for queries in commands.
