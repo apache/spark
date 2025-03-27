@@ -33,7 +33,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
       .build()
-    assert(con1.toDDL == "CONSTRAINT con1 CHECK id > 10 ENFORCED VALID RELY")
+    assert(con1.toDDL == "CONSTRAINT con1 CHECK (id > 10) ENFORCED VALID RELY")
 
     val con2 = Constraint.check("con2")
     .predicate(
@@ -46,7 +46,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
       .build()
-    assert(con2.toDDL == "CONSTRAINT con2 CHECK a.`b.c`.d = 1 NOT ENFORCED VALID RELY")
+    assert(con2.toDDL == "CONSTRAINT con2 CHECK (a.`b.c`.d = 1) NOT ENFORCED VALID RELY")
 
     val con3 = Constraint.check("con3")
       .sql("a.b.c <=> 1")
@@ -60,10 +60,10 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.INVALID)
       .rely(false)
       .build()
-    assert(con3.toDDL == "CONSTRAINT con3 CHECK a.b.c <=> 1 NOT ENFORCED INVALID NORELY")
+    assert(con3.toDDL == "CONSTRAINT con3 CHECK (a.b.c <=> 1) NOT ENFORCED INVALID NORELY")
 
     val con4 = Constraint.check("con4").sql("a = 1").build()
-    assert(con4.toDDL == "CONSTRAINT con4 CHECK a = 1 ENFORCED UNVALIDATED NORELY")
+    assert(con4.toDDL == "CONSTRAINT con4 CHECK (a = 1) ENFORCED UNVALIDATED NORELY")
   }
 
   test("UNIQUE constraint toDDL") {

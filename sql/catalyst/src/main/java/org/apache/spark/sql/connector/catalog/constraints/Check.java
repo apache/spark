@@ -68,7 +68,7 @@ public class Check extends BaseConstraint {
 
   @Override
   protected String definition() {
-    return String.format("CHECK %s", sql != null ? sql : predicate);
+    return String.format("CHECK (%s)", sql != null ? sql : predicate);
   }
 
   @Override
