@@ -807,7 +807,7 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies for PySpark
         run: |
-          python3.11 -m pip install ipython numpy scipy 'protobuf==5.28.3' 'pyarrow>=18.0.0' 'six==1.16.0' 'pandas==2.2.3' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3' 'googleapis-common-protos==1.65.0'
+          python3.11 -m pip install ipython numpy scipy 'protobuf==5.28.3' 'pyarrow>=19.0.0' 'six==1.16.0' 'pandas==2.2.3' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3' 'googleapis-common-protos==1.65.0'
           python3.11 -m pip list
       - name: Build Spark
         run: |
@@ -838,6 +838,8 @@ jobs:
         shell: 'script -q -e -c "bash {0}"'
         run: |
           export SPARK_HOME=$(pwd)
+          export PYSPARK_DRIVER_PYTHON=$(which python3)
+          export PYSPARK_PYTHON=$(which python3)
           echo 'spark.range(1024).count()' | ./bin/pyspark --remote local > pyspark-connect-repl.log
           grep 'Out.*1024' pyspark-connect-repl.log
       - name: Upload log files
