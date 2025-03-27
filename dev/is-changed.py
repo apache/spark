@@ -67,12 +67,17 @@ def main():
         )
 
     if any(f.endswith(".jar") for f in changed_files):
-        with os.path.join(os.path.dirname(os.path.realpath(__file__)), 'test-jars.txt') as f:
-            inter = set(f.readlines()).intersection(set(changed_files))
-            if inter:
-                raise RuntimeError(
-                "Cannot include jars in source codes. If this has to be added temporarily, "
-                "please add the file name into dev/test-jars.txt.")
+        with open(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), "test-jars.txt")
+        ) as jarlist:
+            inter = set((line.strip() for line in jarlist.readlines())).intersection(
+                set(changed_files)
+            )
+            if len(inter) > 0:
+                raise SystemExit(
+                    "Cannot include jars in source codes. If this has to be added temporarily, "
+                    "please add the file name into dev/test-jars.txt."
+                )
 
     changed_modules = determine_modules_to_test(
         determine_modules_for_files(changed_files), deduplicated=False
