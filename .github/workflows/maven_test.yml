@@ -191,7 +191,7 @@ jobs:
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
           
           if [ "$MODULES_TO_TEST" != "connect" ]; then
-            echo "Clean up the `assembly` module before maven testing"
+            echo "Clean up the assembly module before maven testing"
             ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
           fi
           
