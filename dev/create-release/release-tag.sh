@@ -73,6 +73,11 @@ cd spark
 git config user.name "$GIT_NAME"
 git config user.email "$GIT_EMAIL"
 
+# Remove test jars that do not belong to source releases.
+rm $(<dev/test-jars.txt)
+git commit -a -m "Removing test jars"
+JAR_RM_REF=$(git rev-parse HEAD)
+
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
 if [[ $RELEASE_VERSION != *"preview"* ]]; then
@@ -91,6 +96,9 @@ git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
 git tag $RELEASE_TAG
 
+# Restore test jars for dev.
+git revert --no-edit $JAR_RM_REF
+
 # Create next version
 $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
 # Remove -SNAPSHOT before setting the R version as R expects version strings to only have numbers
@@ -106,8 +114,6 @@ sed -i".tmp7" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$NEXT_VERSION"'/g' docs/_con
 sed -i".tmp8" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"'/g' docs/_config.yml
 # Update the version index of DocSearch as the short version
 sed -i".tmp9" "s/'facetFilters':.*$/'facetFilters': [\"version:$R_NEXT_VERSION\"]/g" docs/_config.yml
-# Remove test jars that do not beling to source releases.
-rm $(<dev/test-jars.txt)
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
