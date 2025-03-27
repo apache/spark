@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.QueryTest
@@ -24,8 +23,11 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.test.SharedSparkSession
 
-class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils {
+abstract class BaseBroadcastVarPushDownTests
+    extends QueryTest
+   with BroadcastVarPushdownUtils {
 
   test("test broadcast variables push on simple join") {
     val planToTest = () =>
@@ -105,3 +107,8 @@ class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils
     })
   }
 }
+
+class BroadcastVarPushDownSuite
+    extends BaseBroadcastVarPushDownTests
+    with SharedSparkSession
+    with DataSourceV2RelationCreator

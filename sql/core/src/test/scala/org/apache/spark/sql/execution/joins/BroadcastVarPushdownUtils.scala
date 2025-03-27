@@ -21,12 +21,13 @@ import org.scalatest.Tag
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, PropagateEmptyRelation, PruneFilters, PushDownPredicates}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTable}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.{SparkPlan, WrapsBroadcastVarPushDownSupporter}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -59,7 +60,7 @@ trait DisableBroadcastFilterPushdownSuite extends SQLTestUtils {
   }
 }
 
-trait BroadcastVarPushdownUtils extends SharedSparkSession {
+trait BroadcastVarPushdownUtils extends SQLTestUtils {
 
   import scala.jdk.CollectionConverters._
 
@@ -81,7 +82,18 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
   val part_table3_schema =
     StructType.fromDDL("c3_1 INT, c3_2 INT, c3_3 LONG, c3_4 STRING, c3_5 STRING")
 
-  def non_part_table1: DataSourceV2Relation = {
+  def createNonPartitionedRelation(
+      tablename: String,
+      schema: StructType,
+      data: BufferedRows): LogicalPlan
+
+  def createPartitionedRelation(
+      tablename: String,
+      schema: StructType,
+      datas: IndexedSeq[BufferedRows],
+      partitionColName: String): LogicalPlan
+
+  def non_part_table1: LogicalPlan = {
     val data = new BufferedRows()
     for (i <- 1 to 500) {
       data.withRow(
@@ -93,17 +105,10 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
             UTF8String.fromString(s"name$i"),
             UTF8String.fromString(s"address$i"))))
     }
-    DataSourceV2Relation.create(
-      new InMemoryTable(
-        non_part_table1_name,
-        non_part_table1_schema,
-        Array.empty,
-        Map.empty[String, String].asJava).withData(Array(data)),
-      None,
-      None)
+    createNonPartitionedRelation(non_part_table1_name, non_part_table1_schema, data)
   }
 
-  def non_part_table2: DataSourceV2Relation = {
+  def non_part_table2: LogicalPlan = {
     val data = new BufferedRows()
     for (i <- 1 to 10000) {
       data.withRow(
@@ -115,17 +120,11 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
             UTF8String.fromString(s"name${i * 10}"),
             UTF8String.fromString(s"address${i * 10}"))))
     }
-    DataSourceV2Relation.create(
-      new InMemoryTable(
-        non_part_table2_name,
-        non_part_table2_schema,
-        Array.empty,
-        Map.empty[String, String].asJava).withData(Array(data)),
-      None,
-      None)
+
+    createNonPartitionedRelation(non_part_table2_name, non_part_table2_schema, data)
   }
 
-  def non_part_table3: DataSourceV2Relation = {
+  def non_part_table3: LogicalPlan = {
     val data = new BufferedRows()
     for (i <- 1 to 800) {
       data.withRow(
@@ -137,21 +136,14 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
             UTF8String.fromString(s"name${i * 20}"),
             UTF8String.fromString(s"address${i * 20}"))))
     }
-    DataSourceV2Relation.create(
-      new InMemoryTable(
-        non_part_table3_name,
-        non_part_table3_schema,
-        Array.empty,
-        Map.empty[String, String].asJava).withData(Array(data)),
-      None,
-      None)
+    createNonPartitionedRelation(non_part_table3_name, non_part_table3_schema, data)
   }
 
   val part_table1_name = "part_tab1"
   val part_table2_name = "part_tab2"
   val part_table3_name = "part_tab3"
 
-  def part_table1: DataSourceV2Relation = {
+  def part_table1: LogicalPlan = {
     val datas = for (j <- 1 to 10) yield {
       val data = new BufferedRows(Seq(j))
       for (i <- 1 to 10) {
@@ -166,17 +158,10 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
       }
       data
     }
-    DataSourceV2Relation.create(
-      new InMemoryTable(
-        part_table1_name,
-        part_table1_schema,
-        Array(IdentityTransform(FieldReference("c1_1"))),
-        Map.empty[String, String].asJava).withData(datas.toArray),
-      None,
-      None)
+    createPartitionedRelation(part_table1_name, part_table1_schema, datas, "c1_1")
   }
 
-  def part_table2: DataSourceV2Relation = {
+  def part_table2: LogicalPlan = {
     val datas = for (j <- 1 to 10) yield {
       val data = new BufferedRows(Seq(j))
       for (i <- 1 to 100) {
@@ -191,17 +176,12 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
       }
       data
     }
-    DataSourceV2Relation.create(
-      new InMemoryTable(
-        part_table2_name,
-        part_table2_schema,
-        Array(IdentityTransform(FieldReference("c2_1"))),
-        Map.empty[String, String].asJava).withData(datas.toArray),
-      None,
-      None)
+
+    createPartitionedRelation(part_table2_name, part_table2_schema, datas, "c2_1")
+
   }
 
-  def part_table3: DataSourceV2Relation = {
+  def part_table3: LogicalPlan = {
     val datas = for (j <- 1 to 10) yield {
       val data = new BufferedRows(Seq(j))
       for (i <- 1 to 300) {
@@ -216,20 +196,14 @@ trait BroadcastVarPushdownUtils extends SharedSparkSession {
       }
       data
     }
-    DataSourceV2Relation.create(
-      new InMemoryTable(
-        part_table3_name,
-        part_table3_schema,
-        Array(IdentityTransform(FieldReference("c3_1"))),
-        Map.empty[String, String].asJava).withData(datas.toArray),
-      None,
-      None)
+
+    createPartitionedRelation(part_table3_name, part_table3_schema, datas, "c3_1")
   }
 
   def createNonPartTable(
       name: String,
       schema: StructType,
-      data: BufferedRows): DataSourceV2Relation = DataSourceV2Relation.create(
+      data: BufferedRows): LogicalPlan = DataSourceV2Relation.create(
     new InMemoryTable(name, schema, Array.empty, Map.empty[String, String].asJava)
       .withData(Array(data)),
     None,
@@ -323,3 +297,38 @@ case class BHJData(
     streamPlan: SparkPlan,
     buildKeys: Seq[Expression],
     streamKeys: Seq[Expression])
+
+trait DataSourceV2RelationCreator {
+  this : BroadcastVarPushdownUtils =>
+
+  import scala.jdk.CollectionConverters._
+
+  override def createNonPartitionedRelation(
+      tablename: String,
+      schema: StructType,
+      data: BufferedRows): LogicalPlan = {
+    DataSourceV2Relation.create(
+      new InMemoryTable(
+        tablename,
+        schema,
+        Array.empty,
+        Map.empty[String, String].asJava).withData(Array(data)),
+      None,
+      None)
+  }
+
+  override def createPartitionedRelation(
+      tablename: String,
+      schema: StructType,
+      datas: IndexedSeq[BufferedRows],
+      partitionColName: String): LogicalPlan = {
+    DataSourceV2Relation.create(
+      new InMemoryTable(
+        tablename,
+        schema,
+        Array(IdentityTransform(FieldReference(partitionColName))),
+        Map.empty[String, String].asJava).withData(datas.toArray),
+      None,
+      None)
+  }
+}
