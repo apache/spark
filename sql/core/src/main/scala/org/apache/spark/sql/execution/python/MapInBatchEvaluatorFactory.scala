@@ -88,10 +88,8 @@ class MapInBatchEvaluatorFactory(
 }
 
 class MapInBatchColumnarEvaluatorFactory(
-    output: Seq[Attribute],
     chainedFunc: Seq[(ChainedPythonFunctions, Long)],
     outputTypes: StructType,
-    batchSize: Int,
     pythonEvalType: Int,
     sessionLocalTimeZone: String,
     largeVarTypes: Boolean,
@@ -132,15 +130,7 @@ class MapInBatchColumnarEvaluatorFactory(
         None) with BatchedPythonArrowInput
       val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
-      columnarBatchIter.map { batch =>
-        // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
-        // the children here
-        val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-        val outputVectors = output.indices.map(structVector.getChild)
-        val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
-        flattenedBatch.setNumRows(batch.numRows())
-        flattenedBatch
-      }
+      columnarBatchIter
     }
   }
 }

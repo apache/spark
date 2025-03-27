@@ -90,6 +90,7 @@ class PythonStreamingPartitionReaderFactory(
   }
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
+    // Prefetched block doesn't support columnar read because ColumnarBatch is not serializable.
     val part = partition.asInstanceOf[PythonStreamingInputPartition]
     part.blockId.isEmpty
   }

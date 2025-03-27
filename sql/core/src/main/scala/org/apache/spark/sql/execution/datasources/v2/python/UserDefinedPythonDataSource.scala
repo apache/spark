@@ -199,10 +199,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
     val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
     new MapInBatchColumnarEvaluatorFactory(
-      toAttributes(outputSchema),
       Seq((ChainedPythonFunctions(Seq(pythonUDF.func)), pythonUDF.resultId.id)),
       inputSchema,
-      conf.arrowMaxRecordsPerBatch,
       pythonEvalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
