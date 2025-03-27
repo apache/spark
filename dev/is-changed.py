@@ -65,6 +65,15 @@ def main():
         changed_files = identify_changed_files_from_git_commits(
             os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
         )
+
+    if any(f.endswith(".jar") for f in changed_files):
+        with os.path.join(os.path.dirname(os.path.realpath(__file__)), 'test-jars.txt') as f:
+            inter = set(f.readlines()).intersection(set(changed_files))
+            if inter:
+                raise RuntimeError(
+                "Cannot include jars in source codes. If this has to be added temporarily, "
+                "please add the file name into dev/test-jars.txt.")
+
     changed_modules = determine_modules_to_test(
         determine_modules_for_files(changed_files), deduplicated=False
     )
