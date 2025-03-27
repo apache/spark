@@ -80,6 +80,20 @@ def main():
                     "please add the file name into dev/test-jars.txt."
                 )
 
+    if any(f.endswith(".class") for f in changed_files):
+        with open(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), "test-classes.txt")
+        ) as clslist:
+            itrsect = set((line.strip() for line in clslist.readlines())).intersection(
+                set(changed_files)
+            )
+            if len(itrsect) > 0:
+                raise SystemExit(
+                    f"Cannot include class files in source codes ({', '.join(itrsect)}). "
+                    "If they have to be added temporarily, "
+                    "please add the file name into dev/test-classes.txt."
+                )
+
     changed_modules = determine_modules_to_test(
         determine_modules_for_files(changed_files), deduplicated=False
     )
