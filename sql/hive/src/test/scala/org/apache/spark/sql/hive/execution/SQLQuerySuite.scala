@@ -258,7 +258,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         "when `expr1` = `expr4`, return `expr5`; else return `expr6`")
   }
 
-  test("describe functions - user defined functions") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: describe functions - user defined functions") {
     withUserDefinedFunction("udtf_count" -> false) {
       sql(
         s"""
@@ -283,7 +284,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("describe functions - temporary user defined functions") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: describe functions - temporary user defined functions") {
     withUserDefinedFunction("udtf_count_temp" -> true) {
       sql(
         s"""
@@ -2484,7 +2486,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
     withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
       sql(
         s"""

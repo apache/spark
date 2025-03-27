@@ -3240,7 +3240,8 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-34261: Avoid side effect if create exists temporary function") {
+  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+    "tests: SPARK-34261: Avoid side effect if create exists temporary function") {
     withUserDefinedFunction("f1" -> true) {
       sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
 

@@ -28,7 +28,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.ProtoDataTypes
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
-
 @Ignore
 class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 

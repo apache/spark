@@ -394,19 +394,20 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val testBytes = "test".getBytes(StandardCharsets.UTF_8)
       Files.write(randomFilePath, testBytes)
 
+      val artifacts = 2
+
       // Register multiple kinds of artifacts
       artifactManager.addArtifact( // Class
         Paths.get("classes/Hello.class"), path.resolve("Hello.class"), None)
       artifactManager.addArtifact( // Python
         Paths.get("pyfiles/abc.zip"), randomFilePath, None, deleteStagedFile = false)
-      ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-        "tests") {
-        artifactManager.addArtifact( // JAR
-          Paths.get("jars/udf_noA.jar"), path.resolve("udf_noA.jar"), None)
-      }
+      // "SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected tests"
+      // artifactManager.addArtifact( // JAR
+      //    Paths.get("jars/udf_noA.jar"), path.resolve("udf_noA.jar"), None)
       artifactManager.addArtifact( // Cached
         Paths.get("cache/test"), randomFilePath, None)
-      assert(FileUtils.listFiles(artifactManager.artifactPath.toFile, null, true).size() === 3)
+      assert(FileUtils.listFiles(artifactManager.artifactPath.toFile, null, true).size() ===
+        artifacts)
 
       // Clone the artifact manager
       val newSession = spark.cloneSession()
@@ -426,7 +427,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
       }
 
       val allFiles = FileUtils.listFiles(newArtifactManager.artifactPath.toFile, null, true)
-      assert(allFiles.size() === 3)
+      assert(allFiles.size() === artifacts)
       allFiles.forEach { file =>
         assert(!file.getCanonicalPath.contains(spark.sessionUUID))
         assert(file.getCanonicalPath.contains(newSession.sessionUUID))

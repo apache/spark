@@ -143,8 +143,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   singleChunkArtifactTest("smallClassFile.class")
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests") {
+  ignore(
+    "SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+      "tests") {
     singleChunkArtifactTest("smallJar.jar")
   }
 
@@ -180,8 +181,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Chunked Artifact - junitLargeJar.jar") {
+  ignore(
+    "SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+      "tests: Chunked Artifact - junitLargeJar.jar") {
     val artifactPath = artifactFilePath.resolve("junitLargeJar.jar")
     artifactManager.addArtifact(artifactPath.toString)
     // Expected chunks = roundUp( file_size / chunk_size) = 12
@@ -200,8 +202,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     checkChunksDataAndCrc(artifactPath, dataChunks)
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Batched SingleChunkArtifacts") {
+  ignore(
+    "SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+      "tests: Batched SingleChunkArtifacts") {
     val file1 = artifactFilePath.resolve("smallClassFile.class").toUri
     val file2 = artifactFilePath.resolve("smallJar.jar").toUri
     artifactManager.addArtifacts(Seq(file1, file2))
@@ -223,8 +226,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assertFileDataEquality(artifacts.get(1).getData, Paths.get(file2))
   }
 
-  ignore("SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
-    "tests: Mix of SingleChunkArtifact and chunked artifact") {
+  ignore(
+    "SPARK-51318: Remove `jar` files from Apache Spark repository and disable affected " +
+      "tests: Mix of SingleChunkArtifact and chunked artifact") {
     val file1 = artifactFilePath.resolve("smallClassFile.class").toUri
     val file2 = artifactFilePath.resolve("junitLargeJar.jar").toUri
     val file3 = artifactFilePath.resolve("smallClassFileDup.class").toUri
