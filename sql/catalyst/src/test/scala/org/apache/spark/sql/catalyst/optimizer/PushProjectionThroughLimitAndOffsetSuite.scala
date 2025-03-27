@@ -25,15 +25,69 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-class PushProjectionThroughOffsetSuite extends PlanTest {
-
+class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Optimizer Batch",
       FixedPoint(100),
-      PushProjectionThroughLimit,
-      PushProjectionThroughOffset,
+      PushProjectionThroughLimitAndOffset,
       EliminateLimits,
       LimitPushDown) :: Nil
+  }
+
+  test("SPARK-40501: push projection through limit") {
+    val testRelation = LocalRelation.fromExternalRows(
+      Seq("a".attr.int, "b".attr.int, "c".attr.int),
+      1.to(20).map(_ => Row(1, 2, 3)))
+
+    val query1 = testRelation
+      .limit(10)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .limit(15).analyze
+    val optimized1 = Optimize.execute(query1)
+    val expected1 = testRelation
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .limit(10).analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = testRelation
+      .sortBy($"a".asc)
+      .limit(10)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .limit(15).analyze
+    val optimized2 = Optimize.execute(query2)
+    val expected2 = testRelation
+      .sortBy($"a".asc)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .limit(10).analyze
+    comparePlans(optimized2, expected2)
+
+    val query3 = testRelation
+      .limit(10)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .limit(20)
+      .select(Symbol("a"))
+      .limit(15).analyze
+    val optimized3 = Optimize.execute(query3)
+    val expected3 = testRelation
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .select(Symbol("a"))
+      .limit(10).analyze
+    comparePlans(optimized3, expected3)
+
+    val query4 = testRelation
+      .sortBy($"a".asc)
+      .limit(10)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .limit(20)
+      .select(Symbol("a"))
+      .limit(15).analyze
+    val optimized4 = Optimize.execute(query4)
+    val expected4 = testRelation
+      .sortBy($"a".asc)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .select(Symbol("a"))
+      .limit(10).analyze
+    comparePlans(optimized4, expected4)
   }
 
   test("push projection through offset") {
