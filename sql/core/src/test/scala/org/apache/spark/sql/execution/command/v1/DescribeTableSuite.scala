@@ -551,9 +551,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
                  |""".stripMargin
             spark.sql(tableCreationStr)
             val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
-            spark.sql("SET spark.sql.ansi.enabled = false") // non-default
-            spark.sql("SET spark.sql.parquet.enableVectorizedReader = true") // default
-            spark.sql("SET spark.sql.sources.fileCompressionFactor = 2.0") // non-default
             spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
             val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
             val firstRow = descriptionDf.select("json_metadata").head()
