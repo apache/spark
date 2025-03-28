@@ -534,6 +534,7 @@ object PartitioningUtils extends SQLConfHelper {
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
+    case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()
     // Timestamp types
     case dt if AnyTimestampType.acceptsType(dt) =>
       Try {
