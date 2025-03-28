@@ -99,6 +99,10 @@ case class DescribeRelationJsonCommand(
       case _ => throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
     }
 
+    // Add default collation if not yet added (addKeyValueToMap only adds unique keys).
+    // Add here to only affect `DESC AS JSON` and not the `DESC TABLE` output.
+    addKeyValueToMap("collation", JString("UTF8_BINARY"), jsonMap)
+
     Seq(Row(compact(render(JObject(jsonMap.toList)))))
   }
 
