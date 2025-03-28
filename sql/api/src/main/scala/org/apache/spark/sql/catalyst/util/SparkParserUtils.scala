@@ -127,6 +127,12 @@ trait SparkParserUtils {
     }
   }
 
+  /** Get the code that creates the given node. */
+  def source(ctx: ParserRuleContext): String = {
+    val stream = ctx.getStart.getInputStream
+    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
+  }
+
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
 

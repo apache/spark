@@ -21,12 +21,11 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.Token
-import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{CollationFactory, SparkParserUtils}
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -100,7 +99,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       // Make sure it can be converted to Catalyst expressions.
       typedVisit(ctx.expression)
       // Metadata for SQL UDF
-      builder.putString("default", getOriginalSql(ctx.expression))
+      builder.putString("default", SparkParserUtils.source(ctx.expression))
     }
 
     StructField(
@@ -108,16 +107,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       dataType = dataType,
       nullable = nullable,
       metadata = builder.build())
-  }
-
-  protected def getOriginalSql(exprCtx: ExpressionContext): String = {
-    // Extract the raw expression text so that we can save the user provided text. We don't
-    // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
-    // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
-    // get the text from the underlying char stream instead.
-    val start = exprCtx.getStart.getStartIndex
-    val end = exprCtx.getStop.getStopIndex
-    exprCtx.getStart.getInputStream.getText(new Interval(start, end))
   }
 
   override def visitStringLit(ctx: StringLitContext): Token = {

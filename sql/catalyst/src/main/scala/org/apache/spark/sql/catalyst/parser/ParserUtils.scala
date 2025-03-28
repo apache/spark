@@ -62,12 +62,6 @@ object ParserUtils extends SparkParserUtils {
     }
   }
 
-  /** Get the code that creates the given node. */
-  def source(ctx: ParserRuleContext): String = {
-    val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
-  }
-
   /** Get all the text which comes after the given rule. */
   def remainder(ctx: ParserRuleContext): String = remainder(ctx.getStop)
 
