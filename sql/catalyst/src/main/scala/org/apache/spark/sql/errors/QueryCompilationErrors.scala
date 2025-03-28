@@ -294,6 +294,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("tableName" -> toSQLId(tableName)))
   }
 
+  def unsupportedSetOperationOnMapType(mapCol: Attribute): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(mapCol.name),
+        "dataType" -> toSQLType(mapCol.dataType)
+      )
+    )
+  }
+
+  def unsupportedSetOperationOnVariantType(variantCol: Attribute): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(variantCol.name),
+        "dataType" -> toSQLType(variantCol.dataType)
+      )
+    )
+  }
+
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
