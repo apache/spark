@@ -689,6 +689,18 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
       }
 
+      val containsGeneratedColumn: Option[Boolean] = Option(ctx.parameters).map { params =>
+        params.colDefinition().asScala.exists { colDefinition =>
+          colDefinition.colDefinitionOption().asScala.exists { option =>
+            Option(option.generationExpression()).isDefined
+          }
+        }
+      }
+
+      if (containsGeneratedColumn.contains(true)) {
+        throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+      }
+
       val inputParamText = Option(ctx.parameters).map(source)
       val returnTypeText: String =
         if (ctx.RETURNS != null &&
