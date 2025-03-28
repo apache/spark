@@ -455,8 +455,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
-    Batch("ReassignAliasNamesWithCollations", Once,
-      ReassignAliasNamesWithCollations),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
     Batch("HandleSpecialCommand", Once,
@@ -526,7 +524,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Replaces [[UnresolvedAlias]]s with concrete aliases.
    */
   object ResolveAliases extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan =
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val collatedPlan =
+        if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
+          CollationTypeCasts(plan)
+        } else {
+          plan
+        }
+      doApply(collatedPlan)
+    }
+
+    private def doApply(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS), ruleId) {
         case Aggregate(groups, aggs, child, _)
             if child.resolved && AliasResolution.hasUnresolvedAlias(aggs) =>
@@ -562,6 +570,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             if c.child.resolved && AliasResolution.hasUnresolvedAlias(c.metrics) =>
           c.copy(metrics = AliasResolution.assignAliases(c.metrics))
       }
+    }
   }
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
@@ -2785,7 +2794,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * and group by expressions from them.
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val collatedPlan =
+        if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
+          CollationTypeCasts(plan)
+        } else {
+          plan
+        }
+      doApply(collatedPlan)
+    }
+
+    def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(AGGREGATE), ruleId) {
       case UnresolvedHaving(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
