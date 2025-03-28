@@ -3970,7 +3970,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (expr.containsPattern(PARAMETER)) {
       throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
     }
-    DefaultValueExpression(expr, getOriginalSql(exprCtx))
+    DefaultValueExpression(expr, SparkParserUtils.source(exprCtx))
   }
 
   /**
