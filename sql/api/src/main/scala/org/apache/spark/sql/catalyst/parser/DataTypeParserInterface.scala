@@ -39,6 +39,6 @@ trait DataTypeParserInterface {
   /**
    * Parse a string to a [[StructType]] as routine parameters.
    */
-  @throws[ParseException]("Text cannot be parsed to a schema")
+  @throws[ParseException]("Text cannot be parsed to routine parameters")
   def parseRoutineParam(sqlText: String): StructType
 }
