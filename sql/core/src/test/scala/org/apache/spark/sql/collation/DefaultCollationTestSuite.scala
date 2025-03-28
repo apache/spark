@@ -445,6 +445,9 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1 = 'Ć'"), Row(3))
       // scalastyle:on
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2 = 'a'"), Row(2))
+      val prefix = "SYSTEM.BUILTIN"
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testTable"), Row(s"$prefix.sr_AI"))
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testTable"), Row(s"$prefix.UTF8_LCASE"))
     }
   }
 }
