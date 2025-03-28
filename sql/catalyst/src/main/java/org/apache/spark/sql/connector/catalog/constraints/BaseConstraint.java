@@ -77,7 +77,7 @@ abstract class BaseConstraint implements Constraint {
     return toDDL();
   }
 
-  protected String toSQL(NamedReference[] columns) {
+  protected String toDDL(NamedReference[] columns) {
     StringJoiner joiner = new StringJoiner(", ");
 
     for (NamedReference column : columns) {

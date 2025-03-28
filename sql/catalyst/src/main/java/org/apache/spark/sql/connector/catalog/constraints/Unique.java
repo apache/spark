@@ -59,7 +59,7 @@ public class Unique extends BaseConstraint {
 
   @Override
   protected String definition() {
-    return String.format("UNIQUE (%s)", toSQL(columns));
+    return String.format("UNIQUE (%s)", toDDL(columns));
   }
 
   @Override

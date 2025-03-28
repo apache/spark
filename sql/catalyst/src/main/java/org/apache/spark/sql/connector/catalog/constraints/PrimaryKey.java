@@ -61,7 +61,7 @@ public class PrimaryKey extends BaseConstraint {
 
   @Override
   protected String definition() {
-    return String.format("PRIMARY KEY (%s)", toSQL(columns));
+    return String.format("PRIMARY KEY (%s)", toDDL(columns));
   }
 
   @Override

@@ -44,26 +44,26 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
  */
 public class Check extends BaseConstraint {
 
-  private final String predicateSQL;
+  private final String predicateSql;
   private final Predicate predicate;
 
   private Check(
       String name,
-      String predicateSQL,
+      String predicateSql,
       Predicate predicate,
       boolean enforced,
       ValidationStatus validationStatus,
       boolean rely) {
     super(name, enforced, validationStatus, rely);
-    this.predicateSQL = predicateSQL;
+    this.predicateSql = predicateSql;
     this.predicate = predicate;
   }
 
   /**
    * Returns the SQL representation of the search condition (Spark SQL dialect).
    */
-  public String predicateSQL() {
-    return predicateSQL;
+  public String predicateSql() {
+    return predicateSql;
   }
 
   /**
@@ -75,7 +75,7 @@ public class Check extends BaseConstraint {
 
   @Override
   protected String definition() {
-    return String.format("CHECK (%s)", predicateSQL != null ? predicateSQL : predicate);
+    return String.format("CHECK (%s)", predicateSql != null ? predicateSql : predicate);
   }
 
   @Override
@@ -84,7 +84,7 @@ public class Check extends BaseConstraint {
     if (other == null || getClass() != other.getClass()) return false;
     Check that = (Check) other;
     return Objects.equals(name(), that.name()) &&
-        Objects.equals(predicateSQL, that.predicateSQL) &&
+        Objects.equals(predicateSql, that.predicateSql) &&
         Objects.equals(predicate, that.predicate) &&
         enforced() == that.enforced() &&
         Objects.equals(validationStatus(), that.validationStatus()) &&
@@ -93,12 +93,12 @@ public class Check extends BaseConstraint {
 
   @Override
   public int hashCode() {
-    return Objects.hash(name(), predicateSQL, predicate, enforced(), validationStatus(), rely());
+    return Objects.hash(name(), predicateSql, predicate, enforced(), validationStatus(), rely());
   }
 
   public static class Builder extends BaseConstraint.Builder<Builder, Check> {
 
-    private String predicateSQL;
+    private String predicateSql;
     private Predicate predicate;
 
     Builder(String name) {
@@ -110,8 +110,8 @@ public class Check extends BaseConstraint {
       return this;
     }
 
-    public Builder predicateSQL(String sql) {
-      this.predicateSQL = sql;
+    public Builder predicateSql(String sql) {
+      this.predicateSql = sql;
       return this;
     }
 
@@ -121,12 +121,12 @@ public class Check extends BaseConstraint {
     }
 
     public Check build() {
-      if (predicateSQL == null && predicate == null) {
+      if (predicateSql == null && predicate == null) {
         throw new SparkIllegalArgumentException(
             "INTERNAL_ERROR",
             Map.of("message", "Predicate SQL and expression can't be both null in CHECK"));
       }
-      return new Check(name(), predicateSQL, predicate, enforced(), validationStatus(), rely());
+      return new Check(name(), predicateSql, predicate, enforced(), validationStatus(), rely());
     }
   }
 }

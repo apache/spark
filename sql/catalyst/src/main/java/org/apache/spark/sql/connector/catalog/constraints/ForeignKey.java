@@ -85,9 +85,9 @@ public class ForeignKey extends BaseConstraint {
   protected String definition() {
     return String.format(
         "FOREIGN KEY (%s) REFERENCES %s (%s)",
-        toSQL(columns),
+        toDDL(columns),
         refTable,
-        toSQL(refColumns));
+        toDDL(refColumns));
   }
 
   @Override
