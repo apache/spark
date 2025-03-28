@@ -129,6 +129,8 @@ trait SparkParserUtils {
 
   /** Get the code that creates the given node. */
   def source(ctx: ParserRuleContext): String = {
+    // Note: `exprCtx.getText` returns a string without spaces, so we need to
+    // get the text from the underlying char stream instead.
     val stream = ctx.getStart.getInputStream
     stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
   }
