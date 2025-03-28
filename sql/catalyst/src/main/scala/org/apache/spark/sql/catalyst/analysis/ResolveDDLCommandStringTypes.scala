@@ -47,7 +47,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
         StringType(createTable.tableSpec.collation.get)
 
       // CreateView also handles CREATE OR REPLACE VIEW
-      // Unlike tables, it is not treated separately
+      // Unlike for tables, CreateView also handles CREATE OR REPLACE VIEW
       case createView: CreateView if createView.collation.isDefined =>
         StringType(createView.collation.get)
 

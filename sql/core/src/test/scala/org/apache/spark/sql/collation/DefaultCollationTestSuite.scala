@@ -400,6 +400,10 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
              | DEFAULT COLLATION sr_ci_ai
              | AS SELECT *, 'ć' AS c3 FROM $testTable
              |""".stripMargin)
+        val prefix = "SYSTEM.BUILTIN"
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testView"), Row(s"$prefix.UTF8_BINARY"))
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testView"), Row(s"$prefix.UTF8_LCASE"))
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c3) FROM $testView"), Row(s"$prefix.sr_CI_AI"))
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Row(1))
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'a'"), Row(2))
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c3 = 'Č'"), Row(3))
