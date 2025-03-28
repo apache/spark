@@ -1107,6 +1107,11 @@
           "class <className> not found."
         ]
       },
+      "UNEXPECTED_FUNCTION_ARGUMENT_TYPE" : {
+        "message" : [
+          "Argument type must be a <requiredType>, but it's <argumentType>."
+        ]
+      },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
           "The <paramIndex> parameter requires the <requiredType> type, however <inputSql> has the type <inputType>."
