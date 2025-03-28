@@ -757,13 +757,14 @@ object SparkSession extends SparkSessionCompanion with Logging {
         }
       }
 
+    lazy val serverId = UUID.randomUUID().toString
+
     server.synchronized {
       if (server.isEmpty &&
         (remoteString.exists(_.startsWith("local")) ||
           (remoteString.isDefined && isAPIModeConnect)) &&
         maybeConnectStartScript.exists(Files.exists(_))) {
         val token = java.util.UUID.randomUUID().toString()
-        val serverId = UUID.randomUUID().toString
         server = Some {
           val args =
             Seq(
@@ -813,8 +814,9 @@ object SparkSession extends SparkSessionCompanion with Logging {
         Runtime.getRuntime.addShutdownHook(new Thread() {
           override def run(): Unit = server.synchronized {
             if (server.isDefined) {
-              new ProcessBuilder(maybeConnectStopScript.get.toString)
-                .start()
+              val builder = new ProcessBuilder(maybeConnectStopScript.get.toString)
+              builder.environment().put("SPARK_IDENT_STRING", serverId)
+              builder.start()
             }
           }
         })
