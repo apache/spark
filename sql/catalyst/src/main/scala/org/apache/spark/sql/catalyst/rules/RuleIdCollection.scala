@@ -111,6 +111,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveUpdateEventTimeWatermarkColumn" ::
       "org.apache.spark.sql.catalyst.expressions.EliminatePipeOperators" ::
       "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
