@@ -344,6 +344,26 @@ class DataFrameSparkIOTestsMixin:
                     pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
                 )
 
+    def test_read_large_excel(self):
+        n = 20000
+        pdf = pd.DataFrame(
+            {
+                "i32": np.arange(n, dtype=np.int32) % 3,
+                "i64": np.arange(n, dtype=np.int64) % 5,
+                "f": np.arange(n, dtype=np.float64),
+                "bhello": np.random.choice(["hello", "yo", "people"], size=n).astype("O"),
+            },
+            columns=["i32", "i64", "f", "bhello"],
+            index=np.random.rand(n),
+        )
+
+        with self.temp_dir() as tmp:
+            path = "{}/large_file.xlsx".format(tmp)
+            pdf.to_excel(path)
+
+            self.assert_eq(ps.read_excel(path), pd.read_excel(path))
+            self.assert_eq(ps.read_excel(path, nrows=10), pd.read_excel(path, nrows=10))
+
     def test_read_orc(self):
         with self.temp_dir() as tmp:
             path = "{}/file1.orc".format(tmp)

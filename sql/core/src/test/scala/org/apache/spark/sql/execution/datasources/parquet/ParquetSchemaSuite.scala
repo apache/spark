@@ -2349,6 +2349,15 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     writeLegacyParquetFormat = false)
 
+  testCatalystToParquet(
+    "SPARK-51610: Support the TIME data type in the parquet datasource",
+    StructType(Seq(StructField("f1", TimeType()))),
+    """message root {
+      |  optional INT64 f1;
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
   // The behavior of reading/writing TimestampNTZ type is independent of the configurations
   // SQLConf.PARQUET_INT96_AS_TIMESTAMP and SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE
   Seq(true, false).foreach { int96AsTimestamp =>
