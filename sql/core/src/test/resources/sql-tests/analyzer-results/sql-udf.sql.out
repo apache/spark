@@ -520,6 +520,79 @@ Project [a#x, b#x]
 
 
 -- !query
+CREATE FUNCTION foo1e1(x INT NOT NULL, y INT) RETURNS INT RETURN 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_NULL_ON_FUNCTION_PARAMETERS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "input" : "x INT NOT NULL, y INT"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo1e2(x INT, y INT NOT NULL) RETURNS TABLE (x INT) RETURN SELECT 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_NULL_ON_FUNCTION_PARAMETERS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "input" : "x INT, y INT NOT NULL"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo1e3(x INT, y INT) RETURNS TABLE (x INT NOT NULL) RETURN SELECT 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.NOT_NULL_ON_FUNCTION_PARAMETERS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "input" : "x INT NOT NULL"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo1f1(x INT, y INT GENERATED ALWAYS AS (x + 10)) RETURNS INT RETURN y + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 90,
+    "fragment" : "CREATE FUNCTION foo1f1(x INT, y INT GENERATED ALWAYS AS (x + 10)) RETURNS INT RETURN y + 1"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION foo1f2(id BIGINT GENERATED ALWAYS AS IDENTITY) RETURNS BIGINT RETURN id + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "CREATE FUNCTION foo1f2(id BIGINT GENERATED ALWAYS AS IDENTITY) RETURNS BIGINT RETURN id + 1"
+  } ]
+}
+
+
+-- !query
 CREATE FUNCTION foo2_1a(a INT) RETURNS INT RETURN a
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException

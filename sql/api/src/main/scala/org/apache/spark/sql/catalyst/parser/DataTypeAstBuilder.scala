@@ -79,9 +79,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         }
         defaultSpec = Some(expr)
       }
-      Option(option.generationExpression()).foreach { _ =>
-        throw QueryParsingErrors.createFuncWithGeneratedColumnsError(option)
-      }
       Option(option.commentSpec()).foreach { spec =>
         if (commentSpec.isDefined) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
