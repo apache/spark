@@ -22,13 +22,10 @@ var PlanVizConstants = {
   svgMarginY: 16
 };
 
-/* eslint-disable no-unused-vars */
 function shouldRenderPlanViz() {
   return planVizContainer().selectAll("svg").empty();
 }
-/* eslint-enable no-unused-vars */
 
-/* eslint-disable no-unused-vars */
 function renderPlanViz() {
   var svg = planVizContainer().append("svg");
   var metadata = d3.select("#plan-viz-metadata");
@@ -52,7 +49,6 @@ function renderPlanViz() {
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
 }
-/* eslint-enable no-unused-vars */
 
 /* -------------------- *
  * | Helper functions | *
@@ -344,4 +340,17 @@ document.getElementById("plan-viz-download-btn").addEventListener("click", async
     return;
   }
   downloadPlanBlob(blob, format);
+});
+
+/* eslint-disable no-unused-vars */
+function clickPhysicalPlanDetails() {
+/* eslint-enable no-unused-vars */
+  $('#physical-plan-details').toggle();
+  $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  if (shouldRenderPlanViz()) {
+    renderPlanViz();
+  }
 });
