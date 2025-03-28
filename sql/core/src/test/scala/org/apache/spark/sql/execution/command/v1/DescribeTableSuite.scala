@@ -273,6 +273,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         bucket_columns = Some(List("employee_id")),
         sort_columns = Some(List("employee_name")),
@@ -338,6 +339,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
         sort_columns = Some(Nil),
@@ -402,6 +404,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
         sort_columns = Some(Nil),
@@ -437,7 +440,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |  id INT
            |)
            |USING parquet COMMENT 'table_comment'
-           |DEFAULT COLLATION UTF8_BINARY
+           |DEFAULT COLLATION DE
            |""".stripMargin
       spark.sql(tableCreationStr)
 
@@ -460,7 +463,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
-        collation = Some("UTF8_BINARY"),
+        collation = Some("DE"),
         storage_properties = None,
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
@@ -514,6 +517,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         storage_properties = None,
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
@@ -569,6 +573,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             last_access = Some("UNKNOWN"),
             created_by = Some(s"Spark $SPARK_VERSION"),
             `type` = Some("VIEW"),
+            collation = Some("UTF8_BINARY"),
             view_text = Some("SELECT * FROM spark_catalog.ns.table"),
             view_original_text = if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
             // TODO: this is unexpected and temp view should also use COMPENSATION mode.
@@ -760,6 +765,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         comment = Some("A table with nested complex types"),
         table_properties = Some(Map(

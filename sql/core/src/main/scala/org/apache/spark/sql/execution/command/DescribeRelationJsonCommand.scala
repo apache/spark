@@ -289,6 +289,9 @@ case class DescribeRelationJsonCommand(
     filteredTableInfo.map { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
     }
+    // Add default collation if not yet added (addKeyValueToMap only adds unique keys).
+    // Add here to only affect `DESC AS JSON` and not the `DESC TABLE` output.
+    addKeyValueToMap("collation", JString("UTF8_BINARY"), jsonMap)
   }
 
   private def describePartitionInfoJson(
