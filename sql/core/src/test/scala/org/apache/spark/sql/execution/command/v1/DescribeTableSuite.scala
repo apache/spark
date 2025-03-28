@@ -463,7 +463,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
-        collation = Some("DE"),
+        collation = Some("de"),
         storage_properties = None,
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
