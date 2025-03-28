@@ -109,6 +109,18 @@ private[spark] class Executor(
   // so that tasks can exit quickly if they are interrupted while waiting on another task to
   // finish downloading dependencies.
   private val updateDependenciesLock = new ReentrantLock()
+  
+  private lazy val mdcIsSupported = {
+    try {
+      // This tests if any class initialization error is thrown
+      MDC.clear()
+      true
+    } catch {
+      case t: Throwable =>
+        logInfo("MDC is not supported.", t)
+        false
+    }
+  }
 
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
@@ -930,21 +942,17 @@ private[spark] class Executor(
   }
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    try {
+    if (mdcIsSupported) {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
       MDC.put(taskNameMDCKey, taskName)
-    } catch {
-      case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
   }
 
   private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    try {
+    if (mdcIsSupported) {
       mdc.foreach { case (key, _) => MDC.remove(key) }
       MDC.remove(taskNameMDCKey)
-    } catch {
-      case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
   }
 
