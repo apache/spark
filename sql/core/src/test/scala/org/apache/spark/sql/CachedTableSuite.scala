@@ -1668,4 +1668,95 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
     }
   }
+
+    test("Cache reuse in case of multiple cte") {
+    sql(
+      """
+        |CACHE TABLE cached_cte_multiple AS
+        |  WITH cte1 AS (
+        |    SELECT 1 AS id, 'Alice' AS name
+        |    UNION ALL
+        |    SELECT 2 AS id, 'Bob' AS name
+        |  ),
+        |  cte2 AS (
+        |    SELECT 1 AS id, 10 AS score
+        |    UNION ALL
+        |    SELECT 2 AS id, 20 AS score
+        |  )
+        |SELECT cte1.id, cte1.name, cte2.score
+        |FROM cte1
+        |JOIN cte2 ON cte1.id = cte2.id
+        |""".stripMargin
+    )
+
+    val ds = sql("SELECT * FROM cached_cte_multiple")
+    assert(getNumInMemoryRelations(ds) == 1)
+
+    // Assert we can reuse the cached data
+    assertCached(
+      sql(
+        """
+          |  WITH cte1 AS (
+          |    SELECT 1 AS id, 'Alice' AS name
+          |    UNION ALL
+          |    SELECT 2 AS id, 'Bob' AS name
+          |  ),
+          |  cte2 AS (
+          |    SELECT 1 AS id, 10 AS score
+          |    UNION ALL
+          |    SELECT 2 AS id, 20 AS score
+          |  )
+          |SELECT cte1.id, cte1.name, cte2.score
+          |FROM cte1
+          |JOIN cte2 ON cte1.id = cte2.id
+          |""".stripMargin
+      )
+    )
+
+    uncacheTable("cached_cte_multiple")
+  }
+
+  test("Cache reuse in case of nested cte") {
+    // Create a cached view from nested CTEs
+    sql(
+      """
+        |CACHE TABLE cached_cte_nested AS
+        |  WITH t1 AS (
+        |    SELECT 1
+        |  ),
+        |  t2 AS (
+        |    WITH t3 AS (
+        |      SELECT * FROM t1
+        |    )
+        |    SELECT * FROM t3
+        |  )
+        |SELECT *
+        |FROM t2
+        |""".stripMargin
+    )
+
+    val ds = sql("SELECT * FROM cached_cte_nested")
+    assert(getNumInMemoryRelations(ds) == 1)
+
+    // Assert we can reuse the cached data
+    assertCached(
+      sql(
+        """
+          |WITH t1 AS (
+          |  SELECT 1
+          |),
+          |t2 AS (
+          |  WITH t3 AS (
+          |    SELECT * FROM t1
+          |  )
+          |  SELECT * FROM t3
+          |)
+          |SELECT *
+          |FROM t2
+          |""".stripMargin
+      )
+    )
+
+    uncacheTable("cached_cte_nested")
+  }
 }
