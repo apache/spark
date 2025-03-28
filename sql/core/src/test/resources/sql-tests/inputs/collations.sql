@@ -442,6 +442,83 @@ select RTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_bina
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5;
 select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
 
+-- Implicit aliases to collated expression trees are correctly generated
+
+-- Simple select
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5;
+
+-- Select by implicit alias
+select `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+);
+
+-- Select by star
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+);
+
+-- Select by qualified star
+select subq1.* from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+) AS subq1;
+
+-- Implicit alias in CTE output
+with cte as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+select * from cte;
+
+-- Implicit alias in EXISTS subquery output
+select * from values (1) where exists (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+);
+
+-- Implicit alias in scalar subquery output
+select (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+);
+
+-- Scalar subquery with CTE with implicit alias
+select (
+  with cte as (
+    select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  )
+  select * from cte limit 1
+);
+
+-- Outer reference to implicit alias
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+)
+where (
+  `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` == 'aaa'
+);
+
+-- Implicit alias reference in Sort
+select lower(`concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)`) from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  group by 1
+  order by 1
+);
+
+-- Implciit alias from aggregate in Sort
+select lower(`concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)`) from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  group by 1
+  order by max(concat_ws(' ', utf8_lcase, utf8_lcase))
+);
+
+-- Implicit alias in view schema
+create temporary view v1 as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+);
+
+select * from v1;
+
+select `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` from v1;
+
+drop view v1;
+
 drop table t5;
 drop table t6;
 drop table t7;
