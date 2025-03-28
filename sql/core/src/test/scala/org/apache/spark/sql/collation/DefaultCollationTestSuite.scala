@@ -452,7 +452,8 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       sql(
         s"""CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE
            | AS SELECT 'a' AS c1,
-           | (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END)) AS c2
+           | (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END)
+           |  WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2
            |""".stripMargin)
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(1)))
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'a'"), Seq(Row(1)))
