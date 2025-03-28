@@ -294,23 +294,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("tableName" -> toSQLId(tableName)))
   }
 
-  def unsupportedSetOperationOnMapType(mapCol: Attribute): Throwable = {
+  def unsupportedSetOperationOnMapType(mapCol: Attribute, origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       messageParameters = Map(
         "colName" -> toSQLId(mapCol.name),
         "dataType" -> toSQLType(mapCol.dataType)
-      )
+      ),
+      origin = origin
     )
   }
 
-  def unsupportedSetOperationOnVariantType(variantCol: Attribute): Throwable = {
+  def unsupportedSetOperationOnVariantType(variantCol: Attribute, origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
       messageParameters = Map(
         "colName" -> toSQLId(variantCol.name),
         "dataType" -> toSQLType(variantCol.dataType)
-      )
+      ),
+      origin = origin
     )
   }
 
