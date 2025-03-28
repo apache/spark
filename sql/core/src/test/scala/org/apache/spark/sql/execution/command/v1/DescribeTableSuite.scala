@@ -458,7 +458,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           TableColumn("c1", Type("string", collation = Some("UNICODE_CI"))),
           TableColumn("c2", Type("string", collation = Some("UNICODE_RTRIM"))),
           TableColumn("c3", Type("string", collation = Some("fr"))),
-          TableColumn("c4", Type("string", collation = Some("UTF8_BINARY"))),
+          TableColumn("c4", Type("string", collation = Some("de"))),
           TableColumn("id", Type("int")))),
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
