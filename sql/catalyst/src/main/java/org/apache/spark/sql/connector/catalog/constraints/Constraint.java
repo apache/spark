@@ -42,12 +42,14 @@ public interface Constraint {
   /**
    * Indicates whether the existing data in the table satisfies this constraint. The constraint
    * can be valid (the data is guaranteed to satisfy the constraint), invalid (some records violate
-   * the constraint), or unvalidated (the validity is unknown).
+   * the constraint), or unvalidated (the validity is unknown). The validation status is usually
+   * managed by the system and can't be modified by the user.
    */
   ValidationStatus validationStatus();
 
   /**
-   * Indicates whether this constraint is assumed to hold true if the validity is unknown.
+   * Indicates whether this constraint is assumed to hold true if the validity is unknown. Unlike
+   * the validation status, this flag is usually provided by the user as a hint to the system.
    */
   boolean rely();
 

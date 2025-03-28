@@ -115,7 +115,9 @@ abstract class BaseConstraint implements Constraint {
     }
 
     public B validationStatus(ValidationStatus validationStatus) {
-      this.validationStatus = validationStatus;
+      if (validationStatus != null) {
+        this.validationStatus = validationStatus;
+      }
       return self();
     }
 

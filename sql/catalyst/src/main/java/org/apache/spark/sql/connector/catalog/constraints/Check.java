@@ -32,31 +32,38 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
  * more columns. Such constraint is considered violated if its condition evaluates to {@code FALSE},
  * but not {@code NULL}. The search condition must be deterministic and cannot contain subqueries
  * and certain functions like aggregates or UDFs.
+ * <p>
+ * Spark supports enforced and not enforced CHECK constraints, allowing connectors to control
+ * whether data modifications that violate the constraint must fail. Each constraint is either
+ * valid (the existing data is guaranteed to satisfy the constraint), invalid (some records violate
+ * the constraint), or unvalidated (the validity is unknown). If the validity is unknown, Spark
+ * will check {@link #rely()} to see whether the constraint is believed to be true and can be used
+ * for query optimization.
  *
  * @since 4.1.0
  */
 public class Check extends BaseConstraint {
 
-  private final String sql;
+  private final String predicateSQL;
   private final Predicate predicate;
 
   private Check(
       String name,
-      String sql,
+      String predicateSQL,
       Predicate predicate,
       boolean enforced,
       ValidationStatus validationStatus,
       boolean rely) {
     super(name, enforced, validationStatus, rely);
-    this.sql = sql;
+    this.predicateSQL = predicateSQL;
     this.predicate = predicate;
   }
 
   /**
    * Returns the SQL representation of the search condition (Spark SQL dialect).
    */
-  public String sql() {
-    return sql;
+  public String predicateSQL() {
+    return predicateSQL;
   }
 
   /**
@@ -68,7 +75,7 @@ public class Check extends BaseConstraint {
 
   @Override
   protected String definition() {
-    return String.format("CHECK (%s)", sql != null ? sql : predicate);
+    return String.format("CHECK (%s)", predicateSQL != null ? predicateSQL : predicate);
   }
 
   @Override
@@ -77,7 +84,7 @@ public class Check extends BaseConstraint {
     if (other == null || getClass() != other.getClass()) return false;
     Check that = (Check) other;
     return Objects.equals(name(), that.name()) &&
-        Objects.equals(sql, that.sql) &&
+        Objects.equals(predicateSQL, that.predicateSQL) &&
         Objects.equals(predicate, that.predicate) &&
         enforced() == that.enforced() &&
         Objects.equals(validationStatus(), that.validationStatus()) &&
@@ -86,12 +93,12 @@ public class Check extends BaseConstraint {
 
   @Override
   public int hashCode() {
-    return Objects.hash(name(), sql, predicate, enforced(), validationStatus(), rely());
+    return Objects.hash(name(), predicateSQL, predicate, enforced(), validationStatus(), rely());
   }
 
   public static class Builder extends BaseConstraint.Builder<Builder, Check> {
 
-    private String sql;
+    private String predicateSQL;
     private Predicate predicate;
 
     Builder(String name) {
@@ -103,8 +110,8 @@ public class Check extends BaseConstraint {
       return this;
     }
 
-    public Builder sql(String sql) {
-      this.sql = sql;
+    public Builder predicateSQL(String sql) {
+      this.predicateSQL = sql;
       return this;
     }
 
@@ -114,12 +121,12 @@ public class Check extends BaseConstraint {
     }
 
     public Check build() {
-      if (sql == null && predicate == null) {
+      if (predicateSQL == null && predicate == null) {
         throw new SparkIllegalArgumentException(
             "INTERNAL_ERROR",
-            Map.of("message", "SQL and predicate in CHECK can't be both null"));
+            Map.of("message", "Predicate SQL and expression can't be both null in CHECK"));
       }
-      return new Check(name(), sql, predicate, enforced(), validationStatus(), rely());
+      return new Check(name(), predicateSQL, predicate, enforced(), validationStatus(), rely());
     }
   }
 }

@@ -27,6 +27,12 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * <p>
  * A UNIQUE constraint specifies one or more columns as unique columns. Such constraint is satisfied
  * if and only if no two rows in a table have the same non-null values in the unique columns.
+ * <p>
+ * Spark doesn't enforce UNIQUE constraints but leverages them for query optimization. Each
+ * constraint is either valid (the existing data is guaranteed to satisfy the constraint), invalid
+ * (some records violate the constraint), or unvalidated (the validity is unknown). If the validity
+ * is unknown, Spark will check {@link #rely()} to see whether the constraint is believed to be
+ * true and can be used for query optimization.
  *
  * @since 4.1.0
  */

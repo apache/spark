@@ -31,6 +31,12 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * must form a UNIQUE or PRIMARY KEY constraint in the referenced table. For this constraint to be
  * satisfied, each row in the table must contain values in the referencing columns that exactly
  * match values of a row in the referenced table.
+ * <p>
+ * Spark doesn't enforce FOREIGN KEY constraints but leverages them for query optimization. Each
+ * constraint is either valid (the existing data is guaranteed to satisfy the constraint), invalid
+ * (some records violate the constraint), or unvalidated (the validity is unknown). If the validity
+ * is unknown, Spark will check {@link #rely()} to see whether the constraint is believed to be
+ * true and can be used for query optimization.
  *
  * @since 4.1.0
  */
