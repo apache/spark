@@ -131,6 +131,16 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+
+    case subquery: SubqueryExpression =>
+      val plan = subquery.plan
+      newType =>
+        val newPlan = plan resolveExpressionsUp { expression =>
+          transformExpression
+            .andThen(_.apply(newType))
+            .applyOrElse(expression, identity[Expression])
+        }
+        subquery.withNewPlan(newPlan)
   }
 
   /**
