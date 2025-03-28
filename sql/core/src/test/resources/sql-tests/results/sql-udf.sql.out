@@ -302,7 +302,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT DEFAULT 9)
+CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test')
   RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d
 -- !query schema
 struct<>
@@ -369,7 +369,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE OR REPLACE FUNCTION foo1d2(a INT DEFAULT 5, b INT , c INT DEFAULT 8, d INT DEFAULT 9)
+CREATE OR REPLACE FUNCTION foo1d2(a INT DEFAULT 5, b INT , c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test')
   RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d
 -- !query schema
 struct<>
@@ -387,7 +387,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT)
+CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT COMMENT 'test')
   RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d
 -- !query schema
 struct<>
@@ -405,7 +405,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE OR REPLACE TEMPORARY FUNCTION foo1d3(a INT DEFAULT 7) RETURNS INT RETURN a
+CREATE OR REPLACE TEMPORARY FUNCTION foo1d3(a INT DEFAULT 7 COMMENT 'hello') RETURNS INT RETURN a
 -- !query schema
 struct<>
 -- !query output
