@@ -117,19 +117,21 @@ class MlCommand(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        OBJ_REF_FIELD_NUMBER: builtins.int
+        OBJ_REFS_FIELD_NUMBER: builtins.int
         @property
-        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
+        def obj_refs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.ml_common_pb2.ObjectRef
+        ]: ...
         def __init__(
             self,
             *,
-            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
+            obj_refs: collections.abc.Iterable[pyspark.sql.connect.proto.ml_common_pb2.ObjectRef]
+            | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
-        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
+            self, field_name: typing_extensions.Literal["obj_refs", b"obj_refs"]
         ) -> None: ...
 
     class Write(google.protobuf.message.Message):

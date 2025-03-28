@@ -1988,7 +1988,7 @@ class SparkConnectClient(object):
         # try best to delete the cache
         try:
             command = pb2.Command()
-            command.ml_command.delete.obj_ref.CopyFrom(pb2.ObjectRef(id=cache_id))
+            command.ml_command.delete.obj_refs.extend([pb2.ObjectRef(id=cache_id)])
             self.execute_command(command)
         except Exception:
             pass
