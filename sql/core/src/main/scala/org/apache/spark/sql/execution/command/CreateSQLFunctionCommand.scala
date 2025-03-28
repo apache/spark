@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, SQLFunctionNode, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunctionErrors}
+import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -70,7 +70,7 @@ case class CreateSQLFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     val conf = sparkSession.sessionState.conf
 
-    val inputParam = inputParamText.map(parser.parseTableSchema)
+    val inputParam = inputParamText.map(UserDefinedFunction.parseRoutineParam(_, parser))
     val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser)
 
     val function = SQLFunction(
