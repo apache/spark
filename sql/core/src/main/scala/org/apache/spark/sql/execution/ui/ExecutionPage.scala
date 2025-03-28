@@ -75,6 +75,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
+          <div id="plan-viz-download-btn-container">
+            <select id="plan-viz-format-select">
+              <option value="svg">SVG</option>
+              <option value="dot">DOT</option>
+              <option value="txt">TXT</option>
+            </select>
+            <label for="plan-viz-format-select">
+              <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
+            </label>
+          </div>
         </div>
 
       val metrics = sqlStore.executionMetrics(executionId)
