@@ -178,15 +178,7 @@ singleTableSchema
     ;
 
 singleRoutineParamList
-    : routineParamList EOF
-    ;
-
-routineParamList
-    : routineParam (COMMA routineParam)*
-    ;
-
-routineParam
-    : colType defaultExpression?
+    : colDefinitionList EOF
     ;
 
 statement

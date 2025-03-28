@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 
+import scala.collection.Seq
 import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.Token
@@ -26,7 +27,7 @@ import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{CollationFactory, ResolveDefaultColumnsUtils}
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -47,7 +48,131 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   override def visitSingleRoutineParamList(ctx: SingleRoutineParamListContext): StructType = {
-    withOrigin(ctx)(StructType(visitRoutineParamList(ctx.routineParamList())))
+    withOrigin(ctx)(StructType(visitSimplifiedColDefinitionList(ctx.colDefinitionList())))
+  }
+
+  private def visitSimplifiedColDefinitionList(
+      ctx: ColDefinitionListContext): Seq[StructField] = withOrigin(ctx) {
+    ctx.colDefinition().asScala.map(visitStructField).map(_._1).toSeq
+  }
+
+  protected def visitStructField(
+      ctx: ColDefinitionContext): (StructField, Option[NamedColumnConstraintContext]) =
+    withOrigin(ctx) {
+    import ctx._
+
+    // Check that no duplicates exist among any CREATE TABLE column options specified.
+    var nullable = true
+    var defaultSpec: Option[DefaultSpecContext] = None
+    var generationExpression: Option[GenerationExpressionContext] = None
+    var commentSpec: Option[CommentSpecContext] = None
+    var namedColumnConstraint: Option[NamedColumnConstraintContext] = None
+    ctx.colDefinitionOption().asScala.foreach { option =>
+      if (option.NULL != null) {
+        if (!nullable) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, colName.getText, "NOT NULL")
+        }
+        nullable = false
+      }
+      Option(option.defaultSpec()).foreach { expr =>
+        if (defaultSpec.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, colName.getText, "DEFAULT")
+        }
+        defaultSpec = Some(expr)
+      }
+      Option(option.generationExpression()).foreach { expr =>
+        if (generationExpression.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, colName.getText, "GENERATED ALWAYS AS")
+        }
+        generationExpression = Some(expr)
+      }
+      Option(option.commentSpec()).foreach { spec =>
+        if (commentSpec.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, colName.getText, "COMMENT")
+        }
+        commentSpec = Some(spec)
+      }
+      Option(option.namedColumnConstraint()).foreach { spec =>
+        if (namedColumnConstraint.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, colName.getText, "CONSTRAINT")
+        }
+        namedColumnConstraint = Some(spec)
+      }
+    }
+
+    val isPrimaryKey = namedColumnConstraint.exists { namedColConstraint =>
+      namedColConstraint.columnConstraint match {
+        case _: PrimaryKeyColumnConstraintContext => true
+        case _ => false
+      }
+    }
+
+    val dataType = typedVisit[DataType](ctx.dataType)
+
+    val builder = new MetadataBuilder
+    // Add comment to metadata
+    commentSpec.map(visitCommentSpec).foreach {
+      builder.putString("comment", _)
+    }
+    generationExpression.foreach {
+      // Add generation expression to the column metadata.
+      case ctx: GeneratedColumnContext =>
+        val exprStr = visitGeneratedColumn(ctx)
+        // We store the generation expression at both the delta-specific key as well as the OSS
+        // Spark key. This is because the delta-specific key is already used throughout analysis.
+        // During planning we remove the delta-specific key for other formats.
+        builder.putString(
+          DatabricksDataTypeUtils.DELTA_GENERATION_EXPRESSION_METADATA_KEY, // Delta key
+          exprStr
+        )
+        builder.putString(
+          DatabricksDataTypeUtils.SPARK_GENERATION_EXPRESSION_METADATA_KEY, // OSS Spark key
+          exprStr
+        )
+      // Add IDENTITY column information to the column metadata.
+      // We store the identity column information at both the delta-specific key as well as the OSS
+      // Spark key.
+      case ctx: IdentityColumnContext =>
+        val identityColumnSpec = visitIdentityColumn(ctx, dataType)
+        // At table creation time, the high water mark field is not added.
+        builder.putLong(DatabricksDataTypeUtils.DELTA_IDENTITY_INFO_START,
+          identityColumnSpec.getStart)
+        builder.putLong(DatabricksDataTypeUtils.DELTA_IDENTITY_INFO_STEP,
+          identityColumnSpec.getStep)
+        builder.putBoolean(DatabricksDataTypeUtils.DELTA_IDENTITY_INFO_ALLOW_EXPLICIT_INSERT,
+          identityColumnSpec.isAllowExplicitInsert)
+
+        builder.putLong(DatabricksDataTypeUtils.SPARK_IDENTITY_INFO_START,
+          identityColumnSpec.getStart)
+        builder.putLong(DatabricksDataTypeUtils.SPARK_IDENTITY_INFO_STEP,
+          identityColumnSpec.getStep)
+        builder.putBoolean(DatabricksDataTypeUtils.SPARK_IDENTITY_INFO_ALLOW_EXPLICIT_INSERT,
+          identityColumnSpec.isAllowExplicitInsert)
+    }
+    // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
+    defaultSpec.map(ctx => verifyAndGetExpression(ctx.expression, "DEFAULT")).foreach { field =>
+      if (SqlApiConf.get.enableDefaultColumns) {
+        // Add default to metadata
+        builder.putString(ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY, field)
+        builder.putString(ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY, field)
+      } else {
+        throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
+      }
+      // Metadata for SQL UDF
+      builder.putString(DatabricksDataTypeUtils.SQL_FUNCTION_METADATA_KEY, field)
+    }
+
+      (StructField(
+        name = colName.getText,
+        dataType = dataType,
+        // Primary key columns are implicitly NOT NULL
+        nullable = nullable && !isPrimaryKey,
+        metadata = builder.build()), namedColumnConstraint)
   }
 
   override def visitRoutineParamList(ctx: RoutineParamListContext): Seq[StructField] =
