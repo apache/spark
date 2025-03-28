@@ -109,7 +109,7 @@ private[spark] class Executor(
   // so that tasks can exit quickly if they are interrupted while waiting on another task to
   // finish downloading dependencies.
   private val updateDependenciesLock = new ReentrantLock()
-  
+
   private lazy val mdcIsSupported = {
     try {
       // This tests if any class initialization error is thrown
