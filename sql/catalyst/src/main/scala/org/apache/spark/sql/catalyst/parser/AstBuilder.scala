@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
-import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
@@ -3971,14 +3970,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (expr.containsPattern(PARAMETER)) {
       throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
     }
-    // Extract the raw expression text so that we can save the user provided text. We don't
-    // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
-    // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
-    // get the text from the underlying char stream instead.
-    val start = exprCtx.getStart.getStartIndex
-    val end = exprCtx.getStop.getStopIndex
-    val originalSQL = exprCtx.getStart.getInputStream.getText(new Interval(start, end))
-    DefaultValueExpression(expr, originalSQL)
+    DefaultValueExpression(expr, getOriginalSql(exprCtx))
   }
 
   /**
