@@ -1205,6 +1205,20 @@ abstract class ParquetPartitionDiscoverySuite
       checkAnswer(spark.read.load(path.getAbsolutePath), df)
     }
   }
+
+  test("Invalid times should be inferred as STRING in partition inference") {
+    withTempPath { path =>
+      val data = Seq(("1", "10:61", "12:13:14:04", "T00:01:02", "test"))
+        .toDF("id", "time_min", "time_sec", "time_prefix", "data")
+
+      data.write.partitionBy("time_min", "time_sec", "time_prefix").parquet(path.getAbsolutePath)
+      val input = spark.read.parquet(path.getAbsolutePath).select("id",
+        "time_min", "time_sec", "time_prefix", "data")
+
+      assert(DataTypeUtils.sameType(data.schema, input.schema))
+      checkAnswer(input, data)
+    }
+  }
 }
 
 class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
