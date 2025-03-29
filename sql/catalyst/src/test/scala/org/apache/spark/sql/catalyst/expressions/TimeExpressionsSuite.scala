@@ -19,12 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.time.LocalTime
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, StringType}
-import org.apache.spark.sql.types.{StringType, TimeType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, StringType, TimeType}
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {

@@ -20,16 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.{DateTimeException, LocalTime}
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.TimeFormatter
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimeFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.localTimeToMicros
+import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, IntegerType, ObjectType, TimeType}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, IntegerType, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
