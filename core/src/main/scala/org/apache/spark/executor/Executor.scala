@@ -113,7 +113,10 @@ private[spark] class Executor(
   private lazy val mdcIsSupported = {
     try {
       // This tests if any class initialization error is thrown
-      MDC.clear()
+      val testKey = System.nanoTime().toString
+      MDC.put(testKey, "testValue")
+      MDC.remove(testKey)
+
       true
     } catch {
       case t: Throwable =>
