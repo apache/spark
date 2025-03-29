@@ -124,7 +124,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
       }
     }
     val aggExpr = agg.aggregateExpressions.map { expr =>
-      expr.transformUp {
+      expr.transformDown {
         // PythonUDF over aggregate was pull out by ExtractPythonUDFFromAggregate.
         // PythonUDF here should be either
         // 1. Argument of an aggregate function.
