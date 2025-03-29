@@ -51,6 +51,7 @@ private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWr
     jobDataBuilder.setJobId(jobData.jobId.toLong)
       .setStatus(JobExecutionStatusSerializer.serialize(jobData.status))
       .setNumTasks(jobData.numTasks)
+      .setTotalTasks(jobData.totalTasks)
       .setNumActiveTasks(jobData.numActiveTasks)
       .setNumCompletedTasks(jobData.numCompletedTasks)
       .setNumSkippedTasks(jobData.numSkippedTasks)
@@ -97,6 +98,7 @@ private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWr
       jobTags = info.getJobTagsList.asScala,
       status = status,
       numTasks = info.getNumTasks,
+      totalTasks = info.getTotalTasks,
       numActiveTasks = info.getNumActiveTasks,
       numCompletedTasks = info.getNumCompletedTasks,
       numSkippedTasks = info.getNumSkippedTasks,
