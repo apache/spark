@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.LocalSparkSession
@@ -28,6 +29,7 @@ import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
+  private val jsonProtocol = new JsonProtocol(new SparkConf())
 
   test("SparkPlanGraph backward compatibility: metadata") {
     Seq(true, false).foreach { newExecutionStartEvent =>
@@ -61,7 +63,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
              |}
           """.stripMargin
 
-        val reconstructedEvent = JsonProtocol.sparkEventFromJson(SQLExecutionStartJsonString)
+        val reconstructedEvent = jsonProtocol.sparkEventFromJson(SQLExecutionStartJsonString)
         if (newExecutionStartEvent) {
           val expectedEvent = if (newExecutionStartJson) {
             SparkListenerSQLExecutionStart(0, Some(1), "test desc", "test detail",
@@ -93,7 +95,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
     event.executionName = Some("test")
     event.qe = qe
     event.executionFailure = Some(exception)
-    val json = JsonProtocol.sparkEventToJsonString(event)
+    val json = jsonProtocol.sparkEventToJsonString(event)
     // scalastyle:off line.size.limit
     assert(parse(json) == parse(
       s"""
@@ -105,7 +107,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |}
       """.stripMargin))
     // scalastyle:on
-    val readBack = JsonProtocol.sparkEventFromJson(json)
+    val readBack = jsonProtocol.sparkEventFromJson(json)
     event.duration = 0
     event.executionName = None
     event.qe = null
@@ -123,7 +125,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |  "time" : 10
         |}
       """.stripMargin
-    val readBack = JsonProtocol.sparkEventFromJson(executionEnd)
+    val readBack = jsonProtocol.sparkEventFromJson(executionEnd)
     assert(readBack == SparkListenerSQLExecutionEnd(1, 10))
 
     // parse new event using old SparkListenerSQLExecutionEnd
@@ -138,7 +140,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |}
       """.stripMargin
     // scalastyle:on
-    val readBack2 = JsonProtocol.sparkEventFromJson(newExecutionEnd)
+    val readBack2 = jsonProtocol.sparkEventFromJson(newExecutionEnd)
     assert(readBack2 == OldVersionSQLExecutionEnd(1, 10))
   }
 }
