@@ -55,7 +55,7 @@ class HybridAnalyzer(
     resolverGuard: ResolverGuard,
     resolver: Resolver,
     extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
-    checkSupportedSinglePassFeatures: Boolean = true)
+    exposeExplicitlyUnsupportedResolverFeature: Boolean = false)
     extends SQLConfHelper {
   private var singlePassResolutionDuration: Option[Long] = None
   private var fixedPointResolutionDuration: Option[Long] = None
@@ -65,13 +65,13 @@ class HybridAnalyzer(
   def apply(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     val dualRun =
       conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER) &&
-      checkResolverGuard(plan)
+      resolverGuard.apply(plan)
 
     withTrackedAnalyzerBridgeState(dualRun) {
       if (dualRun) {
         resolveInDualRun(plan, tracker)
       } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
-        resolveInSinglePass(plan)
+        resolveInSinglePass(plan, tracker)
       } else {
         resolveInFixedPoint(plan, tracker)
       }
@@ -136,7 +136,7 @@ class HybridAnalyzer(
     var singlePassException: Option[Throwable] = None
     val singlePassResult = try {
       val (resolutionDuration, result) = recordDuration {
-        Some(resolveInSinglePass(plan))
+        Some(resolveInSinglePass(plan, tracker))
       }
       singlePassResolutionDuration = Some(resolutionDuration)
       result
@@ -160,7 +160,7 @@ class HybridAnalyzer(
       case None =>
         singlePassException match {
           case Some(singlePassEx: ExplicitlyUnsupportedResolverFeature)
-              if checkSupportedSinglePassFeatures =>
+              if !exposeExplicitlyUnsupportedResolverFeature =>
             fixedPointResult.get
           case Some(singlePassEx) =>
             throw singlePassEx
@@ -179,8 +179,12 @@ class HybridAnalyzer(
    * This method is used to run the single-pass Analyzer which will return the resolved plan
    * or throw an exception if the resolution fails. Both cases are handled in the caller method.
    * */
-  private def resolveInSinglePass(plan: LogicalPlan): LogicalPlan =
-    resolverRunner.resolve(plan, AnalysisContext.get.getSinglePassResolverBridgeState)
+  private def resolveInSinglePass(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan =
+    resolverRunner.resolve(
+      plan = plan,
+      analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState,
+      tracker = tracker
+    )
 
   /**
    * This method is used to run the legacy Analyzer which will return the resolved plan
@@ -212,9 +216,6 @@ class HybridAnalyzer(
   private def normalizePlan(plan: LogicalPlan) = AnalysisHelper.allowInvokingTransformsInAnalyzer {
     NormalizePlan(plan)
   }
-
-  private def checkResolverGuard(plan: LogicalPlan): Boolean =
-    !checkSupportedSinglePassFeatures || resolverGuard.apply(plan)
 
   private def recordDuration[T](thunk: => T): (Long, T) = {
     val start = System.nanoTime()

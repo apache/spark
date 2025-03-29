@@ -26,23 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   SchemaBinding
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate,
-  CTERelationDef,
-  CTERelationRef,
-  Distinct,
-  Filter,
-  GlobalLimit,
-  LocalLimit,
-  LocalRelation,
-  LogicalPlan,
-  OneRowRelation,
-  Project,
-  SubqueryAlias,
-  Union,
-  View,
-  WithCTE
-}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StructType}
@@ -55,10 +39,12 @@ import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, Struc
  * The validation approach is single-pass, post-order, complementary to the resolution process.
  */
 class ResolutionValidator {
+  private val attributeScopeStack = new AttributeScopeStack
+  private val cteRelationDefIds = new HashSet[Long]
+
   private val expressionResolutionValidator = new ExpressionResolutionValidator(this)
 
-  private[resolver] var attributeScopeStack = new AttributeScopeStack
-  private val cteRelationDefIds = new HashSet[Long]
+  def getAttributeScopeStack: AttributeScopeStack = attributeScopeStack
 
   /**
    * Validate the resolved logical `plan` - assert invariants that should never be false no
@@ -70,7 +56,11 @@ class ResolutionValidator {
     validate(plan)
   }
 
-  private def validate(operator: LogicalPlan): Unit = {
+  /**
+   * Validate a specific `operator`. This is an internal entry point for the recursive validation.
+   * Also, [[ExpressionResolutionValidator]] calls it to validate [[SubqueryExpression]] plans.
+   */
+  def validate(operator: LogicalPlan): Unit = {
     operator match {
       case withCte: WithCTE =>
         validateWith(withCte)
@@ -92,6 +82,10 @@ class ResolutionValidator {
         validateGlobalLimit(globalLimit)
       case localLimit: LocalLimit =>
         validateLocalLimit(localLimit)
+      case offset: Offset =>
+        validateOffset(offset)
+      case tail: Tail =>
+        validateTail(tail)
       case distinct: Distinct =>
         validateDistinct(distinct)
       case inlineTable: ResolvedInlineTable =>
@@ -100,17 +94,33 @@ class ResolutionValidator {
         validateRelation(localRelation)
       case oneRowRelation: OneRowRelation =>
         validateRelation(oneRowRelation)
+      case range: Range =>
+        validateRelation(range)
       case union: Union =>
         validateUnion(union)
+      case sort: Sort =>
+        validateSort(sort)
+      case join: Join =>
+        validateJoin(join)
+      case repartition: Repartition =>
+        validateRepartition(repartition)
       // [[LogicalRelation]], [[HiveTableRelation]] and other specific relations can't be imported
       // because of a potential circular dependency, so we match a generic Catalyst
       // [[MultiInstanceRelation]] instead.
       case multiInstanceRelation: MultiInstanceRelation =>
         validateRelation(multiInstanceRelation)
     }
-    ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
-      operator.children.map(_.output)
-    )
+
+    operator match {
+      case withCte: WithCTE =>
+        ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
+          withCte.cteDefs.map(_.output)
+        )
+      case _ =>
+        ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
+          operator.children.map(_.output)
+        )
+    }
   }
 
   private def validateWith(withCte: WithCTE): Unit = {
@@ -141,16 +151,17 @@ class ResolutionValidator {
   }
 
   private def validateAggregate(aggregate: Aggregate): Unit = {
-    attributeScopeStack.withNewScope {
+    attributeScopeStack.withNewScope() {
       validate(aggregate.child)
       expressionResolutionValidator.validateProjectList(aggregate.aggregateExpressions)
+      aggregate.groupingExpressions.foreach(expressionResolutionValidator.validate)
     }
 
     handleOperatorOutput(aggregate)
   }
 
   private def validateProject(project: Project): Unit = {
-    attributeScopeStack.withNewScope {
+    attributeScopeStack.withNewScope() {
       validate(project.child)
       expressionResolutionValidator.validateProjectList(project.projectList)
     }
@@ -207,6 +218,16 @@ class ResolutionValidator {
     expressionResolutionValidator.validate(localLimit.limitExpr)
   }
 
+  private def validateOffset(offset: Offset): Unit = {
+    validate(offset.child)
+    expressionResolutionValidator.validate(offset.offsetExpr)
+  }
+
+  private def validateTail(tail: Tail): Unit = {
+    validate(tail.child)
+    expressionResolutionValidator.validate(tail.limitExpr)
+  }
+
   private def validateDistinct(distinct: Distinct): Unit = {
     validate(distinct.child)
   }
@@ -248,8 +269,38 @@ class ResolutionValidator {
     handleOperatorOutput(union)
   }
 
+  private def validateSort(sort: Sort): Unit = {
+    validate(sort.child)
+    for (sortOrder <- sort.order) {
+      expressionResolutionValidator.validate(sortOrder.child)
+    }
+  }
+
+  private def validateRepartition(repartition: Repartition): Unit = {
+    validate(repartition.child)
+  }
+
+  private def validateJoin(join: Join) = {
+    attributeScopeStack.withNewScope() {
+      attributeScopeStack.withNewScope() {
+        validate(join.left)
+        validate(join.right)
+        assert(join.left.outputSet.intersect(join.right.outputSet).isEmpty)
+      }
+
+      attributeScopeStack.overwriteCurrent(join.left.output ++ join.right.output)
+
+      join.condition match {
+        case Some(condition) => expressionResolutionValidator.validate(condition)
+        case None =>
+      }
+    }
+
+    handleOperatorOutput(join)
+  }
+
   private def handleOperatorOutput(operator: LogicalPlan): Unit = {
-    attributeScopeStack.overwriteTop(operator.output)
+    attributeScopeStack.overwriteCurrent(operator.output)
 
     operator.output.foreach(attribute => {
       assert(
