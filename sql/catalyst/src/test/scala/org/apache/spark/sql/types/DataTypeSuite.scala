@@ -22,7 +22,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
@@ -1392,5 +1392,26 @@ class DataTypeSuite extends SparkFunSuite {
         parameters = Map("precision" -> p.toString)
       )
     }
+  }
+
+  test("Parse time(n) as TimeType(n)") {
+    0 to 6 foreach { n =>
+      assert(DataType.fromJson(s"\"time($n)\"") == TimeType(n))
+      val expectedStructType = StructType(Seq(StructField("t", TimeType(n))))
+      assert(DataType.fromDDL(s"t time($n)") == expectedStructType)
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson("\"time(9)\"")
+      },
+      condition = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> "time(9)"))
+    checkError(
+      exception = intercept[ParseException] {
+        DataType.fromDDL("t time(-1)")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'time'", "hint" -> ""))
   }
 }

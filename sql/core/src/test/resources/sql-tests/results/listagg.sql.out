@@ -158,35 +158,35 @@ bbaa
 
 
 -- !query
-SELECT listagg(c1) FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
+WITH t(col) AS (SELECT listagg(col1) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
 -- !query schema
-struct<listagg(c1, NULL):binary>
+struct<len(col):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
 -- !query output
-DEADBEEF
+4	1	1
 
 
 -- !query
-SELECT listagg(c1, NULL) FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
+WITH t(col) AS (SELECT listagg(col1, NULL) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
 -- !query schema
-struct<listagg(c1, NULL):binary>
+struct<len(col):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
 -- !query output
-DEADBEEF
+4	1	1
 
 
 -- !query
-SELECT listagg(c1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
+WITH t(col) AS (SELECT listagg(col1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'42'), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
 -- !query schema
-struct<listagg(c1, X'42'):binary>
+struct<len(col):int,regexp_count(col, X'42'):int,regexp_count(col, X'DEAD'):int,regexp_count(col, X'BEEF'):int>
 -- !query output
-DEAD42BEEF
+5	1	1	1
 
 
 -- !query
-SELECT listagg(col1), listagg(col2, ',') FROM df2
+WITH t(col1, col2) AS (SELECT listagg(col1), listagg(col2, ',') FROM df2) SELECT len(col1), regexp_count(col1, '1'), regexp_count(col1, '2'), regexp_count(col1, '3'), len(col2), regexp_count(col2, 'true'), regexp_count(col1, 'false') FROM t
 -- !query schema
-struct<listagg(col1, NULL):string,listagg(col2, ,):string>
+struct<len(col1):int,regexp_count(col1, 1):int,regexp_count(col1, 2):int,regexp_count(col1, 3):int,len(col2):int,regexp_count(col2, true):int,regexp_count(col1, false):int>
 -- !query output
-123	true,false,false
+3	1	1	1	16	1	0
 
 
 -- !query

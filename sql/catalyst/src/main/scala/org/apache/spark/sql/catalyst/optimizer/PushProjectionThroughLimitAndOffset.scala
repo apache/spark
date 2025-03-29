@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, Offset, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, PROJECT}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
 
 /**
  * Pushes Project operator through Limit operator.
  */
-object PushProjectionThroughLimit extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAllPatterns(PROJECT, LIMIT)) {
+object PushProjectionThroughLimitAndOffset extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(treeBits =>
+    treeBits.containsPattern(PROJECT) && treeBits.containsAnyPattern(OFFSET, LIMIT)) {
 
     case p @ Project(projectList, limit @ LocalLimit(_, child))
         if projectList.forall(_.deterministic) =>
@@ -35,5 +35,9 @@ object PushProjectionThroughLimit extends Rule[LogicalPlan] {
     case p @ Project(projectList, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
         if projectList.forall(_.deterministic) =>
       g.copy(child = limit.copy(child = p.copy(projectList, child)))
+
+    case p @ Project(projectList, offset @ Offset(_, child))
+      if projectList.forall(_.deterministic) =>
+      offset.copy(child = p.copy(projectList, child))
   }
 }

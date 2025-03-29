@@ -74,6 +74,7 @@ case class DescribeRelationJsonCommand(
         describeIdentifier(v.identifier.toQualifiedNameParts(v.catalog), jsonMap)
         describeColsJson(v.metadata.schema, jsonMap)
         describeFormattedTableInfoJson(v.metadata, jsonMap)
+        describeViewSqlConfsJson(v.metadata, jsonMap)
 
       case ResolvedTable(catalog, identifier, V1Table(metadata), _) =>
         describeIdentifier(identifier.toQualifiedNameParts(catalog), jsonMap)
@@ -240,6 +241,17 @@ case class DescribeRelationJsonCommand(
     val columnsJson = jsonType(StructType(schema.fields))
       .asInstanceOf[JObject].find(_.isInstanceOf[JArray]).get
     addKeyValueToMap("columns", columnsJson, jsonMap)
+  }
+
+  /** Display SQL confs set at time of view creation */
+  private def describeViewSqlConfsJson(
+      table: CatalogTable,
+      jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
+    val viewConfigs: Map[String, String] = table.viewSQLConfigs
+    val viewConfigsJson: JValue = JObject(viewConfigs.map { case (key, value) =>
+      key -> JString(value)
+    }.toList)
+    addKeyValueToMap("view_creation_spark_configuration", viewConfigsJson, jsonMap)
   }
 
   private def describeClusteringInfoJson(

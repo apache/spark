@@ -566,6 +566,7 @@ def get_current_ref():
 
 def initialize_jira():
     global asf_jira
+    asf_jira = None
     jira_server = {"server": JIRA_API_BASE}
 
     if not JIRA_IMPORTED:
@@ -595,7 +596,6 @@ def initialize_jira():
     else:
         print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
         continue_maybe("Continue without jira?")
-        asf_jira = None
 
 
 def main():

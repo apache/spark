@@ -224,6 +224,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     def test_basic_requests(self):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
         response = self.artifact_manager._retrieve_responses(
             self.artifact_manager._create_requests(
                 small_jar_path, pyfile=False, archive=False, file=False
@@ -235,6 +237,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(
@@ -261,6 +265,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         file_name = "junitLargeJar"
         large_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         large_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
+        if not os.path.isfile(large_jar_path):
+            raise unittest.SkipTest(f"Skipped as {large_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(
@@ -296,6 +302,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(
@@ -333,6 +341,10 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         large_jar_path = os.path.join(self.artifact_file_path, f"{file_name2}.jar")
         large_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name2}.txt")
         large_jar_size = os.path.getsize(large_jar_path)
+        if not os.path.isfile(small_jar_path):
+            raise unittest.SkipTest(f"Skipped as {small_jar_path} does not exist.")
+        if not os.path.isfile(large_jar_path):
+            raise unittest.SkipTest(f"Skipped as {large_jar_path} does not exist.")
 
         requests = list(
             self.artifact_manager._create_requests(
