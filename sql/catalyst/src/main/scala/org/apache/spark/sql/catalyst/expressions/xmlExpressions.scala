@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.expressions.xml.XmlExpressionEvalUtils
-import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, FailureSafeParser, PermissiveMode}
+import org.apache.spark.sql.catalyst.expressions.xml.{XmlExpressionEvalUtils, XmlToStructsEvaluator}
+import org.apache.spark.sql.catalyst.util.DropMalformedMode
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -54,7 +54,7 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "4.0.0")
 // scalastyle:on line.size.limit
 case class XmlToStructs(
-    schema: StructType,
+    schema: DataType,
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
@@ -65,7 +65,7 @@ case class XmlToStructs(
 
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = ExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = options,
       child = child,
       timeZoneId = None)
@@ -81,36 +81,26 @@ case class XmlToStructs(
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = ExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
-  // This converts parsed rows to the desired output by the given schema.
+  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
+    case _: StructType | _: VariantType =>
+      val checkResult = ExprUtils.checkXmlSchema(nullableSchema)
+      if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "INVALID_XML_SCHEMA",
+        messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+  }
+
   @transient
-  private lazy val converter =
-    (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+  lazy val evaluator: XmlToStructsEvaluator =
+    XmlToStructsEvaluator(options, nullableSchema, nameOfCorruptRecord, timeZoneId, child)
 
   private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
-
-  @transient
-  private lazy val parser = {
-    val parsedOptions = new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord)
-    val mode = parsedOptions.parseMode
-    if (mode != PermissiveMode && mode != FailFastMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
-    }
-    ExprUtils.verifyColumnNameOfCorruptRecord(
-      nullableSchema, parsedOptions.columnNameOfCorruptRecord)
-    val rawParser = new StaxXmlParser(schema, parsedOptions)
-    val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-
-    new FailureSafeParser[String](
-      input => rawParser.doParseColumn(input, mode, xsdSchema),
-      mode,
-      nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord)
-  }
 
   override def dataType: DataType = nullableSchema
 
@@ -118,8 +108,7 @@ case class XmlToStructs(
     copy(timeZoneId = Option(timeZoneId))
   }
 
-  override def nullSafeEval(xml: Any): Any =
-    converter(parser.parse(xml.asInstanceOf[UTF8String].toString))
+  override def nullSafeEval(xml: Any): Any = evaluator.evaluate(xml.asInstanceOf[UTF8String])
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
