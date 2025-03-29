@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationState
+import org.apache.hive.service.cli.operation.OperationManager
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
 import org.apache.hive.service.rpc.thrift.{TProtocolVersion, TTypeId}
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
@@ -93,7 +94,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
       doReturn(dataFrame, Nil: _*).when(spySparkSession).sql(statement)
 
       val executeStatementOperation = new MySparkExecuteStatementOperation(spySparkSession,
-        hiveSession, statement, signal, finalState)
+        hiveSession, new OperationManagerMock(), statement, signal, finalState)
 
       val run = new Thread() {
         override def run(): Unit = executeStatementOperation.runInternal()
@@ -112,10 +113,11 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
   private class MySparkExecuteStatementOperation(
       session: SparkSession,
       hiveSession: HiveSession,
+      operationManager: OperationManager,
       statement: String,
       signal: Semaphore,
       finalState: OperationState)
-    extends SparkExecuteStatementOperation(session, hiveSession, statement,
+    extends SparkExecuteStatementOperation(session, hiveSession, operationManager, statement,
       new util.HashMap, false, 0) {
 
     override def cleanup(): Unit = {

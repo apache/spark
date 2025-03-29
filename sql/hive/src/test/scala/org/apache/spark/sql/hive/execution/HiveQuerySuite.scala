@@ -23,7 +23,7 @@ import java.sql.Timestamp
 
 import scala.util.Try
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkFiles, TestUtils}
@@ -1212,7 +1212,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
             .zip(parts)
             .map { case (k, v) =>
               if (v == "NULL") {
-                s"$k=${ConfVars.DEFAULTPARTITIONNAME.defaultStrVal}"
+                s"$k=${ConfVars.DEFAULTPARTITIONNAME.getDefaultVal}"
               } else {
                 s"$k=$v"
               }
