@@ -362,8 +362,11 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
     }.toMap
 
   override protected def run(): Seq[InternalRow] = {
-    val writtenRows = writeWithV2(write.toBatch)
-    postDriverMetrics()
+    val writtenRows = try {
+      writeWithV2(write.toBatch)
+    } finally {
+      postDriverMetrics()
+    }
     refreshCache()
     writtenRows
   }

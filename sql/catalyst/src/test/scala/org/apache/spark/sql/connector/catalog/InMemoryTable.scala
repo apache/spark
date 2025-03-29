@@ -61,23 +61,31 @@ class InMemoryTable(
 
   override def withData(
       data: Array[BufferedRows],
-      writeSchema: StructType): InMemoryTable = dataMap.synchronized {
-    data.foreach(_.rows.foreach { row =>
-      val key = getKey(row, writeSchema)
-      dataMap += dataMap.get(key)
-        .map { splits =>
-          val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-            splits :+ new BufferedRows(key)
-          } else {
-            splits
+      writeSchema: StructType): InMemoryTable = {
+    dataMap.synchronized {
+      data.foreach(_.rows.foreach { row =>
+        val key = getKey(row, writeSchema)
+        dataMap += dataMap.get(key)
+          .map { splits =>
+            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
+              splits :+ new BufferedRows(key)
+            } else {
+              splits
+            }
+            newSplits.last.withRow(row)
+            key -> newSplits
           }
-          newSplits.last.withRow(row)
-          key -> newSplits
-        }
-        .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
-      addPartitionKey(key)
-    })
-    this
+          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
+        addPartitionKey(key)
+      })
+
+      if (data.exists(_.rows.exists(row => row.numFields == 1 &&
+          row.getInt(0) == InMemoryTable.uncommittableValue()))) {
+        throw new IllegalArgumentException(s"Test only mock write failure")
+      }
+
+      this
+    }
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -165,6 +173,8 @@ object InMemoryTable {
       case _ => false
     }
   }
+
+  def uncommittableValue(): Int = Int.MaxValue / 2
 
   private def splitAnd(filter: Filter): Seq[Filter] = {
     filter match {
