@@ -27,6 +27,7 @@ bin/docker-image-tool.sh \
     -r $REPOPATH \
     -t $VERSION \
     -p dist/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
+    -b java_image_tag=17-noble \
     build
 
 az acr login -n ${REPONAME} --subscription api
