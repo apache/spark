@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
@@ -219,7 +217,7 @@ case class CachedRDDBuilder(
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
-
+	
   val supportsColumnarInput: Boolean = {
     cachedPlan.supportsColumnar &&
       serializer.supportsColumnarInput(cachedPlan.output)

@@ -133,6 +133,9 @@ message AnalyzePlanRequest {
 
       // Generates a physical plan outline and also node details.
       EXPLAIN_MODE_FORMATTED = 5;
+
+      // No plan outline is generated.
+      EXPLAIN_MODE_OFF = 6;
     }
   }
 

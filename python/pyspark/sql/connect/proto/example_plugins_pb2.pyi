@@ -33,68 +33,61 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import google.protobuf.descriptor
 import google.protobuf.message
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
-import sys
-
-if sys.version_info >= (3, 8):
-    import typing as typing_extensions
-else:
-    import typing_extensions
+import typing
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing.final
 class ExamplePluginRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     CUSTOM_FIELD_FIELD_NUMBER: builtins.int
+    custom_field: builtins.str
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
-    custom_field: builtins.str
     def __init__(
         self,
         *,
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         custom_field: builtins.str = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
-    ) -> builtins.bool: ...
+    def HasField(self, field_name: typing.Literal["input", b"input"]) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal["custom_field", b"custom_field", "input", b"input"],
+        self, field_name: typing.Literal["custom_field", b"custom_field", "input", b"input"]
     ) -> None: ...
 
 global___ExamplePluginRelation = ExamplePluginRelation
 
+@typing.final
 class ExamplePluginExpression(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     CHILD_FIELD_NUMBER: builtins.int
     CUSTOM_FIELD_FIELD_NUMBER: builtins.int
+    custom_field: builtins.str
     @property
     def child(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
-    custom_field: builtins.str
     def __init__(
         self,
         *,
         child: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         custom_field: builtins.str = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["child", b"child"]
-    ) -> builtins.bool: ...
+    def HasField(self, field_name: typing.Literal["child", b"child"]) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal["child", b"child", "custom_field", b"custom_field"],
+        self, field_name: typing.Literal["child", b"child", "custom_field", b"custom_field"]
     ) -> None: ...
 
 global___ExamplePluginExpression = ExamplePluginExpression
 
+@typing.final
 class ExamplePluginCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -105,8 +98,6 @@ class ExamplePluginCommand(google.protobuf.message.Message):
         *,
         custom_field: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["custom_field", b"custom_field"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["custom_field", b"custom_field"]) -> None: ...
 
 global___ExamplePluginCommand = ExamplePluginCommand

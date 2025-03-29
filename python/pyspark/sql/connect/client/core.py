@@ -1298,9 +1298,13 @@ class SparkConnectClient(object):
                 req.explain.explain_mode = (
                     pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
                 )
-            else:  # formatted
+            elif  # formatted
                 req.explain.explain_mode = (
                     pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
+                )
+            else:  # off
+                req.explain.explain_mode = (
+                    pb2.AnalyzePlanRequest.Explain.ExplainMode.OFF
                 )
         elif method == "tree_string":
             req.tree_string.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))

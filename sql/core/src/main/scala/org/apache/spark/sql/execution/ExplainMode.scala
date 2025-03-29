@@ -56,6 +56,12 @@ case object CostMode extends ExplainMode { val name = "cost" }
  */
 case object FormattedMode extends ExplainMode { val name = "formatted" }
 
+/**
+ * Off mode means that when printing explain for a DataFrame, an empty string is expected
+ * to be printed to the console.
+ */
+case object OffMode extends ExplainMode { val name = "off" }
+
 object ExplainMode {
   /**
    * Returns the explain mode from the given string.
@@ -66,7 +72,8 @@ object ExplainMode {
     case CodegenMode.name => CodegenMode
     case CostMode.name => CostMode
     case FormattedMode.name => FormattedMode
+    case OffMode.name => OffMode
     case _ => throw new IllegalArgumentException(s"Unknown explain mode: $mode. Accepted " +
-      "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
+      "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted', 'off'.")
   }
 }
