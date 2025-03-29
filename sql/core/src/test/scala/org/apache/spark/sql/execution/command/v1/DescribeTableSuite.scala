@@ -533,70 +533,73 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
   }
 
   test("DESCRIBE AS JSON view") {
-    Seq(true, false).foreach { isTemp =>
-      withNamespaceAndTable("ns", "table") { t =>
-        withView("view") {
-          val tableCreationStr =
-            s"""
-               |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
-               |  USING parquet
-               |  OPTIONS ('compression' 'snappy')
-               |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
-               |  COMMENT 'test temp view'
-               |  TBLPROPERTIES ('parquet.encryption' = 'true')
-               |""".stripMargin
-          spark.sql(tableCreationStr)
-          val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
-          spark.sql("SET spark.sql.ansi.enabled = false") // non-default
-          spark.sql("SET spark.sql.parquet.enableVectorizedReader = true") // default
-          spark.sql("SET spark.sql.sources.fileCompressionFactor = 2.0") // non-default
-          spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
-          val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
-          val firstRow = descriptionDf.select("json_metadata").head()
-          val jsonValue = firstRow.getString(0)
-          val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "false",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.FILE_COMPRESSION_FACTOR.key -> "2.0") {
+        Seq(true, false).foreach { isTemp =>
+          withNamespaceAndTable("ns", "table") { t =>
+            withView("view") {
+              val tableCreationStr =
+                s"""
+                   |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
+                   |  USING parquet
+                   |  OPTIONS ('compression' 'snappy')
+                   |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
+                   |  COMMENT 'test temp view'
+                   |  TBLPROPERTIES ('parquet.encryption' = 'true')
+                   |""".stripMargin
+              spark.sql(tableCreationStr)
+              val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
+              spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
+              val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
+              val firstRow = descriptionDf.select("json_metadata").head()
+              val jsonValue = firstRow.getString(0)
+              val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
-          val expectedOutput = DescribeTableJson(
-            table_name = Some("view"),
-            catalog_name = if (isTemp) Some("system") else Some("spark_catalog"),
-            namespace = if (isTemp) Some(List("session")) else Some(List("default")),
-            schema_name = if (isTemp) Some("session") else Some("default"),
-            columns = Some(List(
-              TableColumn("id", Type("int")),
-              TableColumn("name", Type("string", collation = Some("UTF8_BINARY"))),
-              TableColumn("created_at", Type("timestamp_ltz"))
-            )),
-            last_access = Some("UNKNOWN"),
-            created_by = Some(s"Spark $SPARK_VERSION"),
-            `type` = Some("VIEW"),
-            view_text = Some("SELECT * FROM spark_catalog.ns.table"),
-            view_original_text = if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
-            // TODO: this is unexpected and temp view should also use COMPENSATION mode.
-            view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
-            view_catalog_and_namespace = Some("spark_catalog.default"),
-            view_query_output_columns = Some(List("id", "name", "created_at"))
-          )
+              val expectedOutput = DescribeTableJson(
+                table_name = Some("view"),
+                catalog_name = if (isTemp) Some("system") else Some("spark_catalog"),
+                namespace = if (isTemp) Some(List("session")) else Some(List("default")),
+                schema_name = if (isTemp) Some("session") else Some("default"),
+                columns = Some(List(
+                  TableColumn("id", Type("int")),
+                  TableColumn("name", Type("string", collation = Some("UTF8_BINARY"))),
+                  TableColumn("created_at", Type("timestamp_ltz"))
+                )),
+                last_access = Some("UNKNOWN"),
+                created_by = Some(s"Spark $SPARK_VERSION"),
+                `type` = Some("VIEW"),
+                view_text = Some("SELECT * FROM spark_catalog.ns.table"),
+                view_original_text =
+                  if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
+                // TODO: this is unexpected and temp view should also use COMPENSATION mode.
+                view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
+                view_catalog_and_namespace = Some("spark_catalog.default"),
+                view_query_output_columns = Some(List("id", "name", "created_at"))
+              )
 
-          assert(iso8601Regex.matches(parsedOutput.created_time.get))
-          assert(expectedOutput == parsedOutput.copy(
-            created_time = None,
-            table_properties = None,
-            storage_properties = None,
-            serde_library = None,
-            view_creation_spark_configuration = None
-          ))
-          // assert output contains Spark confs set at view creation
-          if (!isTemp) {
-            assert(parsedOutput.view_creation_spark_configuration
-              .get("spark.sql.ansi.enabled") == "false")
-            assert(parsedOutput.view_creation_spark_configuration
-              .get("spark.sql.parquet.enableVectorizedReader") == "true")
-            assert(parsedOutput.view_creation_spark_configuration
-              .get("spark.sql.sources.fileCompressionFactor") == "2.0")
+              assert(iso8601Regex.matches(parsedOutput.created_time.get))
+              assert(expectedOutput == parsedOutput.copy(
+                created_time = None,
+                table_properties = None,
+                storage_properties = None,
+                serde_library = None,
+                view_creation_spark_configuration = None
+              ))
+              // assert output contains Spark confs set at view creation
+              if (!isTemp) {
+                assert(parsedOutput.view_creation_spark_configuration
+                  .get("spark.sql.ansi.enabled") == "false")
+                assert(parsedOutput.view_creation_spark_configuration
+                  .get("spark.sql.parquet.enableVectorizedReader") == "true")
+                assert(parsedOutput.view_creation_spark_configuration
+                  .get("spark.sql.sources.fileCompressionFactor") == "2.0")
+              }
+            }
           }
         }
       }
-    }
   }
 
   test("DESCRIBE AS JSON for column throws Analysis Exception") {
