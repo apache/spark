@@ -48,7 +48,7 @@ message MlCommand {
     Relation dataset = 3;
   }
 
-  // Command to delete the cached object which could be a model
+  // Command to delete the cached objects which could be a model
   // or summary evaluated by a model
   message Delete {
     repeated ObjectRef obj_refs = 1;

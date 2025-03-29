@@ -111,7 +111,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["params"] | None: ...
 
     class Delete(google.protobuf.message.Message):
-        """Command to delete the cached object which could be a model
+        """Command to delete the cached objects which could be a model
         or summary evaluated by a model
         """
 
