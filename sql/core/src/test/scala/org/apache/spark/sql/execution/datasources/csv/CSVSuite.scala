@@ -3325,7 +3325,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 40)
+    assert(CSVOptions.getAllOptions.size == 41)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3366,6 +3366,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("sep"))
     assert(CSVOptions.isValidOption("extension"))
     assert(CSVOptions.isValidOption("delimiter"))
+    assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
     // Please add validation on any new parquet options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
@@ -3491,6 +3492,118 @@ abstract class CSVSuite
     assert(malformedCSVException.getCause.isInstanceOf[TextParsingException])
     val textParsingException = malformedCSVException.getCause.asInstanceOf[TextParsingException]
     assert(textParsingException.getCause.isInstanceOf[ArrayIndexOutOfBoundsException])
+  }
+
+  test("csv with variant") {
+    withTempPath { path =>
+      val data =
+        """field 1,field2
+          |100,1.1
+          |2000-01-01,2000-01-01 00:00:00
+          |,true
+          |1e9,hello,extra
+          |missing
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
+        val allOptions = options ++ Map("singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+          expected.map(Row(_))
+        )
+      }
+
+      checkSingleVariant(Map(),
+        """{"_c0":"field 1","_c1":"field2"}""",
+        """{"_c0":"100","_c1":"1.1"}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 00:00:00"}""",
+        """{"_c0":null,"_c1":"true"}""",
+        """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
+        """{"_c0":"missing"}""")
+
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("header" -> "true"),
+          """{"field 1":100,"field2":1.1}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 00:00:00+00:00"}""",
+          """{"field 1":null,"field2":true}""",
+          """{"field 1":"1e9","field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("singleVariantColumn" -> "v", "mode" -> "failfast")
+          spark.read.options(options).csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """[{"_c0":"1e9","_c1":"hello","_c2":"extra"}]""",
+          "failFastMode" -> "FAILFAST")
+      )
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("singleVariantColumn" -> "v", "header" -> "true", "mode" -> "failfast")
+          spark.read.options(options).csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """[{"field 1":"1e9","field2":"hello"}]""",
+          "failFastMode" -> "FAILFAST")
+      )
+
+      def checkSchema(options: Map[String, String], expected: (String, String)*): Unit = {
+        checkAnswer(
+          spark.read.options(options).schema("`field 1` variant, field2 variant")
+            .csv(path.getCanonicalPath)
+            .selectExpr("cast(`field 1` as string)", "cast(field2 as string)"),
+          expected.map(f => Row(f._1, f._2))
+        )
+      }
+
+      checkSchema(Map(),
+        ("field 1", "field2"),
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 00:00:00"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
+
+      checkSchema(Map("header" -> "true"),
+        ("100", "1.1"),
+        ("2000-01-01", "2000-01-01 00:00:00"),
+        (null, "true"),
+        ("1e9", "hello"),
+        ("missing", null))
+
+      checkError(
+        exception = intercept[SparkException] {
+          val options = Map("multiLine" -> "true", "header" -> "true", "mode" -> "failfast")
+          spark.read.options(options).schema("`field 1` variant, field2 variant")
+            .csv(path.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkException],
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> """["1e9","hello"]""", "failFastMode" -> "FAILFAST")
+      )
+    }
+  }
+
+  test("write variant with csv is disallowed") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("create table test_table(v variant) using csv")
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        withTempPath { path =>
+          spark.sql("select cast(1 as variant) v").write.csv(path.getCanonicalPath)
+        }
+      },
+      condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      parameters = Map("columnName" -> "`v`", "columnType" -> "\"VARIANT\"", "format" -> "CSV")
+    )
   }
 }
 

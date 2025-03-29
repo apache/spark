@@ -59,7 +59,7 @@ class CSVHeaderChecker(
    * @param columnNames names of CSV columns that must be checked against to the schema.
    */
   private def checkHeaderColumnNames(columnNames: Array[String]): Unit = {
-    if (columnNames != null) {
+    if (columnNames != null && options.singleVariantColumn.isEmpty) {
       val fieldNames = schema.map(_.name).toIndexedSeq
       val (headerLen, schemaSize) = (columnNames.length, fieldNames.length)
       var errorMessage: Option[MessageWithContext] = None
