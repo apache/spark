@@ -36,7 +36,8 @@ import org.apache.spark.sql.sources.Filter;
  * @since 3.4.0
  */
 @Experimental
-public interface SupportsRuntimeV2Filtering extends Scan {
+public interface SupportsRuntimeV2Filtering extends
+    Scan, SupportsBroadcastVarPushdownFiltering<Scan> {
   /**
    * Returns attributes this scan can be filtered by at runtime.
    * <p>
@@ -64,4 +65,6 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * @param predicates data source V2 predicates used to filter the scan at runtime
    */
   void filter(Predicate[] predicates);
+
+  default NamedReference[] partitionAttributes() {return new NamedReference[0];}
 }

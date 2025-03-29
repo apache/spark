@@ -1,0 +1,53 @@
+TakeOrderedAndProject [numwait,s_name]
+  WholeStageCodegen (7)
+    HashAggregate [s_name,count] [count(1),numwait,count]
+      InputAdapter
+        Exchange [s_name] #1
+          WholeStageCodegen (6)
+            HashAggregate [s_name] [count,count]
+              Project [s_name]
+                BroadcastHashJoin [s_nationkey,n_nationkey]
+                  Project [s_name,s_nationkey]
+                    BroadcastHashJoin [l_orderkey,o_orderkey]
+                      Project [s_name,s_nationkey,l_orderkey]
+                        BroadcastHashJoin [s_suppkey,l_suppkey]
+                          Project [s_suppkey,s_name,s_nationkey]
+                            Filter [s_suppkey,s_nationkey]
+                              InputAdapter
+                                BatchScan spark_catalog.default.supplier [s_suppkey,s_name,s_nationkey]
+                          InputAdapter
+                            BroadcastExchange #2
+                              WholeStageCodegen (3)
+                                BroadcastHashJoin [l_orderkey,l_orderkey,l_suppkey,l_suppkey]
+                                  BroadcastHashJoin [l_orderkey,l_orderkey,l_suppkey,l_suppkey]
+                                    Project [l_orderkey,l_suppkey]
+                                      Filter [l_receiptdate,l_commitdate,l_suppkey,l_orderkey]
+                                        InputAdapter
+                                          BatchScan spark_catalog.default.lineitem [l_orderkey,l_suppkey,l_commitdate,l_receiptdate]
+                                    InputAdapter
+                                      BroadcastExchange #3
+                                        WholeStageCodegen (1)
+                                          Project [l_orderkey,l_suppkey]
+                                            InputAdapter
+                                              BatchScan spark_catalog.default.lineitem [l_orderkey,l_partkey,l_suppkey,l_linenumber,l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment]
+                                  InputAdapter
+                                    BroadcastExchange #4
+                                      WholeStageCodegen (2)
+                                        Project [l_orderkey,l_suppkey]
+                                          Filter [l_receiptdate,l_commitdate]
+                                            InputAdapter
+                                              BatchScan spark_catalog.default.lineitem [l_orderkey,l_partkey,l_suppkey,l_linenumber,l_quantity,l_extendedprice,l_discount,l_tax,l_returnflag,l_linestatus,l_shipdate,l_commitdate,l_receiptdate,l_shipinstruct,l_shipmode,l_comment]
+                      InputAdapter
+                        BroadcastExchange #5
+                          WholeStageCodegen (4)
+                            Project [o_orderkey]
+                              Filter [o_orderstatus,o_orderkey]
+                                InputAdapter
+                                  BatchScan spark_catalog.default.orders [o_orderkey,o_orderstatus]
+                  InputAdapter
+                    BroadcastExchange #6
+                      WholeStageCodegen (5)
+                        Project [n_nationkey]
+                          Filter [n_name,n_nationkey]
+                            InputAdapter
+                              BatchScan spark_catalog.default.nation [n_nationkey,n_name]

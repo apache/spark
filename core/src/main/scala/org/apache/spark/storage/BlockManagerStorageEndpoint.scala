@@ -74,6 +74,8 @@ class BlockManagerStorageEndpoint(
 
     case RemoveBroadcast(broadcastId, _) =>
       doAsync[Int](log"removing broadcast ${MDC(BROADCAST_ID, broadcastId)}", context) {
+        Option(SparkEnv.get).foreach(
+          _.broadcastManager.invokeBroadcastLifeCycleListeners(broadcastId))
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 

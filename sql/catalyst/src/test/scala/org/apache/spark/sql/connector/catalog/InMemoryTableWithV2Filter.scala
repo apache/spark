@@ -19,11 +19,12 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import com.google.common.base.Objects
 import org.scalatest.Assertions.assert
 
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
-import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsBroadcastVarPushdownFiltering, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -90,6 +91,17 @@ class InMemoryTableWithV2Filter(
         }
       }
     }
+
+    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering[Scan]):
+     Boolean = other match {
+      case ims: InMemoryV2FilterBatchScan => this.readSchema == ims.readSchema &&
+        this.tableSchema == ims.tableSchema
+
+      case _ => false
+    }
+
+    override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(this.readSchema,
+      this.tableSchema)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

@@ -1,0 +1,384 @@
+== Physical Plan ==
+* Sort (42)
++- Exchange (41)
+   +- * Filter (40)
+      +- * HashAggregate (39)
+         +- Exchange (38)
+            +- * HashAggregate (37)
+               +- * HashAggregate (36)
+                  +- Exchange (35)
+                     +- * HashAggregate (34)
+                        +- * Project (33)
+                           +- * BroadcastHashJoin Inner BuildRight (32)
+                              :- * Project (27)
+                              :  +- * BroadcastHashJoin Inner BuildRight (26)
+                              :     :- * Project (21)
+                              :     :  +- * BroadcastHashJoin Inner BuildRight (20)
+                              :     :     :- * Project (15)
+                              :     :     :  +- * BroadcastHashJoin Inner BuildRight (14)
+                              :     :     :     :- * Project (9)
+                              :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (8)
+                              :     :     :     :     :- * Project (3)
+                              :     :     :     :     :  +- * Filter (2)
+                              :     :     :     :     :     +- BatchScan spark_catalog.default.store_sales (1)
+                              :     :     :     :     +- BroadcastExchange (7)
+                              :     :     :     :        +- * Project (6)
+                              :     :     :     :           +- * Filter (5)
+                              :     :     :     :              +- BatchScan spark_catalog.default.store_returns (4)
+                              :     :     :     +- BroadcastExchange (13)
+                              :     :     :        +- * Project (12)
+                              :     :     :           +- * Filter (11)
+                              :     :     :              +- BatchScan spark_catalog.default.store (10)
+                              :     :     +- BroadcastExchange (19)
+                              :     :        +- * Project (18)
+                              :     :           +- * Filter (17)
+                              :     :              +- BatchScan spark_catalog.default.item (16)
+                              :     +- BroadcastExchange (25)
+                              :        +- * Project (24)
+                              :           +- * Filter (23)
+                              :              +- BatchScan spark_catalog.default.customer (22)
+                              +- BroadcastExchange (31)
+                                 +- * Project (30)
+                                    +- * Filter (29)
+                                       +- BatchScan spark_catalog.default.customer_address (28)
+
+
+(1) BatchScan spark_catalog.default.store_sales
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_ticket_number IS NOT NULL, ss_item_sk IS NOT NULL, ss_store_sk IS NOT NULL, ss_customer_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 6]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+Condition : (((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_customer_sk#2))
+
+(3) Project [codegen id : 6]
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+
+(4) BatchScan spark_catalog.default.store_returns
+Output [2]: [sr_item_sk#6, sr_ticket_number#7]
+spark_catalog.default.store_returns [scan class = SparkBatchQueryScan] [filters=sr_ticket_number IS NOT NULL, sr_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [2]: [sr_item_sk#6, sr_ticket_number#7]
+Condition : (isnotnull(sr_ticket_number#7) AND isnotnull(sr_item_sk#6))
+
+(6) Project [codegen id : 1]
+Output [2]: [sr_item_sk#6, sr_ticket_number#7]
+Input [2]: [sr_item_sk#6, sr_ticket_number#7]
+
+(7) BroadcastExchange
+Input [2]: [sr_item_sk#6, sr_ticket_number#7]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 6]
+Left keys [2]: [ss_ticket_number#4, ss_item_sk#1]
+Right keys [2]: [sr_ticket_number#7, sr_item_sk#6]
+Join condition: None
+
+(9) Project [codegen id : 6]
+Output [4]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5]
+Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, sr_item_sk#6, sr_ticket_number#7]
+
+(10) BatchScan spark_catalog.default.store
+Output [5]: [s_store_sk#8, s_store_name#9, s_market_id#10, s_state#11, s_zip#12]
+spark_catalog.default.store [scan class = SparkBatchQueryScan] [filters=s_market_id IS NOT NULL, s_market_id = 8, s_store_sk IS NOT NULL, s_zip IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(11) Filter [codegen id : 2]
+Input [5]: [s_store_sk#8, s_store_name#9, s_market_id#10, s_state#11, s_zip#12]
+Condition : (((isnotnull(s_market_id#10) AND (s_market_id#10 = 8)) AND isnotnull(s_store_sk#8)) AND isnotnull(s_zip#12))
+
+(12) Project [codegen id : 2]
+Output [4]: [s_store_sk#8, s_store_name#9, s_state#11, s_zip#12]
+Input [5]: [s_store_sk#8, s_store_name#9, s_market_id#10, s_state#11, s_zip#12]
+
+(13) BroadcastExchange
+Input [4]: [s_store_sk#8, s_store_name#9, s_state#11, s_zip#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(14) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#8]
+Join condition: None
+
+(15) Project [codegen id : 6]
+Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12]
+Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5, s_store_sk#8, s_store_name#9, s_state#11, s_zip#12]
+
+(16) BatchScan spark_catalog.default.item
+Output [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+spark_catalog.default.item [scan class = SparkBatchQueryScan] [filters=i_color IS NOT NULL, i_color = 'pale', i_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(17) Filter [codegen id : 3]
+Input [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Condition : ((isnotnull(i_color#16) AND (i_color#16 = pale)) AND isnotnull(i_item_sk#13))
+
+(18) Project [codegen id : 3]
+Output [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Input [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+
+(19) BroadcastExchange
+Input [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(20) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ss_item_sk#1]
+Right keys [1]: [i_item_sk#13]
+Join condition: None
+
+(21) Project [codegen id : 6]
+Output [10]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+
+(22) BatchScan spark_catalog.default.customer
+Output [5]: [c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+spark_catalog.default.customer [scan class = SparkBatchQueryScan] [filters=c_customer_sk IS NOT NULL, c_current_addr_sk IS NOT NULL, c_birth_country IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(23) Filter [codegen id : 4]
+Input [5]: [c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+Condition : ((isnotnull(c_customer_sk#19) AND isnotnull(c_current_addr_sk#20)) AND isnotnull(c_birth_country#23))
+
+(24) Project [codegen id : 4]
+Output [5]: [c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+Input [5]: [c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+
+(25) BroadcastExchange
+Input [5]: [c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(26) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ss_customer_sk#2]
+Right keys [1]: [c_customer_sk#19]
+Join condition: None
+
+(27) Project [codegen id : 6]
+Output [13]: [ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+Input [15]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+
+(28) BatchScan spark_catalog.default.customer_address
+Output [4]: [ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+spark_catalog.default.customer_address [scan class = SparkBatchQueryScan] [filters=ca_address_sk IS NOT NULL, ca_country IS NOT NULL, ca_zip IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(29) Filter [codegen id : 5]
+Input [4]: [ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+Condition : ((isnotnull(ca_address_sk#24) AND isnotnull(ca_country#27)) AND isnotnull(ca_zip#26))
+
+(30) Project [codegen id : 5]
+Output [4]: [ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+Input [4]: [ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+
+(31) BroadcastExchange
+Input [4]: [ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+Arguments: HashedRelationBroadcastMode(List(input[0, int, true], upper(input[3, string, true]), input[2, string, true]),false), [plan_id=5]
+
+(32) BroadcastHashJoin [codegen id : 6]
+Left keys [3]: [c_current_addr_sk#20, c_birth_country#23, s_zip#12]
+Right keys [3]: [ca_address_sk#24, upper(ca_country#27), ca_zip#26]
+Join condition: None
+
+(33) Project [codegen id : 6]
+Output [11]: [ss_net_paid#5, s_store_name#9, s_state#11, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_first_name#21, c_last_name#22, ca_state#25]
+Input [17]: [ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23, ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+
+(34) HashAggregate [codegen id : 6]
+Input [11]: [ss_net_paid#5, s_store_name#9, s_state#11, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_first_name#21, c_last_name#22, ca_state#25]
+Keys [10]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
+Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#5))]
+Aggregate Attributes [1]: [sum#28]
+Results [11]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#29]
+
+(35) Exchange
+Input [11]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#29]
+Arguments: hashpartitioning(c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(36) HashAggregate [codegen id : 7]
+Input [11]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#29]
+Keys [10]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
+Functions [1]: [sum(UnscaledValue(ss_net_paid#5))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#5))#30]
+Results [4]: [c_last_name#22, c_first_name#21, s_store_name#9, MakeDecimal(sum(UnscaledValue(ss_net_paid#5))#30,17,2) AS netpaid#31]
+
+(37) HashAggregate [codegen id : 7]
+Input [4]: [c_last_name#22, c_first_name#21, s_store_name#9, netpaid#31]
+Keys [3]: [c_last_name#22, c_first_name#21, s_store_name#9]
+Functions [1]: [partial_sum(netpaid#31)]
+Aggregate Attributes [2]: [sum#32, isEmpty#33]
+Results [5]: [c_last_name#22, c_first_name#21, s_store_name#9, sum#34, isEmpty#35]
+
+(38) Exchange
+Input [5]: [c_last_name#22, c_first_name#21, s_store_name#9, sum#34, isEmpty#35]
+Arguments: hashpartitioning(c_last_name#22, c_first_name#21, s_store_name#9, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+
+(39) HashAggregate [codegen id : 8]
+Input [5]: [c_last_name#22, c_first_name#21, s_store_name#9, sum#34, isEmpty#35]
+Keys [3]: [c_last_name#22, c_first_name#21, s_store_name#9]
+Functions [1]: [sum(netpaid#31)]
+Aggregate Attributes [1]: [sum(netpaid#31)#36]
+Results [4]: [c_last_name#22, c_first_name#21, s_store_name#9, sum(netpaid#31)#36 AS paid#37]
+
+(40) Filter [codegen id : 8]
+Input [4]: [c_last_name#22, c_first_name#21, s_store_name#9, paid#37]
+Condition : (isnotnull(paid#37) AND (cast(paid#37 as decimal(33,8)) > cast(Subquery scalar-subquery#38, [id=#39] as decimal(33,8))))
+
+(41) Exchange
+Input [4]: [c_last_name#22, c_first_name#21, s_store_name#9, paid#37]
+Arguments: rangepartitioning(c_last_name#22 ASC NULLS FIRST, c_first_name#21 ASC NULLS FIRST, s_store_name#9 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=8]
+
+(42) Sort [codegen id : 9]
+Input [4]: [c_last_name#22, c_first_name#21, s_store_name#9, paid#37]
+Arguments: [c_last_name#22 ASC NULLS FIRST, c_first_name#21 ASC NULLS FIRST, s_store_name#9 ASC NULLS FIRST], true, 0
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 40 Hosting Expression = Subquery scalar-subquery#38, [id=#39]
+* HashAggregate (69)
++- Exchange (68)
+   +- * HashAggregate (67)
+      +- * HashAggregate (66)
+         +- Exchange (65)
+            +- * HashAggregate (64)
+               +- * Project (63)
+                  +- * BroadcastHashJoin Inner BuildRight (62)
+                     :- * Project (60)
+                     :  +- * BroadcastHashJoin Inner BuildRight (59)
+                     :     :- * Project (57)
+                     :     :  +- * BroadcastHashJoin Inner BuildRight (56)
+                     :     :     :- * Project (51)
+                     :     :     :  +- * BroadcastHashJoin Inner BuildRight (50)
+                     :     :     :     :- * Project (48)
+                     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (47)
+                     :     :     :     :     :- * Project (45)
+                     :     :     :     :     :  +- * Filter (44)
+                     :     :     :     :     :     +- BatchScan spark_catalog.default.store_sales (43)
+                     :     :     :     :     +- ReusedExchange (46)
+                     :     :     :     +- ReusedExchange (49)
+                     :     :     +- BroadcastExchange (55)
+                     :     :        +- * Project (54)
+                     :     :           +- * Filter (53)
+                     :     :              +- BatchScan spark_catalog.default.item (52)
+                     :     +- ReusedExchange (58)
+                     +- ReusedExchange (61)
+
+
+(43) BatchScan spark_catalog.default.store_sales
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_ticket_number IS NOT NULL, ss_item_sk IS NOT NULL, ss_store_sk IS NOT NULL, ss_customer_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(44) Filter [codegen id : 6]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+Condition : (((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_customer_sk#2))
+
+(45) Project [codegen id : 6]
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
+
+(46) ReusedExchange [Reuses operator id: 7]
+Output [2]: [sr_item_sk#6, sr_ticket_number#7]
+
+(47) BroadcastHashJoin [codegen id : 6]
+Left keys [2]: [ss_ticket_number#4, ss_item_sk#1]
+Right keys [2]: [sr_ticket_number#7, sr_item_sk#6]
+Join condition: None
+
+(48) Project [codegen id : 6]
+Output [4]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5]
+Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5, sr_item_sk#6, sr_ticket_number#7]
+
+(49) ReusedExchange [Reuses operator id: 13]
+Output [4]: [s_store_sk#8, s_store_name#9, s_state#11, s_zip#12]
+
+(50) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#8]
+Join condition: None
+
+(51) Project [codegen id : 6]
+Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12]
+Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5, s_store_sk#8, s_store_name#9, s_state#11, s_zip#12]
+
+(52) BatchScan spark_catalog.default.item
+Output [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+spark_catalog.default.item [scan class = SparkBatchQueryScan] [filters=i_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(53) Filter [codegen id : 3]
+Input [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Condition : isnotnull(i_item_sk#13)
+
+(54) Project [codegen id : 3]
+Output [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Input [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+
+(55) BroadcastExchange
+Input [6]: [i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=9]
+
+(56) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ss_item_sk#1]
+Right keys [1]: [i_item_sk#13]
+Join condition: None
+
+(57) Project [codegen id : 6]
+Output [10]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_item_sk#13, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18]
+
+(58) ReusedExchange [Reuses operator id: 25]
+Output [5]: [c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+
+(59) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ss_customer_sk#2]
+Right keys [1]: [c_customer_sk#19]
+Join condition: None
+
+(60) Project [codegen id : 6]
+Output [13]: [ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+Input [15]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_customer_sk#19, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23]
+
+(61) ReusedExchange [Reuses operator id: 31]
+Output [4]: [ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+
+(62) BroadcastHashJoin [codegen id : 6]
+Left keys [3]: [c_current_addr_sk#20, c_birth_country#23, s_zip#12]
+Right keys [3]: [ca_address_sk#24, upper(ca_country#27), ca_zip#26]
+Join condition: None
+
+(63) Project [codegen id : 6]
+Output [11]: [ss_net_paid#5, s_store_name#9, s_state#11, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_first_name#21, c_last_name#22, ca_state#25]
+Input [17]: [ss_net_paid#5, s_store_name#9, s_state#11, s_zip#12, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_current_addr_sk#20, c_first_name#21, c_last_name#22, c_birth_country#23, ca_address_sk#24, ca_state#25, ca_zip#26, ca_country#27]
+
+(64) HashAggregate [codegen id : 6]
+Input [11]: [ss_net_paid#5, s_store_name#9, s_state#11, i_current_price#14, i_size#15, i_color#16, i_units#17, i_manager_id#18, c_first_name#21, c_last_name#22, ca_state#25]
+Keys [10]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
+Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#5))]
+Aggregate Attributes [1]: [sum#40]
+Results [11]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#41]
+
+(65) Exchange
+Input [11]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#41]
+Arguments: hashpartitioning(c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, 5), ENSURE_REQUIREMENTS, [plan_id=10]
+
+(66) HashAggregate [codegen id : 7]
+Input [11]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15, sum#41]
+Keys [10]: [c_last_name#22, c_first_name#21, s_store_name#9, ca_state#25, s_state#11, i_color#16, i_current_price#14, i_manager_id#18, i_units#17, i_size#15]
+Functions [1]: [sum(UnscaledValue(ss_net_paid#5))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#5))#30]
+Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#5))#30,17,2) AS netpaid#31]
+
+(67) HashAggregate [codegen id : 7]
+Input [1]: [netpaid#31]
+Keys: []
+Functions [1]: [partial_avg(netpaid#31)]
+Aggregate Attributes [2]: [sum#42, count#43]
+Results [2]: [sum#44, count#45]
+
+(68) Exchange
+Input [2]: [sum#44, count#45]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
+
+(69) HashAggregate [codegen id : 8]
+Input [2]: [sum#44, count#45]
+Keys: []
+Functions [1]: [avg(netpaid#31)]
+Aggregate Attributes [1]: [avg(netpaid#31)#46]
+Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#31)#46)), DecimalType(24,8)) AS (0.05 * avg(netpaid))#47]
+
+

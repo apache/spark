@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import com.google.common.base.Objects
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -148,6 +151,56 @@ case class DataSourceV2ScanRelation(
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
+
+  // because in case of proxy broadcast var push, the build leg plan in a cached stage
+  // would already have materialized the stage so the runtime vars may have been pushed to
+  // the Scan instance. While the lookup physical plan will have a buildleg whose leaf relation's
+  // scan is not materialied , so that runtime vars are not pushed yet. So to consider equality
+  // of scans here , we have to ignore runtime filters.
+  // It is Ok to ignore run time filters because since we are in LogicalPlan phase, the runtime
+  // filters would not have been pushed to scan level.
+  // And for broadcast var change, when this equality comes into picture in build Leg Plan in
+  // proxybroadcast, the runtime filters check would not actually matter as that will be
+  // taken care by the BatchScanExecs.
+
+  override def equals(other: Any): Boolean = other match {
+    case dsvsr: DataSourceV2ScanRelation =>
+      val commonEquality = this.relation == dsvsr.relation &&
+        this.output == dsvsr.output &&
+        this.keyGroupedPartitioning == dsvsr.keyGroupedPartitioning &&
+        this.ordering == dsvsr.ordering
+      if (commonEquality) {
+        (this.scan, dsvsr.scan) match {
+          case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
+            sr1.equalToIgnoreRuntimeFilters(sr2)
+
+          case _ if this.scan != null => this.scan == dsvsr.scan
+        }
+      } else {
+        false
+      }
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val batchHashCode = scan match {
+      case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
+
+      case _ => this.scan.hashCode()
+    }
+    Objects.hashCode(Integer.valueOf(batchHashCode), this.relation, this.output,
+      this.keyGroupedPartitioning, this.ordering)
+  }
+
+  override def doCanonicalize(): DataSourceV2ScanRelation =
+    this.copy(
+      output = output.map(QueryPlan.normalizeExpressions(_, output)),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(
+        _.map(QueryPlan.normalizeExpressions(_, output))),
+      relation = relation.canonicalized.asInstanceOf[DataSourceV2Relation],
+      ordering = ordering.map(_.map(QueryPlan.normalizeExpressions(_, output)))
+    )
 
   override def name: String = relation.name
 
