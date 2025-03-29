@@ -111,25 +111,27 @@ class MlCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["params"] | None: ...
 
     class Delete(google.protobuf.message.Message):
-        """Command to delete the cached object which could be a model
+        """Command to delete the cached objects which could be a model
         or summary evaluated by a model
         """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        OBJ_REF_FIELD_NUMBER: builtins.int
+        OBJ_REFS_FIELD_NUMBER: builtins.int
         @property
-        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
+        def obj_refs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.ml_common_pb2.ObjectRef
+        ]: ...
         def __init__(
             self,
             *,
-            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
+            obj_refs: collections.abc.Iterable[pyspark.sql.connect.proto.ml_common_pb2.ObjectRef]
+            | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
-        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
+            self, field_name: typing_extensions.Literal["obj_refs", b"obj_refs"]
         ) -> None: ...
 
     class Write(google.protobuf.message.Message):

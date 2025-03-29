@@ -171,11 +171,12 @@ private[connect] object MLHandler extends Logging {
         }
 
       case proto.MlCommand.CommandCase.DELETE =>
-        val objId = mlCommand.getDelete.getObjRef.getId
         var result = false
-        if (!objId.contains(".")) {
-          mlCache.remove(objId)
-          result = true
+        mlCommand.getDelete.getObjRefsList.asScala.toArray.foreach { objId =>
+          if (!objId.getId.contains(".")) {
+            mlCache.remove(objId.getId)
+            result = true
+          }
         }
         proto.MlCommandResult
           .newBuilder()

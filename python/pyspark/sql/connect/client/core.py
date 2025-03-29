@@ -1982,14 +1982,17 @@ class SparkConnectClient(object):
             self.thread_local.ml_caches = set()
 
         if cache_id in self.thread_local.ml_caches:
-            self._delete_ml_cache(cache_id)
+            self._delete_ml_cache([cache_id])
 
-    def _delete_ml_cache(self, cache_id: str) -> None:
+    def _delete_ml_cache(self, cache_ids: List[str]) -> None:
         # try best to delete the cache
         try:
-            command = pb2.Command()
-            command.ml_command.delete.obj_ref.CopyFrom(pb2.ObjectRef(id=cache_id))
-            self.execute_command(command)
+            if len(cache_ids) > 0:
+                command = pb2.Command()
+                command.ml_command.delete.obj_refs.extend(
+                    [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
+                )
+                self.execute_command(command)
         except Exception:
             pass
 
@@ -1998,6 +2001,4 @@ class SparkConnectClient(object):
             self.thread_local.ml_caches = set()
 
         self.disable_reattachable_execute()
-        # Todo add a pattern to delete all model in one command
-        for model_id in self.thread_local.ml_caches:
-            self._delete_ml_cache(model_id)
+        self._delete_ml_cache([model_id for model_id in self.thread_local.ml_caches])
