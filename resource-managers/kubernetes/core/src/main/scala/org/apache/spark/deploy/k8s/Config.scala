@@ -749,6 +749,13 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
       .createWithDefaultString("20s")
 
+  val KUBERNETES_PRIORITY_CLASS_NAME =
+    ConfigBuilder("spark.kubernetes.priorityclass.name")
+      .doc("Priority class name of driver and executor pods")
+      .version("4.1.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
