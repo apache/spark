@@ -432,7 +432,7 @@ object PartitioningUtils extends SQLConfHelper {
   /**
    * Converts a string to a [[Literal]] with automatic type inference. Currently only supports
    * [[NullType]], [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
-   * [[TimestampType]], and [[StringType]].
+   * [[TimestampType]], [[TimeType]] and [[StringType]].
    *
    * When resolving conflicts, it follows the table below:
    *

@@ -1219,6 +1219,28 @@ abstract class ParquetPartitionDiscoverySuite
       checkAnswer(input, data)
     }
   }
+
+  test("Resolve type conflicts between strings and time in partition column") {
+    val df = Seq(
+      (1, "00:00:00"),
+      (2, "23:59:00.001"),
+      (3, "blah")).toDF("i", "str")
+
+    withTempPath { path =>
+      df.write.format("parquet").partitionBy("str").save(path.getAbsolutePath)
+      checkAnswer(spark.read.load(path.getAbsolutePath), df)
+    }
+  }
+
+  test("Resolve type conflicts between times and timestamps in partition column") {
+    withTempPath { path =>
+      val df = Seq((1, "23:59:59"), (2, "00:01:00"), (3, "2015-01-01 00:01:00")).toDF("i", "ts")
+      df.write.format("parquet").partitionBy("ts").save(path.getAbsolutePath)
+      checkAnswer(
+        spark.read.load(path.getAbsolutePath),
+        Row(1, "23:59:59") :: Row(2, "00:01:00") :: Row(3, "2015-01-01 00:01:00") :: Nil)
+    }
+  }
 }
 
 class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
