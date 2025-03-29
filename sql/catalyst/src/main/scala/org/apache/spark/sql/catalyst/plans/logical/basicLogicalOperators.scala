@@ -669,13 +669,17 @@ case class Join(
   override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
 
   override def metadataOutput: Seq[Attribute] = {
-    joinType match {
-      case ExistenceJoin(_) =>
-        left.metadataOutput
-      case LeftExistence(_) =>
-        left.metadataOutput
-      case _ =>
-        children.flatMap(_.metadataOutput)
+    if (resolved) {
+      joinType match {
+        case ExistenceJoin(_) =>
+          left.metadataOutput
+        case LeftExistence(_) =>
+          left.metadataOutput
+        case _ =>
+          children.flatMap(_.metadataOutput)
+      }
+    } else {
+      Seq.empty
     }
   }
 
