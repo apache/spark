@@ -388,6 +388,29 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       assertTableColumnCollation(testTable, "c4", "UTF8_BINARY")
     }
   }
+
+  test("CREATE OR REPLACE VIEW with DEFAULT COLLATION") {
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING, c2 STRING COLLATE UTF8_LCASE)")
+      sql(s"INSERT INTO $testTable VALUES ('a', 'a'), ('A', 'A'), ('b', 'b')")
+      withView(testView) {
+        // scalastyle:off
+        sql(
+          s"""CREATE OR REPLACE VIEW $testView
+             | DEFAULT COLLATION sr_ci_ai
+             | AS SELECT *, 'ć' AS c3 FROM $testTable
+             |""".stripMargin)
+        val prefix = "SYSTEM.BUILTIN"
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testView"), Row(s"$prefix.UTF8_BINARY"))
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testView"), Row(s"$prefix.UTF8_LCASE"))
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c3) FROM $testView"), Row(s"$prefix.sr_CI_AI"))
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Row(1))
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'a'"), Row(2))
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c3 = 'Č'"), Row(3))
+        // scalastyle:on
+      }
+    }
+  }
 }
 
 class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with DatasourceV2SQLBase {
@@ -407,6 +430,24 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
 
       assertTableColumnCollation(testTable, "c1", "UTF8_BINARY")
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2"), Seq(Row(0)))
+    }
+  }
+
+  test("CREATE OR REPLACE TABLE with DEFAULT COLLATION") {
+    withTable(testTable) {
+      sql(
+        s"""CREATE OR REPLACE TABLE $testTable
+           | (c1 STRING, c2 STRING COLLATE UTF8_LCASE)
+           | DEFAULT COLLATION sr_ai
+           |""".stripMargin)
+      // scalastyle:off
+      sql(s"INSERT INTO $testTable VALUES ('Ć', 'a'), ('Č', 'A'), ('C', 'b')")
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1 = 'Ć'"), Row(3))
+      // scalastyle:on
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2 = 'a'"), Row(2))
+      val prefix = "SYSTEM.BUILTIN"
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testTable"), Row(s"$prefix.sr_AI"))
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testTable"), Row(s"$prefix.UTF8_LCASE"))
     }
   }
 }
