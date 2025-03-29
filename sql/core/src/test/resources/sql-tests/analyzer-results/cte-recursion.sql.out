@@ -1167,3 +1167,55 @@ WithCTE
       +- Project [a#x]
          +- SubqueryAlias t1
             +- CTERelationRef xxxx, true, [a#x, b#x, c#x], false, false
+
+
+-- !query
+CREATE TABLE tb (
+                    next INT
+)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
+
+
+-- !query
+INSERT INTO tb VALUES (0), (1)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
++- Project [cast(col1#x as int) AS next#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT next FROM t CROSS JOIN tb
+    )
+SELECT * FROM t LIMIT 63
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [next#x]
+:              +- Join Cross
+:                 :- SubqueryAlias t
+:                 :  +- Project [1#x AS n#x]
+:                 :     +- UnionLoopRef xxxx, [1#x], false
+:                 +- SubqueryAlias spark_catalog.default.tb
+:                    +- Relation spark_catalog.default.tb[next#x] parquet
++- GlobalLimit 63
+   +- LocalLimit 63
+      +- Project [n#x]
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+DROP TABLE tb
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tb
