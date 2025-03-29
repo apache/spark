@@ -328,7 +328,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
   // This is a temporary solution, we will change the type of children to IndexedSeq in a
   // followup PR
-  private def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
+  protected def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
     seq match {
       case types: IndexedSeq[BaseType] => types
       case other => other.toIndexedSeq
@@ -1345,6 +1345,30 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   }
 
   protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
+}
+
+trait NaryLike[T <: TreeNode[T]] { self : TreeNode[T] =>
+
+  override final def mapChildren(f: T => T): T = {
+    val newChildren = children.map { child =>
+      val newChild = f(child)
+      if (newChild fastEquals child) {
+        child
+      } else {
+        newChild
+      }
+    }
+
+    if (newChildren.eq(children)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(asIndexedSeq(newChildren))
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
 }
 
 object MultiTransform {
