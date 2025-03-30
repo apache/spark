@@ -256,7 +256,7 @@ case class Crc32(child: Expression)
  *                             input with seed.
  *  - binary:                  use murmur3 to hash the bytes with seed.
  *  - string:                  get the bytes of string and hash it.
- *  - time:                    it store long value of `microseconds` since the midnight, use
+ *  - time:                    it stores long value of `microseconds` since the midnight, use
  *                             murmur3 to hash the long input with seed.
  *  - array:                   The `result` starts with seed, then use `result` as seed, recursively
  *                             calculate hash value for each element, and assign the element hash
