@@ -101,7 +101,7 @@ object DataTypeTestUtils {
     TimestampNTZType,
     DateType,
     StringType,
-    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
+    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes ++ timeTypes
 
   /**
    * All the types that we can use in a property check
