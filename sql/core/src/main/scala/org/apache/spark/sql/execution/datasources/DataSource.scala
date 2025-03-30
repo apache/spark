@@ -262,7 +262,8 @@ case class DataSource(
 
         val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
-        val isSingleVariantColumn = providingClass == classOf[json.JsonFileFormat] &&
+        val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
+          providingClass == classOf[csv.CSVFileFormat]) &&
           caseInsensitiveOptions.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && !isSingleVariantColumn &&

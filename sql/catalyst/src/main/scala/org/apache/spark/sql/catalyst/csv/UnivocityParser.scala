@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.univocity.parsers.common.TextParsingException
@@ -139,7 +140,7 @@ class UnivocityParser(
   // When `options.needHeaderForSingleVariantColumn` is true, it will be set to the header column
   // names by `CSVDataSource.readHeaderForSingleVariantColumn`.
   var headerColumnNames: Option[Array[String]] = None
-  private var singleVariantFieldConverters: Array[VariantValueConverter] = null
+  private val singleVariantFieldConverters = new ArrayBuffer[VariantValueConverter]()
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -354,8 +355,9 @@ class UnivocityParser(
     try {
       val keys = headerColumnNames.orNull
       val numFields = if (keys != null) tokens.length.min(keys.length) else tokens.length
-      if (singleVariantFieldConverters == null) {
-        singleVariantFieldConverters = Array.fill(numFields)(new VariantValueConverter)
+      if (singleVariantFieldConverters.length < numFields) {
+        val extra = numFields - singleVariantFieldConverters.length
+        singleVariantFieldConverters.appendAll(Array.fill(extra)(new VariantValueConverter))
       }
       val builder = new VariantBuilder(false)
       val start = builder.getWritePos
@@ -364,21 +366,14 @@ class UnivocityParser(
         val key = if (keys != null) keys(i) else "_c" + i
         val id = builder.addKey(key)
         fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
-        val converter = if (i < singleVariantFieldConverters.length) {
-          singleVariantFieldConverters(i)
-        } else {
-          // If we reach here, we will throw an exception below.
-          new VariantValueConverter
-        }
-        converter.convertInput(builder, tokens(i))
+        singleVariantFieldConverters(i).convertInput(builder, tokens(i))
       }
       builder.finishWritingObject(start, fields)
       val v = builder.result()
       row(0) = new VariantVal(v.getValue, v.getMetadata)
-      // The header line and all content lines must all have the same number of tokens, otherwise
-      // the CSV data is malformed. We may still have partially parsed data in `row`.
-      if ((keys != null && keys.length != tokens.length) ||
-          singleVariantFieldConverters.length != tokens.length) {
+      // If the header line has different number of tokens than the content line, the CSV data is
+      // malformed. We may still have partially parsed data in `row`.
+      if (keys != null && keys.length != tokens.length) {
         throw QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)
       }
       row
@@ -448,6 +443,19 @@ class UnivocityParser(
     }
   }
 
+  /**
+   * This class converts a comma-separated value into a variant column (when the schema contains
+   * variant type) or a variant field (when in singleVariantColumn mode).
+   *
+   * It has a list of scalar types to try (long, decimal, date, timestamp, boolean) and maintains
+   * the current content type. It tries to parse the input as the current content type. If the
+   * parsing fails, it moves to the next type in the list and continues the trial. It never checks
+   * the previous types that have already failed. In the end, it either successfully parses the
+   * input as a specific scalar type, or fails after trying all the types and defaults to the string
+   * type. The state is reset for every input file.
+   *
+   * Floating point types (double, float) are not considered to avoid precision loss.
+   */
   private final class VariantValueConverter extends ValueConverter {
     private var currentType: DataType = LongType
 
@@ -458,11 +466,6 @@ class UnivocityParser(
       new VariantVal(v.getValue, v.getMetadata)
     }
 
-    /**
-     * Convert a CSV value `s` into a variant value and append the result to `builder`.
-     * The result can only be one of a variant boolean/numeric/string. Anything that cannot be
-     * precisely represented by a variant boolean/numeric will be represented by a variant string.
-     */
     def convertInput(builder: VariantBuilder, s: String): Unit = {
       if (s == null || s == options.nullValue) {
         builder.appendNull()
@@ -472,6 +475,8 @@ class UnivocityParser(
       def parseLong(): DataType = {
         try {
           builder.appendLong(s.toLong)
+          // The actual integral type doesn't matter. `appendLong` will use the smallest possible
+          // integral type to store the value.
           LongType
         } catch {
           case NonFatal(_) => parseDecimal()
@@ -480,10 +485,15 @@ class UnivocityParser(
 
       def parseDecimal(): DataType = {
         try {
-          val d = decimalParser(s)
+          var d = decimalParser(s)
+          if (d.scale() < 0) {
+            d = d.setScale(0)
+          }
           if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
             d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
             builder.appendDecimal(d)
+            // The actual decimal type doesn't matter. `appendDecimal` will use the smallest
+            // possible decimal type to store the value.
             DecimalType.USER_DEFAULT
           } else {
             parseDate()
@@ -531,7 +541,6 @@ class UnivocityParser(
       val newType = currentType match {
         case LongType => parseLong()
         case _: DecimalType => parseDecimal()
-        //      case DoubleType => parseDouble()
         case DateType => parseDate()
         case TimestampType => parseTimestamp()
         case BooleanType => parseBoolean()

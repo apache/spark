@@ -3499,7 +3499,7 @@ abstract class CSVSuite
       val data =
         """field 1,field2
           |100,1.1
-          |2000-01-01,2000-01-01 00:00:00
+          |2000-01-01,2000-01-01 01:02:03
           |,true
           |1e9,hello,extra
           |missing
@@ -3514,32 +3514,50 @@ abstract class CSVSuite
         )
       }
 
+      val legacy = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
+      val timestampResult = if (legacy) "2000-01-01" else "2000-01-01 01:02:03+00:00"
+
       checkSingleVariant(Map(),
         """{"_c0":"field 1","_c1":"field2"}""",
         """{"_c0":"100","_c1":"1.1"}""",
-        """{"_c0":"2000-01-01","_c1":"2000-01-01 00:00:00"}""",
+        """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
         """{"_c0":null,"_c1":"true"}""",
         """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
         """{"_c0":"missing"}""")
 
+      // With a small enough partition size, every line is parsed in a separate partition, so every
+      // value has the chance to try all scalar types.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"field 1","_c1":"field2"}""",
+          """{"_c0":100,"_c1":1.1}""",
+          s"""{"_c0":"2000-01-01","_c1":"$timestampResult"}""",
+          """{"_c0":null,"_c1":true}""",
+          """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+          """{"_c0":"missing"}""")
+      }
+
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         checkSingleVariant(Map("header" -> "true"),
           """{"field 1":100,"field2":1.1}""",
-          """{"field 1":"2000-01-01","field2":"2000-01-01 00:00:00+00:00"}""",
+          s"""{"field 1":"2000-01-01","field2":"$timestampResult"}""",
           """{"field 1":null,"field2":true}""",
           """{"field 1":"1e9","field2":"hello"}""",
           """{"field 1":"missing"}""")
       }
 
-      checkError(
-        exception = intercept[SparkException] {
-          val options = Map("singleVariantColumn" -> "v", "mode" -> "failfast")
-          spark.read.options(options).csv(path.getCanonicalPath).collect()
-        }.getCause.asInstanceOf[SparkException],
-        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> """[{"_c0":"1e9","_c1":"hello","_c2":"extra"}]""",
-          "failFastMode" -> "FAILFAST")
-      )
+      // Validate `CSVDataSource.setHeaderForSingleVariantColumn` works, no matter whether the
+      // partition is at the file start.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("header" -> "true"),
+          """{"field 1":100,"field2":1.1}""",
+          s"""{"field 1":"2000-01-01","field2":"$timestampResult"}""",
+          """{"field 1":null,"field2":true}""",
+          """{"field 1":1000000000,"field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
 
       checkError(
         exception = intercept[SparkException] {
@@ -3563,14 +3581,14 @@ abstract class CSVSuite
       checkSchema(Map(),
         ("field 1", "field2"),
         ("100", "1.1"),
-        ("2000-01-01", "2000-01-01 00:00:00"),
+        ("2000-01-01", "2000-01-01 01:02:03"),
         (null, "true"),
         ("1e9", "hello"),
         ("missing", null))
 
       checkSchema(Map("header" -> "true"),
         ("100", "1.1"),
-        ("2000-01-01", "2000-01-01 00:00:00"),
+        ("2000-01-01", if (legacy) "2000-01-01" else "2000-01-01 01:02:03"),
         (null, "true"),
         ("1e9", "hello"),
         ("missing", null))

@@ -94,17 +94,30 @@ object CSVDataSource extends Logging {
     }
   }
 
-  def readHeaderForSingleVariantColumn(
+  /**
+   * Returns a function that sets the header column names used in singleVariantColumn mode. The
+   * returned function takes an optional input, which is the header column names potentially read by
+   * `CSVHeaderChecker`. The function only needs to read the file when the input is empty (e.g.,
+   * `CSVHeaderChecker` won't read anything when the partition is not at the file start).
+   *
+   * We need to return a function here instead of letting `CSVHeaderChecker` call this function
+   * directly, because this package (also the `CSVUtils` class) depends on `CSVHeaderChecker`.
+   */
+  def setHeaderForSingleVariantColumn(
       conf: Configuration,
       file: PartitionedFile,
-      parser: UnivocityParser): Unit = {
+      parser: UnivocityParser): Option[Option[Array[String]] => Unit] =
     if (parser.options.needHeaderForSingleVariantColumn) {
-      parser.headerColumnNames =
-        CSVUtils.readHeaderLine(file.toPath, parser.options, conf).map { line =>
-          new CsvParser(parser.options.asParserSettings).parseLine(line)
+      Some(headerColumnNames => {
+        parser.headerColumnNames = headerColumnNames.orElse {
+          CSVUtils.readHeaderLine(file.toPath, parser.options, conf).map { line =>
+            new CsvParser(parser.options.asParserSettings).parseLine(line)
+          }
         }
+      })
+    } else {
+      None
     }
-  }
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
@@ -126,7 +139,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       }
     }
 
-    CSVDataSource.readHeaderForSingleVariantColumn(conf, file, parser)
+    headerChecker.setHeaderForSingleVariantColumn =
+      CSVDataSource.setHeaderForSingleVariantColumn(conf, file, parser)
     UnivocityParser.parseIterator(lines, parser, headerChecker, requiredSchema)
   }
 
@@ -204,7 +218,8 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       parser: UnivocityParser,
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
-    CSVDataSource.readHeaderForSingleVariantColumn(conf, file, parser)
+    headerChecker.setHeaderForSingleVariantColumn =
+      CSVDataSource.setHeaderForSingleVariantColumn(conf, file, parser)
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
       parser,
