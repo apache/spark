@@ -262,8 +262,8 @@ ALL_GATHER_FUNCTION = 2
 
 
 def _load_from_socket(
-    port: Optional[Union[str, int]],
-    auth_secret: str,
+    conn_info: Optional[Union[str, int]],
+    auth_secret: Optional[str],
     function: int,
     all_gather_message: Optional[str] = None,
 ) -> List[str]:
@@ -271,7 +271,7 @@ def _load_from_socket(
     Load data from a given socket, this is a blocking method thus only return when the socket
     connection has been closed.
     """
-    (sockfile, sock) = local_connect_and_auth(port, auth_secret)
+    (sockfile, sock) = local_connect_and_auth(conn_info, auth_secret)
 
     # The call may block forever, so no timeout
     sock.settimeout(None)

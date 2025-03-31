@@ -731,7 +731,9 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) -> Tuple:
+def local_connect_and_auth(
+    conn_info: Optional[Union[str, int]], auth_secret: Optional[str]
+) -> Tuple:
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
@@ -739,13 +741,35 @@ def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) ->
     Parameters
     ----------
     port : str or int, optional
-    auth_secret : str
+    auth_secret : str, optional
 
     Returns
     -------
     tuple
         with (sockfile, sock)
     """
+    is_unix_domain_socket = str(conn_info) and auth_secret is None
+    if is_unix_domain_socket:
+        sock_path = conn_info
+        assert isinstance(sock_path, str)
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
+            sock.connect(sock_path)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            return (sockfile, sock)
+        except socket.error as e:
+            if sock is not None:
+                sock.close()
+            raise PySparkRuntimeError(
+                errorClass="CANNOT_OPEN_SOCKET",
+                messageParameters={
+                    "errors": "tried to connect to %s, but an error occurred: %s"
+                    % (sock_path, str(e)),
+                },
+            )
+
     sock = None
     errors = []
     # Support for both IPv4 and IPv6.

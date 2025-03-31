@@ -70,6 +70,14 @@ private[spark] object Python {
     .booleanConf
     .createWithDefault(false)
 
+  val PYTHON_UNIX_DOMAIN_SOCKET_ENABLED = ConfigBuilder("spark.python.unix.domain.socket.enabled")
+    .doc("When true, Python Driver process uses Unix domain sockets for better performance " +
+      "and permission controls when it collects and send data from/to JVM. This configuration " +
+      "is only effective for Spark Classic.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   private val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY = "spark.python.worker.idleTimeoutSeconds"
   private val PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY = "spark.python.worker.killOnIdleTimeout"
 

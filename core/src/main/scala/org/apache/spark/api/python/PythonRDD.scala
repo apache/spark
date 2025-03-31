@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
+import java.nio.channels.{Channels, SocketChannel}
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
@@ -231,9 +232,9 @@ private[spark] object PythonRDD extends Logging {
    *         server object that can be used to join the JVM serving thread in Python.
    */
   def toLocalIteratorAndServe[T](rdd: RDD[T], prefetchPartitions: Boolean = false): Array[Any] = {
-    val handleFunc = (sock: Socket) => {
-      val out = new DataOutputStream(sock.getOutputStream)
-      val in = new DataInputStream(sock.getInputStream)
+    val handleFunc = (sock: SocketChannel) => {
+      val out = new DataOutputStream(Channels.newOutputStream(sock))
+      val in = new DataInputStream(Channels.newInputStream(sock))
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Collects a partition on each iteration
         val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
@@ -287,7 +288,7 @@ private[spark] object PythonRDD extends Logging {
     }
 
     val server = new SocketFuncServer(authHelper, "serve toLocalIterator", handleFunc)
-    Array(server.port, server.secret, server)
+    Array(server.connInfo, server.secret, server)
   }
 
   def readRDDFromFile(
@@ -831,21 +832,21 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
 
   def setupEncryptionServer(): Array[Any] = {
     encryptionServer = new SocketAuthServer[Unit]("broadcast-encrypt-server") {
-      override def handleConnection(sock: Socket): Unit = {
+      override def handleConnection(sock: SocketChannel): Unit = {
         val env = SparkEnv.get
-        val in = sock.getInputStream()
+        val in = Channels.newInputStream(sock)
         val abspath = new File(path).getAbsolutePath
         val out = env.serializerManager.wrapForEncryption(new FileOutputStream(abspath))
         DechunkedInputStream.dechunkAndCopyToOutput(in, out)
       }
     }
-    Array(encryptionServer.port, encryptionServer.secret)
+    Array(encryptionServer.connInfo, encryptionServer.secret)
   }
 
   def setupDecryptionServer(): Array[Any] = {
     decryptionServer = new SocketAuthServer[Unit]("broadcast-decrypt-server-for-driver") {
-      override def handleConnection(sock: Socket): Unit = {
-        val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()))
+      override def handleConnection(sock: SocketChannel): Unit = {
+        val out = new DataOutputStream(new BufferedOutputStream(Channels.newOutputStream(sock)))
         Utils.tryWithSafeFinally {
           val in = SparkEnv.get.serializerManager.wrapForEncryption(new FileInputStream(path))
           Utils.tryWithSafeFinally {
@@ -859,7 +860,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
         }
       }
     }
-    Array(decryptionServer.port, decryptionServer.secret)
+    Array(decryptionServer.connInfo, decryptionServer.secret)
   }
 
   def waitTillBroadcastDataSent(): Unit = decryptionServer.getResult()
@@ -945,8 +946,8 @@ private[spark] class EncryptedPythonBroadcastServer(
     val idsAndFiles: Seq[(Long, String)])
     extends SocketAuthServer[Unit]("broadcast-decrypt-server") with Logging {
 
-  override def handleConnection(socket: Socket): Unit = {
-    val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()))
+  override def handleConnection(socket: SocketChannel): Unit = {
+    val out = new DataOutputStream(new BufferedOutputStream(Channels.newOutputStream(socket)))
     var socketIn: InputStream = null
     // send the broadcast id, then the decrypted data.  We don't need to send the length, the
     // the python pickle module just needs a stream.
@@ -962,7 +963,7 @@ private[spark] class EncryptedPythonBroadcastServer(
       }
       logTrace("waiting for python to accept broadcast data over socket")
       out.flush()
-      socketIn = socket.getInputStream()
+      socketIn = Channels.newInputStream(socket)
       socketIn.read()
       logTrace("done serving broadcast data")
     } {
@@ -983,8 +984,8 @@ private[spark] class EncryptedPythonBroadcastServer(
 private[spark] abstract class PythonRDDServer
     extends SocketAuthServer[JavaRDD[Array[Byte]]]("pyspark-parallelize-server") {
 
-  def handleConnection(sock: Socket): JavaRDD[Array[Byte]] = {
-    val in = sock.getInputStream()
+  def handleConnection(sock: SocketChannel): JavaRDD[Array[Byte]] = {
+    val in = Channels.newInputStream(sock)
     val dechunkedInput: InputStream = new DechunkedInputStream(in)
     streamToRDD(dechunkedInput)
   }

@@ -18,6 +18,7 @@ package org.apache.spark.security
 
 import java.io.Closeable
 import java.net._
+import java.nio.channels.{ServerSocketChannel, SocketChannel}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
@@ -56,9 +57,10 @@ class SocketAuthHelperSuite extends SparkFunSuite {
   }
 
   private class ServerThread extends Thread with Closeable {
-
-    private val ss = new ServerSocket()
-    ss.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
+    private val serverSocketChannel = ServerSocketChannel.open()
+    serverSocketChannel.configureBlocking(true)
+    serverSocketChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
+    serverSocketChannel.configureBlocking(true)
 
     @volatile var error: Exception = _
     @volatile var authenticated = false
@@ -66,14 +68,16 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     setDaemon(true)
     start()
 
-    def createClient(): Socket = {
-      new Socket(InetAddress.getLoopbackAddress(), ss.getLocalPort())
+    def createClient(): SocketChannel = {
+      val socket = serverSocketChannel.accept()
+      socket.configureBlocking(true)
+      socket
     }
 
     override def run(): Unit = {
-      var clientConn: Socket = null
+      var clientConn: SocketChannel = null
       try {
-        clientConn = ss.accept()
+        clientConn = serverSocketChannel.accept()
         authHelper.authClient(clientConn)
         authenticated = true
       } catch {
@@ -86,7 +90,7 @@ class SocketAuthHelperSuite extends SparkFunSuite {
 
     override def close(): Unit = {
       try {
-        ss.close()
+        serverSocketChannel.close()
       } finally {
         interrupt()
       }
