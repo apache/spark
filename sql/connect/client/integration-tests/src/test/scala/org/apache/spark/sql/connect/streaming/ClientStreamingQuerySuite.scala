@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.connect.streaming
 
 import java.io.{File, FileWriter}
 import java.nio.file.Paths
@@ -33,6 +33,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter, Row}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener, Trigger}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SparkFileUtils

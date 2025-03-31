@@ -28,8 +28,8 @@ import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder, StringEncoder}
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.functions.{call_function, col, count, lit, struct, udaf, udf}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
 
 /**
  * All tests in this class requires client UDF defined in this test class synced with the server.
