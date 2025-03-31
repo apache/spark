@@ -493,6 +493,22 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
       withSparkSession(test, Int.MaxValue, None, enableIOEncryption)
     }
   }
+
+  test("SPARK-51505: log empty partition number metrics") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+        val df = spark.range(0, 1000, 1, 5).withColumn("value", when(col("id") < 500, 0)
+            .otherwise(1)).groupBy("value").agg("value" -> "sum")
+        df.collect()
+        val plan = df.queryExecution.executedPlan
+        val coalesce = collectFirst(plan) {
+          case e: AQEShuffleReadExec => e
+        }.get
+        assert(coalesce.metrics("numEmptyPartitions").value == 3)
+      }
+    }
+    withSparkSession(test, 100, None)
+  }
 }
 
 object CoalescedShuffleRead {

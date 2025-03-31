@@ -188,7 +188,12 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   procedures.put(Identifier.of(Array("dummy"), "increment"), UnboundIncrement)
 
   protected def allNamespaces: Seq[Seq[String]] = {
-    (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
+    (tables.keySet.asScala.map(_.namespace.toSeq)
+      ++ namespaces.keySet.asScala
+      ++ procedures.keySet.asScala
+      .filter(i => !i.namespace.sameElements(Array("dummy")))
+      .map(_.namespace.toSeq)
+      ).toSeq.distinct
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = {
@@ -270,6 +275,17 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     val procedure = procedures.get(ident)
     if (procedure == null) throw new RuntimeException("Procedure not found: " + ident)
     procedure
+  }
+
+  override def listProcedures(namespace: Array[String]): Array[Identifier] = {
+    val result =
+      if (namespaceExists(namespace)) {
+        procedures.keySet.asScala
+          .filter(_.namespace.sameElements(namespace))
+      } else {
+        throw new NoSuchNamespaceException(namespace)
+      }
+    result.filter(!_.namespace.sameElements(Array("dummy"))).toArray
   }
 
   object UnboundIncrement extends UnboundProcedure {

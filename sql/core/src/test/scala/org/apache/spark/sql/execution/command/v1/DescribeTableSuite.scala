@@ -26,6 +26,7 @@ import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.execution.command.{DescribeTableJson, Field, TableColumn, Type}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
@@ -436,6 +437,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |  id INT
            |)
            |USING parquet COMMENT 'table_comment'
+           |DEFAULT COLLATION UTF8_BINARY
            |""".stripMargin
       spark.sql(tableCreationStr)
 
@@ -458,6 +460,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         storage_properties = None,
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
@@ -468,6 +471,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         } else {
           None
         },
+        // table_properties should not include collation
         table_properties = None
       )
       assert(parsedOutput.location.isDefined)
@@ -529,56 +533,73 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
   }
 
   test("DESCRIBE AS JSON view") {
-    Seq(true, false).foreach { isTemp =>
-      withNamespaceAndTable("ns", "table") { t =>
-        withView("view") {
-          val tableCreationStr =
-            s"""
-               |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
-               |  USING parquet
-               |  OPTIONS ('compression' 'snappy')
-               |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
-               |  COMMENT 'test temp view'
-               |  TBLPROPERTIES ('parquet.encryption' = 'true')
-               |""".stripMargin
-          spark.sql(tableCreationStr)
-          val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
-          spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
-          val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
-          val firstRow = descriptionDf.select("json_metadata").head()
-          val jsonValue = firstRow.getString(0)
-          val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "false",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.FILE_COMPRESSION_FACTOR.key -> "2.0") {
+        Seq(true, false).foreach { isTemp =>
+          withNamespaceAndTable("ns", "table") { t =>
+            withView("view") {
+              val tableCreationStr =
+                s"""
+                   |CREATE TABLE $t (id INT, name STRING, created_at TIMESTAMP)
+                   |  USING parquet
+                   |  OPTIONS ('compression' 'snappy')
+                   |  CLUSTERED BY (id, name) SORTED BY (created_at) INTO 4 BUCKETS
+                   |  COMMENT 'test temp view'
+                   |  TBLPROPERTIES ('parquet.encryption' = 'true')
+                   |""".stripMargin
+              spark.sql(tableCreationStr)
+              val viewType = if (isTemp) "TEMP VIEW" else "VIEW"
+              spark.sql(s"CREATE $viewType view AS SELECT * FROM $t")
+              val descriptionDf = spark.sql(s"DESCRIBE EXTENDED view AS JSON")
+              val firstRow = descriptionDf.select("json_metadata").head()
+              val jsonValue = firstRow.getString(0)
+              val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
-          val expectedOutput = DescribeTableJson(
-            table_name = Some("view"),
-            catalog_name = if (isTemp) Some("system") else Some("spark_catalog"),
-            namespace = if (isTemp) Some(List("session")) else Some(List("default")),
-            schema_name = if (isTemp) Some("session") else Some("default"),
-            columns = Some(List(
-              TableColumn("id", Type("int")),
-              TableColumn("name", Type("string", collation = Some("UTF8_BINARY"))),
-              TableColumn("created_at", Type("timestamp_ltz"))
-            )),
-            last_access = Some("UNKNOWN"),
-            created_by = Some(s"Spark $SPARK_VERSION"),
-            `type` = Some("VIEW"),
-            view_text = Some("SELECT * FROM spark_catalog.ns.table"),
-            view_original_text = if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
-            // TODO: this is unexpected and temp view should also use COMPENSATION mode.
-            view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
-            view_catalog_and_namespace = Some("spark_catalog.default"),
-            view_query_output_columns = Some(List("id", "name", "created_at"))
-          )
+              val expectedOutput = DescribeTableJson(
+                table_name = Some("view"),
+                catalog_name = if (isTemp) Some("system") else Some("spark_catalog"),
+                namespace = if (isTemp) Some(List("session")) else Some(List("default")),
+                schema_name = if (isTemp) Some("session") else Some("default"),
+                columns = Some(List(
+                  TableColumn("id", Type("int")),
+                  TableColumn("name", Type("string", collation = Some("UTF8_BINARY"))),
+                  TableColumn("created_at", Type("timestamp_ltz"))
+                )),
+                last_access = Some("UNKNOWN"),
+                created_by = Some(s"Spark $SPARK_VERSION"),
+                `type` = Some("VIEW"),
+                view_text = Some("SELECT * FROM spark_catalog.ns.table"),
+                view_original_text =
+                  if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
+                // TODO: this is unexpected and temp view should also use COMPENSATION mode.
+                view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
+                view_catalog_and_namespace = Some("spark_catalog.default"),
+                view_query_output_columns = Some(List("id", "name", "created_at"))
+              )
 
-          assert(iso8601Regex.matches(parsedOutput.created_time.get))
-          assert(expectedOutput == parsedOutput.copy(
-            created_time = None,
-            table_properties = None,
-            storage_properties = None,
-            serde_library = None))
+              assert(iso8601Regex.matches(parsedOutput.created_time.get))
+              assert(expectedOutput == parsedOutput.copy(
+                created_time = None,
+                table_properties = None,
+                storage_properties = None,
+                serde_library = None,
+                view_creation_spark_configuration = None
+              ))
+              // assert output contains Spark confs set at view creation
+              if (!isTemp) {
+                assert(parsedOutput.view_creation_spark_configuration
+                  .get("spark.sql.ansi.enabled") == "false")
+                assert(parsedOutput.view_creation_spark_configuration
+                  .get("spark.sql.parquet.enableVectorizedReader") == "true")
+                assert(parsedOutput.view_creation_spark_configuration
+                  .get("spark.sql.sources.fileCompressionFactor") == "2.0")
+              }
+            }
+          }
         }
       }
-    }
   }
 
   test("DESCRIBE AS JSON for column throws Analysis Exception") {
@@ -846,67 +867,3 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
     }
   }
 }
-
-/** Represents JSON output of DESCRIBE TABLE AS JSON */
-case class DescribeTableJson(
-    table_name: Option[String] = None,
-    catalog_name: Option[String] = None,
-    namespace: Option[List[String]] = Some(Nil),
-    schema_name: Option[String] = None,
-    columns: Option[List[TableColumn]] = Some(Nil),
-    created_time: Option[String] = None,
-    last_access: Option[String] = None,
-    created_by: Option[String] = None,
-    `type`: Option[String] = None,
-    provider: Option[String] = None,
-    bucket_columns: Option[List[String]] = Some(Nil),
-    sort_columns: Option[List[String]] = Some(Nil),
-    comment: Option[String] = None,
-    table_properties: Option[Map[String, String]] = None,
-    location: Option[String] = None,
-    serde_library: Option[String] = None,
-    storage_properties: Option[Map[String, String]] = None,
-    partition_provider: Option[String] = None,
-    partition_columns: Option[List[String]] = Some(Nil),
-    partition_values: Option[Map[String, String]] = None,
-    clustering_columns: Option[List[String]] = None,
-    statistics: Option[Map[String, Any]] = None,
-    view_text: Option[String] = None,
-    view_original_text: Option[String] = None,
-    view_schema_mode: Option[String] = None,
-    view_catalog_and_namespace: Option[String] = None,
-    view_query_output_columns: Option[List[String]] = None
-  )
-
-/** Used for columns field of DescribeTableJson */
-case class TableColumn(
-  name: String,
-  `type`: Type,
-  element_nullable: Boolean = true,
-  comment: Option[String] = None,
-  default: Option[String] = None
-)
-
-case class Type(
-   name: String,
-   collation: Option[String] = None,
-   length: Option[Int] = None,
-   fields: Option[List[Field]] = None,
-   `type`: Option[Type] = None,
-   element_type: Option[Type] = None,
-   key_type: Option[Type] = None,
-   value_type: Option[Type] = None,
-   comment: Option[String] = None,
-   default: Option[String] = None,
-   element_nullable: Option[Boolean] = Some(true),
-   value_nullable: Option[Boolean] = Some(true),
-   nullable: Option[Boolean] = Some(true)
-)
-
-case class Field(
-  name: String,
-  `type`: Type,
-  element_nullable: Boolean = true,
-  comment: Option[String] = None,
-  default: Option[String] = None
-)

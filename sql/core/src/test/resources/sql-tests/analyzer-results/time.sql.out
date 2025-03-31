@@ -44,3 +44,78 @@ select to_time("13-60", "HH-mm")
 -- !query analysis
 Project [to_time(13-60, Some(HH-mm)) AS to_time(13-60, HH-mm)#x]
 +- OneRowRelation
+
+
+-- !query
+select try_to_time(null), try_to_time('00:12:00'), try_to_time('01:02:03', 'HH:mm:ss')
+-- !query analysis
+Project [try_to_time(to_time(null, None)) AS try_to_time(to_time(NULL))#x, try_to_time(to_time(00:12:00, None)) AS try_to_time(to_time(00:12:00))#x, try_to_time(to_time(01:02:03, Some(HH:mm:ss))) AS try_to_time(to_time(01:02:03, HH:mm:ss))#x]
++- OneRowRelation
+
+
+-- !query
+select try_to_time(1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"to_time(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "try_to_time(1)"
+  } ]
+}
+
+
+-- !query
+select try_to_time('12:48:31 abc')
+-- !query analysis
+Project [try_to_time(to_time(12:48:31 abc, None)) AS try_to_time(to_time(12:48:31 abc))#x]
++- OneRowRelation
+
+
+-- !query
+select try_to_time('10:11:12.', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [try_to_time(to_time(10:11:12., Some(HH:mm:ss.SSSSSS))) AS try_to_time(to_time(10:11:12., HH:mm:ss.SSSSSS))#x]
++- OneRowRelation
+
+
+-- !query
+select try_to_time("02-69", "HH-mm")
+-- !query analysis
+Project [try_to_time(to_time(02-69, Some(HH-mm))) AS try_to_time(to_time(02-69, HH-mm))#x]
++- OneRowRelation
+
+
+-- !query
+select try_to_time('11:12:13', 'HH:mm:ss', 'SSSSSS')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2]",
+    "functionName" : "`try_to_time`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "try_to_time('11:12:13', 'HH:mm:ss', 'SSSSSS')"
+  } ]
+}

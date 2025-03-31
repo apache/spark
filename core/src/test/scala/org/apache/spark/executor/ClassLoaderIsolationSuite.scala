@@ -29,21 +29,28 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
     .take(2)
     .mkString(".")
 
-  val jar1 = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
+  private val jarURL1 = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+  private lazy val jar1 = jarURL1.toString
 
   // package com.example
   // object Hello { def test(): Int = 2 }
   // case class Hello(x: Int, y: Int)
-  val jar2 = Thread.currentThread().getContextClassLoader
-    .getResource(s"TestHelloV2_$scalaVersion.jar").toString
+  private val jarURL2 = Thread.currentThread().getContextClassLoader
+    .getResource(s"TestHelloV2_$scalaVersion.jar")
+  private lazy val jar2 = jarURL2.toString
 
   // package com.example
   // object Hello { def test(): Int = 3 }
   // case class Hello(x: String)
-  val jar3 = Thread.currentThread().getContextClassLoader
-    .getResource(s"TestHelloV3_$scalaVersion.jar").toString
+  private val jarURL3 = Thread.currentThread().getContextClassLoader
+    .getResource(s"TestHelloV3_$scalaVersion.jar")
+  private lazy val jar3 = jarURL3.toString
 
   test("Executor classloader isolation with JobArtifactSet") {
+    assume(jarURL1 != null)
+    assume(jarURL2 != null)
+    assume(jarURL3 != null)
+
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     sc.addJar(jar1)
     sc.addJar(jar2)

@@ -17,14 +17,18 @@
 import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
+from typing import Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
 
+from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.errors.utils import ErrorClassesReader
 from pyspark.logger import PySparkLogger
 from pickle import PicklingError
 
 if TYPE_CHECKING:
     from pyspark.sql.types import Row
+
+
+T = TypeVar("T", bound="PySparkException")
 
 
 class PySparkException(Exception):
@@ -449,3 +453,30 @@ class QueryContext(ABC):
         Summary of the exception cause.
         """
         ...
+
+
+def recover_python_exception(e: T) -> T:
+    """
+    Recover Python exception stack trace.
+
+    Many JVM exceptions types may wrap Python exceptions. For example:
+    - UDFs can cause PythonException
+    - UDTFs and Data Sources can cause AnalysisException
+    """
+    python_exception_header = "Traceback (most recent call last):"
+    try:
+        message = str(e)
+        start = message.find(python_exception_header)
+        if start == -1:
+            # No Python exception found
+            return e
+
+        # The message contains a Python exception. Parse it to use it as the exception's traceback.
+        # This allows richer error messages, for example showing line content in Python UDF.
+        python_exception_string = message[start:]
+        tb = Traceback.from_string(python_exception_string)
+        tb.populate_linecache()
+        return e.with_traceback(tb.as_traceback())
+    except BaseException:
+        # Parsing the stacktrace is best effort.
+        return e

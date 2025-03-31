@@ -1537,11 +1537,16 @@ class AstBuilder extends DataTypeAstBuilder
       val newProjectList: Seq[NamedExpression] = if (isPipeOperatorSelect) {
         // If this is a pipe operator |> SELECT clause, add a [[PipeExpression]] wrapping
         // each alias in the project list, so the analyzer can check invariants later.
+        def withPipeExpression(node: UnaryExpression): NamedExpression = {
+          node.withNewChildren(Seq(
+              PipeExpression(node.child, isAggregate = false, PipeOperators.selectClause)))
+            .asInstanceOf[NamedExpression]
+        }
         namedExpressions.map {
           case a: Alias =>
-            a.withNewChildren(Seq(
-                PipeExpression(a.child, isAggregate = false, PipeOperators.selectClause)))
-              .asInstanceOf[NamedExpression]
+            withPipeExpression(a)
+          case u: UnresolvedAlias =>
+            withPipeExpression(u)
           case other =>
             other
         }
@@ -3153,7 +3158,9 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitFrameBound(ctx: FrameBoundContext): Expression = withOrigin(ctx) {
     def value: Expression = {
       val e = expression(ctx.expression)
-      validate(e.resolved && e.foldable, "Frame bound value must be a literal.", ctx)
+      validate(
+        e.resolved && e.foldable || e.isInstanceOf[Parameter],
+        "Frame bound value must be a literal.", ctx)
       e
     }
 
@@ -4399,16 +4406,6 @@ class AstBuilder extends DataTypeAstBuilder
         withIdentClause(ctx.identifierReference, UnresolvedNamespace(_)),
         visitLocationSpec(ctx.locationSpec))
     }
-  }
-
-  /**
-   * Create a [[ShowNamespaces]] command.
-   */
-  override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
-    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowNamespaces(
-      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
-      Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
 
   /**

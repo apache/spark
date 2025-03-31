@@ -506,6 +506,8 @@ class SparkSubmitSuite
 
   test("SPARK-47495: Not to add primary resource to jars again" +
     " in k8s client mode & driver runs inside a POD") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -514,7 +516,7 @@ class SparkSubmitSuite
       "--class", "org.SomeClass",
       "--driver-memory", "1g",
       "--conf", "spark.kubernetes.submitInDriver=true",
-      "--jars", "src/test/resources/TestUDTF.jar",
+      "--jars", testJar,
       "/home/jarToIgnore.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -524,6 +526,8 @@ class SparkSubmitSuite
   }
 
   test("SPARK-33782: handles k8s files download to current directory") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -537,7 +541,7 @@ class SparkSubmitSuite
       "--files", "src/test/resources/test_metrics_config.properties",
       "--py-files", "src/test/resources/test_metrics_system.properties",
       "--archives", "src/test/resources/log4j2.properties",
-      "--jars", "src/test/resources/TestUDTF.jar",
+      "--jars", testJar,
       "/home/thejar.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -561,6 +565,8 @@ class SparkSubmitSuite
   test("SPARK-47475: Avoid jars download if scheme matches " +
     "spark.kubernetes.jars.avoidDownloadSchemes " +
     "in k8s client mode & driver runs inside a POD") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     withTempDir { tmpDir =>
@@ -579,7 +585,7 @@ class SparkSubmitSuite
         "--files", "src/test/resources/test_metrics_config.properties",
         "--py-files", "src/test/resources/test_metrics_system.properties",
         "--archives", "src/test/resources/log4j2.properties",
-        "--jars", s"src/test/resources/TestUDTF.jar,$remoteJarFile",
+        "--jars", s"$testJar,$remoteJarFile",
         "/home/jarToIgnore.jar",
         "arg1")
       val appArgs = new SparkSubmitArguments(clArgs)
