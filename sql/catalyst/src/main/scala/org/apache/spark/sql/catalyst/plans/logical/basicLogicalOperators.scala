@@ -416,8 +416,7 @@ case class Intersect(
     newLeft: LogicalPlan, newRight: LogicalPlan): Intersect = copy(left = newLeft, right = newRight)
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
-
-  /** We don't use right.output because those rows get excluded from the set. */
+  
   private def computeOutput(): Seq[Attribute] = Intersect.mergeChildOutputs(children.map(_.output))
 }
 
@@ -457,7 +456,6 @@ case class Except(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  /** We don't use right.output because those rows get excluded from the set. */
   private def computeOutput(): Seq[Attribute] = Except.mergeChildOutputs(children.map(_.output))
 }
 
