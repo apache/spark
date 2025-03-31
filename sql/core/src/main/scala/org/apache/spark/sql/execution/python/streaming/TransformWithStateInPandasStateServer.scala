@@ -138,6 +138,18 @@ class TransformWithStateInPandasStateServer(
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
+
+    // SPARK-51667: We have a pattern of sending messages continuously from one side
+    // (Python -> JVM, and vice versa) before getting response from other side. Since most
+    // messages we are sending are small, this triggers the bad combination of Nagle's algorithm
+    // and delayed ACKs, which can cause a significant delay on the latency.
+    // See SPARK-51667 for more details on how this can be a problem.
+    //
+    // Disabling either would work, but it's more common to disable Nagle's algorithm; there is
+    // lot less reference to disabling delayed ACKs, while there are lots of resources to
+    // disable Nagle's algorithm.
+    listeningSocket.setTcpNoDelay(true)
+
     inputStream = new DataInputStream(
       new BufferedInputStream(listeningSocket.getInputStream))
     outputStream = new DataOutputStream(
