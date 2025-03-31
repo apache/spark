@@ -23,7 +23,7 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedPlanId}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -419,6 +419,13 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
     copy(values = newChildren.dropRight(1), query = newChildren.last.asInstanceOf[ListQuery])
 }
 
+case class UnresolvedInSubqueryPlanId(values: Seq[Expression], planId: Long)
+  extends UnresolvedPlanId {
+
+  override def withPlan(plan: LogicalPlan): Expression = {
+    InSubquery(values, ListQuery(plan))
+  }
+}
 
 /**
  * Evaluates to `true` if `list` contains `value`.
