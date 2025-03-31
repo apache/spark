@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.types.{StringType, TimeType}
 
@@ -225,5 +226,71 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => SecondsOfTime(child).replacement, TimeType())
+  }
+
+  test("CurrentTimeExpressionBuilder") {
+    // Case 1: Zero arguments => should build CurrentTime(6) by default
+    val builtExprNoArg = CurrentTimeExpressionBuilder.build("current_time", Seq.empty)
+    assert(builtExprNoArg.isInstanceOf[CurrentTime])
+    assert(builtExprNoArg.asInstanceOf[CurrentTime].precision == 6)
+
+    // Case 2: One integer argument => e.g. current_time(3) => CurrentTime(3)
+    val intArg = Literal(3)
+    val builtExprOneArg = CurrentTimeExpressionBuilder.build("current_time", Seq(intArg))
+    assert(builtExprOneArg.isInstanceOf[CurrentTime])
+    assert(builtExprOneArg.asInstanceOf[CurrentTime].precision == 3)
+
+    // Case 3: One non-integer literal => should fail
+    checkError(
+      exception = intercept[AnalysisException] {
+        // e.g. current_time('string')
+        val strArg = Literal("foo")
+        CurrentTimeExpressionBuilder.build("current_time", Seq(strArg))
+      },
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"foo\"",
+        "inputName" -> "`precision`",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"foo\""
+      )
+    )
+
+    // Case 4: More than one argument => e.g. current_time(3, 4) => fail
+    checkError(
+      exception = intercept[AnalysisException] {
+        val multiArgs = Seq(Literal(3), Literal(4))
+        CurrentTimeExpressionBuilder.build("current_time", multiArgs)
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`current_time`",
+        "expectedNum" -> "[0, 1]",
+        "actualNum" -> "2",
+        "docroot" -> SPARK_DOC_ROOT
+        // Update keys/values to match your builder’s actual thrown error
+      )
+    )
+  }
+
+  test("CurrentTime") {
+    // test valid precision
+    var expr = CurrentTime(3)
+    assert(expr.children.isEmpty)
+    assert(expr.dataType == TimeType(3), "Should produce TIME(3) data type")
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test default constructor => TIME(6)
+    expr = CurrentTime()
+    assert(expr.precision == 6, "Default precision should be 6")
+    assert(expr.dataType == TimeType(6))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test out of range precision => checkInputDataTypes fails
+    expr = CurrentTime(10)
+    val result = expr.checkInputDataTypes()
+    assert(result.isInstanceOf[TypeCheckFailure])
+    val failure = result.asInstanceOf[TypeCheckFailure]
+    assert(failure.message.contains("Invalid precision 10. Must be between 0 and 6."))
   }
 }

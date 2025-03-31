@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.time.DateTimeException
 
-import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, IntegerType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType, ObjectType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -349,3 +350,62 @@ object SecondExpressionBuilder extends ExpressionBuilder {
   }
 }
 
+case class CurrentTime(precision: Int = 6) extends CurrentTimestampLike with ExpectsInputTypes {
+  // The function returns a TIME(n).
+  override def dataType: DataType = TimeType(precision)
+
+  override def prettyName: String = "current_time"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (precision < TimeType.MIN_PRECISION || precision > TimeType.MICROS_PRECISION) {
+      TypeCheckFailure(s"Invalid precision $precision. Must be between 0 and 6.")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+}
+
+/**
+ * Returns the current time at the start of query evaluation.
+ * There is no code generation since this expression should get constant folded by the optimizer.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current time at the start of query evaluation. All calls of current_time within the same query return the same value.
+
+    _FUNC_ - Returns the current time at the start of query evaluation.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       15:49:11.914120
+      > SELECT _FUNC_;
+       15:49:11.914120
+      > SELECT _FUNC_(0);
+       15:49:11
+      > SELECT _FUNC_(3);
+       15:49:11.914
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+object CurrentTimeExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions match {
+      case Nil => CurrentTime(TimeType.MICROS_PRECISION)
+
+      case Seq(Literal(precisionValue, IntegerType)) =>
+        CurrentTime(precisionValue.asInstanceOf[Int])
+
+      case Seq(_) =>
+        val child = expressions.head
+        throw QueryCompilationErrors.nonFoldableInputError("precision", child, IntegerType)
+
+      case _ =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0, 1), expressions.length)
+    }
+  }
+}
