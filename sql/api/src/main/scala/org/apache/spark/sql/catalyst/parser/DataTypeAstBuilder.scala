@@ -54,7 +54,15 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     ctx.colDefinition().asScala.map(visitStructField).toSeq
   }
 
-  protected def visitStructField(
+  /**
+   * Create a [[StructField]] from a column definition which allows options like COMMENT and
+   * DEFAULT.
+   *
+   * Don't handle generation expression since this function is currently only used for creating
+   * SQL functions which don't support generation expressions. The rejection logic is in
+   * [[SqlBaseParserVisitor#visitCreateUserDefinedFunction()]] implementation.
+   */
+  private def visitStructField(
       ctx: ColDefinitionContext): StructField =
     withOrigin(ctx) {
     import ctx._
