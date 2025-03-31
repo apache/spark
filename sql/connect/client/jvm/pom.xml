@@ -176,25 +176,19 @@
               </includes>
             </relocation>
             <relocation>
-              <pattern>com.google.thirdparty</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-              <includes>
-                <include>com.google.thirdparty.**</include>
-              </includes>
-            </relocation>
-            <relocation>
-              <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
-              <includes>
-                <include>com.google.protobuf.**</include>
-              </includes>
-            </relocation>
-            <relocation>
               <pattern>io.grpc</pattern>
               <shadedPattern>${spark.shade.packageName}.io.grpc</shadedPattern>
               <includes>
                 <include>io.grpc.**</include>
               </includes>
+            </relocation>
+            <relocation>
+              <pattern>com.google</pattern>
+              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
+              <excludes>
+                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
+                <exclude>com.google.common.**</exclude>
+              </excludes>
             </relocation>
             <relocation>
               <pattern>io.netty</pattern>

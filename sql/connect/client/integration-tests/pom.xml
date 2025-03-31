@@ -85,7 +85,7 @@
         </exclusion>
         <exclusion>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
+          <artifactId>spark-connect_${scala.binary.version}</artifactId>
         </exclusion>
       </exclusions>
       <scope>test</scope>

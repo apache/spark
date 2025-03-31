@@ -21,7 +21,7 @@ import java.nio.file.{Files, Paths}
 
 import scala.util.Properties
 
-import org.sparkproject.connect.protobuf.ByteString
+import org.sparkproject.com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.ProtoDataTypes
