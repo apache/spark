@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog.constraints;
 import java.util.Arrays;
 import java.util.Objects;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -36,6 +37,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  *
  * @since 4.1.0
  */
+@Evolving
 public class Unique extends BaseConstraint {
 
   private final NamedReference[] columns;

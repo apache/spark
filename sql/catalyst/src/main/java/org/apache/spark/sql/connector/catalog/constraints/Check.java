@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 
 /**
@@ -42,6 +43,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
  *
  * @since 4.1.0
  */
+@Evolving
 public class Check extends BaseConstraint {
 
   private final String predicateSql;
@@ -110,8 +112,8 @@ public class Check extends BaseConstraint {
       return this;
     }
 
-    public Builder predicateSql(String sql) {
-      this.predicateSql = sql;
+    public Builder predicateSql(String predicateSql) {
+      this.predicateSql = predicateSql;
       return this;
     }
 
