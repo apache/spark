@@ -116,7 +116,19 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       groupExprs.map { g =>
         g.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
           case u: UnresolvedAttribute =>
-            selectList.find(ne => conf.resolver(ne.name, u.name)).getOrElse(u)
+            val (result, index) =
+              selectList.zipWithIndex.find(ne => conf.resolver(ne._1.name, u.name))
+                .getOrElse((u, -1))
+
+            trimAliases(result) match {
+              // HACK ALERT: If the expanded grouping expression is an integer literal, don't use it
+              //             but use an integer literal of the index. The reason is we may
+              //             repeatedly analyze the plan, and the original integer literal may cause
+              //             failures with a later GROUP BY ordinal resolution. GROUP BY constant is
+              //             meaningless so whatever value does not matter here.
+              case IntegerLiteral(_) => Literal(index + 1)
+              case _ => result
+            }
         }
       }
     } else {
