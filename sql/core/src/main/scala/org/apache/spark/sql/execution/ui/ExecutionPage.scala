@@ -71,6 +71,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <li>
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
+            {
+              if (executionUIData.rootExecutionId != executionId) {
+                <li>
+                  <strong>Parent Execution: </strong>
+                  <a href={"?id=" + executionUIData.rootExecutionId}>
+                    {executionUIData.rootExecutionId}
+                  </a>
+                </li>
+              }
+            }
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
@@ -144,7 +154,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </div>
       </div>
       {planVisualizationResources(request)}
-      <script>$(function() {{ if (shouldRenderPlanViz()) {{ renderPlanViz(); }} }})</script>
     </div>
   }
 
@@ -163,12 +172,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     <div id="physical-plan-details" style="display: none;">
       <pre>{physicalPlanDescription}</pre>
     </div>
-    <script>
-      function clickPhysicalPlanDetails() {{
-        $('#physical-plan-details').toggle();
-        $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
-      }}
-    </script>
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {

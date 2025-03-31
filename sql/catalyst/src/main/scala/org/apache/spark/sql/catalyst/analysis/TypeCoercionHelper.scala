@@ -84,7 +84,8 @@ import org.apache.spark.sql.types.{
   StructType,
   TimestampNTZType,
   TimestampType,
-  TimestampTypeExpression
+  TimestampTypeExpression,
+  TimeType
 }
 
 abstract class TypeCoercionHelper {
@@ -239,16 +240,18 @@ abstract class TypeCoercionHelper {
     }
   }
 
-  protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): DatetimeType =
+  protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): Option[DatetimeType] =
     (d1, d2) match {
+      case (_, _: TimeType) => None
+      case (_: TimeType, _) => None
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        TimestampType
+        Some(TimestampType)
 
       case (_: TimestampType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimestampType) =>
-        TimestampType
+        Some(TimestampType)
 
       case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
-        TimestampNTZType
+        Some(TimestampNTZType)
     }
 
   /**
