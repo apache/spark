@@ -3212,8 +3212,8 @@ select lower(`concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)`) from (
 Project [lower(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x) AS lower(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x]
-      +- Sort [max(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase))#x ASC NULLS FIRST], true
-         +- Aggregate [concat_ws( , utf8_lcase#x, utf8_lcase#x)], [concat_ws( , utf8_lcase#x, utf8_lcase#x) AS concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x, max(concat_ws( , utf8_lcase#x, utf8_lcase#x)) AS max(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase))#x]
+      +- Sort [max(concat_ws( , utf8_lcase#x, utf8_lcase#x))#x ASC NULLS FIRST], true
+         +- Aggregate [concat_ws( , utf8_lcase#x, utf8_lcase#x)], [concat_ws( , utf8_lcase#x, utf8_lcase#x) AS concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x, max(concat_ws( , utf8_lcase#x, utf8_lcase#x)) AS max(concat_ws( , utf8_lcase#x, utf8_lcase#x))#x]
             +- SubqueryAlias spark_catalog.default.t5
                +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
