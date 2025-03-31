@@ -181,7 +181,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
       parallelism <- as.integer(numSlices)
       jserver <- newJObject("org.apache.spark.api.r.RParallelizeServer", sc, parallelism)
       authSecret <- callJMethod(jserver, "secret")
-      port <- callJMethod(jserver, "port")
+      port <- callJMethod(jserver, "connInfo")
       conn <- socketConnection(
         port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
       doServerAuth(conn, authSecret)

@@ -880,7 +880,7 @@ class SparkContext:
         if self._encryption_enabled:
             # with encryption, we open a server in java and send the data directly
             server = server_func()
-            (sock_file, _) = local_connect_and_auth(server.port(), server.secret())
+            (sock_file, _) = local_connect_and_auth(server.connInfo(), server.secret())
             chunked_out = ChunkedStream(sock_file, 8192)
             serializer.dump_stream(data, chunked_out)
             chunked_out.close()
