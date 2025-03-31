@@ -90,11 +90,6 @@ object IntegrationTestUtils {
     Files.exists(Paths.get(filePath))
   }
 
-  lazy val isAssemblyJarsDirExists: Boolean = {
-    val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/"
-    Files.exists(Paths.get(filePath))
-  }
-
   private[sql] def cleanUpHiveClassesDirIfNeeded(): Unit = {
     def delete(f: File): Unit = {
       if (f.exists()) {
