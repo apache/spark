@@ -66,6 +66,16 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
             StringType(defaultCollation)
         }
 
+      case alterViewAs: AlterViewAs =>
+        alterViewAs.child match {
+          case resolvedPersistentView: ResolvedPersistentView =>
+            val collation = resolvedPersistentView.metadata.collation.getOrElse(defaultCollation)
+            StringType(collation)
+          case resolvedTempView: ResolvedTempView =>
+            val collation = resolvedTempView.metadata.collation.getOrElse(defaultCollation)
+            StringType(collation)
+        }
+
       case _ => StringType(defaultCollation)
     }
   }
