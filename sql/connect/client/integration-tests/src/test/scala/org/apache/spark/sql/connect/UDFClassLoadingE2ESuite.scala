@@ -59,7 +59,6 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     // Session1 should stub the missing class, but fail to call methods on it
     val session1 = spark.newSession()
 
-    registerUdf(session1)
     assert(
       intercept[Exception] {
         registerUdf(session1)
