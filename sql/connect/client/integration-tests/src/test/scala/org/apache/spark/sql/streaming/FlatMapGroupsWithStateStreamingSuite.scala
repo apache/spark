@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.streaming
+package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
 
@@ -26,7 +26,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 case class ClickEvent(id: String, timestamp: Timestamp)

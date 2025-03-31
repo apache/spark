@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkThreadUtils
 
+
 class ClientE2ETestSuite
     extends QueryTest
     with ConnectFunSuite

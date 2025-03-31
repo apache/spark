@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.streaming
+package org.apache.spark.sql.streaming
 
 import java.io.{BufferedWriter, File, FileWriter}
 import java.nio.file.Paths
@@ -31,7 +31,6 @@ import org.apache.spark.sql.{DataFrame, Dataset, Encoders, Row}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.{ListState, MapState, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.types._
 
 case class InputRowForConnectTest(key: String, value: String)

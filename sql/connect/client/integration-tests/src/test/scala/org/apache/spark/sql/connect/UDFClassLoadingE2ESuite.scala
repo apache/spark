@@ -21,7 +21,7 @@ import java.nio.file.{Files, Paths}
 
 import scala.util.Properties
 
-import com.google.protobuf.ByteString
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.ProtoDataTypes
@@ -59,6 +59,7 @@ class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     // Session1 should stub the missing class, but fail to call methods on it
     val session1 = spark.newSession()
 
+    registerUdf(session1)
     assert(
       intercept[Exception] {
         registerUdf(session1)
