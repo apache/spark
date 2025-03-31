@@ -1108,8 +1108,10 @@ private[spark] class Executor(
 
   private def createClassLoader(urls: Array[URL],
                                 isDefaultSession: Boolean): MutableURLClassLoader = {
-    // SPARK-51537, The isolation session must "inherit" the classloader from default session which
-    // has already added the global jars specified by --jars
+    // SPARK-51537: The isolated session must *inherit* the classloader from the default session,
+    // which has already included the global JARs specified via --jars. For Spark plugins, we
+    // cannot simply add the plugin JARs to the classpath of the isolated session, as this may
+    // cause the plugin to be reloaded, leading to potential conflicts or unexpected behavior.
     val loader = if (isDefaultSession) systemLoader else defaultSessionState.replClassLoader
     if (userClassPathFirst) {
       new ChildFirstURLClassLoader(urls, loader)
@@ -1122,8 +1124,10 @@ private[spark] class Executor(
       urls: Array[URL],
       binaryName: Seq[String],
       isDefaultSession: Boolean): MutableURLClassLoader = {
-    // SPARK-51537, The isolation session must "inherit" the classloader from default session which
-    // has already added the global jars specified by --jars
+    // SPARK-51537: The isolated session must *inherit* the classloader from the default session,
+    // which has already included the global JARs specified via --jars. For Spark plugins, we
+    // cannot simply add the plugin JARs to the classpath of the isolated session, as this may
+    // cause the plugin to be reloaded, leading to potential conflicts or unexpected behavior.
     val loader = if (isDefaultSession) systemLoader else defaultSessionState.replClassLoader
     if (userClassPathFirst) {
       // user -> (sys -> stub)

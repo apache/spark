@@ -119,6 +119,7 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
   test("SPARK-51537 Executor isolation session classloader inherits from " +
     "default session classloader") {
+    assume(jarURL2 != null)
     sc = new SparkContext(new SparkConf()
       .setAppName("test")
       .setMaster("local")
