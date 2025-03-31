@@ -331,6 +331,7 @@ class QueryExecution(
         queryExecution.stringWithStats(maxFields, append)
       case FormattedMode =>
         queryExecution.simpleString(formatted = true, maxFields = maxFields, append)
+      case OffMode =>
     }
   }
 
