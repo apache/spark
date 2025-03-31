@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTime, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -52,6 +52,31 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits(0) == lits(1))
   }
 
+  test("analyzer should replace current_time with literals") {
+    // logical plan that calls current_time() twice in the Project
+    val planInput = Project(
+      Seq(
+        Alias(CurrentTime(3), "a")(),
+        Alias(CurrentTime(3), "b")()
+      ),
+      LocalRelation()
+    )
+
+    val analyzed = planInput.analyze
+    val optimized = Optimize.execute(analyzed).asInstanceOf[Project]
+
+    // We expect 2 literals in the final Project. Each literal is a Long
+    // representing microseconds since midnight, truncated to precision=3.
+    val lits = literals[Long](optimized)  // a helper that extracts all Literal values of type Long
+    assert(lits.size == 2, s"Expected two literal values, found ${lits.size}")
+
+    // The rule should produce the same microsecond value for both columns "a" and "b".
+    assert(lits(0) == lits(1),
+      s"Expected both current_time(3) calls to yield the same literal, " +
+        s"but got ${lits(0)} vs ${lits(1)}")
+  }
+
+
   test("analyzer should respect time flow in current timestamp calls") {
     val in = Project(Alias(CurrentTimestamp(), "t1")() :: Nil, LocalRelation())
 
@@ -64,6 +89,20 @@ class ComputeCurrentTimeSuite extends PlanTest {
 
     assert(t2 - t1 <= 1000 && t2 - t1 > 0)
   }
+
+  test("analyzer should respect time flow in current_time calls") {
+    val in = Project(Alias(CurrentTime(4), "t1")() :: Nil, LocalRelation())
+
+    val planT1 = Optimize.execute(in.analyze).asInstanceOf[Project]
+    sleep(5)
+    val planT2 = Optimize.execute(in.analyze).asInstanceOf[Project]
+
+    val t1 = literals[Long](planT1)(0) // the microseconds-of-day for planT1
+    val t2 = literals[Long](planT2)(0) // the microseconds-of-day for planT2
+
+    assert(t2 > t1, s"Expected a newer time in the second analysis, but got t1=$t1, t2=$t2")
+  }
+
 
   test("analyzer should replace current_date with literals") {
     val in = Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())

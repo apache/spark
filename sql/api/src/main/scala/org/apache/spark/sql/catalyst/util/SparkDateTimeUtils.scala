@@ -30,6 +30,7 @@ import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkClassUtils
@@ -131,6 +132,32 @@ trait SparkDateTimeUtils {
       val us = Math.multiplyExact(secs, MICROS_PER_SECOND)
       Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
     }
+  }
+
+  /**
+   * Gets the number of microseconds since midnight using the session time zone.
+   */
+  def instantToMicrosOfDay(instant: Instant): Long = {
+    val zoneId = getZoneId(SqlApiConf.get.sessionLocalTimeZone)
+    val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
+    localDateTime.toLocalTime.toNanoOfDay / 1000
+  }
+
+  /**
+   * Truncates a time value (in microseconds) to the specified fractional precision `p`.
+   *
+   * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond
+   * the thousand-microsecond place. So a value like `123456` microseconds (12:34:56.123456)
+   * becomes `123000` microseconds (12:34:56.123).
+   *
+   * @param micros The original time in microseconds.
+   * @param p      The fractional second precision (range 0 to 6).
+   * @return       The truncated microsecond value, preserving only `p` fractional digits.
+   */
+  def truncateTimeMicrosToPrecision(micros: Long, p: Int): Long = {
+    val scale = TimeType.MICROS_PRECISION - p
+    val factor = math.pow(10, scale).toLong
+    (micros / factor) * factor
   }
 
   /**
