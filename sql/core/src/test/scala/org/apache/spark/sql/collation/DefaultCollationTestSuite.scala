@@ -477,32 +477,41 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
   }
 
   test("ALTER VIEW check default collation") {
-    withView(testView) {
-      sql(s"CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS c1, 'b' AS c2")
-      val prefix = "SYSTEM.BUILTIN"
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testView"), Row(s"$prefix.UTF8_LCASE"))
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testView"), Row(s"$prefix.UTF8_LCASE"))
-      sql(s"ALTER VIEW $testView AS SELECT 'c' AS c3 WHERE 'a' = 'A'")
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c3) FROM $testView"), Row(s"$prefix.UTF8_LCASE"))
-    }
-    withTable(testTable) {
-      sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE, c2 STRING, c3 INT)")
-      sql(s"INSERT INTO $testTable VALUES ('a', 'b', 1)")
-      withView(testView) {
-        sql(s"CREATE VIEW $testView DEFAULT COLLATION sr_AI_CI AS SELECT 'a' AS c1")
-        // scalastyle:off
-        sql(
-          s"""ALTER VIEW $testView AS
-             | SELECT *, 'c' AS c4,
-             | (SELECT (SELECT CASE 'š' = 'S' WHEN TRUE THEN 'd' ELSE 'b' END)) AS c5
-             | FROM $testTable
-             | WHERE c1 = 'A' AND 'ć' = 'Č'""".stripMargin)
-        // scalastyle:on
-        val prefix = "SYSTEM.BUILTIN"
-        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c4) FROM $testView"), Row(s"$prefix.sr_CI_AI"))
-        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c5) FROM $testView"), Row(s"$prefix.sr_CI_AI"))
-        checkAnswer(sql(s"SELECT c5 FROM $testView"), Row("d"))
-      }
+    Seq("", "TEMPORARY").foreach {
+      temporary =>
+        withView(testView) {
+          sql(s"CREATE $temporary VIEW $testView DEFAULT COLLATION UTF8_LCASE AS SELECT 1")
+          sql(s"ALTER VIEW $testView AS SELECT 'a' AS c1, 'b' AS c2")
+          val prefix = "SYSTEM.BUILTIN"
+          checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testView"),
+            Row(s"$prefix.UTF8_LCASE"))
+          checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testView"),
+            Row(s"$prefix.UTF8_LCASE"))
+          sql(s"ALTER VIEW $testView AS SELECT 'c' AS c3 WHERE 'a' = 'A'")
+          checkAnswer(sql(s"SELECT DISTINCT COLLATION(c3) FROM $testView"),
+            Row(s"$prefix.UTF8_LCASE"))
+        }
+        withTable(testTable) {
+          sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE, c2 STRING, c3 INT)")
+          sql(s"INSERT INTO $testTable VALUES ('a', 'b', 1)")
+          withView(testView) {
+            sql(s"CREATE $temporary VIEW $testView DEFAULT COLLATION sr_AI_CI AS SELECT 'a' AS c1")
+            // scalastyle:off
+            sql(
+              s"""ALTER VIEW $testView AS
+                 | SELECT *, 'c' AS c4,
+                 | (SELECT (SELECT CASE 'š' = 'S' WHEN TRUE THEN 'd' ELSE 'b' END)) AS c5
+                 | FROM $testTable
+                 | WHERE c1 = 'A' AND 'ć' = 'Č'""".stripMargin)
+            // scalastyle:on
+            val prefix = "SYSTEM.BUILTIN"
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION(c4) FROM $testView"),
+              Row(s"$prefix.sr_CI_AI"))
+            checkAnswer(sql(s"SELECT DISTINCT COLLATION(c5) FROM $testView"),
+              Row(s"$prefix.sr_CI_AI"))
+            checkAnswer(sql(s"SELECT c5 FROM $testView"), Row("d"))
+          }
+        }
     }
   }
 }
