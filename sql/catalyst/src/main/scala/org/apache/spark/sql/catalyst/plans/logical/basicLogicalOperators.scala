@@ -416,7 +416,7 @@ case class Intersect(
     newLeft: LogicalPlan, newRight: LogicalPlan): Intersect = copy(left = newLeft, right = newRight)
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
-  
+
   private def computeOutput(): Seq[Attribute] = Intersect.mergeChildOutputs(children.map(_.output))
 }
 
