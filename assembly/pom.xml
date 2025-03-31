@@ -120,6 +120,10 @@
       <exclusions>
         <exclusion>
           <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
           <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
         </exclusion>
       </exclusions>
@@ -150,6 +154,7 @@
 
   <build>
     <plugins>
+      <!--
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-deploy-plugin</artifactId>
@@ -164,6 +169,7 @@
           <skip>true</skip>
         </configuration>
       </plugin>
+      -->
       <!-- zip pyspark archives to run python application on yarn mode -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

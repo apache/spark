@@ -88,6 +88,7 @@
           <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
         </exclusion>
       </exclusions>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.lihaoyi</groupId>
