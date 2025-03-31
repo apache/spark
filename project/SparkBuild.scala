@@ -52,9 +52,9 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
-  val connectProjects@Seq(connectCommon, connect, connectClient, connectShims) =
-    Seq("connect-common", "connect", "connect-client-jvm", "connect-shims")
-      .map(ProjectRef(buildLocation, _))
+  val connectProjects@Seq(connectCommon, connect, connectClient, connectClientIT, connectShims) =
+    Seq("connect-common", "connect", "connect-client-jvm", "connect-client-integration-tests",
+      "connect-shims").map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
@@ -369,7 +369,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      variant, connectShims, profiler
+      variant, connectShims, connectClientIT, profiler
     ).contains(x)
   }
 
@@ -417,6 +417,7 @@ object SparkBuild extends PomBuild {
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
+  enable(SparkConnectClientIT.settings)(connectClientIT)
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
@@ -828,20 +829,9 @@ object SparkConnectClient {
       )
     },
 
-    buildTestDeps := {
-      (LocalProject("assembly") / Compile / Keys.`package`).value
-      (LocalProject("catalyst") / Test / Keys.`package`).value
-    },
-
-    // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
-    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
-    // so no additional configuration is required.
-    test := ((Test / test) dependsOn (buildTestDeps)).value,
-
-    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
-
     (assembly / test) := { },
 
+    (assembly / logLevel) := Level.Info,
     (assembly / logLevel) := Level.Info,
 
     // Exclude `scala-library` from assembly.
@@ -860,10 +850,10 @@ object SparkConnectClient {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
-      ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
+      ShadeRule.rename("com.google.**" -> "org.sparkproject.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
       ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
-      ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
+      // ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
@@ -875,6 +865,37 @@ object SparkConnectClient {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
+  )
+}
+
+object SparkConnectClientIT {
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
+
+  lazy val settings = Seq(
+
+    buildTestDeps := {
+      (LocalProject("connect-client-jvm") / assembly).value
+      // (LocalProject("assembly") / Compile / Keys.`package`).value
+      (LocalProject("catalyst") / Test / Keys.`package`).value
+    },
+
+    // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
+    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
+    // so no additional configuration is required.
+    (Test / compile) := ((Test / compile) dependsOn buildTestDeps).value,
+
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
+
+    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
+
+    (Test / dependencyClasspath) := (Test / dependencyClasspath).value
+      .filterNot { f => f.toString.contains("spark-connect-client-jvm_2.13") || f.toString.contains("spark-connect-common_2.13") ||
+        f.toString.contains("spark-connect_2.13") || f.toString.contains("spark-sql_2.13") },
+    (Test / fullClasspath) := (Test / fullClasspath).value
+      .filterNot { f => f.toString.contains("spark-connect-client-jvm_2.13") || f.toString.contains("spark-connect-common_2.13")||
+        f.toString.contains("spark-connect_2.13") || f.toString.contains("spark-sql_2.13") },
+    (Test / unmanagedJars) += Attributed.blank(
+      file(s"${baseDirectory.value}/../jvm/target/scala-${scalaBinaryVersion.value}/spark-connect-client-jvm-assembly-${version.value}.jar"))
   )
 }
 
