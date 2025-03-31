@@ -110,21 +110,6 @@ private[spark] class Executor(
   // finish downloading dependencies.
   private val updateDependenciesLock = new ReentrantLock()
 
-  private lazy val mdcIsSupported = {
-    try {
-      // This tests if any class initialization error is thrown
-      val testKey = System.nanoTime().toString
-      MDC.put(testKey, "testValue")
-      MDC.remove(testKey)
-
-      true
-    } catch {
-      case t: Throwable =>
-        logInfo("MDC is not supported.", t)
-        false
-    }
-  }
-
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
   // must not have port specified.
@@ -945,7 +930,7 @@ private[spark] class Executor(
   }
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    if (mdcIsSupported) {
+    if (Executor.mdcIsSupported) {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
       MDC.put(taskNameMDCKey, taskName)
@@ -953,7 +938,7 @@ private[spark] class Executor(
   }
 
   private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    if (mdcIsSupported) {
+    if (Executor.mdcIsSupported) {
       mdc.foreach { case (key, _) => MDC.remove(key) }
       MDC.remove(taskNameMDCKey)
     }
@@ -1310,7 +1295,7 @@ private[spark] class Executor(
   }
 }
 
-private[spark] object Executor {
+private[spark] object Executor extends Logging {
   // This is reserved for internal use by components that need to read task properties before a
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
@@ -1318,6 +1303,21 @@ private[spark] object Executor {
 
   // Used to store executorSource, for local mode only
   var executorSourceLocalModeOnly: ExecutorSource = null
+
+  lazy val mdcIsSupported: Boolean = {
+    try {
+      // This tests if any class initialization error is thrown
+      val testKey = System.nanoTime().toString
+      MDC.put(testKey, "testValue")
+      MDC.remove(testKey)
+
+      true
+    } catch {
+      case t: Throwable =>
+        logInfo("MDC is not supported.", t)
+        false
+    }
+  }
 
   /**
    * Whether a `Throwable` thrown from a task is a fatal error. We will use this to decide whether
