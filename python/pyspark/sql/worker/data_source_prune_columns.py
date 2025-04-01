@@ -32,7 +32,7 @@ from pyspark.serializers import (
     write_with_length,
 )
 from pyspark.sql.datasource import ColumnPruning, DataSource, DataSourceReader
-from pyspark.sql.types import StructType, _parse_datatype_json_string
+from pyspark.sql.types import ArrayType, DataType, StructType, _parse_datatype_json_string
 from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
 from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
@@ -46,6 +46,54 @@ from pyspark.worker_util import (
 )
 
 utf8_deserializer = UTF8Deserializer()
+
+
+def validate_schema(reader: DataSourceReader, actual: StructType, required: StructType) -> None:
+    path: List[str] = []
+
+    def check_nullable(actual: bool, required: bool) -> None:
+        if actual != required:
+            raise PySparkValueError(
+                errorClass="DATA_SOURCE_PRUNED_SCHEMA_NULLABILITY",
+                messageParameters={
+                    "type": type(reader).__name__,
+                    "path": ".".join(path),
+                    "actual": str(actual),
+                    "required": str(required),
+                },
+            )
+
+    def check(actual: DataType, required: DataType) -> None:
+        if isinstance(actual, StructType) and isinstance(required, StructType):
+            actual_fields = {f.name: f for f in actual.fields}
+            for field in required.fields:
+                path.append(field.name)
+                if field.name not in actual_fields:
+                    raise PySparkValueError(
+                        errorClass="DATA_SOURCE_PRUNED_SCHEMA_MISSING",
+                        messageParameters={
+                            "type": type(reader).__name__,
+                            "path": ".".join(path),
+                        },
+                    )
+                check(actual_fields[field.name].dataType, field.dataType)
+                check_nullable(actual_fields[field.name].nullable, field.nullable)
+                path.pop()
+        elif isinstance(actual, ArrayType) and isinstance(required, ArrayType):
+            check(actual.elementType, required.elementType)
+            check_nullable(actual.containsNull, required.containsNull)
+        elif actual != required:
+            raise PySparkValueError(
+                errorClass="DATA_SOURCE_PRUNED_SCHEMA_MISMATCH",
+                messageParameters={
+                    "type": type(reader).__name__,
+                    "path": ".".join(path),
+                    "actual": actual.json(),
+                    "required": required.json(),
+                },
+            )
+
+    check(actual, required)
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -126,6 +174,9 @@ def main(infile: IO, outfile: IO) -> None:
                     "actual": f"'{type(actual_schema).__name__}'",
                 },
             )
+
+        # Validate the actual schema to make sure it's a superset of the required schema.
+        validate_schema(reader, actual_schema, required_schema)
 
         # Receive the max arrow batch size.
         max_arrow_batch_size = read_int(infile)

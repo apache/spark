@@ -71,7 +71,13 @@ class PythonScanBuilder(
 
   // Optionally called by DSv2 to prune columns before build, after pushFilters.
   override def pruneColumns(requiredSchema: StructType): Unit = {
+    // Skip if not enabled
     if (!supportsColumnPruning || !SQLConf.get.pythonFilterPushDown) {
+      return
+    }
+
+    // Skip if column pruning is not needed
+    if (requiredSchema == outputSchema) {
       return
     }
 

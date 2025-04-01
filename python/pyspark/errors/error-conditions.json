@@ -199,6 +199,21 @@
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
     ]
   },
+  "DATA_SOURCE_PRUNED_SCHEMA_REQUIRED_MISSING": {
+    "message": [
+      "<type>.pruneColumns() returned missing column '<path>', which is part of the required schema."
+    ]
+  },
+  "DATA_SOURCE_PRUNED_SCHEMA_REQUIRED_MISMATCH": {
+    "message": [
+      "<type>.pruneColumns() returned mismatching data type at '<path>'. Required: '<required>'. Actual: '<actual>'."
+    ]
+  },
+  "DATA_SOURCE_PRUNED_SCHEMA_REQUIRED_NULLABILITY": {
+    "message": [
+      "<type>.pruneColumns() returned mismatching nullability at '<path>'. Required: '<required>'. Actual: '<actual>'."
+    ]
+  },
   "DATA_SOURCE_PUSHDOWN_DISABLED": {
     "message": [
       "<type> implements <method> but <feature> is disabled because configuration '<conf>' is false. Set it to true to enable <feature>."
