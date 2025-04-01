@@ -406,6 +406,92 @@ class BasePythonDataSourceTestsMixin:
             df = df.select("a", "b")
             assertDataFrameEqual(df, [Row(a="hi", b=1)])
 
+    def test_combined_workers_column_pruning(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+
+            class TestDataSourceReader(DataSourceReader):
+                def __init__(self):
+                    self.pickle_count = 0
+
+                def __getstate__(self):
+                    self.pickle_count += 1
+                    return self.__dict__
+
+                def pruneColumns(self, pruning: ColumnPruning):
+                    return pruning.fullSchema
+
+                def read(self, partition):
+                    assert self.pickle_count == 1
+                    yield from []
+
+            class TestDataSource(DataSource):
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("a int, b int").load()
+            df = df.select("a")
+            assertDataFrameEqual(df, [])
+
+    def test_combined_workers_filter_pushdown(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+
+            class TestDataSourceReader(DataSourceReader):
+                def __init__(self):
+                    self.pickle_count = 0
+
+                def __getstate__(self):
+                    self.pickle_count += 1
+                    return self.__dict__
+
+                def pushFilters(self, filters):
+                    return filters
+
+                def read(self, partition):
+                    assert self.pickle_count == 1
+                    yield from []
+
+            class TestDataSource(DataSource):
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("a int").load()
+            df = df.filter("a = 1")
+            assertDataFrameEqual(df, [])
+
+    def test_combined_workers_filter_pushdown_column_pruning(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+
+            class TestDataSourceReader(DataSourceReader):
+                def __init__(self):
+                    self.pickle_count = 0
+
+                def __getstate__(self):
+                    self.pickle_count += 1
+                    return self.__dict__
+
+                def pushFilters(self, filters):
+                    assert self.pickle_count == 0
+                    return filters
+
+                def pruneColumns(self, pruning: ColumnPruning):
+                    assert self.pickle_count == 1
+                    return pruning.fullSchema
+
+                def read(self, partition):
+                    assert self.pickle_count == 2
+                    yield from []
+
+            class TestDataSource(DataSource):
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("a int, b int").load()
+            df = df.filter("a = 1").select("a")
+            assertDataFrameEqual(df, [])
+
     def test_filter_pushdown(self):
         class TestDataSourceReader(DataSourceReader):
             def __init__(self):
