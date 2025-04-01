@@ -48,52 +48,47 @@ from pyspark.worker_util import (
 utf8_deserializer = UTF8Deserializer()
 
 
-def validate_schema(reader: DataSourceReader, actual: StructType, required: StructType) -> None:
+def validate_schema(
+    reader: DataSourceReader,
+    superset: StructType,
+    subset: StructType,
+    errorClass: str,
+    should_check_nullability: bool,
+) -> None:
     path: List[str] = []
 
-    def check_nullable(actual: bool, required: bool) -> None:
-        if actual != required:
-            raise PySparkValueError(
-                errorClass="DATA_SOURCE_PRUNED_SCHEMA_NULLABILITY",
-                messageParameters={
-                    "type": type(reader).__name__,
-                    "path": ".".join(path),
-                    "actual": str(actual),
-                    "required": str(required),
-                },
-            )
+    def fail() -> None:
+        raise PySparkValueError(
+            errorClass=errorClass,
+            messageParameters={
+                "type": type(reader).__name__,
+                "path": ".".join(path),
+                "superset": superset.json(),
+                "subset": subset.json(),
+            },
+        )
 
-    def check(actual: DataType, required: DataType) -> None:
-        if isinstance(actual, StructType) and isinstance(required, StructType):
-            actual_fields = {f.name: f for f in actual.fields}
-            for field in required.fields:
+    def check_nullability(superset_nullable: bool, subset_nullable: bool) -> None:
+        if should_check_nullability and not subset_nullable and superset_nullable:
+            fail()
+
+    def check(superset: DataType, subset: DataType) -> None:
+        if isinstance(superset, StructType) and isinstance(subset, StructType):
+            superset_fields = {f.name: f for f in superset.fields}
+            for field in subset.fields:
                 path.append(field.name)
-                if field.name not in actual_fields:
-                    raise PySparkValueError(
-                        errorClass="DATA_SOURCE_PRUNED_SCHEMA_MISSING",
-                        messageParameters={
-                            "type": type(reader).__name__,
-                            "path": ".".join(path),
-                        },
-                    )
-                check(actual_fields[field.name].dataType, field.dataType)
-                check_nullable(actual_fields[field.name].nullable, field.nullable)
+                if field.name not in superset_fields:
+                    fail()
+                check(superset_fields[field.name].dataType, field.dataType)
+                check_nullability(superset_fields[field.name].nullable, field.nullable)
                 path.pop()
-        elif isinstance(actual, ArrayType) and isinstance(required, ArrayType):
-            check(actual.elementType, required.elementType)
-            check_nullable(actual.containsNull, required.containsNull)
-        elif actual != required:
-            raise PySparkValueError(
-                errorClass="DATA_SOURCE_PRUNED_SCHEMA_MISMATCH",
-                messageParameters={
-                    "type": type(reader).__name__,
-                    "path": ".".join(path),
-                    "actual": actual.json(),
-                    "required": required.json(),
-                },
-            )
+        elif isinstance(superset, ArrayType) and isinstance(subset, ArrayType):
+            check(superset.elementType, subset.elementType)
+            check_nullability(superset.containsNull, subset.containsNull)
+        elif superset != subset:
+            fail()
 
-    check(actual, required)
+    check(superset, subset)
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -175,8 +170,22 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Validate the actual schema to make sure it's a superset of the required schema.
-        validate_schema(reader, actual_schema, required_schema)
+        # Validate the actual schema to make sure it's a superset of the required schema and a
+        # subset of the full schema.
+        validate_schema(
+            reader,
+            superset=actual_schema,
+            subset=required_schema,
+            errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET",
+            should_check_nullability=True,
+        )
+        validate_schema(
+            reader,
+            superset=full_schema,
+            subset=actual_schema,
+            errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET",
+            should_check_nullability=False,
+        )
 
         # Receive the max arrow batch size.
         max_arrow_batch_size = read_int(infile)

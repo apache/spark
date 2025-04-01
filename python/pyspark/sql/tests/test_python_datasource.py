@@ -268,21 +268,20 @@ class BasePythonDataSourceTestsMixin:
         self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
 
     def test_column_pruning(self):
-        expected_full_schema = StructType.fromDDL("a int, b array<struct<c: int, d: int>>")
-        expected_required_schema = StructType.fromDDL("b array<struct<c: int>>")
-        expected_required_top_level_schema = StructType.fromDDL("b array<struct<c: int, d: int>>")
+        full_schema = StructType.fromDDL("a int, b array<struct<c: int, d: int>>")
+        required_schema = StructType.fromDDL("b array<struct<c: int>>")
+        required_top_level_schema = StructType.fromDDL("b array<struct<c: int, d: int>>")
 
         class TestDataSourceReader(DataSourceReader):
             def __init__(self, schema):
+                assert schema == full_schema
                 self.pruned = False
-                self.schema = schema
 
             def pruneColumns(self, pruning: ColumnPruning) -> StructType:
                 self.pruned = True
-                assert pruning.fullSchema == self.schema
-                assert pruning.fullSchema == expected_full_schema
-                assert pruning.requiredSchema == expected_required_schema
-                assert pruning.requiredTopLevelSchema == expected_required_top_level_schema
+                assert pruning.fullSchema == full_schema
+                assert pruning.requiredSchema == required_schema
+                assert pruning.requiredTopLevelSchema == required_top_level_schema
                 return pruning.requiredSchema
 
             def read(self, partition):
@@ -292,7 +291,7 @@ class BasePythonDataSourceTestsMixin:
 
         class TestDataSource(DataSource):
             def schema(self):
-                return "a int, b array<struct<c: int, d: int>>"
+                return full_schema
 
             def reader(self, schema) -> "DataSourceReader":
                 return TestDataSourceReader(schema)
@@ -304,8 +303,10 @@ class BasePythonDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(c=1), Row(c=2), Row(c=3)])
 
     def test_no_column_pruning_inside_map(self):
-        full_schema_ddl = "a map<struct<b: int, c: int>, struct<d: int, e: int>>"
-        full_schema = StructType.fromDDL(full_schema_ddl)
+        required_ddl = "a map<struct<b: int, c: int>, struct<d: int, e: int>>"
+        full_ddl = f"{required_ddl}, f: int"
+        required_schema = StructType.fromDDL(required_ddl)
+        full_schema = StructType.fromDDL(full_ddl)
 
         class TestDataSourceReader(DataSourceReader):
             pruned = False
@@ -313,8 +314,8 @@ class BasePythonDataSourceTestsMixin:
             def pruneColumns(self, pruning: ColumnPruning) -> StructType:
                 self.pruned = True
                 assert pruning.fullSchema == full_schema
-                assert pruning.requiredSchema == full_schema
-                assert pruning.requiredTopLevelSchema == full_schema
+                assert pruning.requiredSchema == required_schema
+                assert pruning.requiredTopLevelSchema == required_schema
                 return full_schema
 
             def read(self, partition):
@@ -355,26 +356,47 @@ class BasePythonDataSourceTestsMixin:
     def test_column_pruning_missing_column(self):
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             df = self.load_df_with_column_pruning("a int, foo int", "a int")
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PRUNED_SCHEMA_MISSING.*foo"):
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*foo"
+            ):
                 df.select("foo").collect()
 
     def test_column_pruning_wrong_type(self):
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             df = self.load_df_with_column_pruning("a int, foo int", "foo double")
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PRUNED_SCHEMA_MISMATCH.*foo"):
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*foo"
+            ):
                 df.select("foo").collect()
 
-    def test_column_pruning_wrong_nullability(self):
+    def test_column_pruning_nullability_narrow(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a int, foo int", "foo int not null")
+            df.select("foo").collect()
+
+    def test_column_pruning_nullability_widen(self):
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             df = self.load_df_with_column_pruning("a int, foo int not null", "foo int")
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PRUNED_SCHEMA_NULLABILITY.*foo"):
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*foo"
+            ):
                 df.select("foo").collect()
 
     def test_column_pruning_extraneous(self):
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             df = self.load_df_with_column_pruning("a int, foo int", "foo int, bar int")
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PRUNED_SCHEMA_NULLABILITY.*foo"):
+            with self.assertRaisesRegex(
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET.*bar"
+            ):
                 df.select("foo").collect()
+
+    def test_column_pruning_missing_nested(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning("a struct<b int, c int>", "a struct<c int>")
+            with self.assertRaisesRegex(
+                Exception, r"DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*a\.b"
+            ):
+                df.select("a.b").collect()
 
     def test_column_pruning_reorder(self):
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):

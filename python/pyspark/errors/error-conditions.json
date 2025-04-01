@@ -199,19 +199,22 @@
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
     ]
   },
-  "DATA_SOURCE_PRUNED_SCHEMA_MISSING": {
+  "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET": {
     "message": [
-      "<type>.pruneColumns() returned missing column '<path>', which is part of the required schema."
+      "<type>.pruneColumns() returned a schema that's incompatible at column '<path>'. Make sure it's a subset of the original schema.",
+      "Actual schema:",
+      "<subset>",
+      "Original schema:",
+      "<superset>"
     ]
   },
-  "DATA_SOURCE_PRUNED_SCHEMA_MISMATCH": {
+  "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET": {
     "message": [
-      "<type>.pruneColumns() returned mismatching data type at '<path>'. Required: '<required>'. Actual: '<actual>'."
-    ]
-  },
-  "DATA_SOURCE_PRUNED_SCHEMA_NULLABILITY": {
-    "message": [
-      "<type>.pruneColumns() returned mismatching nullability at '<path>'. Required: '<required>'. Actual: '<actual>'."
+      "<type>.pruneColumns() returned a schema that's incompatible at column '<path>'. Make sure it's a superset of the required schema.",
+      "Actual schema:",
+      "<superset>",
+      "Required schema:",
+      "<subset>"
     ]
   },
   "DATA_SOURCE_PUSHDOWN_DISABLED": {
