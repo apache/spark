@@ -448,6 +448,21 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         }
       }
     }
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE)")
+      // scalastyle:off
+      sql(s"INSERT INTO $testTable VALUES ('ć'), ('č')")
+      // scalastyle:on
+      withView(testView) {
+        sql(
+          s"""CREATE VIEW $testView DEFAULT COLLATION UNICODE
+             | AS SELECT CAST(c1 AS STRING COLLATE SR_AI) FROM $testTable
+             |""".stripMargin)
+        val prefix = "SYSTEM.BUILTIN"
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testView"), Row(s"$prefix.sr_AI"))
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'c'"), Row(2))
+      }
+    }
     withView(testView) {
       sql(
         s"""CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE
@@ -458,6 +473,13 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(1)))
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'a'"), Seq(Row(1)))
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'b'"), Seq(Row(0)))
+    }
+    withView(testView) {
+      sql(
+        s"""CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE
+           |  AS WITH t (SELECT 'a' AS c) SELECT c as c1 FROM t
+           |""".stripMargin)
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(1)))
     }
   }
 }

@@ -49,7 +49,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
-import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -987,17 +987,9 @@ class SessionCatalog(
           parser.parseQuery(viewText)
         }
     }
-    // The metadata.viewText contains only the AS query part of CREATE VIEW statement
-    // and does not include the DEFAULT COLLATION part, resulting in a plan without collation.
-    val plan = if (metadata.collation.isDefined) {
-      val newType = StringType(metadata.collation.get)
-      ResolveDDLCommandStringTypes.transformPlan(parsedPlan, newType)
-    } else {
-      parsedPlan
-    }
     val schemaMode = metadata.viewSchemaMode
     if (schemaMode == SchemaEvolution) {
-      View(desc = metadata, isTempView = isTempView, child = plan)
+      View(desc = metadata, isTempView = isTempView, child = parsedPlan)
     } else {
       val projectList = if (!isHiveCreatedView(metadata)) {
         val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
@@ -1046,7 +1038,7 @@ class SessionCatalog(
           castColToType(col, field, schemaMode)
         }
       }
-      View(desc = metadata, isTempView = isTempView, child = Project(projectList, plan))
+      View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
     }
   }
 
