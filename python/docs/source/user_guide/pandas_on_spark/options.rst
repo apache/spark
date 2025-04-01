@@ -208,6 +208,19 @@ This is conceptually equivalent to the PySpark example as below:
     >>> spark_df.rdd.zipWithIndex().map(lambda p: p[1]).collect()
     [0, 1, 2]
 
+.. warning::
+    Unlike ``sequence``, since ``distributed-sequence`` is executed in a distributed environment,
+    the rows corresponding to each index may vary although the index itself still remains globally sequential.
+
+    This happens because the rows are distributed across multiple partitions and nodes,
+    leading to indeterministic row-to-index mappings when the data is loaded.
+
+    Additionally, when using operations such as ``apply()``, ``groupby()``, or ``transform()``,
+    a new ``distributed-sequence`` index may be generated, which does not necessarily match the original index of the DataFrame.
+    This can result in misaligned row-to-index mappings, leading to incorrect calculations.
+
+    To avoid this issue, see `Handling index misalignment with distributed-sequence <best_practices.rst#handling-index-misalignment-with-distributed-sequence>`_
+
 **distributed**: It implements a monotonically increasing sequence simply by using
 PySpark's `monotonically_increasing_id` function in a fully distributed manner. The
 values are indeterministic. If the index does not have to be a sequence that increases

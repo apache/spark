@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
+import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -542,8 +542,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkError(
       exception = intercept[SparkIllegalArgumentException](
         dateAddInterval(input, new CalendarInterval(36, 47, 1))),
-      condition = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
-      parameters = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+      condition = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION")
   }
 
   test("timestamp add interval") {
@@ -764,10 +763,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("SPARK-35664: microseconds to LocalDateTime") {
-    assert(microsToLocalDateTime(0) ==  LocalDateTime.parse("1970-01-01T00:00:00"))
-    assert(microsToLocalDateTime(100) ==  LocalDateTime.parse("1970-01-01T00:00:00.0001"))
-    assert(microsToLocalDateTime(100000000) ==  LocalDateTime.parse("1970-01-01T00:01:40"))
-    assert(microsToLocalDateTime(100000000000L) ==  LocalDateTime.parse("1970-01-02T03:46:40"))
+    assert(microsToLocalDateTime(0) == LocalDateTime.parse("1970-01-01T00:00:00"))
+    assert(microsToLocalDateTime(100) == LocalDateTime.parse("1970-01-01T00:00:00.0001"))
+    assert(microsToLocalDateTime(100000000) == LocalDateTime.parse("1970-01-01T00:01:40"))
+    assert(microsToLocalDateTime(100000000000L) == LocalDateTime.parse("1970-01-02T03:46:40"))
     assert(microsToLocalDateTime(253402300799999999L) ==
       LocalDateTime.parse("9999-12-31T23:59:59.999999"))
     assert(microsToLocalDateTime(Long.MinValue) ==
@@ -1105,5 +1104,66 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         Map("functionName" -> "`TIMESTAMPDIFF`",
           "parameter" -> "`unit`",
           "invalidValue" -> "'SECS'"))
+  }
+
+  test("localTimeToMicros and microsToLocalTime") {
+    assert(microsToLocalTime(0) === LocalTime.of(0, 0))
+    assert(localTimeToMicros(LocalTime.of(0, 0)) === 0)
+
+    assert(localTimeToMicros(microsToLocalTime(123456789)) === 123456789)
+
+    assert(localTimeToMicros(LocalTime.parse("23:59:59.999999")) === (24L * 60 * 60 * 1000000 - 1))
+    assert(microsToLocalTime(24L * 60 * 60 * 1000000 - 1) === LocalTime.of(23, 59, 59, 999999000))
+
+    Seq(-1, 24L * 60 * 60 * 1000000).foreach { invalidMicros =>
+      val msg = intercept[DateTimeException] {
+        microsToLocalTime(invalidMicros)
+      }.getMessage
+      assert(msg.contains("Invalid value"))
+    }
+    val msg = intercept[ArithmeticException] {
+      microsToLocalTime(Long.MaxValue)
+    }.getMessage
+    assert(msg == "long overflow")
+  }
+
+  test("stringToTime") {
+    def checkStringToTime(str: String, expected: Option[Long]): Unit = {
+      assert(stringToTime(UTF8String.fromString(str)) === expected)
+    }
+
+    checkStringToTime("00:00", Some(localTime()))
+    checkStringToTime("00:00:00", Some(localTime()))
+    checkStringToTime("00:00:00.1", Some(localTime(micros = 100000)))
+    checkStringToTime("00:00:59.01", Some(localTime(sec = 59, micros = 10000)))
+    checkStringToTime("00:59:00.001", Some(localTime(minute = 59, micros = 1000)))
+    checkStringToTime("23:00:00.0001", Some(localTime(hour = 23, micros = 100)))
+    checkStringToTime("23:59:00.00001", Some(localTime(hour = 23, minute = 59, micros = 10)))
+    checkStringToTime("23:59:59.000001",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 1)))
+    checkStringToTime("23:59:59.999999",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999)))
+
+    checkStringToTime("1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime("T1:02:3.04", Some(localTime(hour = 1, minute = 2, sec = 3, micros = 40000)))
+
+    // Negative tests
+    Seq("2025-03-09 00:00:00", "00", "00:01:02 UTC").foreach { invalidTime =>
+      checkStringToTime(invalidTime, None)
+    }
+  }
+
+  test("stringToTimeAnsi") {
+    Seq("2025-03-09T00:00:00", "012", "00:01:02Z").foreach { invalidTime =>
+      checkError(
+        exception = intercept[SparkDateTimeException] {
+          stringToTimeAnsi(UTF8String.fromString(invalidTime))
+        },
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> s"'$invalidTime'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> "\"TIME(6)\""))
+    }
   }
 }

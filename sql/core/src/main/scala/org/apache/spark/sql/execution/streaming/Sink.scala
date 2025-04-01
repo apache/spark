@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
  * exactly once semantics a sink must be idempotent in the face of multiple attempts to add the same
  * batch.
  *
- * Note that, we extends `Table` here, to make the v1 streaming sink API be compatible with
+ * Note that, we extend `Table` here, to make the v1 streaming sink API be compatible with
  * data source v2.
  */
 trait Sink extends Table {

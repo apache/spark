@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.stat
 import java.util.Locale
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -97,7 +98,8 @@ object StatFunctions extends Logging {
         sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
       sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
     }
-    val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
+    val summaries = df.select(columns: _*).materializedRdd
+      .treeAggregate(emptySummaries)(apply, merge)
 
     summaries.map {
       summary => summary.query(probabilities) match {

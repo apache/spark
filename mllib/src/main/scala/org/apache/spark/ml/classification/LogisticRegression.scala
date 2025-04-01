@@ -45,7 +45,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.VersionUtils
+import org.apache.spark.util._
 
 /**
  * Params for logistic regression.
@@ -1041,6 +1041,22 @@ class LogisticRegression @Since("1.2.0") (
     (solution, arrayBuilder.result())
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    // TODO: get numClasses and numFeatures together from dataset
+    val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    if (checkMultinomial(numClasses)) {
+      size += Matrices.getDenseSize(numFeatures, numClasses) // coefficientMatrix
+      size += Vectors.getDenseSize(numClasses) // interceptVector
+    } else {
+      size += Matrices.getDenseSize(numFeatures, 1) // coefficientMatrix
+      size += Vectors.getDenseSize(1) // interceptVector
+    }
+    size
+  }
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
@@ -1077,8 +1093,7 @@ class LogisticRegressionModel private[spark] (
       Vectors.dense(intercept), 2, isMultinomial = false)
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(Identifiable.randomUID("logreg"), Vectors.zeros(0), 0)
+  private[ml] def this() = this("", Matrices.empty, Vectors.empty, -1, false)
 
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained
@@ -1247,6 +1262,17 @@ class LogisticRegressionModel private[spark] (
       val m = margin(features)
       Vectors.dense(-m, m)
     }
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficientMatrix != null) {
+      size += this.coefficientMatrix.getSizeInBytes
+    }
+    if (this.interceptVector != null) {
+      size += this.interceptVector.getSizeInBytes
+    }
+    size
   }
 
   @Since("1.4.0")

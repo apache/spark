@@ -188,8 +188,7 @@ class DecisionTreeRegressionModel private[ml] (
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(Node.dummyNode, 0)
+  private[ml] def this() = this("", Node.dummyNode, -1)
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction

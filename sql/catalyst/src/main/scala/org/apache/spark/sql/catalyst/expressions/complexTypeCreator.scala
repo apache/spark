@@ -79,7 +79,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      SQLConf.get.defaultStringType
+      StringType
     } else {
       NullType
     }
@@ -196,7 +196,7 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      SQLConf.get.defaultStringType
+      StringType
     } else {
       NullType
     }
@@ -354,7 +354,7 @@ case class MapFromArrays(left: Expression, right: Expression)
 case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
   override def nullable: Boolean = false
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
   override def prettyName: String = "NamePlaceholder"
   override def toString: String = prettyName
 }
@@ -457,6 +457,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
       case (name, expr) =>
         val metadata = expr match {
           case ne: NamedExpression => ne.metadata
+          case gsf: GetStructField => gsf.metadata
           case _ => Metadata.empty
         }
         StructField(name.toString, expr.dataType, expr.nullable, metadata)
@@ -565,14 +566,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   extends TernaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   def this(child: Expression, pairDelim: Expression) = {
-    this(child, pairDelim, Literal.create(":", SQLConf.get.defaultStringType))
+    this(child, pairDelim, Literal.create(":", StringType))
   }
 
   def this(child: Expression) = {
     this(
       child,
-      Literal.create(",", SQLConf.get.defaultStringType),
-      Literal.create(":", SQLConf.get.defaultStringType))
+      Literal.create(",", StringType),
+      Literal.create(":", StringType))
   }
 
   override def stateful: Boolean = true

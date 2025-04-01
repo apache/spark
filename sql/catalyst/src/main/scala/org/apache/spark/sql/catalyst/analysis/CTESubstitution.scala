@@ -56,9 +56,15 @@ object CTESubstitution extends Rule[LogicalPlan] {
       return plan
     }
 
-    val commands = plan.collect {
-      case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => c
+    def collectCommands(p: LogicalPlan): Seq[LogicalPlan] = p match {
+      case c @ (_: Command | _: ParsedStatement | _: InsertIntoDir) => Seq(c)
+      case u: UnresolvedWith =>
+        collectCommands(u.child) ++ u.cteRelations.flatMap {
+          case (_, relation) => collectCommands(relation)
+        }
+      case p => p.children.flatMap(collectCommands)
     }
+    val commands = collectCommands(plan)
     val forceInline = if (commands.length == 1) {
       if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
         // The legacy behavior always inlines the CTE relations for queries in commands.
@@ -344,7 +350,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
       recursiveCTERelation.map {
         case (_, d) =>
           SubqueryAlias(table,
-            CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, recursive = true))
+            CTERelationRef(
+              d.id, d.resolved, d.output, d.isStreaming, recursive = true, maxRows = d.maxRows))
       }.get
     } else {
       cteRelations
@@ -357,7 +364,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
               // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
               // This is a non-recursive reference, recursive parameter is by default set to false
               SubqueryAlias(table,
-                CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
+                CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, maxRows = d.maxRows))
             }
         }
         .getOrElse(unresolvedRelation)
@@ -402,7 +409,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
           case e: SubqueryExpression =>
             e.withNewPlan(
-              apply(substituteCTE(e.plan, alwaysInline, cteRelations, None)))
+              apply(substituteCTE(e.plan, alwaysInline, cteRelations, recursiveCTERelation)))
         }
     }
   }

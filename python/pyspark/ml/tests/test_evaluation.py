@@ -28,7 +28,8 @@ from pyspark.ml.evaluation import (
     RankingEvaluator,
 )
 from pyspark.ml.linalg import Vectors
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import Row
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class EvaluatorTestsMixin:
@@ -42,6 +43,7 @@ class EvaluatorTestsMixin:
 
         # Initialize RankingEvaluator
         evaluator = RankingEvaluator().setPredictionCol("prediction")
+        self.assertTrue(evaluator.isLargerBetter())
 
         # Evaluate the dataset using the default metric (mean average precision)
         mean_average_precision = evaluator.evaluate(dataset)
@@ -54,7 +56,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(precision_at_k, 0.3333, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="ranking_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
@@ -86,13 +88,32 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(accuracy, 0.5476, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="multi_label_class_eval") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
             evaluator2 = MultilabelClassificationEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
             self.assertEqual(str(evaluator), str(evaluator2))
+
+        for metric in [
+            "subsetAccuracy",
+            "accuracy",
+            "precision",
+            "recall",
+            "f1Measure",
+            "precisionByLabel",
+            "recallByLabel",
+            "f1MeasureByLabel",
+            "microPrecision",
+            "microRecall",
+            "microF1Measure",
+        ]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(evaluator.isLargerBetter())
+
+        evaluator.setMetricName("hammingLoss")
+        self.assertTrue(not evaluator.isLargerBetter())
 
     def test_multiclass_classification_evaluator(self):
         dataset = self.spark.createDataFrame(
@@ -133,7 +154,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(hamming_loss, 0.3333, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="multi_class_classification_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
@@ -163,6 +184,29 @@ class EvaluatorTestsMixin:
         log_loss = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(log_loss, 1.0093, atol=1e-4))
 
+        for metric in [
+            "f1",
+            "accuracy",
+            "weightedPrecision",
+            "weightedRecall",
+            "weightedTruePositiveRate",
+            "weightedFMeasure",
+            "truePositiveRateByLabel",
+            "precisionByLabel",
+            "recallByLabel",
+            "fMeasureByLabel",
+        ]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(evaluator.isLargerBetter())
+        for metric in [
+            "weightedFalsePositiveRate",
+            "falsePositiveRateByLabel",
+            "logLoss",
+            "hammingLoss",
+        ]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(not evaluator.isLargerBetter())
+
     def test_binary_classification_evaluator(self):
         # Define score and labels data
         data = map(
@@ -180,6 +224,8 @@ class EvaluatorTestsMixin:
         dataset = self.spark.createDataFrame(data, ["raw", "label", "weight"])
 
         evaluator = BinaryClassificationEvaluator().setRawPredictionCol("raw")
+        self.assertTrue(evaluator.isLargerBetter())
+
         auc_roc = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(auc_roc, 0.7083, atol=1e-4))
 
@@ -188,7 +234,7 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(auc_pr, 0.8339, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="binary_classification_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
@@ -226,6 +272,8 @@ class EvaluatorTestsMixin:
         dataset = self.spark.createDataFrame(data, ["features", "prediction", "weight"])
 
         evaluator = ClusteringEvaluator().setPredictionCol("prediction")
+        self.assertTrue(evaluator.isLargerBetter())
+
         score = evaluator.evaluate(dataset)
         self.assertTrue(np.allclose(score, 0.9079, atol=1e-4))
 
@@ -236,12 +284,13 @@ class EvaluatorTestsMixin:
         self.assertTrue(np.allclose(score_with_weight, 0.9079, atol=1e-4))
 
         # read/write
-        with tempfile.TemporaryDirectory(prefix="save") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="clustering_evaluator") as tmp_dir:
             # Save the evaluator
             evaluator.write().overwrite().save(tmp_dir)
             # Load the saved evaluator
             evaluator2 = ClusteringEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "prediction")
+            self.assertTrue(str(evaluator) == str(evaluator2))
 
     def test_clustering_evaluator_with_cosine_distance(self):
         featureAndPredictions = map(
@@ -291,6 +340,7 @@ class EvaluatorTestsMixin:
             # Load the saved evaluator
             evaluator2 = RegressionEvaluator.load(tmp_dir)
             self.assertEqual(evaluator2.getPredictionCol(), "raw")
+            self.assertTrue(str(evaluator) == str(evaluator2))
 
         evaluator_with_weights = RegressionEvaluator(predictionCol="raw", weightCol="weight")
         weighted_rmse = evaluator_with_weights.evaluate(dataset)
@@ -298,14 +348,15 @@ class EvaluatorTestsMixin:
         through_origin = evaluator_with_weights.getThroughOrigin()
         self.assertEqual(through_origin, False)
 
+        for metric in ["mse", "rmse", "mae"]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(not evaluator.isLargerBetter())
+        for metric in ["r2", "var"]:
+            evaluator.setMetricName(metric)
+            self.assertTrue(evaluator.isLargerBetter())
 
-class EvaluatorTests(EvaluatorTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
 
-    def tearDown(self) -> None:
-        self.spark.stop()
-
+class EvaluatorTests(EvaluatorTestsMixin, ReusedSQLTestCase):
     def test_evaluate_invalid_type(self):
         evaluator = RegressionEvaluator(metricName="r2")
         df = self.spark.createDataFrame([Row(label=1.0, prediction=1.1)])

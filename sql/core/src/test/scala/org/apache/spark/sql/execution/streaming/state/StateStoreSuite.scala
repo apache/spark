@@ -1873,22 +1873,26 @@ object StateStoreTestsHelper {
     iterator.map(rowPairToDataPair).toSet
   }
 
-  def remove(store: StateStore, condition: ((String, Int)) => Boolean): Unit = {
-    store.iterator().foreach { rowPair =>
-      if (condition(keyRowToData(rowPair.key))) store.remove(rowPair.key)
+  def remove(store: StateStore, condition: ((String, Int)) => Boolean,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    store.iterator(colFamilyName).foreach { rowPair =>
+      if (condition(keyRowToData(rowPair.key))) store.remove(rowPair.key, colFamilyName)
     }
   }
 
-  def put(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
-    store.put(dataToKeyRow(key1, key2), dataToValueRow(value))
+  def put(store: StateStore, key1: String, key2: Int, value: Int,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    store.put(dataToKeyRow(key1, key2), dataToValueRow(value), colFamilyName)
   }
 
-  def merge(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
-    store.merge(dataToKeyRow(key1, key2), dataToValueRow(value))
+  def merge(store: StateStore, key1: String, key2: Int, value: Int,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    store.merge(dataToKeyRow(key1, key2), dataToValueRow(value), colFamilyName)
   }
 
-  def get(store: ReadStateStore, key1: String, key2: Int): Option[Int] = {
-    Option(store.get(dataToKeyRow(key1, key2))).map(valueRowToData)
+  def get(store: ReadStateStore, key1: String, key2: Int,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Option[Int] = {
+    Option(store.get(dataToKeyRow(key1, key2), colFamilyName)).map(valueRowToData)
   }
 
   def newDir(): String = Utils.createTempDir().toString

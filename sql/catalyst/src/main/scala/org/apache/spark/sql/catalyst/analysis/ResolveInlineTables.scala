@@ -29,12 +29,8 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(AlwaysProcess.fn, ruleId) {
-      case table: UnresolvedInlineTable if canResolveTable(table) =>
+      case table: UnresolvedInlineTable if table.expressionsResolved =>
         EvaluateUnresolvedInlineTable.evaluateUnresolvedInlineTable(table)
     }
-  }
-
-  private def canResolveTable(table: UnresolvedInlineTable): Boolean = {
-    table.expressionsResolved && !ResolveDefaultStringTypes.needsResolution(table)
   }
 }

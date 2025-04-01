@@ -287,7 +287,7 @@ object JSONOptions extends DataSourceOptions {
   val COLUMN_NAME_OF_CORRUPTED_RECORD = newOption("columnNameOfCorruptRecord")
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
-  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   // Options with alternative
   val ENCODING = "encoding"

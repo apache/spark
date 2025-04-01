@@ -247,7 +247,7 @@ res0: Long = 10L
 
 By default, the REPL will attempt to connect to a local Spark Server on port 15002.
 The connection, however, may be configured in several ways as described in this configuration
-[reference](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md).
+[reference](https://github.com/apache/spark/blob/master/sql/connect/docs/client-connection-string.md).
 
 #### Set SPARK_REMOTE environment variable
 
@@ -284,11 +284,11 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 <div data-lang="python"  markdown="1">
 
-First, install PySpark with `pip install pyspark[connect]==3.5.0` or if building a packaged PySpark application/library,
+First, install PySpark with `pip install pyspark[connect]=={{site.SPARK_VERSION_SHORT}}` or if building a packaged PySpark application/library,
 add it your setup.py file as:
 {% highlight python %}
 install_requires=[
-'pyspark[connect]==3.5.0'
+'pyspark[connect]=={{site.SPARK_VERSION_SHORT}}'
 ]
 {% endhighlight %}
 
@@ -335,7 +335,7 @@ Lines with a: 72, lines with b: 39
 To use Spark Connect as part of a Scala application/project, we first need to include the right dependencies.
 Using the `sbt` build system as an example, we add the following dependencies to the `build.sbt` file:
 {% highlight sbt %}
-libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "3.5.0"
+libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "{{site.SPARK_VERSION_SHORT}}"
 {% endhighlight %}
 
 When writing your own code, include the `remote` function with a reference to
@@ -356,7 +356,7 @@ Example:
 import org.apache.spark.sql.connect.client.REPLClassDirMonitor
 // Register a ClassFinder to monitor and upload the classfiles from the build output.
 val classFinder = new REPLClassDirMonitor(<ABSOLUTE_PATH_TO_BUILD_OUTPUT_DIR>)
-spark.registerClassFinder(classfinder)
+spark.registerClassFinder(classFinder)
 
 // Upload JAR dependencies
 spark.addArtifact(<ABSOLUTE_PATH_JAR_DEP>)
@@ -380,9 +380,9 @@ HTTP/2 interface allows for the use of authenticating proxies, which makes
 it possible to secure Spark Connect without having to implement authentication
 logic in Spark directly.
 
-# What is supported in Spark 3.4
+# What is supported
 
-**PySpark**: In Spark 3.4, Spark Connect supports most PySpark APIs, including
+**PySpark**: Since Spark 3.4, Spark Connect supports most PySpark APIs, including
 [DataFrame](api/python/reference/pyspark.sql/dataframe.html),
 [Functions](api/python/reference/pyspark.sql/functions.html), and
 [Column](api/python/reference/pyspark.sql/column.html). However,
@@ -393,7 +393,7 @@ supported in the [API reference](api/python/reference/index.html) documentation.
 Supported APIs are labeled "Supports Spark Connect" so you can check whether the
 APIs you are using are available before migrating existing code to Spark Connect.
 
-**Scala**: In Spark 3.5, Spark Connect supports most Scala APIs, including
+**Scala**: Since Spark 3.5, Spark Connect supports most Scala APIs, including
 [Dataset](api/scala/org/apache/spark/sql/Dataset.html),
 [functions](api/scala/org/apache/spark/sql/functions$.html),
 [Column](api/scala/org/apache/spark/sql/Column.html),

@@ -19,33 +19,55 @@
 # So register the supported estimator here if you're trying to add a new one.
 
 # classification
+org.apache.spark.ml.classification.NaiveBayes
+org.apache.spark.ml.classification.LinearSVC
 org.apache.spark.ml.classification.LogisticRegression
+org.apache.spark.ml.classification.FMClassifier
+org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 org.apache.spark.ml.classification.DecisionTreeClassifier
 org.apache.spark.ml.classification.RandomForestClassifier
 org.apache.spark.ml.classification.GBTClassifier
 
-
 # regression
+org.apache.spark.ml.regression.AFTSurvivalRegression
+org.apache.spark.ml.regression.IsotonicRegression
 org.apache.spark.ml.regression.LinearRegression
+org.apache.spark.ml.regression.GeneralizedLinearRegression
+org.apache.spark.ml.regression.FMRegressor
 org.apache.spark.ml.regression.DecisionTreeRegressor
 org.apache.spark.ml.regression.RandomForestRegressor
 org.apache.spark.ml.regression.GBTRegressor
 
-
 # clustering
 org.apache.spark.ml.clustering.KMeans
 org.apache.spark.ml.clustering.BisectingKMeans
-
+org.apache.spark.ml.clustering.GaussianMixture
+org.apache.spark.ml.clustering.LDA
 
 # recommendation
 org.apache.spark.ml.recommendation.ALS
 
-
 # fpm
 org.apache.spark.ml.fpm.FPGrowth
 
-
 # feature
+org.apache.spark.ml.feature.QuantileDiscretizer
+org.apache.spark.ml.feature.RFormula
+org.apache.spark.ml.feature.Imputer
 org.apache.spark.ml.feature.StandardScaler
 org.apache.spark.ml.feature.MaxAbsScaler
 org.apache.spark.ml.feature.MinMaxScaler
+org.apache.spark.ml.feature.RobustScaler
+org.apache.spark.ml.feature.ChiSqSelector
+org.apache.spark.ml.feature.UnivariateFeatureSelector
+org.apache.spark.ml.feature.VarianceThresholdSelector
+org.apache.spark.ml.feature.StringIndexer
+org.apache.spark.ml.feature.VectorIndexer
+org.apache.spark.ml.feature.PCA
+org.apache.spark.ml.feature.IDF
+org.apache.spark.ml.feature.Word2Vec
+org.apache.spark.ml.feature.CountVectorizer
+org.apache.spark.ml.feature.OneHotEncoder
+org.apache.spark.ml.feature.TargetEncoder
+org.apache.spark.ml.feature.BucketedRandomProjectionLSH
+org.apache.spark.ml.feature.MinHashLSH

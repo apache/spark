@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -674,7 +675,7 @@ object ViewHelper extends SQLConfHelper with Logging {
       val tempVars = collectTemporaryVariables(child)
       tempVars.foreach { nameParts =>
         throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
-          name, nameParts.quoted)
+          name.nameParts, nameParts)
       }
     }
   }

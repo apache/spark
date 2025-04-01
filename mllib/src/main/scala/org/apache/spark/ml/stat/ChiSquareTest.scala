@@ -22,9 +22,8 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.test.{ChiSqTest => OldChiSqTest}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-
 
 /**
  * Chi-square hypothesis testing for categorical data.
@@ -81,22 +80,21 @@ object ChiSquareTest {
     val data = dataset.select(col(labelCol).cast("double"), col(featuresCol)).rdd
       .map { case Row(label: Double, vec: Vector) => (label, OldVectors.fromML(vec)) }
 
-    val resultDF = OldChiSqTest.computeChiSquared(data)
+    val resRDD = OldChiSqTest.computeChiSquared(data)
       .map { case (col, pValue, degreesOfFreedom, statistic, _) =>
         (col, pValue, degreesOfFreedom, statistic)
-      }.toDF("featureIndex", "pValue", "degreesOfFreedom", "statistic")
+      }
 
     if (flatten) {
-      resultDF
+      resRDD.toDF("featureIndex", "pValue", "degreesOfFreedom", "statistic")
     } else {
-      resultDF.agg(collect_list(struct("*")))
-        .as[Seq[(Int, Double, Int, Double)]]
-        .map { seq =>
-          val results = seq.toArray.sortBy(_._1)
-          val pValues = Vectors.dense(results.map(_._2))
-          val degreesOfFreedom = results.map(_._3)
-          val statistics = Vectors.dense(results.map(_._4))
-          (pValues, degreesOfFreedom, statistics)
+      resRDD.coalesce(1)
+        .mapPartitions { iter =>
+          val res = iter.toArray.sortBy(_._1)
+          val pValues = Vectors.dense(res.map(_._2))
+          val degreesOfFreedom = res.map(_._3)
+          val statistics = Vectors.dense(res.map(_._4))
+          Iterator.single((pValues, degreesOfFreedom, statistics))
         }.toDF("pValues", "degreesOfFreedom", "statistics")
     }
   }

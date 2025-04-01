@@ -81,7 +81,7 @@ class PandasConversionMixin:
                 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
                 require_minimum_pyarrow_version()
-                to_arrow_schema(self.schema)
+                to_arrow_schema(self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes())
             except Exception as e:
                 if jconf.arrowPySparkFallbackEnabled():
                     msg = (
@@ -236,7 +236,12 @@ class PandasConversionMixin:
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        prefers_large_var_types = jconf.arrowUseLargeVarTypes()
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            prefers_large_types=prefers_large_var_types,
+        )
 
         import pyarrow as pa
 
@@ -322,7 +327,8 @@ class PandasConversionMixin:
             from pyspark.sql.pandas.types import to_arrow_schema
             import pyarrow as pa
 
-            schema = to_arrow_schema(self.schema)
+            prefers_large_var_types = self.sparkSession._jconf.arrowUseLargeVarTypes()
+            schema = to_arrow_schema(self.schema, prefers_large_types=prefers_large_var_types)
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
 
@@ -715,9 +721,16 @@ class SparkConversionMixin:
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
         # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
+        prefers_large_var_types = self._jconf.arrowUseLargeVarTypes()
         arrow_data = [
             [
-                (c, to_arrow_type(t) if t is not None else None, t)
+                (
+                    c,
+                    to_arrow_type(t, prefers_large_types=prefers_large_var_types)
+                    if t is not None
+                    else None,
+                    t,
+                )
                 for (_, c), t in zip(pdf_slice.items(), spark_types)
             ]
             for pdf_slice in pdf_slices
@@ -785,8 +798,13 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
+        prefers_large_var_types = self._jconf.arrowUseLargeVarTypes()
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
-            to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True)
+            to_arrow_schema(
+                schema,
+                error_on_duplicated_field_names_in_struct=True,
+                prefers_large_types=prefers_large_var_types,
+            )
         )
 
         # Chunk the Arrow Table into RecordBatches
