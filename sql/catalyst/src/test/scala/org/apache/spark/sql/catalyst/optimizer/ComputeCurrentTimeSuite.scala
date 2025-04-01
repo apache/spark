@@ -24,12 +24,13 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTime, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Cast, CurrentDate, CurrentTime, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.types.UTF8String
 
 class ComputeCurrentTimeSuite extends PlanTest {
@@ -56,8 +57,8 @@ class ComputeCurrentTimeSuite extends PlanTest {
     // logical plan that calls current_time() twice in the Project
     val planInput = Project(
       Seq(
-        Alias(CurrentTime(3), "a")(),
-        Alias(CurrentTime(3), "b")()
+        Alias(CurrentTime(Literal(3)), "a")(),
+        Alias(CurrentTime(Literal(3)), "b")()
       ),
       LocalRelation()
     )
@@ -76,6 +77,58 @@ class ComputeCurrentTimeSuite extends PlanTest {
         s"but got ${lits(0)} vs ${lits(1)}")
   }
 
+  test("analyzer should replace current_time with foldable child expressions") {
+    // We build a plan that calls current_time(2 + 1) twice
+    val foldableExpr = Add(Literal(2), Literal(1))  // a foldable arithmetic expression => 3
+    val planInput = Project(
+      Seq(
+        Alias(CurrentTime(foldableExpr), "a")(),
+        Alias(CurrentTime(foldableExpr), "b")()
+      ),
+      LocalRelation()
+    )
+
+    val analyzed = planInput.analyze
+    val optimized = Optimize.execute(analyzed).asInstanceOf[Project]
+
+    // We expect the optimizer to replace current_time(2 + 1) with a literal time value,
+    // so let's extract those literal values.
+    val lits = literals[Long](optimized)
+    assert(lits.size == 2, s"Expected two literal values, found ${lits.size}")
+
+    // Both references to current_time(2 + 1) should be replaced by the same microsecond-of-day
+    assert(lits(0) == lits(1),
+      s"Expected both current_time(2 + 1) calls to yield the same literal, " +
+        s"but got ${lits(0)} vs. ${lits(1)}"
+    )
+  }
+
+  test("analyzer should replace current_time with foldable casted string-literal") {
+    // We'll build a foldable cast expression: CAST(' 0005 ' AS INT) => 5
+    val castExpr = Cast(Literal(" 0005 "), IntegerType)
+
+    // Two references to current_time(castExpr) => so we can check they're replaced consistently
+    val planInput = Project(
+      Seq(
+        Alias(CurrentTime(castExpr), "a")(),
+        Alias(CurrentTime(castExpr), "b")()
+      ),
+      LocalRelation()
+    )
+
+    val analyzed = planInput.analyze
+    val optimized = Optimize.execute(analyzed).asInstanceOf[Project]
+
+    val lits = literals[Long](optimized)
+    assert(lits.size == 2, s"Expected two literal values, found ${lits.size}")
+
+    // Both references to current_time(CAST(' 0005 ' AS INT)) in the same query
+    // should produce the same microsecond-of-day literal.
+    assert(lits(0) == lits(1),
+      s"Expected both references to yield the same literal, but got ${lits(0)} vs. ${lits(1)}"
+    )
+  }
+
 
   test("analyzer should respect time flow in current timestamp calls") {
     val in = Project(Alias(CurrentTimestamp(), "t1")() :: Nil, LocalRelation())
@@ -91,7 +144,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("analyzer should respect time flow in current_time calls") {
-    val in = Project(Alias(CurrentTime(4), "t1")() :: Nil, LocalRelation())
+    val in = Project(Alias(CurrentTime(Literal(4)), "t1")() :: Nil, LocalRelation())
 
     val planT1 = Optimize.execute(in.analyze).asInstanceOf[Project]
     sleep(5)

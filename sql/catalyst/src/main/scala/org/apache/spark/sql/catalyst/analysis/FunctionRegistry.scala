@@ -627,7 +627,7 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
     expression[CurrentTimestamp]("current_timestamp"),
-    expressionBuilder("current_time", CurrentTimeExpressionBuilder),
+    expression[CurrentTime]("current_time"),
     expression[CurrentTimeZone]("current_timezone"),
     expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),

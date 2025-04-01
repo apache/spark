@@ -20,10 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
+import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType, ObjectType, TimeType, TypeCollection}
@@ -350,23 +353,6 @@ object SecondExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-case class CurrentTime(precision: Int = 6) extends CurrentTimestampLike with ExpectsInputTypes {
-  // The function returns a TIME(n).
-  override def dataType: DataType = TimeType(precision)
-
-  override def prettyName: String = "current_time"
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (precision < TimeType.MIN_PRECISION || precision > TimeType.MICROS_PRECISION) {
-      TypeCheckFailure(s"Invalid precision $precision. Must be between 0 and 6.")
-    } else {
-      TypeCheckSuccess
-    }
-  }
-}
-
 /**
  * Returns the current time at the start of query evaluation.
  * There is no code generation since this expression should get constant folded by the optimizer.
@@ -374,7 +360,8 @@ case class CurrentTime(precision: Int = 6) extends CurrentTimestampLike with Exp
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_() - Returns the current time at the start of query evaluation. All calls of current_time within the same query return the same value.
+    _FUNC_([precision]) - Returns the current time at the start of query evaluation.
+    All calls of current_time within the same query return the same value.
 
     _FUNC_ - Returns the current time at the start of query evaluation.
   """,
@@ -388,24 +375,82 @@ case class CurrentTime(precision: Int = 6) extends CurrentTimestampLike with Exp
        15:49:11
       > SELECT _FUNC_(3);
        15:49:11.914
+      > SELECT _FUNC_(1+1);
+       15:49:11.91
   """,
   group = "datetime_funcs",
-  since = "4.1.0")
-// scalastyle:on line.size.limit
-object CurrentTimeExpressionBuilder extends ExpressionBuilder {
-  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    expressions match {
-      case Nil => CurrentTime(TimeType.MICROS_PRECISION)
+  since = "4.1.0"
+)
+case class CurrentTime(child: Expression = Literal(TimeType.MICROS_PRECISION))
+  extends UnaryExpression with FoldableUnevaluable with ImplicitCastInputTypes {
 
-      case Seq(Literal(precisionValue, IntegerType)) =>
-        CurrentTime(precisionValue.asInstanceOf[Int])
-
-      case Seq(_) =>
-        val child = expressions.head
-        throw QueryCompilationErrors.nonFoldableInputError("precision", child, IntegerType)
-
-      case _ =>
-        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0, 1), expressions.length)
-    }
+  def this() = {
+    this(Literal(TimeType.MICROS_PRECISION))
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+
+  override def nullable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // Check foldability
+    if (!child.foldable) {
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("precision"),
+          "inputType" -> toSQLType(child.dataType),
+          "inputExpr" -> toSQLExpr(child)
+        )
+      )
+    }
+
+    // Evaluate
+    val precisionValue = child.eval()
+    if (precisionValue == null) {
+      return DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "precision"))
+    }
+
+    // Check numeric range
+    precisionValue match {
+      case n: Number =>
+        val p = n.intValue()
+        if (p < TimeType.MIN_PRECISION || p > TimeType.MICROS_PRECISION) {
+          return DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> toSQLId("precision"),
+              "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
+              "currentValue" -> toSQLValue(p, IntegerType)
+            )
+          )
+        }
+      case _ =>
+        return DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(IntegerType),
+            "inputSql" -> toSQLExpr(child),
+            "inputType" -> toSQLType(child.dataType))
+        )
+    }
+    TypeCheckSuccess
+  }
+
+  // Because checkInputDataTypes ensures the argument is foldable & valid,
+  // we can directly evaluate here.
+  lazy val precision: Int = child.eval().asInstanceOf[Number].intValue()
+
+  override def dataType: DataType = TimeType(precision)
+
+  override def prettyName: String = "current_time"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(child = newChild)
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
 }

@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.types.{StringType, TimeType}
+import org.apache.spark.sql.types.{IntegerType, StringType, TimeType}
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {
@@ -228,55 +229,9 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (child: Expression) => SecondsOfTime(child).replacement, TimeType())
   }
 
-  test("CurrentTimeExpressionBuilder") {
-    // Case 1: Zero arguments => should build CurrentTime(6) by default
-    val builtExprNoArg = CurrentTimeExpressionBuilder.build("current_time", Seq.empty)
-    assert(builtExprNoArg.isInstanceOf[CurrentTime])
-    assert(builtExprNoArg.asInstanceOf[CurrentTime].precision == 6)
-
-    // Case 2: One integer argument => e.g. current_time(3) => CurrentTime(3)
-    val intArg = Literal(3)
-    val builtExprOneArg = CurrentTimeExpressionBuilder.build("current_time", Seq(intArg))
-    assert(builtExprOneArg.isInstanceOf[CurrentTime])
-    assert(builtExprOneArg.asInstanceOf[CurrentTime].precision == 3)
-
-    // Case 3: One non-integer literal => should fail
-    checkError(
-      exception = intercept[AnalysisException] {
-        // e.g. current_time('string')
-        val strArg = Literal("foo")
-        CurrentTimeExpressionBuilder.build("current_time", Seq(strArg))
-      },
-      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-      parameters = Map(
-        "sqlExpr" -> "\"foo\"",
-        "inputName" -> "`precision`",
-        "inputType" -> "\"INT\"",
-        "inputExpr" -> "\"foo\""
-      )
-    )
-
-    // Case 4: More than one argument => e.g. current_time(3, 4) => fail
-    checkError(
-      exception = intercept[AnalysisException] {
-        val multiArgs = Seq(Literal(3), Literal(4))
-        CurrentTimeExpressionBuilder.build("current_time", multiArgs)
-      },
-      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-      parameters = Map(
-        "functionName" -> "`current_time`",
-        "expectedNum" -> "[0, 1]",
-        "actualNum" -> "2",
-        "docroot" -> SPARK_DOC_ROOT
-        // Update keys/values to match your builder’s actual thrown error
-      )
-    )
-  }
-
   test("CurrentTime") {
     // test valid precision
-    var expr = CurrentTime(3)
-    assert(expr.children.isEmpty)
+    var expr = CurrentTime(Literal(3))
     assert(expr.dataType == TimeType(3), "Should produce TIME(3) data type")
     assert(expr.checkInputDataTypes() == TypeCheckSuccess)
 
@@ -286,11 +241,36 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(expr.dataType == TimeType(6))
     assert(expr.checkInputDataTypes() == TypeCheckSuccess)
 
+    // test no value => TIME()
+    expr = CurrentTime()
+    assert(expr.precision == 6, "Default precision should be 6")
+    assert(expr.dataType == TimeType(6))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test foldable value
+    expr = CurrentTime(Literal(1 + 1))
+    assert(expr.precision == 2, "Precision should be 2")
+    assert(expr.dataType == TimeType(2))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
     // test out of range precision => checkInputDataTypes fails
-    expr = CurrentTime(10)
-    val result = expr.checkInputDataTypes()
-    assert(result.isInstanceOf[TypeCheckFailure])
-    val failure = result.asInstanceOf[TypeCheckFailure]
-    assert(failure.message.contains("Invalid precision 10. Must be between 0 and 6."))
+    expr = CurrentTime(Literal(2 + 8))
+    assert(expr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> toSQLId("precision"),
+          "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
+          "currentValue" -> toSQLValue(10, IntegerType)
+        )
+      )
+    )
+
+    // test non number value should fail since we skip analyzer here
+    expr = CurrentTime(Literal("2"))
+    val failure = intercept[ClassCastException] {
+      expr.precision
+    }
+    assert(failure.getMessage.contains("cannot be cast to class java.lang.Number"))
   }
 }
