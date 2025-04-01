@@ -173,7 +173,7 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAn
     // scalastyle:off classforname line.size.limit
     val sparkHome = IntegrationTestUtils.sparkHome
     val testJar = Paths
-      .get(s"$sparkHome/sql/connect/client/jvm/src/test/resources/TestHelloV2_$scalaVersion.jar")
+      .get(s"$sparkHome/sql/connect/client/integration-tests/src/test/resources/TestHelloV2_$scalaVersion.jar")
       .toFile
 
     assume(testJar.exists(), "Missing TestHelloV2 jar!")
