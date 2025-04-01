@@ -135,12 +135,17 @@ abstract class ParquetFileFormatSuite
   test("Write and read back TIME values") {
     Seq(false, true).foreach { offHeapEnabled =>
       withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
-        withTempPath { dir =>
-          val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
-          data.write.parquet(dir.getCanonicalPath)
-          val readback = spark.read.parquet(dir.getCanonicalPath)
-          assertResult(readback.schema) { new StructType().add("col", TimeType()) }
-          checkAnswer(readback, data)
+        val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
+        withNestedDataFrame(data).foreach { case (newDF, colName, _) =>
+          withTempPath { dir =>
+            newDF.write.parquet(dir.getCanonicalPath)
+            Seq(false, true).foreach { vectorizedReaderEnabled =>
+              readParquetFile(dir.getCanonicalPath, vectorizedReaderEnabled) { df =>
+                checkAnswer(df, newDF)
+                assert(df(colName).expr.dataType == TimeType())
+              }
+            }
+          }
         }
       }
     }

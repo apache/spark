@@ -482,14 +482,12 @@ private[parquet] class ParquetRowConverter(
         }
 
       case _: TimeType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
+        if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 && (
+          parquetType.getLogicalTypeAnnotation == null ||
+          parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
           parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            this.updater.setLong(value)
-          }
-        }
+            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS) =>
+        new ParquetPrimitiveConverter(updater)
 
       // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
       // annotated by `LIST` or `MAP` should be interpreted as a required list of required
