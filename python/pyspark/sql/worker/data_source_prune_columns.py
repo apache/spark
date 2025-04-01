@@ -115,7 +115,9 @@ def main(infile: IO, outfile: IO) -> None:
             )
 
         # Push down the required schema and get the indices of the unsupported filters.
-        actual_schema = reader.pruneColumns(ColumnPruning(full_schema, required_schema, required_top_level_schema))
+        actual_schema = reader.pruneColumns(
+            ColumnPruning(full_schema, required_schema, required_top_level_schema)
+        )
         if not isinstance(actual_schema, StructType):
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",

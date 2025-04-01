@@ -231,7 +231,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Return the data source or the read function depending on whether column pruning is
         # implemented.
-        is_column_pruning_implemented = ( 
+        is_column_pruning_implemented = (
             getattr(reader.pruneColumns, "__func__", None) is not DataSourceReader.pruneColumns
         )
         write_int(is_column_pruning_implemented, outfile)
