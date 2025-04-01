@@ -25,6 +25,7 @@ from typing import Callable, Iterable, List, Union
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
+    ColumnPruning,
     DataSource,
     DataSourceArrowWriter,
     DataSourceReader,
@@ -46,7 +47,7 @@ from pyspark.sql.datasource import (
     StringStartsWith,
     WriterCommitMessage,
 )
-from pyspark.sql.functions import spark_partition_id
+from pyspark.sql.functions import explode, spark_partition_id
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import Row, StructType
 from pyspark.testing import assertDataFrameEqual
@@ -266,6 +267,66 @@ class BasePythonDataSourceTestsMixin:
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
         self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
 
+    def test_column_pruning(self):
+        expected_full_schema = StructType.fromDDL("a int, b array<struct<c: int, d: int>>")
+        expected_required_schema = StructType.fromDDL("b array<struct<c: int>>")
+        expected_required_top_level_schema = StructType.fromDDL("b array<struct<c: int, d: int>>")
+
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self, schema):
+                self.pruned = False
+                self.schema = schema
+
+            def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+                self.pruned = True
+                assert pruning.fullSchema == self.schema
+                assert pruning.fullSchema == expected_full_schema
+                assert pruning.requiredSchema == expected_required_schema
+                assert pruning.requiredTopLevelSchema == expected_required_top_level_schema
+                return pruning.requiredSchema
+
+            def read(self, partition):
+                assert self.pruned
+                yield [[{"c": 1}, {"c": 2}]]
+                yield [[{"c": 3}]]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "a int, b array<struct<c: int, d: int>>"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader(schema)
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load()
+            df = df.select(explode("b").alias("col")).select("col.c")
+            assertDataFrameEqual(df, [Row(c=1), Row(c=2), Row(c=3)])
+
+    def test_column_pruning_wrong_schema(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+                return StructType()
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "a int, b int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().select("a")
+            with self.assertRaisesRegex(
+                PythonException,
+                r"\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\] Return schema mismatch in the result",
+            ):
+                df.collect()
+
     def test_filter_pushdown(self):
         class TestDataSourceReader(DataSourceReader):
             def __init__(self):
@@ -376,7 +437,27 @@ class BasePythonDataSourceTestsMixin:
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
             self.spark.dataSource.register(TestDataSource)
             df = self.spark.read.format("TestDataSource").schema("x int").load()
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+            pattern = "DATA_SOURCE_PUSHDOWN_DISABLED.*filter pushdown"
+            with self.assertRaisesRegex(Exception, pattern):
+                df.show()
+
+    def test_column_pruning_disabled(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("x int").load()
+            pattern = "DATA_SOURCE_PUSHDOWN_DISABLED.*column pruning"
+            with self.assertRaisesRegex(Exception, pattern):
                 df.show()
 
     def _check_filters(self, sql_type, sql_filter, python_filters):
