@@ -113,8 +113,8 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val instant = Instant.now()
     val currentTimestampMicros = instantToMicros(instant)
-    val currentTimeOfDayMicros = instantToMicrosOfDay(instant)
     val currentTime = Literal.create(currentTimestampMicros, TimestampType)
+    val currentTimeOfDayMicros = instantToMicrosOfDay(instant, conf.sessionLocalTimeZone)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
@@ -132,10 +132,9 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
                 DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
             })
           case currentTimeType : CurrentTime =>
-            // scalastyle:off line.size.limit
-            val truncatedTime = truncateTimeMicrosToPrecision(currentTimeOfDayMicros, currentTimeType.precision)
+            val truncatedTime = truncateTimeMicrosToPrecision(currentTimeOfDayMicros,
+              currentTimeType.precision)
             Literal.create(truncatedTime, TimeType(currentTimeType.precision))
-          // scalastyle:on line.size.limit
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>

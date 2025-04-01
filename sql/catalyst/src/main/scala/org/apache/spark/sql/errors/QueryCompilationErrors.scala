@@ -2148,21 +2148,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ))
   }
 
-  // scalastyle:off line.size.limit
-  def nonFoldableInputError(argumentName: String, expression: Expression, requiredType: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-      messageParameters = Map(
-        "sqlExpr" -> toSQLExpr(expression),
-        "inputName" -> toSQLId(argumentName),
-        "inputType" -> toSQLType(requiredType),
-        "inputExpr" -> toSQLExpr(expression)
-      )
-    )
-  }
-  // scalastyle:on line.size.limit
-
-
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     new ExtendedAnalysisException(
       new AnalysisException(errorClass = "_LEGACY_ERROR_TEMP_1181", messageParameters = Map.empty),
