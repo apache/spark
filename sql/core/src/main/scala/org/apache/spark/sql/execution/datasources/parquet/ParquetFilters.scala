@@ -21,7 +21,7 @@ import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float =
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.time.{Duration, Instant, LocalDate, LocalTime, Period}
 import java.util.HashSet
 import java.util.Locale
 
@@ -149,6 +149,8 @@ class ParquetFilters(
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS), INT64, 0)
   private val ParquetTimestampMillisType =
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS), INT64, 0)
+  private val ParquetTimeType =
+    ParquetSchemaType(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS), INT64, 0)
 
   private def dateToDays(date: Any): Int = {
     val gregorianDays = date match {
@@ -207,6 +209,7 @@ class ParquetFilters(
 
   private def toLongValue(v: Any): JLong = v match {
     case d: Duration => IntervalUtils.durationToMicros(d)
+    case lt: LocalTime => DateTimeUtils.localTimeToMicros(lt)
     case l => l.asInstanceOf[JLong]
   }
 
@@ -216,7 +219,7 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[JBoolean])
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.eq(intColumn(n), toIntValue(v))
-    case ParquetLongType =>
+    case ParquetLongType | ParquetTimeType =>
       (n: Array[String], v: Any) => FilterApi.eq(longColumn(n), toLongValue(v))
     case ParquetFloatType =>
       (n: Array[String], v: Any) => FilterApi.eq(floatColumn(n), v.asInstanceOf[JFloat])
@@ -620,7 +623,8 @@ class ParquetFilters(
         case v: JLong => v.longValue() >= Int.MinValue && v.longValue() <= Int.MaxValue
         case _ => false
       }
-      case ParquetLongType => value.isInstanceOf[JLong] || value.isInstanceOf[Duration]
+      case ParquetLongType =>
+        value.isInstanceOf[JLong] || value.isInstanceOf[Duration] || value.isInstanceOf[LocalTime]
       case ParquetFloatType => value.isInstanceOf[JFloat]
       case ParquetDoubleType => value.isInstanceOf[JDouble]
       case ParquetStringType => value.isInstanceOf[String]

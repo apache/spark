@@ -330,7 +330,7 @@ private[parquet] class ParquetRowConverter(
             this.updater.setDouble(value)
         }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
-        _: AnsiIntervalType =>
+        _: AnsiIntervalType | _: TimeType =>
         new ParquetPrimitiveConverter(updater)
 
       case ByteType =>
@@ -478,16 +478,6 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
             this.updater.set(dateRebaseFunc(value))
-          }
-        }
-
-      case _: TimeType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            this.updater.setLong(value)
           }
         }
 
