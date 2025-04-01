@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -43,7 +44,19 @@ private[sql] class RocksDBStateStoreProvider
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
-  class RocksDBStateStore(lastVersion: Long) extends StateStore {
+  private sealed trait ProviderState
+  private case object RELEASED extends ProviderState
+  private case object ACQUIRED extends ProviderState
+  private case object CLOSED extends ProviderState
+
+  @volatile private var providerState: ProviderState = RELEASED
+  private val providerLock = new Object()
+
+  // Ownership tracking
+  private val currentStamp = new AtomicLong(0)
+  private var currentOwnerInfo: Option[AcquiredThreadInfo] = None
+
+  class RocksDBStateStore(lastVersion: Long, ownershipStamp: Long) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
@@ -52,6 +65,50 @@ private[sql] class RocksDBStateStoreProvider
 
     @volatile private var state: STATE = UPDATING
     @volatile private var isValidated = false
+
+    // Store metrics and checkpoint info after commit/abort
+    private var storedMetrics: Option[StateStoreMetrics] = None
+    private var storedCheckpointInfo: Option[StateStoreCheckpointInfo] = None
+
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
+      if (state == UPDATING) {
+        logWarning(s"Task completed without committing or aborting $this, aborting")
+        try {
+          abort()
+        } catch {
+          case NonFatal(e) =>
+            logError("Error aborting state store on task completion", e)
+            // We still need to release ownership even if abort fails
+            releaseProviderOwnership(ownershipStamp)
+        }
+        throw new IllegalStateException(
+          "STATE_STORE_LOCK_VIOLATION.UNRELEASED_HANDLE: " +
+            s"Task completed without releasing state store handle for $id")
+      }
+    })
+
+    // Verify ownership and state for operations
+    private def verifyOwnershipAndState(operation: String): Unit = {
+      if (state == COMMITTED && operation == "iterator") {
+        return
+      }
+
+      if (state != UPDATING &&
+        operation != "metrics" &&
+        operation != "getStateStoreCheckpointInfo") {
+        throw new IllegalStateException(
+          "STATE_STORE_LOCK_VIOLATION.OPERATION_OUT_OF_ORDER: " +
+            s"Cannot perform $operation on $this after commit/abort")
+      }
+
+      providerLock.synchronized {
+        if (providerState != ACQUIRED || currentStamp.get() != ownershipStamp) {
+          throw new IllegalStateException(
+            "STATE_STORE_LOCK_VIOLATION.INCORRECT_HANDLE: " +
+              s"Cannot perform $operation on $this with invalid ownership stamp")
+        }
+      }
+    }
 
     override def id: StateStoreId = RocksDBStateStoreProvider.this.stateStoreId
 
@@ -64,6 +121,7 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
+      verifyOwnershipAndState("create_col_family")
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
@@ -106,6 +164,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
+      verifyOwnershipAndState("get")
       verifyColFamilyOperations("get", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -132,6 +191,7 @@ private[sql] class RocksDBStateStoreProvider
      */
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
       verify(key != null, "Key cannot be null")
+      verifyOwnershipAndState("valuesIterator")
       verifyColFamilyOperations("valuesIterator", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -148,6 +208,7 @@ private[sql] class RocksDBStateStoreProvider
     override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
+      verifyOwnershipAndState("merge")
       verifyColFamilyOperations("merge", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -165,6 +226,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
+      verifyOwnershipAndState("put")
       verifyColFamilyOperations("put", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -174,6 +236,7 @@ private[sql] class RocksDBStateStoreProvider
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
+      verifyOwnershipAndState("remove")
       verifyColFamilyOperations("remove", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -185,6 +248,7 @@ private[sql] class RocksDBStateStoreProvider
       // we are actually doing prefix when useColumnFamilies,
       // but pass "iterator" to throw correct error message
       verifyColFamilyOperations("iterator", colFamilyName)
+      verifyOwnershipAndState("iterator")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
 
@@ -215,6 +279,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
+      verifyOwnershipAndState("prefixScan")
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -234,11 +299,13 @@ private[sql] class RocksDBStateStoreProvider
     override def commit(): Long = synchronized {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
+        verifyOwnershipAndState("commit")
         val (newVersion, newCheckpointInfo) = rocksDB.commit()
         checkpointInfo = Some(newCheckpointInfo)
         state = COMMITTED
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
+        releaseProviderOwnership(ownershipStamp)
         newVersion
       } catch {
         case e: Throwable =>
@@ -247,11 +314,27 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def abort(): Unit = {
+      if (state == ABORTED) {
+        // No-op if already aborted
+        return
+      }
+
       verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
-        log"for ${MDC(STATE_STORE_ID, id)}")
-      rocksDB.rollback()
-      state = ABORTED
+
+      try {
+        verifyOwnershipAndState("abort")
+
+        logInfo(s"Aborting ${version + 1} for ${id}")
+        rocksDB.rollback()
+
+        // Get metrics and checkpoint info before changing state
+        storedMetrics = None
+        storedCheckpointInfo = Some(rocksDB.getLatestCheckpointInfo)
+      } finally {
+        // Always set state and release ownership even if rollback fails
+        state = ABORTED
+        releaseProviderOwnership(ownershipStamp)
+      }
     }
 
     override def metrics: StateStoreMetrics = {
@@ -322,6 +405,7 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED
             .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion
         )
+        verifyOwnershipAndState("metrics")
 
         StateStoreMetrics(
           rocksDBMetrics.numUncommittedKeys,
@@ -337,10 +421,13 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
-      checkpointInfo match {
-        case Some(info) => info
-        case None => throw StateStoreErrors.stateStoreOperationOutOfOrder(
-          "Cannot get checkpointInfo without committing the store")
+      storedCheckpointInfo.getOrElse {
+        if (state == UPDATING) {
+          verifyOwnershipAndState("getStateStoreCheckpointInfo")
+          rocksDB.getLatestCheckpointInfo
+        } else {
+          StateStoreCheckpointInfo(id.partitionId, version, None, None)
+        }
       }
     }
 
@@ -356,6 +443,7 @@ private[sql] class RocksDBStateStoreProvider
 
     /** Remove column family if exists */
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+      verifyOwnershipAndState("remove_col_family")
       verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
       verify(useColumnFamilies, "Column families are not supported in this store")
 
@@ -444,17 +532,65 @@ private[sql] class RocksDBStateStoreProvider
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
+  // Acquire provider ownership with timeout
+  private def acquireProviderOwnership(): Long = {
+    val startTime = System.currentTimeMillis()
+    val timeoutMs = 10
+    val ownerInfo = AcquiredThreadInfo()
+
+    while ((System.currentTimeMillis() - startTime) < timeoutMs) {
+      providerLock.synchronized {
+        if (providerState == RELEASED) {
+          providerState = ACQUIRED
+          val stamp = currentStamp.incrementAndGet()
+          currentOwnerInfo = Some(ownerInfo)
+          return stamp
+        } else if (providerState == CLOSED) {
+          throw new IllegalStateException(
+            "STATE_STORE_LOCK_VIOLATION.PROVIDER_OPERATION_OUT_OF_ORDER: " +
+              s"Cannot acquire ownership of closed provider $stateStoreId")
+        }
+      }
+      // Wait before retrying
+      Thread.sleep(10)
+    }
+
+    // Timeout occurred
+    throw new IllegalStateException(
+      "STATE_STORE_LOCK_VIOLATION.PROVIDER_LOCK_TIMEOUT: " +
+        s"Timed out waiting to acquire ownership of provider $stateStoreId after ${timeoutMs}ms. " +
+        s"Current owner: ${currentOwnerInfo.getOrElse("unknown")}")
+  }
+
+  // Release provider ownership
+  private def releaseProviderOwnership(stamp: Long): Unit = {
+    providerLock.synchronized {
+      if (providerState == ACQUIRED && currentStamp.get() == stamp) {
+        providerState = RELEASED
+        currentOwnerInfo = None
+      }
+    }
+  }
+
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
-      new RocksDBStateStore(version)
-    }
-    catch {
+
+      // Acquire ownership and create the state store
+      val stamp = acquireProviderOwnership()
+      try {
+        rocksDB.load(
+          version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
+        new RocksDBStateStore(version, stamp)
+      } catch {
+        case e: Throwable =>
+          releaseProviderOwnership(stamp)
+          throw e
+      }
+    } catch {
       case e: SparkException
         if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
@@ -472,13 +608,21 @@ private[sql] class RocksDBStateStoreProvider
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = true)
-      new RocksDBStateStore(version)
-    }
-    catch {
+
+      // Acquire ownership and create the state store
+      val stamp = acquireProviderOwnership()
+      try {
+        rocksDB.load(
+          version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+          readOnly = true)
+        new RocksDBStateStore(version, stamp)
+      } catch {
+        case e: Throwable =>
+          releaseProviderOwnership(stamp)
+          throw e
+      }
+    } catch {
       case e: SparkException
         if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
@@ -493,18 +637,28 @@ private[sql] class RocksDBStateStoreProvider
 
   override def doMaintenance(): Unit = {
     try {
+      providerLock.synchronized {
+        if (providerState == CLOSED) {
+          // Don't do maintenance on a closed provider
+          return
+        }
+      }
+
+      // Perform maintenance without holding the lock to allow concurrent operations
       rocksDB.doMaintenance()
     } catch {
-      // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
-      // maintenance thread and streaming aggregation operator
       case NonFatal(ex) =>
-        logWarning(s"Ignoring error while performing maintenance operations with exception=",
-          ex)
+        logWarning("Ignoring error while performing maintenance operations", ex)
     }
   }
 
   override def close(): Unit = {
-    rocksDB.close()
+    providerLock.synchronized {
+      if (providerState != CLOSED) {
+        providerState = CLOSED
+        rocksDB.close()
+      }
+    }
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
@@ -560,8 +714,9 @@ private[sql] class RocksDBStateStoreProvider
       if (endVersion < snapshotVersion) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
+      val stamp = acquireProviderOwnership()
       rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
-      new RocksDBStateStore(endVersion)
+      new RocksDBStateStore(endVersion, stamp)
     }
     catch {
       case e: OutOfMemoryError =>

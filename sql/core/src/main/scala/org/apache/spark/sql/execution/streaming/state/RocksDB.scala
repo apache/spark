@@ -1232,7 +1232,7 @@ class RocksDB(
    * passed back to the stateful operator. It will return the information for the latest
    * state store checkpointing.
    */
-  private def getLatestCheckpointInfo: StateStoreCheckpointInfo = {
+  def getLatestCheckpointInfo: StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(
       partitionId,
       loadedVersion,
