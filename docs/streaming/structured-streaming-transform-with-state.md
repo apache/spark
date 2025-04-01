@@ -79,3 +79,33 @@ State variables can be of the following types:
 - Map State
 
 Similar to collections for popular programming languages, the state types could be used to model data structures optimized for various types of operations for the underlying storage layer. For example, appends are optimized for ListState and point lookups are optimized for MapState.
+
+### Providing state encoders
+
+State encoders are used to serialize and deserialize the state variables. In Scala, the state encoders can be skipped if implicit encoders are available. In Java and Python, the state encoders need to be provided explicitly.
+Built-in encoders for primitives, case classes and Java Bean classes are provided by default via the Spark SQL encoders.
+
+#### Providing implicit encoders in Scala
+
+In Scala, implicit encoders can be provided for case classes and primitive types. The `implicits` object is provided as part of the `StatefulProcessor` class. Within the StatefulProcessor definition, the user can simply import implicits as `import implicits._` and then they do not require to pass the encoder type explicitly.
+
+### Providing TTL for state variables
+
+State variables can be configured with an optional TTL (Time-To-Live) value. The TTL value is used to automatically evict the state variable after the specified duration. The TTL value can be provided as a Duration.
+
+### Handling input rows
+
+The `handleInputRows` method is used to process input rows belonging to a grouping key and emit output if needed. The method is invoked by the Spark query engine for each grouping key value received by the operator. If multiple rows belong to the same grouping key, the provided iterator will include all those rows.
+
+### Handling expired timers
+
+Within the `handleInputRows` or `handleExpiredTimer` methods, the stateful processor can register timers to be triggered at a later time. The `handleExpiredTimer` method is invoked by the Spark query engine when a timer set by the stateful processor has expired. This method is invoked once for each expired timer.
+Here are a few timer properties that are supported:
+- Multiple timers associated with the same grouping key can be registered
+- The engine provides the ability to list/add/remove timers as needed
+- Timers are also checkpointed as part of the query checkpoint and can be triggered on query restart as well.
+
+### Handling initial state
+
+The `handleInitialState` method is used to optionally handle the initial state batch dataframe. The initial state batch dataframe is used to pre-populate the state for the stateful processor. The method is invoked by the Spark query engine when the initial state batch dataframe is available.
+This method is only called once in the lifetime of the query. This is invoked before any input rows are processed by the stateful processor.
