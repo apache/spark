@@ -39,7 +39,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       filters: Seq[Expression],
       relation: LeafNode): Project = {
     val withFilter = if (filters.nonEmpty) {
-      val filterExpression = filters.reduceLeft(And)
+      val filterExpression = filters.reduceLeft(And(_, _))
       Filter(filterExpression, relation)
     } else {
       relation
@@ -78,7 +78,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
         // Change table stats based on the sizeInBytes of pruned files
         val filteredStats =
-          FilterEstimation(Filter(partitionKeyFilters.reduce(And), logicalRelation)).estimate
+          FilterEstimation(Filter(partitionKeyFilters.reduce(And(_, _)), logicalRelation)).estimate
         val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
           (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
         })

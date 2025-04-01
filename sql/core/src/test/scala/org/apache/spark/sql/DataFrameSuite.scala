@@ -107,7 +107,7 @@ class DataFrameSuite extends QueryTest
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
     checkAnswer(
-      df.explode("words", "word") { word: String => word.split(" ").toSeq }.select($"word"),
+      df.explode("words", "word") { (word: String) => word.split(" ").toSeq }.select($"word"),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
   }

@@ -46,7 +46,8 @@ import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSy
  */
 private[streaming]
 class CheckpointInputDStream(_ssc: StreamingContext) extends InputDStream[Int](_ssc) {
-  protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
+  protected[streaming] override val checkpointData: FileInputDStreamCheckpointData =
+    new FileInputDStreamCheckpointData
   override def start(): Unit = { }
   override def stop(): Unit = { }
   override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.makeRDD(Seq(1)))

@@ -1792,13 +1792,17 @@ class AstBuilder extends DataTypeAstBuilder
       allowNamedGroupingExpressions: Boolean): LogicalPlan = withOrigin(ctx) {
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
       val groupByExpressions: Seq[Expression] =
-        ctx.groupingExpressions.asScala.map { n: NamedExpressionContext =>
-          if (!allowNamedGroupingExpressions && (n.name != null || n.identifierList != null)) {
+        ctx.groupingExpressions.asScala.map { expression =>
+          if (
+            !allowNamedGroupingExpressions &&
+              (expression.name != null || expression.identifierList != null)
+          ) {
             // If we do not allow grouping expressions to have aliases in this context, we throw a
             // syntax error here accordingly.
-            val error: String = (if (n.name != null) n.name else n.identifierList).getText
+            val error =
+              (if (expression.name != null) expression.name else expression.identifierList).getText
             throw new ParseException(
-              command = Some(SparkParserUtils.command(n)),
+              command = Some(SparkParserUtils.command(expression)),
               start = Origin(),
               errorClass = "PARSE_SYNTAX_ERROR",
               messageParameters = Map(
@@ -1806,7 +1810,7 @@ class AstBuilder extends DataTypeAstBuilder
                 "hint" -> s": extra input '$error'"),
               queryContext = Array.empty)
           }
-          visitNamedExpression(n)
+          visitNamedExpression(expression)
         }.toSeq
       if (ctx.GROUPING != null) {
         // GROUP BY ... GROUPING SETS (...)
@@ -2737,7 +2741,7 @@ class AstBuilder extends DataTypeAstBuilder
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or(_, _))
             }
           case Some(SqlBaseParser.ALL) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
@@ -2753,7 +2757,7 @@ class AstBuilder extends DataTypeAstBuilder
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And(_, _))
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar)
@@ -5973,7 +5977,7 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitCall(ctx: CallContext): LogicalPlan = withOrigin(ctx) {
-    val procedure = withIdentClause(ctx.identifierReference, UnresolvedProcedure)
+    val procedure = withIdentClause(ctx.identifierReference, UnresolvedProcedure(_))
     val args = ctx.functionArgument.asScala.map {
       case expr if expr.namedArgumentExpression != null =>
         val namedExpr = expr.namedArgumentExpression
@@ -6146,8 +6150,8 @@ class AstBuilder extends DataTypeAstBuilder
       // it to generate clear error messages if the expression contains any aggregate functions
       // (this is not allowed in the EXTEND operator).
       val extendExpressions: Seq[NamedExpression] =
-        Option(ctx.extendList).map { n: NamedExpressionSeqContext =>
-          visitNamedExpressionSeq(n).map {
+        Option(ctx.extendList).map { expressionSeq =>
+          visitNamedExpressionSeq(expressionSeq).map {
             case (a: Alias, _) =>
               a.copy(
                 child = PipeExpression(a.child, isAggregate = false, PipeOperators.extendClause))(
@@ -6249,8 +6253,8 @@ class AstBuilder extends DataTypeAstBuilder
     // Visit each aggregate expression, and add a [[PipeExpression]] on top of it to generate
     // clear error messages if the expression does not contain at least one aggregate function.
     val aggregateExpressions: Seq[NamedExpression] =
-      Option(ctx.namedExpressionSeq()).map { n: NamedExpressionSeqContext =>
-        visitNamedExpressionSeq(n).map {
+      Option(ctx.namedExpressionSeq()).map { expressionSeq =>
+        visitNamedExpressionSeq(expressionSeq).map {
           case (a: Alias, _) =>
             a.copy(child =
               PipeExpression(a.child, isAggregate = true, PipeOperators.aggregateClause))(
@@ -6260,14 +6264,18 @@ class AstBuilder extends DataTypeAstBuilder
               PipeExpression(e, isAggregate = true, PipeOperators.aggregateClause), aliasFunc)
         }
       }.getOrElse(Seq.empty)
-    Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>
-      withAggregationClause(c, aggregateExpressions, left, allowNamedGroupingExpressions = true)
+    Option(ctx.aggregationClause()).map { clause =>
+      withAggregationClause(
+        clause,
+        aggregateExpressions, left,
+        allowNamedGroupingExpressions = true
+      )
       match {
         case a: Aggregate =>
           // GROUP BY ALL, GROUP BY CUBE, GROUPING_ID, GROUPING SETS, and GROUP BY ROLLUP are not
           // supported yet.
           def error(s: String): Unit =
-            throw QueryParsingErrors.pipeOperatorAggregateUnsupportedCaseError(s, c)
+            throw QueryParsingErrors.pipeOperatorAggregateUnsupportedCaseError(s, clause)
           a.groupingExpressions match {
             case Seq(key: UnresolvedAttribute) if key.equalsIgnoreCase("ALL") =>
               error("GROUP BY ALL")

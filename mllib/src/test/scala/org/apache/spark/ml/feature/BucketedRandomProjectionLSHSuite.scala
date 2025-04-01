@@ -98,7 +98,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
       .setSeed(12345)
     val brpModel = brp.fit(dataset)
     val unitVectors = brpModel.randUnitVectors
-    unitVectors.foreach { v: Vector =>
+    unitVectors.foreach { (v: Vector) =>
       assert(Vectors.norm(v, 2.0) ~== 1.0 absTol 1e-14)
     }
 

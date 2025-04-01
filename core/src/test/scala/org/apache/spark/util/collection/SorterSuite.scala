@@ -157,17 +157,19 @@ class SorterSuite extends SparkFunSuite {
     var i: Int = 0
     sum = 0
     val amountOfZeros = arrayToSort.length - runLengths.length
-    do {
+    while ({
       sum += arrayToSort(i)
       i += 1
-    } while (i < amountOfZeros)
+      i < amountOfZeros
+    }) ()
     assert(sum === 0)
 
     val sizeOfArrayToSort = arrayToSort.length
-    do {
+    while ({
       sum += arrayToSort(i)
       i += 1
-    } while (i < sizeOfArrayToSort)
+      i < sizeOfArrayToSort
+    }) ()
     assert(sum === runLengths.length)
     */
   }

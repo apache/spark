@@ -317,7 +317,7 @@ class CountVectorizerModel(
     // rather than once-per-row:
     val minTf = $(minTF)
     val isBinary = $(binary)
-    val vectorizer = udf { document: Seq[String] =>
+    val vectorizer = udf { (document: Seq[String]) =>
       val termCounts = new OpenHashMap[Int, Double]
       var tokenCount = 0L
       document.foreach { term =>

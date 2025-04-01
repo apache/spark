@@ -2736,6 +2736,7 @@
               <arg>-explaintypes</arg>
               <arg>-release</arg>
               <arg>17</arg>
+              <arg>-Xsource:3-cross</arg>
               <arg>-Wconf:any:e</arg>
               <arg>-Wconf:cat=deprecation:wv</arg>
               <arg>-Wunused:imports</arg>

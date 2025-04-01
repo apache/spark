@@ -128,7 +128,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     var outputData = dataset
     var numColsOutput = 0
     if (getRawPredictionCol != "") {
-      val predictRawUDF = udf { features: Any =>
+      val predictRawUDF = udf { (features: Any) =>
         predictRaw(features.asInstanceOf[FeaturesType])
       }
       outputData = outputData.withColumn(getRawPredictionCol, predictRawUDF(col(getFeaturesCol)),
@@ -139,7 +139,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
       val predCol = if (getRawPredictionCol != "") {
         udf(raw2prediction _).apply(col(getRawPredictionCol))
       } else {
-        val predictUDF = udf { features: Any =>
+        val predictUDF = udf { (features: Any) =>
           predict(features.asInstanceOf[FeaturesType])
         }
         predictUDF(col(getFeaturesCol))

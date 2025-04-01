@@ -169,7 +169,7 @@ object SparkConnectServerUtils {
     val jars = System
       .getProperty("java.class.path")
       .split(File.pathSeparatorChar)
-      .filter { e: String =>
+      .filter { (e: String) =>
         val fileName = e.substring(e.lastIndexOf(File.separatorChar) + 1)
         fileName.endsWith(".jar") &&
         (fileName.startsWith("scalatest") || fileName.startsWith("scalactic") ||

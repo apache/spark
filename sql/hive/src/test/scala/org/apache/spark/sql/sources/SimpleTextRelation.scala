@@ -91,7 +91,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
             val literal = Literal.create(value, dataType)
             val attribute = inputAttributes.find(_.name == column).get
             expressions.GreaterThan(attribute, literal)
-        }.reduceOption(expressions.And).getOrElse(Literal(true))
+        }.reduceOption(expressions.And.apply).getOrElse(Literal(true))
         Predicate.create(filterCondition, inputAttributes)
       }
 

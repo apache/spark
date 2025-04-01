@@ -93,7 +93,7 @@ class LinearRegressionWithSGD private[mllib] (
   private val gradient = new LeastSquaresGradient()
   private val updater = new SimpleUpdater()
   @Since("0.8.0")
-  override val optimizer = new GradientDescent(gradient, updater)
+  override val optimizer: GradientDescent = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)

@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
+import org.json4s.jvalue2extractable
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf

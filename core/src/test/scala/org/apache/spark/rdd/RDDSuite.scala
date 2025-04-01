@@ -806,7 +806,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("runJob on an invalid partition") {
     intercept[IllegalArgumentException] {
-      sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2))
+      sc.runJob(sc.parallelize(1 to 10, 2), (iter: Iterator[Int]) => iter.size, Seq(0, 1, 2))
     }
   }
 

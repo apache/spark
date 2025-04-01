@@ -83,7 +83,7 @@ class AsyncProgressTrackingMicroBatchExecution(
       }
     })
 
-  override val offsetLog = new AsyncOffsetSeqLog(
+  override val offsetLog: AsyncOffsetSeqLog = new AsyncOffsetSeqLog(
     sparkSession,
     checkpointFile("offsets"),
     asyncWritesExecutorService,
@@ -91,7 +91,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     clock = triggerClock
   )
 
-  override val commitLog =
+  override val commitLog: AsyncCommitLog =
     new AsyncCommitLog(sparkSession, checkpointFile("commits"), asyncWritesExecutorService)
 
   // perform quick validation to fail faster

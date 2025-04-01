@@ -34,7 +34,7 @@ class AbortableStreamBasedCheckpointFileManagerSuite
   extends CheckpointFileManagerTests with Logging {
 
   override def withTempHadoopPath(p: Path => Unit): Unit = {
-    withTempDir { f: File =>
+    withTempDir { (f: File) =>
       val basePath = new Path(AbortableFileSystem.ABORTABLE_FS_SCHEME, null, f.getAbsolutePath)
       p(basePath)
     }

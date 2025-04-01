@@ -250,7 +250,7 @@ case class WhenMatched[T] private[sql] (
  * @tparam T
  *   The type of data in the MergeIntoWriter.
  */
-case class WhenNotMatched[T] private[sql] (
+case class WhenNotMatched[T](
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Column]) {
 
@@ -287,7 +287,7 @@ case class WhenNotMatched[T] private[sql] (
  * @tparam T
  *   the type parameter for the MergeIntoWriter.
  */
-case class WhenNotMatchedBySource[T] private[sql] (
+case class WhenNotMatchedBySource[T](
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Column]) {
 

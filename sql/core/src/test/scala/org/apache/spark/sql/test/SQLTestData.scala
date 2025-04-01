@@ -239,7 +239,7 @@ private[sql] trait SQLTestData { self =>
 
   // An RDD with 4 elements and 8 partitions
   protected lazy val withEmptyParts: RDD[IntField] = {
-    val rdd = spark.sparkContext.parallelize((1 to 4).map(IntField), 8)
+    val rdd = spark.sparkContext.parallelize((1 to 4).map(IntField(_)), 8)
     rdd.toDF().createOrReplaceTempView("withEmptyParts")
     rdd
   }

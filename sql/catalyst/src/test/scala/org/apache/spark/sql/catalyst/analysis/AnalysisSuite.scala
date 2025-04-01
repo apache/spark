@@ -1244,9 +1244,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
       udfDeterministic = false)
 
-    Seq(reflect, udf).foreach { e: Expression =>
-      val plan = Sort(Seq(e.asc), false, testRelation)
-      val projected = Alias(e, "_nondeterministic")()
+    Seq(reflect, udf).foreach { expression =>
+      val plan = Sort(Seq(expression.asc), false, testRelation)
+      val projected = Alias(expression, "_nondeterministic")()
       val expect =
         Project(testRelation.output,
           Sort(Seq(projected.toAttribute.asc), false,

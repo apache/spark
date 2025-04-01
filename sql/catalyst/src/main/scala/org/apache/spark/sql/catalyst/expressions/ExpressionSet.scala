@@ -183,7 +183,7 @@ class ExpressionSet protected(
 
   /** Returns a length limited string that must be used for logging only. */
   def simpleString(maxFields: Int): String = {
-    val customToString = { e: Expression => e.simpleString(maxFields) }
+    val customToString = (e: Expression) => e.simpleString(maxFields)
     SparkStringUtils.truncatedString(
       seq = originals.toSeq, start = "Set(", sep = ", ", end = ")", maxFields, Some(customToString))
   }

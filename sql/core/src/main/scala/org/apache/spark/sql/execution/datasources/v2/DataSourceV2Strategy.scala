@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNames
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.AttributeSeq
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -688,7 +689,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
       filters: Seq[Expression],
       scan: LeafExecNode,
       needsUnsafeConversion: Boolean): SparkPlan = {
-    val filterCondition = filters.reduceLeftOption(And)
+    val filterCondition = filters.reduceLeftOption(And(_, _))
     val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
 
     if (withFilter.output != project || needsUnsafeConversion) {

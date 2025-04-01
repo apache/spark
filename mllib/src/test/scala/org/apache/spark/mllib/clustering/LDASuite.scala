@@ -129,7 +129,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Check: topDocumentsPerTopic
     // Compare it with top documents per topic derived from topicDistributions
-    val topDocsByTopicDistributions = { n: Int =>
+    val topDocsByTopicDistributions = { (n: Int) =>
       Range(0, k).map { topic =>
         val (doc, docWeights) = topicDistributions.sortBy(-_._2(topic)).take(n).unzip
         (doc.toArray, docWeights.map(_(topic)).toArray)

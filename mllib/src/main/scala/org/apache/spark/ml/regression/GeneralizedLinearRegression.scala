@@ -1333,7 +1333,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   }
 
   private[regression] lazy val pearsonResiduals: DataFrame = {
-    val prUDF = udf { mu: Double => family.variance(mu) }
+    val prUDF = udf { (mu: Double) => family.variance(mu) }
     predictions.select(label.minus(prediction)
       .multiply(sqrt(weight)).divide(sqrt(prUDF(prediction))).as("pearsonResiduals"))
   }

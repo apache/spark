@@ -149,7 +149,7 @@ class PCAModel private[ml] (
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val transposed = pc.transpose
-    val transformer = udf { vector: Vector => transposed.multiply(vector) }
+    val transformer = udf { (vector: Vector) => transposed.multiply(vector) }
     dataset.withColumn($(outputCol), transformer(col($(inputCol))),
       outputSchema($(outputCol)).metadata)
   }

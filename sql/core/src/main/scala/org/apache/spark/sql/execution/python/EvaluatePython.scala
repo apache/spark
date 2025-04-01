@@ -218,7 +218,7 @@ object EvaluatePython {
       f.applyOrElse(input, {
         // all other unexpected type should be null, or we will have runtime exception
         // TODO(davies): we could improve this by try to cast the object to expected type
-        _: Any => null
+        (_: Any) => null
       })
     }
   }

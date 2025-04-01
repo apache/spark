@@ -130,6 +130,6 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
     val evaluatedFilterSet = ExpressionSet(evaluatedFilters)
     val predicates = splitConjunctivePredicates(cond)
     val remainingPredicates = predicates.filterNot(evaluatedFilterSet.contains)
-    remainingPredicates.reduceLeftOption(And).getOrElse(TrueLiteral)
+    remainingPredicates.reduceLeftOption(And(_, _)).getOrElse(TrueLiteral)
   }
 }

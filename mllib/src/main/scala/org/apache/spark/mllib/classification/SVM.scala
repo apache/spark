@@ -137,12 +137,13 @@ class SVMWithSGD private (
   private val gradient = new HingeGradient()
   private val updater = new SquaredL2Updater()
   @Since("0.8.0")
-  override val optimizer = new GradientDescent(gradient, updater)
+  override val optimizer: GradientDescent = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
-  override protected val validators = List(DataValidators.binaryLabelValidator)
+  override protected val validators: Seq[RDD[LabeledPoint] => Boolean] =
+    Seq(DataValidators.binaryLabelValidator)
 
   /**
    * Construct a SVM object with default parameters: {stepSize: 1.0, numIterations: 100,
@@ -151,9 +152,8 @@ class SVMWithSGD private (
   @Since("0.8.0")
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected def createModel(weights: Vector, intercept: Double): SVMModel =
     new SVMModel(weights, intercept)
-  }
 }
 
 /**

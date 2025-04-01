@@ -427,7 +427,7 @@ object DataSourceStrategy
 
     // Combines all Catalyst filter `Expression`s that are either not convertible to data source
     // `Filter`s or cannot be handled by `relation`.
-    val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
+    val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And(_, _))
 
     if (projects.map(_.toAttribute) == projects &&
         projectSet.size == projects.size &&
@@ -686,7 +686,7 @@ object DataSourceStrategy
 
       case expressions.Not(child) =>
         translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          .map(sources.Not)
+          .map(sources.Not(_))
 
       case other =>
         val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))

@@ -808,9 +808,8 @@ class InMemoryCustomDriverMetric extends CustomSumMetric {
   override def description(): String = "number of rows from driver"
 }
 
-class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
+class InMemoryCustomDriverTaskMetric(override val value: Long) extends CustomTaskMetric {
   override def name(): String = "number_of_rows_from_driver"
-  override def value(): Long = value
 }
 
 sealed trait Operation

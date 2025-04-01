@@ -47,7 +47,7 @@ private[r] class GaussianMixtureWrapper private (
 
   lazy val sigma: Array[Double] = gmm.gaussians.flatMap(_.cov.toArray)
 
-  lazy val vectorToArray = udf { probability: Vector => probability.toArray }
+  lazy val vectorToArray = udf { (probability: Vector) => probability.toArray }
   lazy val posterior: DataFrame = gmm.summary.probability
     .withColumn("posterior", vectorToArray(col(gmm.summary.probabilityCol)))
     .drop(gmm.summary.probabilityCol)

@@ -304,7 +304,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     } else {
       (otherPlan, onePlan)
     }
-    val newJoin = Join(left, right, Inner, joinConds.reduceOption(And), JoinHint.NONE)
+    val newJoin = Join(left, right, Inner, joinConds.reduceOption(And(_, _)), JoinHint.NONE)
     val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
     val remainingConds = conditions -- collectedJoinConds
     val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput

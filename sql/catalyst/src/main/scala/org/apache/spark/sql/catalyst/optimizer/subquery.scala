@@ -147,7 +147,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // Construct the pruned filter condition.
       val newFilter: LogicalPlan = withoutSubquery match {
         case Nil => child
-        case conditions => Filter(conditions.reduce(And), child)
+        case conditions => Filter(conditions.reduce(And(_, _)), child)
       }
 
       // Filter the plan by applying left semi and left anti joins.
@@ -194,7 +194,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // SELECT ... FROM A WHERE A.A1 NOT IN (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
           // will have the final conditions in the LEFT ANTI as
           // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
-          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
+          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And(_, _))
           Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, Some(finalJoinCond)),
             LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
         case (p, predicate) =>
@@ -403,7 +403,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case Exists(sub, _, _, conditions, subHint) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val existenceJoin = ExistenceJoin(exists)
-          val newCondition = conditions.reduceLeftOption(And)
+          val newCondition = conditions.reduceLeftOption(And(_, _))
           newPlan =
             buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
               existenceJoin, newCondition, subHint)
@@ -427,7 +427,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           //     :- Relation[id#78,v#79] parquet
           //     +- Relation[id#80] parquet
           val nullAwareJoinConds = inConditions.map(c => Or(c, IsNull(c)))
-          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
+          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And(_, _))
           val joinHint = JoinHint(None, subHint)
           newPlan = Join(newPlan,
             rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
@@ -439,7 +439,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
-          val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
+          val newConditions = (inConditions ++ conditions).reduceLeftOption(And(_, _))
           val joinHint = JoinHint(None, subHint)
           newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
             ExistenceJoin(exists), newConditions, joinHint)
@@ -447,7 +447,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           exists
       }
     }
-    (newExprs.reduceOption(And), newPlan, introducedAttrs.toSeq)
+    (newExprs.reduceOption(And(_, _)), newPlan, introducedAttrs.toSeq)
   }
 }
 
@@ -488,7 +488,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         correlated match {
           case Nil => f
           case xs if local.nonEmpty =>
-            val newFilter = Filter(local.reduce(And), child)
+            val newFilter = Filter(local.reduce(And(_, _)), child)
             predicateMap += newFilter -> xs
             newFilter
           case xs =>
@@ -913,7 +913,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         }
         lazy val planWithoutCountBug = Project(
           currentChild.output :+ origOutput,
-          Join(currentChild, query, joinType, conditions.reduceOption(And), joinHint))
+          Join(currentChild, query, joinType, conditions.reduceOption(And(_, _)), joinHint))
 
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
@@ -962,7 +962,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 currentChild.output :+ subqueryResultExpr,
                 Join(currentChild,
                   Project(query.output :+ alwaysTrueExpr, query),
-                  joinType, conditions.reduceOption(And), joinHint))
+                  joinType, conditions.reduceOption(And(_, _)), joinHint))
 
             } else {
               // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
@@ -994,7 +994,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 currentChild.output :+ caseExpr,
                 Join(currentChild,
                   Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                  joinType, conditions.reduceOption(And), joinHint))
+                  joinType, conditions.reduceOption(And(_, _)), joinHint))
             }
           }
         }
@@ -1087,7 +1087,7 @@ object RewriteLateralSubquery extends Rule[LogicalPlan] {
     _.containsPattern(LATERAL_JOIN)) {
     case LateralJoin(left, LateralSubquery(sub, _, _, joinCond, subHint), joinType, condition) =>
       val newRight = DecorrelateInnerQuery.rewriteDomainJoins(left, sub, joinCond)
-      val newCond = (condition ++ joinCond).reduceOption(And)
+      val newCond = (condition ++ joinCond).reduceOption(And(_, _))
       // The subquery appears on the right side of the join, hence add the hint to the right side
       Join(left, newRight, joinType, newCond, JoinHint(None, subHint))
   }

@@ -29,7 +29,7 @@ import org.apache.spark.rdd.HadoopRDD
 
 @DeveloperApi
 class JavaHadoopRDD[K, V](rdd: HadoopRDD[K, V])
-    (implicit override val kClassTag: ClassTag[K], implicit override val vClassTag: ClassTag[V])
+    (implicit override val kClassTag: ClassTag[K], override val vClassTag: ClassTag[V])
   extends JavaPairRDD[K, V](rdd) {
 
   /** Maps over a partition, providing the InputSplit that was used as the base of the partition. */

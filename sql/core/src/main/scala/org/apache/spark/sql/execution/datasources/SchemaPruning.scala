@@ -42,7 +42,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     plan transformDown {
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
         l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _)) =>
-        val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+        val allFilters = filtersPushDown.reduceOption(And(_, _)).toSeq ++ filtersStayUp
         prunePhysicalColumns(l, projects, allFilters, hadoopFsRelation,
           (prunedDataSchema, prunedMetadataSchema) => {
             val prunedHadoopRelation =
@@ -71,7 +71,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op
-    if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
+    if (requestedRootFields.exists { (root: RootField) => !root.derivedFromAtt }) {
 
       val prunedDataSchema = if (canPruneDataSchema(hadoopFsRelation)) {
         pruneSchema(hadoopFsRelation.dataSchema, requestedRootFields)

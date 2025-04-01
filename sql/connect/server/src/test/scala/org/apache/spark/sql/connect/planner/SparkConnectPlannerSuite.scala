@@ -769,7 +769,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
                   proto.Expression.ExpressionString.newBuilder().setExpression("id")))))
       .build()
     val df = Dataset.ofRows(spark, transform(relation))
-    df.foreachPartition { p: Iterator[Row] =>
+    df.foreachPartition { (p: Iterator[Row]) =>
       var previousValue: Int = -1
       p.foreach { r =>
         val v = r.getAs[Int](0)

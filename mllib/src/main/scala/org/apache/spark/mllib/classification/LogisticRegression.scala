@@ -216,16 +216,18 @@ class LogisticRegressionWithSGD private[mllib] (
   private val gradient = new LogisticGradient()
   private val updater = new SquaredL2Updater()
   @Since("0.8.0")
-  override val optimizer = new GradientDescent(gradient, updater)
+  override val optimizer: GradientDescent = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
   override protected val validators = List(DataValidators.binaryLabelValidator)
 
-  override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
+  override protected[mllib] def createModel(
+    weights: Vector,
+    intercept: Double
+  ): LogisticRegressionModel =
     new LogisticRegressionModel(weights, intercept)
-  }
 }
 
 /**
@@ -249,9 +251,9 @@ class LogisticRegressionWithLBFGS
   this.setFeatureScaling(true)
 
   @Since("1.1.0")
-  override val optimizer = new LBFGS(new LogisticGradient, new SquaredL2Updater)
+  override val optimizer: LBFGS = new LBFGS(new LogisticGradient, new SquaredL2Updater)
 
-  override protected val validators = List(multiLabelValidator)
+  override protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List(multiLabelValidator)
 
   private def multiLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
     if (numOfLinearPredictor > 1) {
@@ -276,7 +278,10 @@ class LogisticRegressionWithLBFGS
     this
   }
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected def createModel(
+    weights: Vector,
+    intercept: Double
+  ): LogisticRegressionModel = {
     if (numOfLinearPredictor == 1) {
       new LogisticRegressionModel(weights, intercept)
     } else {

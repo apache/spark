@@ -23,6 +23,7 @@ import scala.collection.{immutable, mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
 
+import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkIllegalArgumentException
@@ -399,7 +400,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     fields.foreach(field => field.buildFormattedString(prefix, stringConcat, maxDepth))
   }
 
-  override private[sql] def jsonValue =
+  override private[sql] def jsonValue: JValue =
     ("type" -> typeName) ~
       ("fields" -> map(_.jsonValue))
 

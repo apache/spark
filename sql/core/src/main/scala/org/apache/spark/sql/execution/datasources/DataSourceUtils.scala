@@ -200,7 +200,7 @@ object DataSourceUtils extends PredicateHelper {
   def createDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
+    case LegacyBehaviorPolicy.EXCEPTION => (days: Int) =>
       if (days < RebaseDateTime.lastSwitchJulianDay) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
@@ -212,7 +212,7 @@ object DataSourceUtils extends PredicateHelper {
   def createDateRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
+    case LegacyBehaviorPolicy.EXCEPTION => (days: Int) =>
       if (days < RebaseDateTime.lastSwitchGregorianDay) {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }
@@ -224,7 +224,7 @@ object DataSourceUtils extends PredicateHelper {
   def createTimestampRebaseFuncInRead(
       rebaseSpec: RebaseSpec,
       format: String): Long => Long = rebaseSpec.mode match {
-    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
+    case LegacyBehaviorPolicy.EXCEPTION => (micros: Long) =>
       if (micros < RebaseDateTime.lastSwitchJulianTs) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
@@ -237,7 +237,7 @@ object DataSourceUtils extends PredicateHelper {
   def createTimestampRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Long => Long = rebaseMode match {
-    case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
+    case LegacyBehaviorPolicy.EXCEPTION => (micros: Long) =>
       if (micros < RebaseDateTime.lastSwitchGregorianTs) {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }

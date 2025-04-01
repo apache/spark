@@ -294,7 +294,7 @@ class Word2VecModel private[ml] (
     val bcModel = dataset.sparkSession.sparkContext.broadcast(this.wordVectors)
     val size = $(vectorSize)
     val emptyVec = Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
-    val transformer = udf { sentence: Seq[String] =>
+    val transformer = udf { (sentence: Seq[String]) =>
       if (sentence.isEmpty) {
         emptyVec
       } else {

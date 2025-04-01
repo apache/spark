@@ -278,19 +278,19 @@ object FileFormat {
    * fields of the [[PartitionedFile]], and do have entries in the file's metadata map.
    */
   val BASE_METADATA_EXTRACTORS: Map[String, PartitionedFile => Any] = Map(
-    FILE_PATH -> { pf: PartitionedFile =>
+    FILE_PATH -> { (pf: PartitionedFile) =>
       // Use `new Path(Path.toString)` as a form of canonicalization
       new Path(pf.filePath.toPath.toString).toUri.toString
     },
-    FILE_NAME -> { pf: PartitionedFile =>
+    FILE_NAME -> { (pf: PartitionedFile) =>
       pf.filePath.toUri.getRawPath.split("/").lastOption.getOrElse("")
     },
-    FILE_SIZE -> { pf: PartitionedFile => pf.fileSize },
-    FILE_BLOCK_START -> { pf: PartitionedFile => pf.start },
-    FILE_BLOCK_LENGTH -> { pf: PartitionedFile => pf.length },
+    FILE_SIZE -> { (pf: PartitionedFile) => pf.fileSize },
+    FILE_BLOCK_START -> { (pf: PartitionedFile) => pf.start },
+    FILE_BLOCK_LENGTH -> { (pf: PartitionedFile) => pf.length },
     // The modificationTime from the file has millisecond granularity, but the TimestampType for
     // `file_modification_time` has microsecond granularity.
-    FILE_MODIFICATION_TIME -> { pf: PartitionedFile => pf.modificationTime * 1000 }
+    FILE_MODIFICATION_TIME -> { (pf: PartitionedFile) => pf.modificationTime * 1000 }
   )
 
   /**
@@ -306,7 +306,7 @@ object FileFormat {
       file: PartitionedFile,
       metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
     val extractor = metadataExtractors.getOrElse(name,
-      { pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull }
+      { (pf: PartitionedFile) => pf.otherConstantMetadataColumnValues.get(name).orNull }
     )
     Literal(extractor.apply(file))
   }

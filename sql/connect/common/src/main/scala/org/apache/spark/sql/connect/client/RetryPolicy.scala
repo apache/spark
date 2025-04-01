@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.client
 
+import scala.concurrent.duration._
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.Random
 

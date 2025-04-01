@@ -47,7 +47,7 @@ object HashByteArrayBenchmark extends BenchmarkBase {
 
     val benchmark = new Benchmark(
       "Hash byte arrays with length " + length, iters * numArrays.toLong, output = output)
-    benchmark.addCase("Murmur3_x86_32") { _: Int =>
+    benchmark.addCase("Murmur3_x86_32") { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iters) {
         var i = 0
@@ -58,7 +58,7 @@ object HashByteArrayBenchmark extends BenchmarkBase {
       }
     }
 
-    benchmark.addCase("xxHash 64-bit") { _: Int =>
+    benchmark.addCase("xxHash 64-bit") { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iters) {
         var i = 0
@@ -69,7 +69,7 @@ object HashByteArrayBenchmark extends BenchmarkBase {
       }
     }
 
-    benchmark.addCase("HiveHasher") { _: Int =>
+    benchmark.addCase("HiveHasher") { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iters) {
         var i = 0

@@ -136,7 +136,7 @@ class IDFModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val func = { vector: Vector =>
+    val func = { (vector: Vector) =>
       vector match {
         case SparseVector(size, indices, values) =>
           val (newIndices, newValues) = feature.IDFModel.transformSparse(idfModel.idf,

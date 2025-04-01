@@ -22,7 +22,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, CastSupport, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._

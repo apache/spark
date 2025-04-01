@@ -117,7 +117,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
       val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
-        prevLine: String =>
+        (prevLine: String) =>
           new GenericInternalRow(
             prevLine.split(outputRowFormat, -1).padTo(outputFieldWriters.size, null)
               .zip(outputFieldWriters)
@@ -128,7 +128,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         // Here we split row string and choose first 2 values, if values's size less than 2,
         // we pad NULL value until 2 to make behavior same with hive.
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
-        prevLine: String =>
+        (prevLine: String) =>
           new GenericInternalRow(
             prevLine.split(outputRowFormat, -1).slice(0, 2).padTo(2, null)
               .map(kvWriter))

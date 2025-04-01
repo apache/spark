@@ -483,7 +483,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("Remainder/Pmod: exception should contain SQL text context") {
-    Seq(("%", Remainder), ("pmod", Pmod)).foreach { case (symbol, exprBuilder) =>
+    Seq(("%", Remainder(_, _, _)), ("pmod", Pmod(_, _, _))).foreach { case (symbol, exprBuilder) =>
       val query = s"1L $symbol 0L"
       val o = Origin(
         line = Some(1),
@@ -637,7 +637,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
 
     DataTypeTestUtils.ordered.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
+      checkConsistencyBetweenInterpretedAndCodegen(Least(_), dt, 2)
     }
 
     val least = Least(Seq(
@@ -698,7 +698,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
 
     DataTypeTestUtils.ordered.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
+      checkConsistencyBetweenInterpretedAndCodegen(Greatest(_), dt, 2)
     }
 
     val greatest = Greatest(Seq(

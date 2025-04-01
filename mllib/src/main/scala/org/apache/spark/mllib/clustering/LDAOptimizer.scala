@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import java.util.Random
 
 import breeze.linalg.{all, normalize, sum, DenseMatrix => BDM, DenseVector => BDV}
+import breeze.linalg.InjectNumericOps
 import breeze.numerics.{abs, exp, trigamma}
 import breeze.stats.distributions.{Gamma, RandBasis}
 

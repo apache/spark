@@ -24,6 +24,7 @@ import scala.util.Try
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
+import org.json4s.jvalue2extractable
 
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil
 import org.apache.spark.sql.types.StructType

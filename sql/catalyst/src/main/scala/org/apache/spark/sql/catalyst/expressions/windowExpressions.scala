@@ -786,7 +786,7 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   private lazy val count = AttributeReference("count", LongType)()
   override lazy val aggBufferAttributes: Seq[AttributeReference] = result :: count :: Nil
 
-  override lazy val initialValues: Seq[Literal] = Seq(
+  override lazy val initialValues = Seq(
     /* result = */ default,
     /* count = */ Literal(1L)
   )
@@ -936,7 +936,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
     NoOp
   )
 
-  override val evaluateExpression = bucket
+  override val evaluateExpression: Expression = bucket
 
   override protected def withNewChildInternal(
     newChild: Expression): NTile = copy(buckets = newChild)
@@ -959,8 +959,8 @@ abstract class RankLike extends AggregateWindowFunction {
 
   /** Predicate that detects if the order attributes have changed. */
   protected val orderEquals = children.zip(orderAttrs)
-    .map(EqualNullSafe.tupled)
-    .reduceOption(And)
+    .map(EqualNullSafe.tupled(_): Predicate)
+    .reduceOption(And(_, _))
     .getOrElse(Literal(true))
 
   protected val orderInit = children.map(e => Literal.create(null, e.dataType))

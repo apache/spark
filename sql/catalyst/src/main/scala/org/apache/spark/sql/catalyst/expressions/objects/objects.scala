@@ -911,7 +911,7 @@ object MapObjects {
  * @param customCollectionCls Class of the resulting collection (returning ObjectType)
  *                            or None (returning ArrayType)
  */
-case class MapObjects private(
+case class MapObjects private (
     loopVar: LambdaVariable,
     lambdaFunction: Expression,
     inputData: Expression,
@@ -1353,7 +1353,7 @@ object CatalystToExternalMap {
  * @param inputData An expression that when evaluated returns a map object.
  * @param collClass The type of the resulting collection.
  */
-case class CatalystToExternalMap private(
+case class CatalystToExternalMap private[expressions] (
     keyLoopVar: LambdaVariable,
     keyLambdaFunction: Expression,
     valueLoopVar: LambdaVariable,
@@ -1533,13 +1533,13 @@ object ExternalMapToCatalyst {
  *                       format.
  * @param inputData An expression that when evaluated returns the input map object.
  */
-case class ExternalMapToCatalyst private(
+case class ExternalMapToCatalyst private[catalyst] (
     keyLoopVar: LambdaVariable,
     keyConverter: Expression,
     valueLoopVar: LambdaVariable,
     valueConverter: Expression,
-    inputData: Expression)
-  extends Expression with NonSQLExpression {
+    inputData: Expression
+) extends Expression with NonSQLExpression {
 
   override def foldable: Boolean = false
 

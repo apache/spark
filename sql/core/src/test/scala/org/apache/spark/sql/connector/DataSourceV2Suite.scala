@@ -1040,7 +1040,7 @@ object TestingV2Source {
 
 class SimpleSinglePartitionSource extends TestingV2Source {
 
-  class MyScanBuilder extends SimpleScanBuilder {
+  class SimpleSinglePartitionSourceScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 5))
     }
@@ -1048,14 +1048,14 @@ class SimpleSinglePartitionSource extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+      new SimpleSinglePartitionSourceScanBuilder()
     }
   }
 }
 
 class ScanDefinedColumnarSupport extends TestingV2Source {
 
-  class MyScanBuilder(st: ColumnarSupportMode) extends SimpleScanBuilder {
+  class ScanDefinedColumnarSupportScanBuilder(st: ColumnarSupportMode) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       throw new IllegalArgumentException("planInputPartitions must not be called")
     }
@@ -1066,7 +1066,9 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder(Scan.ColumnarSupportMode.valueOf(options.get("columnar")))
+      new ScanDefinedColumnarSupportScanBuilder(
+        Scan.ColumnarSupportMode.valueOf(options.get("columnar"))
+      )
     }
   }
 
@@ -1077,7 +1079,7 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
 // tests still pass.
 class SimpleDataSourceV2 extends TestingV2Source {
 
-  class MyScanBuilder extends SimpleScanBuilder {
+  class SimpleDataSourceV2ScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
     }
@@ -1085,7 +1087,7 @@ class SimpleDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+      new SimpleDataSourceV2ScanBuilder()
     }
   }
 }
@@ -1251,7 +1253,7 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
 
 class SchemaRequiredDataSource extends TableProvider {
 
-  class MyScanBuilder(schema: StructType) extends SimpleScanBuilder {
+  class SchemaRequiredDataSourceScanBuilder(schema: StructType) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 2))
     }
@@ -1274,7 +1276,7 @@ class SchemaRequiredDataSource extends TableProvider {
       override def schema(): StructType = userGivenSchema
 
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-        new MyScanBuilder(userGivenSchema)
+        new SchemaRequiredDataSourceScanBuilder(userGivenSchema)
       }
     }
   }
@@ -1288,7 +1290,7 @@ class PartitionsRequiredDataSource extends SchemaRequiredDataSource {
 
 class ColumnarDataSourceV2 extends TestingV2Source {
 
-  class MyScanBuilder extends SimpleScanBuilder {
+  class ColumnarDataSourceV2ScanBuilder extends SimpleScanBuilder {
 
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 50), RangeInputPartition(50, 90))
@@ -1301,7 +1303,7 @@ class ColumnarDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+      new ColumnarDataSourceV2ScanBuilder()
     }
   }
 }
@@ -1353,7 +1355,7 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
 
 class PartitionAwareDataSource extends TestingV2Source {
 
-  class MyScanBuilder extends SimpleScanBuilder
+  class PartitionAwareDataSourceScanBuilder extends SimpleScanBuilder
     with SupportsReportPartitioning {
 
     override def planInputPartitions(): Array[InputPartition] = {
@@ -1373,14 +1375,14 @@ class PartitionAwareDataSource extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+      new PartitionAwareDataSourceScanBuilder()
     }
   }
 }
 
 class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
-  class MyScanBuilder(
+  private class OrderAndPartitionAwareDataSourceScanBuilder(
       val partitionKeys: Option[Seq[String]],
       val orderKeys: Seq[String])
     extends SimpleScanBuilder
@@ -1414,7 +1416,7 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder(
+      new OrderAndPartitionAwareDataSourceScanBuilder(
         Option(options.get("partitionKeys")).map(_.split(",").toImmutableArraySeq),
         Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
       )
@@ -1490,13 +1492,9 @@ class WritableDataSourceSupportsExternalMetadata extends SimpleWritableDataSourc
  */
 class CustomSchemaAndPartitioningDataSource extends WritableDataSourceSupportsExternalMetadata {
   class TestTable(
-      schema: StructType,
-      partitioning: Array[Transform],
-      options: CaseInsensitiveStringMap) extends MyTable(options) {
-    override def schema(): StructType = schema
-
-    override def partitioning(): Array[Transform] = partitioning
-  }
+      override val schema: StructType,
+      override val partitioning: Array[Transform],
+      options: CaseInsensitiveStringMap) extends MyTable(options)
 
   override def getTable(
       schema: StructType,
@@ -1518,7 +1516,7 @@ class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSourc
 
 class ReportStatisticsDataSource extends SimpleWritableDataSource {
 
-  class MyScanBuilder extends SimpleScanBuilder
+  private class ReportStatisticsDataSourceScanBuilder extends SimpleScanBuilder
     with SupportsReportStatistics {
     override def estimateStatistics(): Statistics = {
       new Statistics {
@@ -1536,7 +1534,7 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new SimpleBatchTable {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-        new MyScanBuilder
+        new ReportStatisticsDataSourceScanBuilder
       }
     }
   }

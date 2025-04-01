@@ -31,7 +31,7 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   import testImplicits._
 
   private def getTestData(labels: Seq[Double]): DataFrame = {
-    labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
+    labels.map { (label: Double) => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
   }
 
   test("getNumClasses") {

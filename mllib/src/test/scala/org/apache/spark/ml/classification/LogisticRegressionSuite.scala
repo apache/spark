@@ -482,7 +482,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     // constant threshold scaling is the same as no thresholds
     model.setThresholds(Array(1000, 1000, 1000))
     testTransformerByGlobalCheckFunc[(Double, Vector)](smallMultinomialDataset.toDF(), model,
-      "prediction") { scaledPredictions: Seq[Row] =>
+      "prediction") { (scaledPredictions: Seq[Row]) =>
       assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
         scaled.getDouble(0) === base.getDouble(0)
       })
@@ -687,7 +687,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     ).toDF()
 
     testTransformerByGlobalCheckFunc[(Double, Vector)](overFlowData.toDF(),
-      model, "rawPrediction", "probability") { results: Seq[Row] =>
+      model, "rawPrediction", "probability") { (results: Seq[Row]) =>
         // probabilities are correct when margins have to be adjusted
         val raw1 = results(0).getAs[Vector](0)
         val prob1 = results(0).getAs[Vector](1)
@@ -2749,7 +2749,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       .map(_.getDouble(0))
     for (model <- Seq(model1, model2)) {
       testTransformerByGlobalCheckFunc[(Double, Vector)](smallBinaryDataset.toDF(), model,
-        "prediction") { rows: Seq[Row] =>
+        "prediction") { (rows: Seq[Row]) =>
         rows.map(_.getDouble(0)).toArray === binaryExpected
       }
     }
@@ -2764,7 +2764,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       .collect().map(_.getDouble(0))
     for (model <- Seq(model3, model4)) {
       testTransformerByGlobalCheckFunc[(Double, Vector)](smallMultinomialDataset.toDF(), model,
-        "prediction") { rows: Seq[Row] =>
+        "prediction") { (rows: Seq[Row]) =>
         rows.map(_.getDouble(0)).toArray === multinomialExpected
       }
     }

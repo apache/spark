@@ -355,7 +355,7 @@ object MLUtils extends Logging {
 
     // TODO: This implementation has performance issues due to unnecessary serialization.
     // TODO: It is better (but trickier) if we can cast the old vector type to new type directly.
-    val convertToML = udf { v: Vector => v.asML }
+    val convertToML = udf { (v: Vector) => v.asML }
     val exprs = schema.fields.map { field =>
       val c = field.name
       if (colSet.contains(c)) {
@@ -459,7 +459,7 @@ object MLUtils extends Logging {
     logWarning("Matrix column conversion has serialization overhead. " +
       "Please migrate your datasets and workflows to use the spark.ml package.")
 
-    val convertToML = udf { v: Matrix => v.asML }
+    val convertToML = udf { (v: Matrix) => v.asML }
     val exprs = schema.fields.map { field =>
       val c = field.name
       if (colSet.contains(c)) {

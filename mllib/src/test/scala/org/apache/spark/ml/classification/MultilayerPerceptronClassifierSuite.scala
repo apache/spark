@@ -206,7 +206,7 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
     // MLP's predictions should not differ a lot from LR's.
     val lrMetrics = new MulticlassMetrics(lrPredictionAndLabels)
     testTransformerByGlobalCheckFunc[(Double, Vector)](dataFrame, model, "prediction", "label") {
-      rows: Seq[Row] =>
+      (rows: Seq[Row]) =>
         val mlpPredictionAndLabels = rows.map(x => (x.getDouble(0), x.getDouble(1)))
         val mlpMetrics = new MulticlassMetrics(sc.makeRDD(mlpPredictionAndLabels))
         assert(mlpMetrics.confusionMatrix.asML ~== lrMetrics.confusionMatrix.asML absTol 100)

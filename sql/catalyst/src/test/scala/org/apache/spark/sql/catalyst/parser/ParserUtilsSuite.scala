@@ -213,7 +213,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("validate") {
-    val f1 = { ctx: ParserRuleContext =>
+    val f1 = { (ctx: ParserRuleContext) =>
       ctx.children != null && !ctx.children.isEmpty
     }
     val message = "ParserRuleContext should not be empty."

@@ -44,12 +44,12 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     super.beforeAll()
 
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
-    denseDataset = denseData.map(FeatureData).toDF()
+    denseDataset = denseData.map(FeatureData(_)).toDF()
     sparseDataset = denseData.map { point =>
       FeatureData(point.toSparse)
     }.toDF()
-    decompositionDataset = decompositionData.map(FeatureData).toDF()
-    rDataset = rData.map(FeatureData).toDF()
+    decompositionDataset = decompositionData.map(FeatureData(_)).toDF()
+    rDataset = rData.map(FeatureData(_)).toDF()
   }
 
   test("gmm fails on high dimensional data") {
@@ -314,7 +314,7 @@ object GaussianMixtureSuite extends SparkFunSuite {
     Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
   )
 
-  val decompositionData: Seq[Vector] = Seq.tabulate(25) { i: Int =>
+  val decompositionData: Seq[Vector] = Seq.tabulate(25) { (i: Int) =>
     Vectors.dense(Array.tabulate(50)(i + _.toDouble))
   }
 
