@@ -16,10 +16,8 @@
 #
 
 import faulthandler
-from functools import cached_property
 import os
 import sys
-from dataclasses import dataclass, field
 from typing import IO, List
 
 from pyspark.accumulators import _accumulatorRegistry
