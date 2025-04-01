@@ -545,7 +545,8 @@ private[spark] class Executor(
         t.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
           // SPARK-32898: it's possible that a task is killed when taskStartTimeNs has the initial
           // value(=0) still. In this case, the executorRunTime should be considered as 0.
-          if (taskStartTimeNs > 0) System.nanoTime() - taskStartTimeNs else 0))
+          if (taskStartTimeNs > 0) (System.nanoTime() - taskStartTimeNs) * taskDescription.cpus
+          else 0))
         t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
       })
 
@@ -702,7 +703,8 @@ private[spark] class Executor(
           (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
         // We need to subtract Task.run()'s deserialization time to avoid double-counting
         task.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
-          (taskFinishNs - taskStartTimeNs) - task.executorDeserializeTimeNs))
+          (taskFinishNs - taskStartTimeNs) * taskDescription.cpus
+            - task.executorDeserializeTimeNs))
         task.metrics.setExecutorCpuTime(
           (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
