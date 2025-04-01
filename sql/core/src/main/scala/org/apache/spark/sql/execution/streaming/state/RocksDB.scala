@@ -532,11 +532,13 @@ class RocksDB(
       maxColumnFamilyId.set(maxId)
     }
 
+    openDB()
+    // Call this after opening the DB to ensure that forcing snapshot is not triggered
+    // unnecessarily.
     if (useColumnFamilies) {
       createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
     }
 
-    openDB()
     val (numKeys, numInternalKeys) = {
       if (!conf.trackTotalNumberOfRows) {
         // we don't track the total number of rows - discard the number being track
