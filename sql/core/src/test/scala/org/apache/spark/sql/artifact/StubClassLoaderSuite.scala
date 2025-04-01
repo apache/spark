@@ -26,8 +26,9 @@ class StubClassLoaderSuite extends SparkFunSuite {
   // TODO: Modify JAR to remove references to connect.
   // See connector/client/jvm/src/test/resources/StubClassDummyUdf for how the UDFs and jars are
   // created.
-  private val udfNoAJar = new File(
-    "src/test/resources/artifact-tests/udf_noA.jar").toURI.toURL
+  private var udfNoJarFile = new File(
+    "src/test/resources/artifact-tests/udf_noA.jar")
+  private lazy val udfNoAJar = udfNoJarFile.toURI.toURL
   private val classDummyUdf = "org.apache.spark.sql.connect.client.StubClassDummyUdf"
   private val classA = "org.apache.spark.sql.connect.client.A"
 
@@ -74,6 +75,7 @@ class StubClassLoaderSuite extends SparkFunSuite {
   }
 
   test("stub missing class") {
+    assume(udfNoJarFile.exists)
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
@@ -87,6 +89,7 @@ class StubClassLoaderSuite extends SparkFunSuite {
   }
 
   test("unload stub class") {
+    assume(udfNoJarFile.exists)
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 

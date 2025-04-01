@@ -53,3 +53,86 @@ org.apache.spark.SparkDateTimeException
     "input" : "'13-60'"
   }
 }
+
+
+-- !query
+select try_to_time(null), try_to_time('00:12:00'), try_to_time('01:02:03', 'HH:mm:ss')
+-- !query schema
+struct<try_to_time(to_time(NULL)):time(6),try_to_time(to_time(00:12:00)):time(6),try_to_time(to_time(01:02:03, HH:mm:ss)):time(6)>
+-- !query output
+NULL	00:12:00	01:02:03
+
+
+-- !query
+select try_to_time(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"to_time(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "try_to_time(1)"
+  } ]
+}
+
+
+-- !query
+select try_to_time('12:48:31 abc')
+-- !query schema
+struct<try_to_time(to_time(12:48:31 abc)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_to_time('10:11:12.', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<try_to_time(to_time(10:11:12., HH:mm:ss.SSSSSS)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_to_time("02-69", "HH-mm")
+-- !query schema
+struct<try_to_time(to_time(02-69, HH-mm)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_to_time('11:12:13', 'HH:mm:ss', 'SSSSSS')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2]",
+    "functionName" : "`try_to_time`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "try_to_time('11:12:13', 'HH:mm:ss', 'SSSSSS')"
+  } ]
+}

@@ -3241,6 +3241,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-34261: Avoid side effect if create exists temporary function") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("f1" -> true) {
       sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
 

@@ -256,6 +256,8 @@ case class Crc32(child: Expression)
  *                             input with seed.
  *  - binary:                  use murmur3 to hash the bytes with seed.
  *  - string:                  get the bytes of string and hash it.
+ *  - time:                    it stores long value of `microseconds` since the midnight, use
+ *                             murmur3 to hash the long input with seed.
  *  - array:                   The `result` starts with seed, then use `result` as seed, recursively
  *                             calculate hash value for each element, and assign the element hash
  *                             value to `result`.
@@ -507,7 +509,7 @@ abstract class HashExpression[E] extends Expression {
     case NullType => ""
     case BooleanType => genHashBoolean(input, result)
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
-    case LongType => genHashLong(input, result)
+    case LongType | _: TimeType => genHashLong(input, result)
     case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
