@@ -229,8 +229,20 @@ def main(infile: IO, outfile: IO) -> None:
             f"'{max_arrow_batch_size}'"
         )
 
-        # Return the read function and partitions. Doing this in the same worker as filter pushdown
-        # helps reduce the number of Python worker calls.
+        # Return the data source or the read function depending on whether column pruning is
+        # implemented.
+        is_column_pruning_implemented = ( 
+            getattr(reader.pruneColumns, "__func__", None) is not DataSourceReader.pruneColumns
+        )
+        write_int(is_column_pruning_implemented, outfile)
+        if is_column_pruning_implemented:
+            # Monkey patch the data source instance to return the existing reader with the
+            # pushed down filters.
+            data_source.reader = lambda schema: reader  # type: ignore[method-assign]
+            pickleSer._write_with_length(data_source, outfile)
+
+        # Return the read function and partitions. Doing this in the same worker as
+        # filter pushdown helps reduce the number of Python worker calls.
         write_read_func_and_partitions(
             outfile,
             reader=reader,

@@ -477,15 +477,6 @@ class ColumnPruning:
     This is a subset of the full schema and a superset of the required schema.
     """
 
-    # @cached_property
-    # def requiredTopLevelSchema(self) -> StructType:
-    #     """
-    #     The schema containing all top level columns that are required by the query.
-    #     This is a subset of the full schema and a superset of the required schema.
-    #     """
-    #     required_names = set(self.requiredSchema.fieldNames())
-    #     return StructType([f for f in self.fullSchema if f.name in required_names])
-
 
 class InputPartition:
     """

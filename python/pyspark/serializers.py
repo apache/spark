@@ -60,6 +60,7 @@ import marshal
 import struct
 import types
 import collections
+from typing import IO
 import zlib
 import itertools
 import pickle

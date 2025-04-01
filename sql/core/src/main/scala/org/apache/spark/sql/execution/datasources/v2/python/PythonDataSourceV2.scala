@@ -52,6 +52,10 @@ class PythonDataSourceV2 extends TableProvider {
     dataSourceInPython
   }
 
+  def setDataSourceInPython(dataSource: PythonDataSourceCreationResult): Unit = {
+    dataSourceInPython = dataSource
+  }
+
   private var readInfo: PythonDataSourceReadInfo = _
 
   def getOrCreateReadInfo(

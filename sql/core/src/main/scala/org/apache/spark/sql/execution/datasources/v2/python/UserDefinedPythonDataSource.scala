@@ -98,7 +98,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   def pruneColumnsInPython(
       pythonResult: PythonDataSourceCreationResult,
       fullSchema: StructType,
-      requiredSchema: StructType): PythonDataSourceCreationResult = {
+      requiredSchema: StructType): PythonColumnPruningResult = {
     new UserDefinedPythonDataSourceColumnPruningRunner(
       createPythonFunction(pythonResult.dataSource),
       fullSchema,
@@ -349,6 +349,7 @@ private class UserDefinedPythonDataSourceRunner(
  * @param isFilterPushed A sequence of bools indicating whether each filter is pushed down.
  */
 case class PythonFilterPushdownResult(
+    dataSource: Option[PythonDataSourceCreationResult],
     readInfo: PythonDataSourceReadInfo,
     isFilterPushed: collection.Seq[Boolean]
 )
@@ -476,6 +477,28 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
+    val isColumnPruningImplemented = dataIn.readInt()
+    if (isColumnPruningImplemented == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
+    }
+
+    val dataSource = Option.when(isColumnPruningImplemented != 0) {
+      // Receive the picked reader or an exception raised in Python worker.
+      val length = dataIn.readInt()
+      if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+        val msg = PythonWorkerUtils.readUTF(dataIn)
+        throw QueryCompilationErrors.pythonDataSourceError(
+          action = "plan",
+          tpe = "read",
+          msg = msg
+        )
+      }
+      // Receive the pickled data source.
+      val pickledDataSourceInstance = PythonWorkerUtils.readBytes(length, dataIn)
+      PythonDataSourceCreationResult(dataSource = pickledDataSourceInstance, schema = schema)
+    }
+
     // Receive the read function and the partitions. Also check for exceptions.
     val readInfo = PythonDataSourceReadInfo.receive(dataIn)
 
@@ -488,11 +511,17 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     }
 
     PythonFilterPushdownResult(
+      dataSource = dataSource,
       readInfo = readInfo,
       isFilterPushed = isFilterPushed
     )
   }
 }
+
+case class PythonColumnPruningResult(
+    readInfo: PythonDataSourceReadInfo,
+    schema: StructType
+)
 
 /**
  * Push down filters to a Python data source.
@@ -508,7 +537,7 @@ private class UserDefinedPythonDataSourceColumnPruningRunner(
     dataSource: PythonFunction,
     fullSchema: StructType,
     requiredSchema: StructType)
-    extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSource) {
+    extends PythonPlannerRunner[PythonColumnPruningResult](dataSource) {
 
   // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
   override val workerModule = "pyspark.sql.worker.data_source_prune_columns"
@@ -528,23 +557,19 @@ private class UserDefinedPythonDataSourceColumnPruningRunner(
     // Send Python data source
     PythonWorkerUtils.writePythonFunction(dataSource, dataOut)
 
-    // Send schema
+    // Send schemas
     PythonWorkerUtils.writeUTF(fullSchema.json, dataOut)
     PythonWorkerUtils.writeUTF(requiredSchema.json, dataOut)
     PythonWorkerUtils.writeUTF(requiredTopLevelSchema.json, dataOut)
+
+    // Send configurations
+    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
   }
 
   override protected def receiveFromPython(
-      dataIn: DataInputStream): PythonDataSourceCreationResult = {
-    // Receive the picked data source or an exception raised in Python worker.
-    val length = dataIn.readInt()
-    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
-    }
-
-    // Receive the pickled data source.
-    val pickledDataSourceInstance: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+      dataIn: DataInputStream): PythonColumnPruningResult = {
+    // Receive the read function and the partitions. Also check for exceptions.
+    val readInfo = PythonDataSourceReadInfo.receive(dataIn)
 
     // Receive the schema.
     val schemaStr = PythonWorkerUtils.readUTF(dataIn)
@@ -553,8 +578,8 @@ private class UserDefinedPythonDataSourceColumnPruningRunner(
       throw QueryCompilationErrors.schemaIsNotStructTypeError(schemaStr, schema)
     }
 
-    PythonDataSourceCreationResult(
-      dataSource = pickledDataSourceInstance,
+    PythonColumnPruningResult(
+      readInfo = readInfo,
       schema = schema.asInstanceOf[StructType]
     )
   }

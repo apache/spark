@@ -31,6 +31,7 @@ class PythonScanBuilder(
     with SupportsPushDownFilters
     with SupportsPushDownRequiredColumns {
   private var supportedFilters: Array[Filter] = Array.empty
+  private var supportsColumnPruning: Boolean = true  // Assume supported by default
 
   override def build(): Scan =
     new PythonScan(ds, shortName, outputSchema, options, supportedFilters)
@@ -45,6 +46,15 @@ class PythonScanBuilder(
     ds.source.pushdownFiltersInPython(dataSource, outputSchema, filters) match {
       case None => filters // No filters are supported.
       case Some(result) =>
+        result.dataSource match {
+          case Some(resultDataSource) =>
+            // Filter pushdown mutates the data source reader so save it for column pruning.
+            ds.setDataSourceInPython(resultDataSource)
+          case None =>
+            // The mutated data source is only returned if column pruning is supported.
+            supportsColumnPruning = false
+        }
+
         // Filter pushdown also returns partitions and the read function.
         // This helps reduce the number of Python worker calls.
         ds.setReadInfo(result.readInfo)
@@ -61,16 +71,16 @@ class PythonScanBuilder(
 
   // Optionally called by DSv2 to prune columns before build, after pushFilters.
   override def pruneColumns(requiredSchema: StructType): Unit = {
-    if (!SQLConf.get.pythonColumnPruning) {
+    if (!supportsColumnPruning || !SQLConf.get.pythonColumnPruning) {
       return
     }
 
     val dataSource = ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema))
     val result = ds.source.pruneColumnsInPython(dataSource, outputSchema, requiredSchema)
 
-    // The Data Source instance state may change after column pruning so we need to update our
-    // pickled data source instance.
-    ds.setDataSourceInPython(result)
+    // Column pruning also returns partitions and the read function.
+    // This helps reduce the number of Python worker calls.
+    ds.setReadInfo(result.readInfo)
     outputSchema = result.schema
   }
 }
