@@ -805,7 +805,6 @@ object SparkConnect {
 
 object SparkConnectClient {
   import BuildCommons.protoVersion
-  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
   lazy val settings = Seq(
     // For some reason the resolution from the imported Maven build does not work for some
