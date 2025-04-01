@@ -109,3 +109,187 @@ Here are a few timer properties that are supported:
 
 The `handleInitialState` method is used to optionally handle the initial state batch dataframe. The initial state batch dataframe is used to pre-populate the state for the stateful processor. The method is invoked by the Spark query engine when the initial state batch dataframe is available.
 This method is only called once in the lifetime of the query. This is invoked before any input rows are processed by the stateful processor.
+
+### Putting it all together
+
+Here is an example of a StatefulProcessor that implements a downtime detector. Each time a new value is seen for a given key, it updates the lastSeen state value, clears any existing timers, and resets a timer for the future.
+
+When a timer expires, the application emits the elapsed time since the last observed event for the key. It then sets a new timer to emit an update 10 seconds later.
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+
+class DownTimeDetector(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        # Define schema for the state value (timestamp)
+        state_schema = StructType([StructField("value", TimestampType(), True)])
+        self.handle = handle
+        # Initialize state to store the last seen timestamp for each key
+        self.last_seen = handle.getValueState("last_seen", state_schema)
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
+        latest_from_existing = self.last_seen.get()
+        # Calculate downtime duration
+        downtime_duration = timerValues.getCurrentProcessingTimeInMs() - int(time.time() * 1000)
+        # Register a new timer for 10 seconds in the future
+        self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+        # Yield a DataFrame with the key and downtime duration
+        yield pd.DataFrame(
+            {
+                "id": key,
+                "timeValues": str(downtime_duration),
+            }
+        )
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        # Find the row with the maximum timestamp
+        max_row = max((tuple(pdf.iloc[0]) for pdf in rows), key=lambda row: row[1])
+
+        # Get the latest timestamp from existing state or use epoch start if not exists
+        if self.last_seen.exists():
+            latest_from_existing = self.last_seen.get()
+        else:
+            latest_from_existing = datetime.fromtimestamp(0)
+
+        # If new data is more recent than existing state
+        if latest_from_existing < max_row[1]:
+            # Delete all existing timers
+            for timer in self.handle.listTimers():
+                self.handle.deleteTimer(timer)
+            # Update the last seen timestamp
+            self.last_seen.update((max_row[1],))
+
+        # Register a new timer for 5 seconds in the future
+        self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+
+        # Get current processing time in milliseconds
+        timestamp_in_millis = str(timerValues.getCurrentProcessingTimeInMs())
+
+        # Yield a DataFrame with the key and current timestamp
+        yield pd.DataFrame({"id": key, "timeValues": timestamp_in_millis})
+
+    def close(self) -> None:
+        # No cleanup needed
+        pass
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+
+// The (String, Timestamp) schema represents an (id, time). We want to do downtime
+// detection on every single unique sensor, where each sensor has a sensor ID.
+class DowntimeDetector(duration: Duration) extends
+  StatefulProcessor[String, (String, Timestamp), (String, Duration)] {
+
+  @transient private var _lastSeen: ValueState[Timestamp] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _lastSeen = getHandle.getValueState[Timestamp]("lastSeen", Encoders.TIMESTAMP, TTLConfig.NONE)
+  }
+
+  // The logic here is as follows: find the largest timestamp seen so far. Set a timer for
+  // the duration later.
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Timestamp)],
+      timerValues: TimerValues): Iterator[(String, Duration)] = {
+    val latestRecordFromNewRows = inputRows.maxBy(_._2.getTime)
+
+    // Use getOrElse to initiate state variable if it doesn't exist
+    val latestTimestampFromExistingRows = _lastSeen.getOption().getOrElse(new Timestamp(0))
+    val latestTimestampFromNewRows = latestRecordFromNewRows._2
+
+    if (latestTimestampFromNewRows.after(latestTimestampFromExistingRows)) {
+      // Cancel the one existing timer, since we have a new latest timestamp.
+      // We call "listTimers()" just because we don't know ahead of time what
+      // the timestamp of the existing timer is.
+      getHandle.listTimers().foreach(timer => getHandle.deleteTimer(timer))
+
+      _lastSeen.update(latestTimestampFromNewRows)
+      // Use timerValues to schedule a timer using processing time.
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + duration.toMillis)
+    } else {
+      // No new latest timestamp, so no need to update state or set a timer.
+    }
+
+    Iterator.empty
+  }
+
+  override def handleExpiredTimer(
+    key: String,
+    timerValues: TimerValues,
+    expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Duration)] = {
+      val latestTimestamp = _lastSeen.get()
+      val downtimeDuration = new Duration(
+        timerValues.getCurrentProcessingTimeInMs() - latestTimestamp.getTime)
+
+      // Register another timer that will fire in 10 seconds.
+      // Timers can be registered anywhere but init()
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+
+      Iterator((key, downtimeDuration))
+  }
+}
+
+{% endhighlight %}
+
+</div>
+
+</div>
+
+### Using the StatefulProcessor in a streaming query
+
+Now that we have defined the `StatefulProcessor`, we can use it in a streaming query. The following code snippets show how to use the `StatefulProcessor` in a streaming query in Python and Scala.
+
+<div class="codetabs">
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+
+q = (df.groupBy("key")
+  .transformWithStateInPandas(
+    statefulProcessor=DownTimeDetector(),
+    outputStructType=output_schema,
+    outputMode="Update",
+    timeMode="None",
+  )
+  .writeStream...
+  
+{% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val query = df.groupBy("key")
+  .transformWithState(
+    statefulProcessor = new DownTimeDetector(),
+    outputMode = OutputMode.Update,
+    timeMode = TimeMode.None)
+  .writeStream...
+{% endhighlight %}
+</div>
+</div>
+
+## Integration with state data source
+
+TransformWithState is a stateful operator that allows users to maintain arbitrary state across batches. In order to read this state, the user needs to provide some additional options in the state data source reader query.
+This operator allows for multiple state variables to be used within the same query. However, because they could be of different composite types and encoding formats, they need to be read within a batch query one variable at a time.
+In order to allow this, the user needs to specify the `stateVarName` for the state variable they are interested in reading.
+
+Timers can read by setting the option `readRegisteredTimers` to true. This will return all the registered timer across grouping keys.
+
+We also allow for composite type variables to be read in 2 formats:
+- Flattened: This is the default format where the composite types are flattened out into individual columns.
+- Non-flattened: This is where the composite types are returned as a single column of Array or Map type in Spark SQL.
+
+Depending on your memory requirements, you can choose the format that best suits your use case.
+More information about source options can be found [here](./structured-streaming-state-data-source.html).
+
