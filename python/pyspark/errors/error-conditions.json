@@ -189,6 +189,11 @@
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_COLUMN_PRUNING_DISABLED": {
+    "message": [
+      "<type> implements pruneColumns() but column pruning is disabled because configuration '<conf>' is false. Set it to true to enable column pruning."
+    ]
+  },
   "DATA_SOURCE_EXTRANEOUS_FILTERS": {
     "message": [
       "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
@@ -219,7 +224,7 @@
   },
   "DATA_SOURCE_PUSHDOWN_DISABLED": {
     "message": [
-      "<type> implements <method> but <feature> is disabled because configuration '<conf>' is false. Set it to true to enable <feature>."
+      "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
     ]
   },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {

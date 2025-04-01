@@ -602,8 +602,7 @@ class BasePythonDataSourceTestsMixin:
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
             self.spark.dataSource.register(TestDataSource)
             df = self.spark.read.format("TestDataSource").schema("x int").load()
-            pattern = "DATA_SOURCE_PUSHDOWN_DISABLED.*filter pushdown"
-            with self.assertRaisesRegex(Exception, pattern):
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
                 df.show()
 
     def test_column_pruning_disabled(self):
@@ -621,8 +620,7 @@ class BasePythonDataSourceTestsMixin:
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
             self.spark.dataSource.register(TestDataSource)
             df = self.spark.read.format("TestDataSource").schema("x int").load()
-            pattern = "DATA_SOURCE_PUSHDOWN_DISABLED.*column pruning"
-            with self.assertRaisesRegex(Exception, pattern):
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_COLUMN_PRUNING_DISABLED"):
                 df.show()
 
     def _check_filters(self, sql_type, sql_filter, python_filters):
