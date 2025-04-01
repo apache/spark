@@ -979,7 +979,6 @@ class ClassificationTestsMixin:
             model2 = MultilayerPerceptronClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))
 
-
     def test_invalid_load_location(self):
         spark = self.spark
         with self.assertRaisesRegex(PySparkException, "Path does not exist"):
