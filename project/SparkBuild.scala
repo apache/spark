@@ -871,31 +871,38 @@ object SparkConnectClient {
 object SparkConnectClientIT {
   val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
-  lazy val settings = Seq(
+  def filterSparkDependencies(
+      files: Seq[Attributed[File]],
+      scalaBinaryVer: String): Seq[Attributed[File]] = {
+    val packageNames = Seq(
+      "spark-connect-client-jvm",
+      "spark-connect-common",
+      "spark-connect",
+      "spark-sql"
+    ).map(name => s"${name}_$scalaBinaryVer")
 
+    files.filterNot(f => packageNames.exists(name => f.toString.contains(name)))
+  }
+
+  lazy val settings = Seq(
     buildTestDeps := {
       (LocalProject("connect-client-jvm") / assembly).value
-      // (LocalProject("assembly") / Compile / Keys.`package`).value
       (LocalProject("catalyst") / Test / Keys.`package`).value
     },
 
-    // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
-    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
-    // so no additional configuration is required.
     (Test / compile) := ((Test / compile) dependsOn buildTestDeps).value,
-
     test := ((Test / test) dependsOn (buildTestDeps)).value,
-
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
 
-    (Test / dependencyClasspath) := (Test / dependencyClasspath).value
-      .filterNot { f => f.toString.contains("spark-connect-client-jvm_2.13") || f.toString.contains("spark-connect-common_2.13") ||
-        f.toString.contains("spark-connect_2.13") || f.toString.contains("spark-sql_2.13") },
-    (Test / fullClasspath) := (Test / fullClasspath).value
-      .filterNot { f => f.toString.contains("spark-connect-client-jvm_2.13") || f.toString.contains("spark-connect-common_2.13")||
-        f.toString.contains("spark-connect_2.13") || f.toString.contains("spark-sql_2.13") },
-    (Test / unmanagedJars) += Attributed.blank(
-      file(s"${baseDirectory.value}/../jvm/target/scala-${scalaBinaryVersion.value}/spark-connect-client-jvm-assembly-${version.value}.jar"))
+    (Test / dependencyClasspath) :=
+      filterSparkDependencies((Test / dependencyClasspath).value, scalaBinaryVersion.value),
+    (Test / fullClasspath) :=
+      filterSparkDependencies((Test / fullClasspath).value, scalaBinaryVersion.value),
+    (Test / unmanagedJars) += {
+      val jarName = s"spark-connect-client-jvm-assembly-${version.value}.jar"
+      val basePath = s"${baseDirectory.value}/../jvm/target/scala-${scalaBinaryVersion.value}"
+      Attributed.blank(file(s"$basePath/$jarName"))
+    }
   )
 }
 
