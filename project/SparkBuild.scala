@@ -831,7 +831,6 @@ object SparkConnectClient {
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
-    (assembly / logLevel) := Level.Info,
 
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
@@ -848,11 +847,11 @@ object SparkConnectClient {
     },
 
     (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.com.google.protobuf.@1").inAll,
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
-      ShadeRule.rename("com.google.**" -> "org.sparkproject.com.google.@1").inAll,
+      ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
       ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
-      ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
@@ -901,8 +900,7 @@ object SparkConnectClientIT {
       val jarName = s"spark-connect-client-jvm-assembly-${version.value}.jar"
       val basePath = s"${baseDirectory.value}/../jvm/target/scala-${scalaBinaryVersion.value}"
       Attributed.blank(file(s"$basePath/$jarName"))
-    },
-    (Test / compile / javacOptions) ++= Seq("-proc:none"),
+    }
   )
 }
 
