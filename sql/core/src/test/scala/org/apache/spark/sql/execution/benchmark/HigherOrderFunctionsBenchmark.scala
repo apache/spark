@@ -17,7 +17,10 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Synthetic benchmark for higher order functions.
@@ -40,82 +43,31 @@ object HigherOrderFunctionsBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Higher order functions") {
-      var benchmark = new Benchmark("transform", N, output = output)
-      benchmark.addCase("codegen", M) { _ =>
-        df.select(transform(col("arr"), x => x + 1)).noop()
-      }
-      benchmark.addCase("interpreted", M) { _ =>
-        withSQLConf("spark.sql.codegen.factoryMode" -> "NO_CODEGEN") {
-          df.select(transform(col("arr"), x => x + 1)).noop()
+      def benchFunction(name: String, col: Column) = {
+        var benchmark = new Benchmark(name, N, output = output)
+        benchmark.addCase("codegen", M) { _ =>
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key ->
+              CodegenObjectFactoryMode.CODEGEN_ONLY.toString()) {
+            df.select(col).noop()
+          }
         }
-      }
-      benchmark.run()
 
-      benchmark = new Benchmark("filter", N, output = output)
-      benchmark.addCase("codegen", M) { _ =>
-        df.select(filter(col("arr"), x => x > 1)).noop()
-      }
-      benchmark.addCase("interpreted", M) { _ =>
-        withSQLConf("spark.sql.codegen.factoryMode" -> "NO_CODEGEN") {
-          df.select(filter(col("arr"), x => x > 1)).noop()
+        benchmark.addCase("interpreted", M) { _ =>
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key ->
+              CodegenObjectFactoryMode.NO_CODEGEN.toString()) {
+            df.select(col).noop()
+          }
         }
+        benchmark.run()
       }
-      benchmark.run()
 
-      benchmark = new Benchmark("forall - fast", N, output = output)
-      benchmark.addCase("codegen", M) { _ =>
-        df.select(forall(col("arr"), x => x < 0)).noop()
-      }
-      benchmark.addCase("interpreted", M) { _ =>
-        withSQLConf("spark.sql.codegen.factoryMode" -> "NO_CODEGEN") {
-          df.select(forall(col("arr"), x => x < 0)).noop()
-        }
-      }
-      benchmark.run()
-
-      benchmark = new Benchmark("forall - slow", N, output = output)
-      benchmark.addCase("codegen", M) { _ =>
-        df.select(forall(col("arr"), x => x >= 0)).noop()
-      }
-      benchmark.addCase("interpreted", M) { _ =>
-        withSQLConf("spark.sql.codegen.factoryMode" -> "NO_CODEGEN") {
-          df.select(forall(col("arr"), x => x >= 0)).noop()
-        }
-      }
-      benchmark.run()
-
-      benchmark = new Benchmark("exists - fast", N, output = output)
-      benchmark.addCase("codegen", M) { _ =>
-        df.select(exists(col("arr"), x => x >= 0)).noop()
-      }
-      benchmark.addCase("interpreted", M) { _ =>
-        withSQLConf("spark.sql.codegen.factoryMode" -> "NO_CODEGEN") {
-          df.select(exists(col("arr"), x => x >= 0)).noop()
-        }
-      }
-      benchmark.run()
-
-      benchmark = new Benchmark("exists - slow", N, output = output)
-      benchmark.addCase("codegen", M) { _ =>
-        df.select(exists(col("arr"), x => x < 0)).noop()
-      }
-      benchmark.addCase("interpreted", M) { _ =>
-        withSQLConf("spark.sql.codegen.factoryMode" -> "NO_CODEGEN") {
-          df.select(exists(col("arr"), x => x < 0)).noop()
-        }
-      }
-      benchmark.run()
-
-      benchmark = new Benchmark("aggregate", N, output = output)
-      benchmark.addCase("codegen", M) { _ =>
-        df.select(aggregate(col("arr"), lit(0L), (acc, x) => acc + x)).noop()
-      }
-      benchmark.addCase("interpreted", M) { _ =>
-        withSQLConf("spark.sql.codegen.factoryMode" -> "NO_CODEGEN") {
-          df.select(aggregate(col("arr"), lit(0L), (acc, x) => acc + x)).noop()
-        }
-      }
-      benchmark.run()
+      benchFunction("transform", transform(col("arr"), x => x + 1))
+      benchFunction("filter", filter(col("arr"), x => x > 1))
+      benchFunction("forall - fast", forall(col("arr"), x => x < 0))
+      benchFunction("forall - slow", forall(col("arr"), x => x >= 0))
+      benchFunction("exists - fast", exists(col("arr"), x => x >= 0))
+      benchFunction("exists - slow", exists(col("arr"), x => x < 0))
+      benchFunction("aggregate", aggregate(col("arr"), lit(0L), (acc, x) => acc + x))
     }
   }
 }
