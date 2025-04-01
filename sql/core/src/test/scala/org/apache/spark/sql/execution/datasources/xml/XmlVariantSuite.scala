@@ -17,9 +17,11 @@
 package org.apache.spark.sql.execution.datasources.xml
 
 import java.time.ZoneOffset
+
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class XmlVariantSuite
@@ -44,7 +46,7 @@ class XmlVariantSuite
     testParser("<ROW><isActive>false</isActive></ROW>", """{"isActive":false}""")
     testParser("<ROW><isActive>true</isActive></ROW>", """{"isActive":true}""")
 
-    // Integer -> Long
+    // Long -> Long
     testParser("<ROW><id>2</id></ROW>", """{"id":2}""")
     testParser("<ROW><id>+2</id></ROW>", """{"id":2}""")
     testParser("<ROW><id>-2</id></ROW>", """{"id":-2}""")
@@ -69,15 +71,13 @@ class XmlVariantSuite
     // Date -> String
     testParser(
       xml = "<ROW><createdAt>2023-10-01</createdAt></ROW>",
-      expectedJsonStr = """{"createdAt":"2023-10-01"}""",
-      extraOptions = Map("dateFormat" -> "yyyy-MM-dd")
+      expectedJsonStr = """{"createdAt":"2023-10-01"}"""
     )
 
     // Timestamp -> String
     testParser(
       xml = "<ROW><createdAt>2023-10-01T12:00:00Z</createdAt></ROW>",
-      expectedJsonStr = """{"createdAt":"2023-10-01T12:00:00Z"}""",
-      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssX")
+      expectedJsonStr = """{"createdAt":"2023-10-01T12:00:00Z"}"""
     )
 
     // String -> String
@@ -242,6 +242,28 @@ class XmlVariantSuite
       xml = complexFieldAndType2.head,
       expectedJsonStr = expectedJsonStr2
     )
+  }
+
+  test("Parser: Case sensitivity test") {
+    val xmlString =
+      """
+        |<ROW>
+        |   <a>1<b>2</b></a>
+        |   <A>3<b>4</b></A>
+        |</ROW>
+        |""".stripMargin
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      testParser(
+        xml = xmlString,
+        expectedJsonStr = """{"a":[{"_VALUE":1,"b":2},{"_VALUE":3,"b":4}]}"""
+      )
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      testParser(
+        xml = xmlString,
+        expectedJsonStr = """{"A":{"_VALUE":3,"b":4},"a":{"_VALUE":1,"b":2}}"""
+      )
+    }
   }
 
   test("DSL: read XML files using singleVariantColumn") {

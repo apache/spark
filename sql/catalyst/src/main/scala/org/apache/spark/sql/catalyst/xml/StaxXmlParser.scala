@@ -934,15 +934,14 @@ object StaxXmlParser {
 
     // Map to store the variants of all child fields
     // Each field could have multiple entries, which means it's an array
-    val fieldToVariants = collection.mutable.Map.empty[String, java.util.ArrayList[Variant]]
+    val fieldToVariants = collection.mutable.TreeMap.empty[String, java.util.ArrayList[Variant]]
 
     // Handle attributes first
     StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options).foreach {
       case (f, v) =>
-        val variants = fieldToVariants.getOrElseUpdate(f, new java.util.ArrayList[Variant]())
         val builder = new VariantBuilder(false)
         appendXMLCharacterToVariant(builder, v, options)
-        variants.add(builder.result())
+        addOrUpdateVariantFields(fieldToVariants, f, builder.result())
     }
 
     var shouldStop = false
@@ -952,17 +951,18 @@ object StaxXmlParser {
           // For each nested field, convert it to a variant and track it in the fieldsToVariants map
           val attributes = s.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
           val field = StaxXmlParserUtils.getName(s.asStartElement.getName, options)
-          val variants = fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
-          variants.add(convertVariant(parser, attributes, options))
+          addOrUpdateVariantFields(
+            fieldToVariants = fieldToVariants,
+            field = field,
+            variant = convertVariant(parser, attributes, options)
+          )
 
         case c: Characters if !c.isWhiteSpace =>
           // Treat the CDATA as a value tag field, where we use the [[XMLOptions.valueTag]] as the
           // field key
           val builder = new VariantBuilder(false)
           appendXMLCharacterToVariant(builder, c.getData, options)
-          val variants =
-            fieldToVariants.getOrElseUpdate(options.valueTag, new java.util.ArrayList[Variant]())
-          variants.add(builder.result())
+          addOrUpdateVariantFields(fieldToVariants, options.valueTag, builder.result())
 
         case _: EndElement =>
           if (fieldToVariants.nonEmpty) {
@@ -1025,6 +1025,26 @@ object StaxXmlParser {
     }
 
     rootBuilder.result()
+  }
+
+  private def addOrUpdateVariantFields(
+      fieldToVariants: collection.mutable.TreeMap[String, java.util.ArrayList[Variant]],
+      field: String,
+      variant: Variant): Unit = {
+    val variants = if (SQLConf.get.caseSensitiveAnalysis) {
+      // If case-sensitive analysis is enabled, we need to use the original field name
+      // to avoid case-insensitive key collision
+      fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
+    } else {
+      // Otherwise, we can use the lower-case field name for case-insensitive key collision
+      fieldToVariants.get(field.toLowerCase(Locale.ROOT)) match {
+        case Some(variantList) => variantList
+        case _ =>
+          // If the field doesn't exist, create the entry with the original field name
+          fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
+      }
+    }
+    variants.add(variant)
   }
 
   /**
