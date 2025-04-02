@@ -801,13 +801,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def constraintNotSupportedError(ctx: ParserRuleContext, constraint: String): Throwable = {
-    new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.CONSTRAINT_TYPE",
-      messageParameters = Map("constraint" -> constraint),
-      ctx)
-  }
-
   def multiplePrimaryKeysError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "MULTIPLE_PRIMARY_KEYS", ctx)
   }
