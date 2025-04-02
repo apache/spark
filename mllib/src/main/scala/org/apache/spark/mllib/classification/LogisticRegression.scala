@@ -253,7 +253,7 @@ class LogisticRegressionWithLBFGS
   @Since("1.1.0")
   override val optimizer: LBFGS = new LBFGS(new LogisticGradient, new SquaredL2Updater)
 
-  override protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List(multiLabelValidator)
+  override protected val validators: List[RDD[LabeledPoint] => Boolean] = List(multiLabelValidator)
 
   private def multiLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
     if (numOfLinearPredictor > 1) {
