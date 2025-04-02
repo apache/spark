@@ -5443,7 +5443,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Parse an [[AlterTableCommand]] with table constraint.
+   * Parse an [[AddConstraint]] command.
    *
    * For example:
    * {{{
