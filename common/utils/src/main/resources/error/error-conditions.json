@@ -2351,11 +2351,11 @@
     },
     "sqlState" : "22022"
   },
-  "INVALID_CONSTRAINT_CHARACTERISTICS": {
-    "message": [
+  "INVALID_CONSTRAINT_CHARACTERISTICS" : {
+    "message" : [
       "Constraint characteristics [<characteristics>] are duplicated or conflict with each other."
     ],
-    "sqlState": "42613"
+    "sqlState" : "42613"
   },
   "INVALID_CORRUPT_RECORD_TYPE" : {
     "message" : [
@@ -5557,11 +5557,11 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC": {
-    "message": [
+  "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC" : {
+    "message" : [
       "Constraint characteristic '<characteristic>' is not supported for constraint type '<constraintType>'."
     ],
-    "sqlState": "0A000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [

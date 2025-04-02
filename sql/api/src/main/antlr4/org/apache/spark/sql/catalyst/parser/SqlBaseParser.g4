@@ -1796,6 +1796,7 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | KEY
     | KEYS
     | LANGUAGE
     | LAST
@@ -1836,7 +1837,6 @@ ansiNonReserved
     | NO
     | NONE
     | NORELY
-    | NOVALIDATE
     | NULLS
     | NUMERIC
     | OF
@@ -1953,7 +1953,6 @@ ansiNonReserved
     | UNTIL
     | UPDATE
     | USE
-    | VALIDATE
     | VALUE
     | VALUES
     | VARCHAR
@@ -2107,6 +2106,7 @@ nonReserved
     | ELSE
     | ELSEIF
     | END
+    | ENFORCED
     | ESCAPE
     | ESCAPED
     | EVOLUTION
@@ -2170,6 +2170,7 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | KEY
     | KEYS
     | LANGUAGE
     | LAST
@@ -2211,6 +2212,7 @@ nonReserved
     | NANOSECONDS
     | NO
     | NONE
+    | NORELY
     | NOT
     | NULL
     | NULLS
@@ -2254,6 +2256,7 @@ nonReserved
     | REDUCE
     | REFERENCES
     | REFRESH
+    | RELY
     | RENAME
     | REPAIR
     | REPEAT
