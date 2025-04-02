@@ -155,8 +155,8 @@ case class StructField(
    * value, such as: CREATE FUNCTION f(arg INT DEFAULT 42) RETURN ....
    */
   private[sql] def getDefault(): Option[String] = {
-    if (metadata.contains("default")) {
-      Option(metadata.getString("default"))
+    if (metadata.contains(StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY)) {
+      Option(metadata.getString(StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY))
     } else {
       None
     }
@@ -253,4 +253,8 @@ case class StructField(
     s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}$nullDDL" +
       s"$getDDLDefault$getDDLComment"
   }
+}
+
+object StructField {
+  val SQL_FUNCTION_DEFAULT_METADATA_KEY = "default"
 }

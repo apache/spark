@@ -3868,6 +3868,11 @@ class AstBuilder extends DataTypeAstBuilder
    * DataType parsing
    * ******************************************************************************************** */
 
+  override def visitSingleRoutineParamList(
+      ctx: SingleRoutineParamListContext): StructType = withOrigin(ctx) {
+    createSchema(ctx.colDefinitionList())
+  }
+
   /**
    * Create top level table schema.
    */
