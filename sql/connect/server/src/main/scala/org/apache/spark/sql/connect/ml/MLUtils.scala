@@ -415,15 +415,10 @@ private[ml] object MLUtils {
     if (operators.isEmpty || !operators.contains(name)) {
       throw MlUnsupportedException(s"Unsupported read for $name")
     }
-    try {
-      operators(name)
-        .getMethod("load", classOf[String])
-        .invoke(null, path)
-        .asInstanceOf[T]
-    } catch {
-      case e: InvocationTargetException if e.getCause != null =>
-        throw e.getCause
-    }
+    operators(name)
+      .getMethod("load", classOf[String])
+      .invoke(null, path)
+      .asInstanceOf[T]
   }
 
   /**
