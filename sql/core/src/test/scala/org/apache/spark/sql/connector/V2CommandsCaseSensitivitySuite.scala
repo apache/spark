@@ -54,7 +54,7 @@ class V2CommandsCaseSensitivitySuite
         Seq("ID", "iD").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
-              None, None, None, None, false)
+              None, None, None, None, false, Seq.empty)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.identity(ref) :: Nil,
@@ -79,7 +79,7 @@ class V2CommandsCaseSensitivitySuite
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
-              None, None, None, None, false)
+              None, None, None, None, false, Seq.empty)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.bucket(4, ref) :: Nil,
@@ -105,7 +105,7 @@ class V2CommandsCaseSensitivitySuite
         Seq("ID", "iD").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
-              None, None, None, None, false)
+              None, None, None, None, false, Seq.empty)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.identity(ref) :: Nil,
@@ -130,7 +130,7 @@ class V2CommandsCaseSensitivitySuite
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec =
             UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty),
-              None, None, None, None, false)
+              None, None, None, None, false, Seq.empty)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),
             Expressions.bucket(4, ref) :: Nil,

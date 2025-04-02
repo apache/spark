@@ -198,7 +198,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=stringLit)?                                        #showNamespaces
-    | createTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
+    | createTableHeader (LEFT_PAREN tableElementList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF errorCapturingNot EXISTS)? target=tableIdentifier
@@ -208,7 +208,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
+    | replaceTableHeader (LEFT_PAREN tableElementList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE identifierReference partitionSpec? COMPUTE STATISTICS
@@ -261,6 +261,10 @@ statement
     | ALTER TABLE identifierReference
         (clusterBySpec | CLUSTER BY NONE)                              #alterClusterBy
     | ALTER TABLE identifierReference collationSpec                    #alterTableCollation
+    | ALTER TABLE identifierReference ADD tableConstraintDefinition    #addTableConstraint
+    | ALTER TABLE identifierReference
+        DROP CONSTRAINT (IF EXISTS)? name=identifier
+        (RESTRICT | CASCADE)?                                     #dropTableConstraint
     | DROP TABLE (IF EXISTS)? identifierReference PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? identifierReference                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
@@ -1334,6 +1338,15 @@ colType
     : colName=errorCapturingIdentifier dataType (errorCapturingNot NULL)? commentSpec?
     ;
 
+tableElementList
+    : tableElement (COMMA tableElement)*
+    ;
+
+tableElement
+    : tableConstraintDefinition
+    | colDefinition
+    ;
+
 colDefinitionList
     : colDefinition (COMMA colDefinition)*
     ;
@@ -1347,6 +1360,7 @@ colDefinitionOption
     | defaultExpression
     | generationExpression
     | commentSpec
+    | columnConstraintDefinition
     ;
 
 generationExpression
@@ -1516,6 +1530,62 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
+columnConstraintDefinition
+    : (CONSTRAINT name=errorCapturingIdentifier)? columnConstraint constraintCharacteristic*
+    ;
+
+columnConstraint
+    : checkConstraint
+    | uniqueSpec
+    | referenceSpec
+    ;
+
+tableConstraintDefinition
+    : (CONSTRAINT name=errorCapturingIdentifier)? tableConstraint constraintCharacteristic*
+    ;
+
+tableConstraint
+    : checkConstraint
+    | uniqueConstraint
+    | foreignKeyConstraint
+    ;
+
+checkConstraint
+    : CHECK LEFT_PAREN (expr=booleanExpression) RIGHT_PAREN
+    ;
+
+uniqueSpec
+    : UNIQUE
+    | PRIMARY KEY
+    ;
+
+uniqueConstraint
+    : uniqueSpec identifierList
+    ;
+
+referenceSpec
+    : REFERENCES multipartIdentifier (parentColumns=identifierList)?
+    ;
+
+foreignKeyConstraint
+    : FOREIGN KEY identifierList referenceSpec
+    ;
+
+constraintCharacteristic
+    : enforcedCharacteristic
+    | relyCharacteristic
+    ;
+
+enforcedCharacteristic
+    : ENFORCED
+    | NOT ENFORCED
+    ;
+
+relyCharacteristic
+    : RELY
+    | NORELY
+    ;
+
 alterColumnSpecList
     : alterColumnSpec (COMMA alterColumnSpec)*
     ;
@@ -1673,6 +1743,7 @@ ansiNonReserved
     | DOUBLE
     | DROP
     | ELSEIF
+    | ENFORCED
     | ESCAPED
     | EVOLUTION
     | EXCHANGE
@@ -1761,6 +1832,8 @@ ansiNonReserved
     | NANOSECONDS
     | NO
     | NONE
+    | NORELY
+    | NOVALIDATE
     | NULLS
     | NUMERIC
     | OF
@@ -1792,6 +1865,7 @@ ansiNonReserved
     | RECOVER
     | REDUCE
     | REFRESH
+    | RELY
     | RENAME
     | REPAIR
     | REPEAT
@@ -1875,6 +1949,7 @@ ansiNonReserved
     | UNTIL
     | UPDATE
     | USE
+    | VALIDATE
     | VALUE
     | VALUES
     | VARCHAR

@@ -154,7 +154,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       comment = None,
       collation = None,
       serde = None,
-      external = false)
+      external = false,
+      constraints = Seq.empty)
     runCommand(
       CreateTableAsSelect(
         UnresolvedIdentifier(tableName),
@@ -220,7 +221,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       comment = None,
       collation = None,
       serde = None,
-      external = false)
+      external = false,
+      constraints = Seq.empty)
     runCommand(ReplaceTableAsSelect(
       UnresolvedIdentifier(tableName),
       partitioning.getOrElse(Seq.empty) ++ clustering,
