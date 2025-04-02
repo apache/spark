@@ -276,7 +276,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def timeParseError(input: Any, fmt: Option[String], e: Throwable): SparkDateTimeException = {
+  def timeParseError(input: String, fmt: Option[String], e: Throwable): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "CANNOT_PARSE_TIME",
       messageParameters = Map(
