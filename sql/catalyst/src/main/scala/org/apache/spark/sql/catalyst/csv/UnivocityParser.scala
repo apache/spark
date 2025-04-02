@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -458,6 +459,9 @@ class UnivocityParser(
    */
   private final class VariantValueConverter extends ValueConverter {
     private var currentType: DataType = LongType
+    // Keep consistent with `CSVInferSchema`: only produce TimestampNTZ when the default timestamp
+    // type is TimestampNTZ.
+    private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
 
     override def apply(s: String): Any = {
       val builder = new VariantBuilder(false)
@@ -499,7 +503,8 @@ class UnivocityParser(
             parseDate()
           }
         } catch {
-          case NonFatal(_) => parseDate()
+          case NonFatal(_) =>
+            if (options.preferDate) parseDate() else parseTimestampNTZ()
         }
       }
 
@@ -509,6 +514,19 @@ class UnivocityParser(
           DateType
         } catch {
           case NonFatal(_) => parseTimestamp()
+        }
+      }
+
+      def parseTimestampNTZ(): DataType = {
+        if (isDefaultNTZ) {
+          try {
+            builder.appendTimestampNtz(timestampNTZFormatter.parseWithoutTimeZone(s, false))
+            TimestampNTZType
+          } catch {
+            case NonFatal(_) => parseTimestamp()
+          }
+        } else {
+          parseTimestamp()
         }
       }
 
@@ -522,10 +540,11 @@ class UnivocityParser(
       }
 
       def parseBoolean(): DataType = {
-        if (s == "true") {
+        val lower = s.toLowerCase(Locale.ROOT)
+        if (lower == "true") {
           builder.appendBoolean(true)
           BooleanType
-        } else if (s == "false") {
+        } else if (lower == "false") {
           builder.appendBoolean(false)
           BooleanType
         } else {
@@ -542,6 +561,7 @@ class UnivocityParser(
         case LongType => parseLong()
         case _: DecimalType => parseDecimal()
         case DateType => parseDate()
+        case TimestampNTZType => parseTimestampNTZ()
         case TimestampType => parseTimestamp()
         case BooleanType => parseBoolean()
         case StringType => parseString()

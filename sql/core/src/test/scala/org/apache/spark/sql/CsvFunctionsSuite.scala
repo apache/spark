@@ -759,11 +759,55 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"to_csv(value)\""),
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
     )
+  }
 
-    checkAnswer(
-      df.select(from_csv(lit("1,2,3"), valueSchema, Map.empty[String, String])),
-      Seq(Row(Row(1L, "2", new VariantVal(Array[Byte](12, 3), Array[Byte](1, 0, 0)))))
-    )
+  test("from_csv with variant") {
+    val df = Seq(
+      "100,1.1",
+      "2000-01-01,2000-01-01 01:02:03",
+      ",true",
+      "1e9,hello,extra",
+      "missing").toDF("value").coalesce(1)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // The `header` option doesn't affect results, just like non-variant from_csv.
+      for (header <- Seq("true", "false")) {
+        checkAnswer(
+          df.select(
+            from_csv(
+              $"value",
+              StructType.fromDDL("a variant, b variant"),
+              Map("header" -> header)
+            ).cast("string")),
+          Seq(
+            Row("{100, 1.1}"),
+            Row("""{"2000-01-01", "2000-01-01 01:02:03+00:00"}"""),
+            Row("{null, true}"),
+            Row("""{"1e9", "hello"}"""),
+            Row("""{"missing", null}""")))
+        checkAnswer(
+          df.select(
+            from_csv(
+              $"value",
+              StructType.fromDDL("v variant"),
+              Map("header" -> header, "singleVariantColumn" -> "true")
+            ).cast("string")),
+          Seq(
+            Row("""{{"_c0":100,"_c1":1.1}}"""),
+            Row("""{{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}}"""),
+            Row("""{{"_c0":null,"_c1":true}}"""),
+            Row("""{{"_c0":"1e9","_c1":"hello","_c2":"extra"}}"""),
+            Row("""{{"_c0":"missing"}}""")))
+      }
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(
+          from_csv(
+          $"value",
+          StructType.fromDDL("a variant, b variant"),
+          Map("singleVariantColumn" -> "true"))).collect()
+      },
+      condition = "INVALID_SINGLE_VARIANT_COLUMN")
   }
 
   test("SPARK-47497: the input of to_csv must be StructType") {
