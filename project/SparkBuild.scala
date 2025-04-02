@@ -229,7 +229,8 @@ object SparkBuild extends PomBuild {
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     (Compile / scalacOptions) ++= {
       Seq(
-        "-Xsource:3-cross",
+        "-Xsource:3",
+        "-Xsource-features:v2.13.15,-case-companion-function",
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details

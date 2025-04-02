@@ -221,7 +221,8 @@ class LogisticRegressionWithSGD private[mllib] (
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
-  override protected val validators = List(DataValidators.binaryLabelValidator)
+  override protected val validators: List[RDD[LabeledPoint] => Boolean] =
+    List(DataValidators.binaryLabelValidator)
 
   override protected[mllib] def createModel(
     weights: Vector,

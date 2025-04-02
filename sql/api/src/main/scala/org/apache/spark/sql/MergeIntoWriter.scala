@@ -250,9 +250,7 @@ case class WhenMatched[T] private[sql] (
  * @tparam T
  *   The type of data in the MergeIntoWriter.
  */
-case class WhenNotMatched[T](
-    mergeIntoWriter: MergeIntoWriter[T],
-    condition: Option[Column]) {
+case class WhenNotMatched[T](mergeIntoWriter: MergeIntoWriter[T], condition: Option[Column]) {
 
   /**
    * Specifies an action to insert all non-matched rows into the DataFrame.
