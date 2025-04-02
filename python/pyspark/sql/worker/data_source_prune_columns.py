@@ -83,6 +83,7 @@ def validate_schema(
         elif isinstance(superset, ArrayType) and isinstance(subset, ArrayType):
             check(superset.elementType, subset.elementType)
             check_nullability(superset.containsNull, subset.containsNull)
+        # Column pruning doesn't go inside MapType, so treat it as a leaf.
         elif superset != subset:
             fail()
 
