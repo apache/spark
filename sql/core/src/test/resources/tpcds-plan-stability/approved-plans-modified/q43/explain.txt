@@ -1,0 +1,125 @@
+== Physical Plan ==
+TakeOrderedAndProject (21)
++- * HashAggregate (20)
+   +- Exchange (19)
+      +- * HashAggregate (18)
+         +- * Project (17)
+            +- * BroadcastHashJoin Inner BuildRight (16)
+               :- * Project (10)
+               :  +- * BroadcastHashJoin Inner BuildRight (9)
+               :     :- * Project (4)
+               :     :  +- * Filter (3)
+               :     :     +- * ColumnarToRow (2)
+               :     :        +- Scan parquet spark_catalog.default.date_dim (1)
+               :     +- BroadcastExchange (8)
+               :        +- * Filter (7)
+               :           +- * ColumnarToRow (6)
+               :              +- Scan parquet spark_catalog.default.store_sales (5)
+               +- BroadcastExchange (15)
+                  +- * Project (14)
+                     +- * Filter (13)
+                        +- * ColumnarToRow (12)
+                           +- Scan parquet spark_catalog.default.store (11)
+
+
+(1) Scan parquet spark_catalog.default.date_dim
+Output [3]: [d_date_sk#1, d_year#2, d_day_name#3]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,1998), GreaterThanOrEqual(d_date_sk,2450816), LessThanOrEqual(d_date_sk,2451179), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_day_name:string>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [3]: [d_date_sk#1, d_year#2, d_day_name#3]
+
+(3) Filter [codegen id : 3]
+Input [3]: [d_date_sk#1, d_year#2, d_day_name#3]
+Condition : ((((isnotnull(d_year#2) AND (d_year#2 = 1998)) AND (d_date_sk#1 >= 2450816)) AND (d_date_sk#1 <= 2451179)) AND isnotnull(d_date_sk#1))
+
+(4) Project [codegen id : 3]
+Output [2]: [d_date_sk#1, d_day_name#3]
+Input [3]: [d_date_sk#1, d_year#2, d_day_name#3]
+
+(5) Scan parquet spark_catalog.default.store_sales
+Output [3]: [ss_store_sk#4, ss_sales_price#5, ss_sold_date_sk#6]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(ss_sold_date_sk#6), (ss_sold_date_sk#6 >= 2450816), (ss_sold_date_sk#6 <= 2451179), dynamicpruningexpression(true)]
+PushedFilters: [IsNotNull(ss_store_sk)]
+ReadSchema: struct<ss_store_sk:int,ss_sales_price:decimal(7,2)>
+
+(6) ColumnarToRow [codegen id : 1]
+Input [3]: [ss_store_sk#4, ss_sales_price#5, ss_sold_date_sk#6]
+
+(7) Filter [codegen id : 1]
+Input [3]: [ss_store_sk#4, ss_sales_price#5, ss_sold_date_sk#6]
+Condition : isnotnull(ss_store_sk#4)
+
+(8) BroadcastExchange
+Input [3]: [ss_store_sk#4, ss_sales_price#5, ss_sold_date_sk#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [plan_id=1]
+
+(9) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [d_date_sk#1]
+Right keys [1]: [ss_sold_date_sk#6]
+Join type: Inner
+Join condition: None
+
+(10) Project [codegen id : 3]
+Output [3]: [d_day_name#3, ss_store_sk#4, ss_sales_price#5]
+Input [5]: [d_date_sk#1, d_day_name#3, ss_store_sk#4, ss_sales_price#5, ss_sold_date_sk#6]
+
+(11) Scan parquet spark_catalog.default.store
+Output [4]: [s_store_sk#7, s_store_id#8, s_store_name#9, s_gmt_offset#10]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_gmt_offset), EqualTo(s_gmt_offset,-5.00), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_id:string,s_store_name:string,s_gmt_offset:decimal(5,2)>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [4]: [s_store_sk#7, s_store_id#8, s_store_name#9, s_gmt_offset#10]
+
+(13) Filter [codegen id : 2]
+Input [4]: [s_store_sk#7, s_store_id#8, s_store_name#9, s_gmt_offset#10]
+Condition : ((isnotnull(s_gmt_offset#10) AND (s_gmt_offset#10 = -5.00)) AND isnotnull(s_store_sk#7))
+
+(14) Project [codegen id : 2]
+Output [3]: [s_store_sk#7, s_store_id#8, s_store_name#9]
+Input [4]: [s_store_sk#7, s_store_id#8, s_store_name#9, s_gmt_offset#10]
+
+(15) BroadcastExchange
+Input [3]: [s_store_sk#7, s_store_id#8, s_store_name#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(16) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_store_sk#4]
+Right keys [1]: [s_store_sk#7]
+Join type: Inner
+Join condition: None
+
+(17) Project [codegen id : 3]
+Output [4]: [d_day_name#3, ss_sales_price#5, s_store_id#8, s_store_name#9]
+Input [6]: [d_day_name#3, ss_store_sk#4, ss_sales_price#5, s_store_sk#7, s_store_id#8, s_store_name#9]
+
+(18) HashAggregate [codegen id : 3]
+Input [4]: [d_day_name#3, ss_sales_price#5, s_store_id#8, s_store_name#9]
+Keys [2]: [s_store_name#9, s_store_id#8]
+Functions [7]: [partial_sum(UnscaledValue(CASE WHEN (d_day_name#3 = Sunday   ) THEN ss_sales_price#5 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#3 = Monday   ) THEN ss_sales_price#5 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#3 = Tuesday  ) THEN ss_sales_price#5 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#3 = Wednesday) THEN ss_sales_price#5 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#3 = Thursday ) THEN ss_sales_price#5 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#3 = Friday   ) THEN ss_sales_price#5 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#3 = Saturday ) THEN ss_sales_price#5 END))]
+Aggregate Attributes [7]: [sum#11, sum#12, sum#13, sum#14, sum#15, sum#16, sum#17]
+Results [9]: [s_store_name#9, s_store_id#8, sum#18, sum#19, sum#20, sum#21, sum#22, sum#23, sum#24]
+
+(19) Exchange
+Input [9]: [s_store_name#9, s_store_id#8, sum#18, sum#19, sum#20, sum#21, sum#22, sum#23, sum#24]
+Arguments: hashpartitioning(s_store_name#9, s_store_id#8, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(20) HashAggregate [codegen id : 4]
+Input [9]: [s_store_name#9, s_store_id#8, sum#18, sum#19, sum#20, sum#21, sum#22, sum#23, sum#24]
+Keys [2]: [s_store_name#9, s_store_id#8]
+Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#3 = Sunday   ) THEN ss_sales_price#5 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Monday   ) THEN ss_sales_price#5 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Tuesday  ) THEN ss_sales_price#5 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Wednesday) THEN ss_sales_price#5 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Thursday ) THEN ss_sales_price#5 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Friday   ) THEN ss_sales_price#5 END)), sum(UnscaledValue(CASE WHEN (d_day_name#3 = Saturday ) THEN ss_sales_price#5 END))]
+Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#3 = Sunday   ) THEN ss_sales_price#5 END))#25, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Monday   ) THEN ss_sales_price#5 END))#26, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Tuesday  ) THEN ss_sales_price#5 END))#27, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Wednesday) THEN ss_sales_price#5 END))#28, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Thursday ) THEN ss_sales_price#5 END))#29, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Friday   ) THEN ss_sales_price#5 END))#30, sum(UnscaledValue(CASE WHEN (d_day_name#3 = Saturday ) THEN ss_sales_price#5 END))#31]
+Results [9]: [s_store_name#9, s_store_id#8, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#3 = Sunday   ) THEN ss_sales_price#5 END))#25,17,2) AS sun_sales#32, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#3 = Monday   ) THEN ss_sales_price#5 END))#26,17,2) AS mon_sales#33, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#3 = Tuesday  ) THEN ss_sales_price#5 END))#27,17,2) AS tue_sales#34, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#3 = Wednesday) THEN ss_sales_price#5 END))#28,17,2) AS wed_sales#35, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#3 = Thursday ) THEN ss_sales_price#5 END))#29,17,2) AS thu_sales#36, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#3 = Friday   ) THEN ss_sales_price#5 END))#30,17,2) AS fri_sales#37, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#3 = Saturday ) THEN ss_sales_price#5 END))#31,17,2) AS sat_sales#38]
+
+(21) TakeOrderedAndProject
+Input [9]: [s_store_name#9, s_store_id#8, sun_sales#32, mon_sales#33, tue_sales#34, wed_sales#35, thu_sales#36, fri_sales#37, sat_sales#38]
+Arguments: 100, [s_store_name#9 ASC NULLS FIRST, s_store_id#8 ASC NULLS FIRST, sun_sales#32 ASC NULLS FIRST, mon_sales#33 ASC NULLS FIRST, tue_sales#34 ASC NULLS FIRST, wed_sales#35 ASC NULLS FIRST, thu_sales#36 ASC NULLS FIRST, fri_sales#37 ASC NULLS FIRST, sat_sales#38 ASC NULLS FIRST], [s_store_name#9, s_store_id#8, sun_sales#32, mon_sales#33, tue_sales#34, wed_sales#35, thu_sales#36, fri_sales#37, sat_sales#38]
+

@@ -1,0 +1,49 @@
+<root>
+  <item>
+    <!-- Issue 314 - We expect [null]
+               The node exists but is empty
+    -->
+    <b>
+    </b>
+  </item>
+  <item>
+    <b>
+      <!-- Issue 314 - We expect [[null,null]]
+                   The <es> node exists and can have two nested elements, both null
+      -->
+      <es></es>
+    </b>
+  </item>
+  <item>
+    <b>
+      <es>
+        <!-- Issue 314 - We expect [[E,null]]
+                       The <es> node exists and can have two nested elements, E and null
+        -->
+        <e>E</e>
+      </es>
+    </b>
+  </item>
+  <item>
+    <b>
+      <es>
+        <!-- Issue 314 - We expect [[E,null]]
+                       The <es> node exists and can have two nested elements, E and " "
+        -->
+        <e>E</e>
+        <f> </f>
+      </es>
+    </b>
+  </item>
+  <item>
+    <b>
+      <es>
+        <!-- Issue 314 - We expect [[E,]]
+                       The <es> node exists and can have two nested elements, E and ""
+        -->
+        <e>E</e>
+        <f></f>
+      </es>
+    </b>
+  </item>
+</root>

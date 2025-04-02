@@ -1,0 +1,101 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: varargFunctionsOverloads
+  main: |
+    from pyspark.sql.functions import (
+      array,
+      col,
+      create_map,
+      map_concat,
+      struct,
+    )
+
+    array(col("foo"), col("bar"))
+    array([col("foo"), col("bar")])
+    array("foo", "bar")
+    array(["foo", "bar"])
+
+    create_map(col("foo"), col("bar"))
+    create_map([col("foo"), col("bar")])
+    create_map("foo", "bar")
+    create_map(["foo", "bar"])
+
+    map_concat(col("foo"), col("bar"))
+    map_concat([col("foo"), col("bar")])
+    map_concat("foo", "bar")
+    map_concat(["foo", "bar"])
+
+    struct(col("foo"), col("bar"))
+    struct([col("foo"), col("bar")])
+    struct("foo", "bar")
+    struct(["foo", "bar"])
+
+    array([col("foo")], [col("bar")])
+    create_map([col("foo")], [col("bar")])
+    map_concat([col("foo")], [col("bar")])
+    struct(["foo"], ["bar"])
+    array(["foo"], ["bar"])
+    create_map(["foo"], ["bar"])
+    map_concat(["foo"], ["bar"])
+    struct(["foo"], ["bar"])
+
+    col_names = ["foo", "bar"]
+    array(col_names)
+    struct(col_names)
+    create_map(col_names)
+    map_concat (col_names)
+
+    col_objs = [col(x) for x in col_names]
+    array(col_objs)
+    struct(col_objs)
+    create_map(col_objs)
+    map_concat(col_objs)
+
+  out: |
+    main:29: error: No overload variant of "array" matches argument types "list[Column]", "list[Column]"  [call-overload]
+    main:29: note: Possible overload variants:
+    main:29: note:     def array(*cols: Union[Column, str]) -> Column
+    main:29: note:     def array(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:30: error: No overload variant of "create_map" matches argument types "list[Column]", "list[Column]"  [call-overload]
+    main:30: note: Possible overload variants:
+    main:30: note:     def create_map(*cols: Union[Column, str]) -> Column
+    main:30: note:     def create_map(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:31: error: No overload variant of "map_concat" matches argument types "list[Column]", "list[Column]"  [call-overload]
+    main:31: note: Possible overload variants:
+    main:31: note:     def map_concat(*cols: Union[Column, str]) -> Column
+    main:31: note:     def map_concat(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:32: error: No overload variant of "struct" matches argument types "list[str]", "list[str]"  [call-overload]
+    main:32: note: Possible overload variants:
+    main:32: note:     def struct(*cols: Union[Column, str]) -> Column
+    main:32: note:     def struct(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:33: error: No overload variant of "array" matches argument types "list[str]", "list[str]"  [call-overload]
+    main:33: note: Possible overload variants:
+    main:33: note:     def array(*cols: Union[Column, str]) -> Column
+    main:33: note:     def array(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:34: error: No overload variant of "create_map" matches argument types "list[str]", "list[str]"  [call-overload]
+    main:34: note: Possible overload variants:
+    main:34: note:     def create_map(*cols: Union[Column, str]) -> Column
+    main:34: note:     def create_map(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:35: error: No overload variant of "map_concat" matches argument types "list[str]", "list[str]"  [call-overload]
+    main:35: note: Possible overload variants:
+    main:35: note:     def map_concat(*cols: Union[Column, str]) -> Column
+    main:35: note:     def map_concat(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:36: error: No overload variant of "struct" matches argument types "list[str]", "list[str]"  [call-overload]
+    main:36: note: Possible overload variants:
+    main:36: note:     def struct(*cols: Union[Column, str]) -> Column
+    main:36: note:     def struct(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column

@@ -1,0 +1,17 @@
+================================================================================================
+projection on wide table
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+projection on wide table:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split threshold 10                                 2555           2620          67          0.4        2437.1       1.0X
+split threshold 100                                2044           2069          22          0.5        1949.7       1.2X
+split threshold 1024                               1653           1669          18          0.6        1576.0       1.5X
+split threshold 2048                               1617           1649          24          0.6        1541.7       1.6X
+split threshold 4096                               1687           1691           6          0.6        1608.7       1.5X
+split threshold 8192                               2129           2146          24          0.5        2030.3       1.2X
+split threshold 65536                             21564          21770         151          0.0       20565.0       0.1X
+
+

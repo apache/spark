@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# define test binaries + versions
+FLAKE8_BUILD="flake8"
+MINIMUM_FLAKE8="3.9.0"
+MINIMUM_MYPY="1.8.0"
+MYPY_BUILD="mypy"
+PYTEST_BUILD="pytest"
+
+PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
+
+BLACK_BUILD="$PYTHON_EXECUTABLE -m black"
+
+function exit_with_usage {
+  set +x
+  echo "lint-python - linter for Python"
+  echo ""
+  echo "usage:"
+  cl_options="[--compile] [--black] [--custom-pyspark-error] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
+  echo "lint-python $cl_options"
+  echo ""
+  exit 1
+}
+
+# Parse arguments
+while (( "$#" )); do
+  case $1 in
+    --compile)
+      COMPILE_TEST=true
+      ;;
+    --black)
+      BLACK_TEST=true
+      ;;
+    --custom-pyspark-error)
+      PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
+      ;;
+    --flake8)
+      FLAKE8_TEST=true
+      ;;
+    --mypy)
+      MYPY_TEST=true
+      ;;
+    --mypy-examples)
+      MYPY_EXAMPLES_TEST=true
+      ;;
+    --mypy-data)
+      MYPY_DATA_TEST=true
+      ;;
+    *)
+      echo "Error: $1 is not supported"
+      exit_with_usage
+      ;;
+  esac
+  shift
+done
+
+if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+  COMPILE_TEST=true
+  BLACK_TEST=true
+  PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
+  FLAKE8_TEST=true
+  MYPY_TEST=true
+  MYPY_EXAMPLES_TEST=true
+  MYPY_DATA_TEST=true
+fi
+
+function satisfies_min_version {
+    local provided_version="$1"
+    local expected_version="$2"
+    echo "$(
+        "$PYTHON_EXECUTABLE" << EOM
+try:
+    from setuptools.extern.packaging import version
+except ModuleNotFoundError:
+    from packaging import version
+print(version.parse('$provided_version') >= version.parse('$expected_version'))
+EOM
+    )"
+}
+
+function compile_python_test {
+    local COMPILE_STATUS=
+    local COMPILE_REPORT=
+
+    if [[ ! "$1" ]]; then
+        echo "No python files found!  Something is very wrong -- exiting."
+        exit 1;
+    fi
+
+    # compileall: https://docs.python.org/3/library/compileall.html
+    echo "starting python compilation test..."
+    COMPILE_REPORT=$( ("$PYTHON_EXECUTABLE" -B -mcompileall -q -l -x "[/\\\\][.]git" $1) 2>&1)
+    COMPILE_STATUS=$?
+
+    if [ $COMPILE_STATUS -ne 0 ]; then
+        echo "Python compilation failed with the following errors:"
+        echo "$COMPILE_REPORT"
+        echo "$COMPILE_STATUS"
+        exit "$COMPILE_STATUS"
+    else
+        echo "python compilation succeeded."
+        echo
+    fi
+}
+
+
+function mypy_annotation_test {
+    local MYPY_REPORT=
+    local MYPY_STATUS=
+
+    echo "starting mypy annotations test..."
+    MYPY_REPORT=$( ($MYPY_BUILD \
+      --python-executable $PYTHON_EXECUTABLE \
+      --namespace-packages \
+      --config-file python/mypy.ini \
+      --cache-dir /tmp/.mypy_cache/ \
+      python/pyspark) 2>&1)
+    MYPY_STATUS=$?
+
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "annotations failed mypy checks:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
+    else
+        echo "annotations passed mypy checks."
+        echo
+    fi
+}
+
+
+function mypy_data_test {
+    local PYTEST_REPORT=
+    local PYTEST_STATUS=
+
+    echo "starting mypy data test..."
+
+    $PYTHON_EXECUTABLE -c "import importlib.util; import sys; \
+               sys.exit(0 if importlib.util.find_spec('pytest_mypy_plugins') else 1)"
+
+    if [ $? -ne 0 ]; then
+      echo "pytest-mypy-plugins missing. Skipping for now."
+      return
+    fi
+
+    PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
+      -c dev/pyproject.toml \
+      --rootdir python \
+      --mypy-only-local-stub \
+      --mypy-ini-file python/mypy.ini \
+      python/pyspark ) 2>&1)
+
+    PYTEST_STATUS=$?
+
+    if [ "$PYTEST_STATUS" -ne 0 ]; then
+        echo "annotations failed data checks:"
+        echo "$PYTEST_REPORT"
+        echo "$PYTEST_STATUS"
+        exit "$PYTEST_STATUS"
+    else
+      echo "annotations passed data checks."
+      echo
+    fi
+}
+
+function mypy_examples_test {
+    local MYPY_REPORT=
+    local MYPY_STATUS=
+
+    echo "starting mypy examples test..."
+
+    MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
+      --python-executable $PYTHON_EXECUTABLE \
+      --namespace-packages \
+      --config-file python/mypy.ini \
+      --exclude "mllib/*" \
+      examples/src/main/python/) 2>&1)
+
+    MYPY_STATUS=$?
+
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "examples failed mypy checks:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
+    else
+      echo "examples passed mypy checks."
+      echo
+    fi
+}
+
+
+function mypy_test {
+    if ! hash "$MYPY_BUILD" 2> /dev/null; then
+        echo "The $MYPY_BUILD command was not found. Skipping for now."
+        return
+    fi
+
+    _MYPY_VERSION=($($MYPY_BUILD --version))
+    MYPY_VERSION="${_MYPY_VERSION[1]}"
+    EXPECTED_MYPY="$(satisfies_min_version $MYPY_VERSION $MINIMUM_MYPY)"
+
+    if [[ "$EXPECTED_MYPY" == "False" ]]; then
+        echo "The minimum mypy version needs to be $MINIMUM_MYPY. Your current version is $MYPY_VERSION. Skipping for now."
+        return
+    fi
+
+    if [[ "$MYPY_TEST" == "true" ]]; then
+        mypy_annotation_test
+    fi
+    if [[ "$MYPY_EXAMPLES_TEST" == "true" ]]; then
+        mypy_examples_test
+    fi
+    if [[ "$MYPY_DATA_TEST" == "true" ]]; then
+        mypy_data_test
+    fi
+}
+
+
+function flake8_test {
+    local FLAKE8_VERSION=
+    local EXPECTED_FLAKE8=
+    local FLAKE8_REPORT=
+    local FLAKE8_STATUS=
+
+    if ! hash "$FLAKE8_BUILD" 2> /dev/null; then
+        echo "The flake8 command was not found. Skipping for now."
+        return
+    fi
+
+    _FLAKE8_VERSION=($($FLAKE8_BUILD --version))
+    FLAKE8_VERSION="${_FLAKE8_VERSION[0]}"
+    EXPECTED_FLAKE8="$(satisfies_min_version $FLAKE8_VERSION $MINIMUM_FLAKE8)"
+
+    if [[ "$EXPECTED_FLAKE8" == "False" ]]; then
+        echo "\
+The minimum flake8 version needs to be $MINIMUM_FLAKE8. Your current version is $FLAKE8_VERSION
+
+flake8 checks failed."
+        exit 1
+    fi
+
+    echo "starting $FLAKE8_BUILD test..."
+    FLAKE8_REPORT=$( ($FLAKE8_BUILD --append-config dev/tox.ini --count --show-source --statistics .) 2>&1)
+    FLAKE8_STATUS=$?
+
+    if [ "$FLAKE8_STATUS" -ne 0 ]; then
+        echo "flake8 checks failed:"
+        echo "$FLAKE8_REPORT"
+        echo "$FLAKE8_STATUS"
+        exit "$FLAKE8_STATUS"
+    else
+        echo "flake8 checks passed."
+        echo
+    fi
+}
+
+function black_test {
+    local BLACK_REPORT=
+    local BLACK_STATUS=
+
+    # Skip check if black is not installed.
+    $PYTHON_EXECUTABLE -c 'import black' &> /dev/null
+    if [ $? -ne 0 ]; then
+        echo "The Python library providing 'black' module was not found. Skipping black checks for now."
+        echo
+        return
+    fi
+
+    echo "starting black test..."
+    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev python/packaging) 2>&1)
+    BLACK_STATUS=$?
+
+    if [ "$BLACK_STATUS" -ne 0 ]; then
+        echo "black checks failed:"
+        echo "$BLACK_REPORT"
+        echo "Please run 'dev/reformat-python' script."
+        echo "$BLACK_STATUS"
+        exit "$BLACK_STATUS"
+    else
+        echo "black checks passed."
+        echo
+    fi
+}
+
+function pyspark_custom_errors_check_test {
+    local PYSPARK_CUSTOM_ERRORS_CHECK_REPORT=
+    local PYSPARK_CUSTOM_ERRORS_CHECK_STATUS=
+
+    echo "starting PySpark custom errors check..."
+    PYSPARK_CUSTOM_ERRORS_CHECK_REPORT=$( "$PYTHON_EXECUTABLE" dev/check_pyspark_custom_errors.py 2>&1 )
+    PYSPARK_CUSTOM_ERRORS_CHECK_STATUS=$?
+
+    if [ "$PYSPARK_CUSTOM_ERRORS_CHECK_STATUS" -ne 0 ]; then
+        echo "PySpark custom errors check failed!"
+        echo "$PYSPARK_CUSTOM_ERRORS_CHECK_REPORT"
+        exit "$PYSPARK_CUSTOM_ERRORS_CHECK_STATUS"
+    else
+        echo "PySpark custom errors check passed."
+        echo
+    fi
+}
+
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+
+pushd "$SPARK_ROOT_DIR" &> /dev/null
+
+PYTHON_SOURCE="$(git ls-files '*.py')"
+
+if [[ "$COMPILE_TEST" == "true" ]]; then
+    compile_python_test "$PYTHON_SOURCE"
+fi
+if [[ "$BLACK_TEST" == "true" ]]; then
+    black_test
+fi
+if [[ "$PYSPARK_CUSTOM_ERRORS_CHECK_TEST" == "true" ]]; then
+    pyspark_custom_errors_check_test
+fi
+if [[ "$FLAKE8_TEST" == "true" ]]; then
+    flake8_test
+fi
+if [[ "$MYPY_TEST" == "true" ]] || [[ "$MYPY_EXAMPLES_TEST" == "true" ]] || [[ "$MYPY_DATA_TEST" == "true" ]]; then
+    mypy_test
+fi
+
+echo
+echo "all lint-python tests passed!"
+
+popd &> /dev/null

@@ -1,0 +1,1 @@
+xpath(xml, xpath) - Returns a string array of values within xml nodes that match the xpath expression

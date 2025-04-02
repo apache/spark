@@ -1,0 +1,30 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+source "https://rubygems.org"
+
+# Keep these specifications as flexible as possible and leave it to Bundler
+# to pin versions in the lock file.
+# To update the lock file, run `bundle update`.
+# Version constraint reference: https://guides.rubygems.org/patterns/#declaring-dependencies
+
+gem "jekyll", "~> 4.3"
+gem "jekyll-redirect-from", "~> 0.16"
+# This resolves a build issue on Apple Silicon.
+# See: https://issues.apache.org/jira/browse/SPARK-38488
+gem "ffi", "~> 1.15"
+gem "rexml", "~> 3.3.9"

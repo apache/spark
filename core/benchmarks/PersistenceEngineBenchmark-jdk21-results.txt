@@ -1,0 +1,18 @@
+================================================================================================
+PersistenceEngineBenchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+1000 Workers:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ZooKeeperPersistenceEngine with JavaSerializer                     6237           6453         236          0.0     6236919.5       1.0X
+FileSystemPersistenceEngine with JavaSerializer                    2481           2495          12          0.0     2480642.5       2.5X
+FileSystemPersistenceEngine with JavaSerializer (lz4)               776            805          29          0.0      776056.9       8.0X
+FileSystemPersistenceEngine with JavaSerializer (lzf)               728            733           4          0.0      727884.9       8.6X
+FileSystemPersistenceEngine with JavaSerializer (snappy)            739            753          13          0.0      738838.5       8.4X
+FileSystemPersistenceEngine with JavaSerializer (zstd)              976            989          22          0.0      976199.8       6.4X
+RocksDBPersistenceEngine with JavaSerializer                        283            286           4          0.0      282774.2      22.1X
+BlackHolePersistenceEngine                                            0              0           0          6.0         167.9   37143.3X
+
+

@@ -1,0 +1,9 @@
+day(param) - Returns the day of the month of date/timestamp, or day component of interval
+Synonyms: dayofmonth
+param can be one of:
+1. A string in the format of 'yyyy-MM-dd HH:mm:ss' or 'yyyy-MM-dd'.
+2. A date value
+3. A timestamp value
+4. A day-time interval valueExample:
+   > SELECT day('2009-07-30') FROM src LIMIT 1;
+  30

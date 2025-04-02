@@ -1,0 +1,116 @@
+- text: Getting Started
+  url: sql-getting-started.html
+  subitems:
+    - text: "Starting Point: SparkSession"
+      url: sql-getting-started.html#starting-point-sparksession
+    - text: Creating DataFrames
+      url: sql-getting-started.html#creating-dataframes
+    - text: Untyped Dataset Operations (DataFrame operations)
+      url: sql-getting-started.html#untyped-dataset-operations-aka-dataframe-operations
+    - text: Running SQL Queries Programmatically
+      url: sql-getting-started.html#running-sql-queries-programmatically
+    - text: Global Temporary View
+      url: sql-getting-started.html#global-temporary-view
+    - text: Creating Datasets
+      url: sql-getting-started.html#creating-datasets
+    - text: Interoperating with RDDs
+      url: sql-getting-started.html#interoperating-with-rdds
+    - text: Scalar Functions
+      url: sql-getting-started.html#scalar-functions
+    - text: Aggregate Functions
+      url: sql-getting-started.html#aggregate-functions
+- text: Data Sources
+  url: sql-data-sources.html
+  subitems:
+    - text: "Generic Load/Save Functions"
+      url: sql-data-sources-load-save-functions.html
+    - text: "Generic File Source Options"
+      url: sql-data-sources-generic-options.html
+    - text: Parquet Files
+      url: sql-data-sources-parquet.html
+    - text: ORC Files
+      url: sql-data-sources-orc.html
+    - text: JSON Files
+      url: sql-data-sources-json.html
+    - text: CSV Files
+      url: sql-data-sources-csv.html
+    - text: Text Files
+      url: sql-data-sources-text.html
+    - text: XML Files
+      url: sql-data-sources-xml.html
+    - text: Hive Tables
+      url: sql-data-sources-hive-tables.html
+    - text: JDBC To Other Databases
+      url: sql-data-sources-jdbc.html
+    - text: Avro Files
+      url: sql-data-sources-avro.html
+    - text: Protobuf data
+      url: sql-data-sources-protobuf.html
+    - text: Whole Binary Files
+      url: sql-data-sources-binaryFile.html
+    - text: Troubleshooting
+      url: sql-data-sources-troubleshooting.html
+- text: Performance Tuning
+  url: sql-performance-tuning.html
+  subitems:
+    - text: Caching Data
+      url: sql-performance-tuning.html#caching-data
+    - text: Tuning Partitions
+      url: sql-performance-tuning.html#tuning-partitions
+    - text: Leveraging Statistics
+      url: sql-performance-tuning.html#leveraging-statistics
+    - text: Optimizing the Join Strategy
+      url: sql-performance-tuning.html#optimizing-the-join-strategy
+    - text: Adaptive Query Execution
+      url: sql-performance-tuning.html#adaptive-query-execution
+    - text: Storage Partition Join
+      url: sql-performance-tuning.html#storage-partition-join
+- text: Distributed SQL Engine
+  url: sql-distributed-sql-engine.html
+  subitems:
+    - text: "Running the Thrift JDBC/ODBC server"
+      url: sql-distributed-sql-engine.html#running-the-thrift-jdbcodbc-server
+    - text: Running the Spark SQL CLI
+      url: sql-distributed-sql-engine.html#running-the-spark-sql-cli
+- text: PySpark Usage Guide for Pandas with Apache Arrow
+  url: sql-pyspark-pandas-with-arrow.html
+- text: Migration Guide
+  url: sql-migration-guide.html
+- text: SQL Reference
+  url: sql-ref.html
+  subitems:
+    - text: ANSI Compliance
+      url: sql-ref-ansi-compliance.html
+    - text: Data Types
+      url: sql-ref-datatypes.html
+    - text: Datetime Pattern
+      url: sql-ref-datetime-pattern.html
+    - text: Number Pattern
+      url: sql-ref-number-pattern.html
+    - text: Operators
+      url: sql-ref-operators.html
+    - text: Functions
+      url: sql-ref-functions.html
+    - text: Identifiers
+      url: sql-ref-identifier.html
+    - text: IDENTIFIER clause
+      url: sql-ref-identifier-clause.html
+    - text: Literals
+      url: sql-ref-literals.html
+    - text: Null Semantics
+      url: sql-ref-null-semantics.html
+    - text: SQL Syntax
+      url: sql-ref-syntax.html
+      subitems:
+        - text: Data Definition Statements
+          url: sql-ref-syntax.html#ddl-statements
+        - text: Data Manipulation Statements
+          url: sql-ref-syntax.html#dml-statements
+        - text: Data Retrieval(Queries)
+          url: sql-ref-syntax.html#data-retrieval-statements
+        - text: Auxiliary Statements
+          url: sql-ref-syntax.html#auxiliary-statements
+        - text: Pipe Syntax
+          url: sql-pipe-syntax.html
+- text: Error Conditions
+  url: sql-error-conditions.html

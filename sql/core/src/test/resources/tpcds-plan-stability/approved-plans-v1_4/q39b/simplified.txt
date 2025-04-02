@@ -1,0 +1,81 @@
+WholeStageCodegen (11)
+  Sort [w_warehouse_sk,i_item_sk,d_moy,mean,cov,d_moy,mean,cov]
+    InputAdapter
+      Exchange [w_warehouse_sk,i_item_sk,d_moy,mean,cov,d_moy,mean,cov] #1
+        WholeStageCodegen (10)
+          BroadcastHashJoin [i_item_sk,w_warehouse_sk,i_item_sk,w_warehouse_sk]
+            Project [w_warehouse_sk,i_item_sk,d_moy,mean,stdev]
+              Filter [mean,stdev]
+                HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(inv_quantity_on_hand),stdev,mean,n,avg,m2,sum,count]
+                  InputAdapter
+                    Exchange [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy] #2
+                      WholeStageCodegen (4)
+                        HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,inv_quantity_on_hand] [n,avg,m2,sum,count,n,avg,m2,sum,count]
+                          Project [inv_quantity_on_hand,i_item_sk,w_warehouse_sk,w_warehouse_name,d_moy]
+                            BroadcastHashJoin [inv_date_sk,d_date_sk]
+                              Project [inv_quantity_on_hand,inv_date_sk,i_item_sk,w_warehouse_sk,w_warehouse_name]
+                                BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
+                                  Project [inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk,i_item_sk]
+                                    BroadcastHashJoin [inv_item_sk,i_item_sk]
+                                      Filter [inv_item_sk,inv_warehouse_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                              SubqueryBroadcast [d_date_sk] #1
+                                                BroadcastExchange #3
+                                                  WholeStageCodegen (1)
+                                                    Project [d_date_sk,d_moy]
+                                                      Filter [d_year,d_moy,d_date_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
+                                      InputAdapter
+                                        BroadcastExchange #4
+                                          WholeStageCodegen (1)
+                                            Filter [i_item_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.item [i_item_sk]
+                                  InputAdapter
+                                    BroadcastExchange #5
+                                      WholeStageCodegen (2)
+                                        Filter [w_warehouse_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet spark_catalog.default.warehouse [w_warehouse_sk,w_warehouse_name]
+                              InputAdapter
+                                ReusedExchange [d_date_sk,d_moy] #3
+            InputAdapter
+              BroadcastExchange #6
+                WholeStageCodegen (9)
+                  Project [w_warehouse_sk,i_item_sk,d_moy,mean,stdev]
+                    Filter [mean,stdev]
+                      HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(inv_quantity_on_hand),stdev,mean,n,avg,m2,sum,count]
+                        InputAdapter
+                          Exchange [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy] #7
+                            WholeStageCodegen (8)
+                              HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,inv_quantity_on_hand] [n,avg,m2,sum,count,n,avg,m2,sum,count]
+                                Project [inv_quantity_on_hand,i_item_sk,w_warehouse_sk,w_warehouse_name,d_moy]
+                                  BroadcastHashJoin [inv_date_sk,d_date_sk]
+                                    Project [inv_quantity_on_hand,inv_date_sk,i_item_sk,w_warehouse_sk,w_warehouse_name]
+                                      BroadcastHashJoin [inv_warehouse_sk,w_warehouse_sk]
+                                        Project [inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk,i_item_sk]
+                                          BroadcastHashJoin [inv_item_sk,i_item_sk]
+                                            Filter [inv_item_sk,inv_warehouse_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                                    SubqueryBroadcast [d_date_sk] #2
+                                                      BroadcastExchange #8
+                                                        WholeStageCodegen (1)
+                                                          Project [d_date_sk,d_moy]
+                                                            Filter [d_year,d_moy,d_date_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
+                                            InputAdapter
+                                              ReusedExchange [i_item_sk] #4
+                                        InputAdapter
+                                          ReusedExchange [w_warehouse_sk,w_warehouse_name] #5
+                                    InputAdapter
+                                      ReusedExchange [d_date_sk,d_moy] #8

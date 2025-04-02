@@ -1,0 +1,1028 @@
+:root {
+  --navbar-height: 80px;
+}
+
+body {
+  color: #666666;
+  font-family: "DM Sans", sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  padding-bottom: 20px;
+  padding-top: var(--navbar-height);
+}
+
+a {
+  background: transparent;
+  color: #2fa4e7;
+  text-decoration: none;
+}
+
+a:hover,
+a:focus {
+  color: #157ab5;
+  text-decoration: underline;
+}
+
+.navbar {
+  border-radius: 0;
+  z-index: 9999;
+  transition: none !important;
+  height: var(--navbar-height);
+}
+
+/*
+Any element with an id attribute can be scrolled to via the URL hash fragment.
+But since the navbar is fixed at the top, elements will, by default, get hidden
+by the navbar. To prevent this, we make sure that there's a margin above these
+links.
+*/
+*[id] {
+  scroll-margin-top: var(--navbar-height);
+}
+
+.navbar .nav-item:hover .dropdown-menu,
+.navbar .nav-item .dropdown-menu,
+.navbar .dropdown-menu.fade-down,
+.navbar-toggler,
+.collapse,
+.collapsing {
+  transition: none !important;
+  transform: none !important;
+}
+
+@media all and (min-width: 992px) {
+  .navbar .nav-item .dropdown-menu {
+    display: block;
+    opacity: 0;
+    visibility: hidden;
+    transition: none !important;
+    margin-top: 0;
+  }
+
+  .navbar .dropdown-menu.fade-down {
+    top: 80%;
+    transform: none !important;
+    transform-origin: 0% 0%;
+  }
+
+  .navbar .dropdown-menu.fade-up {
+    top: 180%;
+  }
+
+  .navbar .nav-item:hover .dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    top: 100%;
+    font-size: calc(0.51rem + 0.55vw);
+  }
+}
+
+.navbar-nav {
+  font-style: normal;
+  font-weight: 500;
+  font-size: calc(0.51rem + 0.55vw);
+  line-height: 20px;
+}
+
+.navbar-nav a {
+  text-decoration: none !important;
+}
+
+.navbar-dark .navbar-nav .nav-link.active,
+.navbar-dark .navbar-nav .show>.nav-link,
+.navbar-dark .navbar-nav .nav-link {
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-dark .navbar-nav .nav-link:active,
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-dark .navbar-nav .nav-link:hover {
+  color: #ffffff;
+  background-color: #1b618e;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+section {
+  position: relative;
+}
+
+.navbar-dark .navbar-toggler {
+  color: #fff;
+  border: none;
+  border-color: transparent;
+}
+
+.hero-banner .container .row h1 {
+  color: #0B9ACE;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 48px;
+  line-height: 63px;
+  letter-spacing: -0.045em;
+}
+
+.what-is-spark {
+  font-style: normal;
+  font-weight: normal;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.btn-cta {
+  background: #F55B14;
+  border-radius: 4px;
+  font-style: normal;
+  font-weight: bold;
+  font-size: 16px;
+  line-height: 23px;
+  text-align: center;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+
+.btn-cta:hover {
+  background: #CA4000;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.spark-star-bg {
+  background: url(../images/spark-start.svg) no-repeat;
+  width: 907.5px;
+  height: 726px;
+  position: absolute;
+  right: 70px;
+}
+
+.apache-spark-motto {
+  margin-top: 150px;
+  position: relative;
+  font-style: normal;
+  font-weight: bold;
+  font-size: calc(3.2rem + 3.3vw);
+  line-height: 113px;
+  letter-spacing: -0.05em;
+  color: #8A8A8A;
+}
+
+@media screen and (min-width: 1900px) {
+  .apache-spark-motto {
+    font-size: 7.3rem;
+  }
+}
+
+.features .title {
+  margin-top: 24px;
+  font-style: normal;
+  font-weight: bold;
+  font-size: 21px;
+  line-height: 33px;
+  color: #0B9ACE;
+}
+
+.features .details {
+  color: #000000;
+  margin-top: 20px;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 17px;
+  line-height: 24px;
+  margin-right: 20px;
+}
+
+.spark-run-now {
+  background-color: #1D6890;
+}
+
+.spark-run-now nav {
+  background-color: #1B4257;
+  color: #ffffff;
+}
+
+.spark-run-now .nav-link:focus,
+.nav-link:hover {
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+
+.spark-run-now .nav-tabs .nav-item.show .nav-link,
+.spark-run-now .nav-tabs .nav-link.active {
+  color: #ffffff;
+  background-color: #1d6890;
+  border: none;
+}
+
+.spark-run-now .nav-tabs .nav-link:focus,
+.spark-run-now .nav-tabs .nav-link:hover {
+  outline: none;
+  background-color: #1D6890;
+  border: 1px solid transparent;
+}
+
+.spark-run-now .nav-link {
+  color: #ffffff;
+  border-radius: 0;
+  padding: 10px;
+  font-style: normal;
+  font-weight: bold;
+  font-size: 20px;
+  line-height: 33px;
+  text-align: center;
+}
+
+.spark-run-now .tab-content {
+  color: #ffffff;
+}
+
+.spark-run-now .title {
+  font-style: normal;
+  font-weight: bold;
+  font-size: 20px;
+  line-height: 42px;
+}
+
+.spark-code {
+  border-top: 2px solid #000000;
+}
+
+.examples {
+  color: #666666;
+  padding: 12px 0 0 0;
+  background-color: #ffffff;
+  border-radius: 10px;
+}
+
+.examples .nav-tabs {
+  background-color: #F0F0F0;
+}
+
+.spark-run-now .examples .tab-content {
+  color: #666666;
+}
+
+.spark-run-now .examples nav {
+  border: 1px solid #000000;
+}
+
+.spark-run-now .examples .nav-link {
+  padding: 6px 5px;
+  border-right: 1px solid #000000;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 15px;
+  line-height: 19px;
+  color: #666666;
+  box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
+}
+
+.spark-run-now .examples .nav-link:hover {
+  color: #ffffff;
+}
+
+.window {
+  height: 30px;
+  padding: 0 10px;
+}
+
+.circle {
+  border-radius: 50%;
+  height: 17px;
+  width: 17px;
+  display: inline-block;
+  margin: 2px;
+}
+
+.circle.red {
+  background-color: #fb615a;
+}
+
+.circle.yellow {
+  background-color: #fdbc40;
+}
+
+.circle.green {
+  background-color: #3ec648;
+}
+
+.nav-tabs .nav-link {
+  margin-bottom: 0;
+}
+
+.spark-run-now .examples .nav-tabs .nav-link:focus,
+.spark-run-now .examples .nav-tabs .nav-link:hover,
+.spark-run-now .examples .nav-tabs .nav-link:active {
+  border-right: 1px solid;
+}
+
+.spark-run-now .examples .nav-tabs .nav-item.show .nav-link,
+.spark-run-now .examples .nav-tabs .nav-link.active {
+  border-right: 1px solid #666;
+}
+
+.btn {
+  padding: 11px 23px 11px 23px;
+}
+
+.card {
+  box-shadow: 0px 4px 30px rgb(27 49 57 / 10%);
+  border: 2px solid transparent;
+  font-size: 19px;
+  line-height: 25px;
+}
+
+.card:hover {
+  border-bottom: 2px solid #F55B14;
+  cursor: pointer;
+  box-shadow: 0 14px 40px rgb(27 49 57 / 15%);
+}
+
+.card a {
+  text-decoration: none;
+  color: #666666;
+}
+
+.card a:hover {
+  text-decoration: none;
+  color: #666666;
+}
+
+.card-body img {
+  margin-right: 20px;
+}
+
+.tm {
+  font-size: 12px;
+  bottom: 5px;
+  position: relative;
+}
+
+.ecosystem-title {
+  font-style: normal;
+  font-weight: bold;
+  font-size: 20px;
+  line-height: 33px;
+  text-align: center;
+  color: #F55B14;
+}
+
+.scalable-data-science a {
+  font-style: normal;
+  font-weight: bold;
+  font-size: 20px;
+  line-height: 33px;
+  color: #0B9ACE;
+  text-decoration: none;
+}
+
+.scalable-data-science p {
+  font-style: normal;
+  font-weight: normal;
+  font-size: 18px;
+  line-height: 24px;
+}
+
+@media (max-width: 768px) {
+  .hero-banner {
+    background-size: 390px;
+    background-position: center right;
+    background-position-y: 40px;
+  }
+
+  .hero-banner .bg {
+    transform: translate(46%, -5%);
+    display: none;
+  }
+
+  .hero-banner h1 {
+    margin-bottom: 30px;
+  }
+
+  .apache-spark-motto {
+    font-size: 90px;
+    margin: 120px 0;
+  }
+
+  .features {
+    margin-top: 53px;
+  }
+
+  .features:first-child {
+    margin-top: 0;
+  }
+
+  .border-end {
+    border-right: 1px solid transparent;
+    border-bottom: 1px solid #dee2e6;
+  }
+}
+
+@media (max-width: 320px) {
+  .hero-banner {
+    background-size: 230px;
+    background-position: center right;
+    background-position-y: 160px;
+    background: none;
+  }
+
+  .navbar-dark .navbar-nav .nav-link.active,
+  .navbar-dark .navbar-nav .show>.nav-link,
+  .navbar-dark .navbar-nav .nav-link {
+    padding-left: 1rem;
+  }
+
+  .hero-banner h1 {
+    line-height: 65px;
+  }
+
+  .apache-spark-motto {
+    font-size: 70px;
+    margin: 0 0 50px 0;
+    line-height: 80px;
+  }
+}
+
+a:active,
+a:hover {
+  outline: 0;
+}
+
+@media print {
+  * {
+    color: #000 !important;
+    text-shadow: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  a,
+  a:visited {
+    text-decoration: underline;
+  }
+
+  a[href]:after {
+    content: " (" attr(href) ")";
+  }
+
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  pre {
+    border: 1px solid #999;
+    page-break-inside: avoid;
+  }
+
+  .global pre {
+    border: 1px solid #999;
+    page-break-inside: avoid;
+  }
+
+  h3 {
+    orphans: 3;
+    widows: 3;
+    page-break-after: avoid;
+  }
+}
+
+*,
+*:before,
+*:after {
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+a:focus {
+  outline: 5px;
+  outline-offset: -2px;
+}
+
+h5 {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 500;
+  line-height: 1.1;
+  color: #317eac;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+p {
+  margin: 0 0 10px;
+}
+
+.small {
+  font-size: 85%;
+}
+
+ul {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.list-unstyled {
+  padding-left: 0;
+  list-style: none;
+}
+
+.news {
+  background: #FFF6ED;
+  border-radius: 6px;
+  padding: 4px 12px 1px 12px;
+}
+
+.news h5 {
+  color: #555;
+  font-size: 16px;
+}
+
+.news ul li {
+  margin-bottom: 6px;
+}
+
+.news li a,
+.news li a:hover,
+.news li a:visited {
+  color: #555;
+}
+
+.news li .small {
+  color: #888;
+  font-size: 12px;
+}
+
+pre {
+  white-space: pre-wrap;
+  display: block;
+  padding: 20px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.428571429;
+  color: #333;
+  word-break: break-all;
+  word-wrap: break-word;
+  background-color: #f5f5f5;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+pre {
+  font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+code {
+  font: 90% "Menlo", "Lucida Console", Consolas, monospace;
+  white-space: nowrap;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0;
+  color: inherit;
+}
+
+pre code {
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre-wrap;
+  background-color: transparent;
+  border-radius: 0;
+}
+
+h3 {
+  font: 500 20px/1.1 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: #317eac;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.list-none {
+  list-style: none;
+  padding: 0;
+}
+
+@media screen and (max-width: 990px) {
+  .navbar-nav {
+    font-size: 16px;
+  }
+
+  .features .details {
+    margin-right: 0 !important;
+  }
+}
+
+@media screen and (min-width: 1441px) {
+
+  .navbar-nav,
+  .navbar .nav-item:hover .dropdown-menu {
+    font-size: 16px;
+  }
+}
+
+.col-padded-top {
+  margin-top: 30px;
+  margin-bottom: 18px;
+}
+
+.col-center {
+  text-align: center;
+}
+
+.nav>li>a {
+  position: relative;
+  display: block;
+  padding: 10px 15px;
+}
+
+.nav>li>a:hover,
+.nav>li>a:focus {
+  text-decoration: none;
+  background-color: #eee;
+}
+
+.nav-tabs>li>a {
+  margin-right: 2px;
+  line-height: 1.428571429;
+  border: 1px solid transparent;
+  border-radius: 4px 4px 0 0;
+}
+
+.nav-tabs>li>a:hover {
+  border-color: #eee #eee #ddd;
+}
+
+.nav-tabs>li.active>a,
+.nav-tabs>li.active>a:hover,
+.nav-tabs>li.active>a:focus {
+  color: #555;
+  cursor: default;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-bottom-color: transparent;
+}
+
+.nav.nav-tabs>li>a {
+  padding: 6px 11px;
+  font-size: 14px;
+  border-radius: 0;
+}
+
+.global .row-padded {
+  margin-top: 30px;
+}
+
+.global .col-padded {
+  margin-top: 30px;
+  margin-bottom: 30px;
+}
+
+.global h1,
+.global h2,
+.global h3,
+.global h4,
+.global h5,
+.global h6,
+.global .h1,
+.global .h2,
+.global .h3,
+.global .h4,
+.global .h5,
+.global .h6 {
+  color: #317eac;
+}
+
+.global h1,
+.global h2,
+.global h3 {
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.global h1,
+.global .h1 {
+  font-size: 30px;
+}
+
+#content h1.title {
+  font-size: 40px;
+}
+
+.global h2 {
+  font-size: 24px !important;
+}
+
+.global h3 {
+  font-size: 20px !important;
+}
+
+.global h4 {
+  font-size: 18px !important;
+}
+
+.global h5 {
+  font-size: 16px !important;
+}
+
+.global h1:first-letter,
+.global h2:first-letter,
+.global h3:first-letter,
+.global h4:first-letter,
+.global h5:first-letter,
+.global h6:first-letter,
+.global .h1:first-letter,
+.global .h2:first-letter,
+.global .h3:first-letter,
+.global .h4:first-letter,
+.global .h5:first-letter,
+.global .h6:first-letter {
+  text-transform: uppercase;
+}
+
+.global .caption {
+  width: 100%;
+  margin-top: 20px;
+  text-align: center;
+  color: #8f8f8f;
+}
+
+.global figure {
+  display: block;
+  margin: 0;
+}
+
+.global pre {
+  font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+.global pre {
+  white-space: pre-wrap;
+  display: block;
+  padding: 9.5px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.428571429;
+  color: #333;
+  word-break: break-all;
+  word-wrap: break-word;
+  background-color: #f5f5f5;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.global pre code {
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre-wrap;
+  background-color: transparent;
+  border-radius: 0;
+}
+
+footer {
+  text-align: center;
+  color: #8f8f8f;
+  padding-bottom: 18px;
+  font-size: 80%;
+}
+
+footer a {
+  display: contents;
+}
+
+h1 .tm,
+h2 .tm,
+h3 .tm {
+  bottom: 10px;
+}
+
+.question {
+  font-size: 16px;
+  margin-top: 20px;
+  color: #555;
+  font-weight: 500;
+}
+
+blockquote {
+  display: block;
+  margin-block-start: 1em;
+  margin-block-end: 1em;
+  margin-inline-start: 40px;
+  margin-inline-end: 40px;
+  padding: 0 1em;
+  color: rgba(0, 0, 0, .5);
+  border-left: 0.25em solid rgba(0, 0, 0, .1);
+}
+
+.content {
+  z-index: 1;
+  position: relative;
+  background-color: #FFF;
+  max-width: 914px;
+  line-height: 1.6;
+}
+
+.content-with-sidebar {
+  z-index: 1;
+  position: relative;
+  background-color: #FFF;
+  max-width: 914px;
+  line-height: 1.6;
+  padding-left: 30px;
+  min-height: 100vh;
+}
+
+.left-menu-wrapper {
+  margin-left: 0px;
+  margin-right: 0px;
+  border-top-width: 0px;
+  border-left-width: 0px;
+  border-bottom-width: 0px;
+  margin-top: 0px;
+  width: 220px;
+  height: 80%;
+  float: left;
+  position: fixed;
+  overflow-y: scroll;
+  padding-right: 20px;
+  font-size: 0.9em !important;
+}
+
+.left-menu h3 {
+  margin-left: 10px;
+  line-height: 30px;
+}
+
+.nav-trigger {
+  position: fixed;
+  clip: rect(0, 0, 0, 0);
+}
+
+.nav-trigger+label:after {
+  content: '»';
+}
+
+label {
+  z-index: 10;
+}
+
+label[for="nav-trigger"] {
+  position: fixed;
+  margin-left: 0px;
+  padding-top: 100px;
+  padding-left: 5px;
+  width: 10px;
+  height: 80%;
+  cursor: pointer;
+  background-size: contain;
+  background-color: #e2e2e2;
+  box-sizing: content-box;
+}
+
+label[for="nav-trigger"]:hover {
+  background-color: #d0cdcd;
+}
+
+.nav-trigger:checked+label {
+  margin-left: 200px;
+}
+
+.nav-trigger:checked+label:after {
+  content: '«';
+}
+
+.nav-trigger:checked~div.content-with-sidebar {
+  margin-left: 200px;
+}
+
+.nav-trigger+label,
+div.content-with-sidebar {
+  transition: left 0.4s;
+}
+
+@media all and (max-width: 780px) {
+  div.content-with-sidebar {
+    margin-left: 200px;
+  }
+
+  .nav-trigger+label:after {
+    content: '«';
+  }
+
+  label[for="nav-trigger"] {
+    margin-left: 200px;
+  }
+
+  .nav-trigger:checked+label {
+    margin-left: 0px;
+  }
+
+  .nav-trigger:checked+label:after {
+    content: '»';
+  }
+
+  .nav-trigger:checked~div.content-with-sidebar {
+    margin-left: 0px;
+  }
+
+  div.container-index {
+    margin-left: -215px;
+  }
+}
+
+img {
+  max-width: 100%;
+}
+
+table {
+  width: 100%;
+  overflow-wrap: break-word;
+  border-collapse: collapse;
+  white-space: normal;
+}
+
+table code {
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+table th,
+table td {
+  border: 1px solid #cccccc;
+  padding: 6px 13px;
+}
+
+table tr {
+  background-color: white;
+}
+
+/* Set a different background color for even rows so that the row
+   color alternates.
+ */
+table tr:nth-child(2n) {
+  background-color: #F1F4F5;
+}
+
+table.spark-config {
+  width: 100%;
+  table-layout: fixed;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* We have long config names and formulas that often show up in tables. To prevent
+ * any table column from become super wide, we allow the browser to break words at
+ * any point.
+ */
+table.spark-config code,
+table.spark-config th,
+table.spark-config td {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* CSS does not respect max-width on tables or table parts (like cells, columns, etc.),
+   so we have to pick a fixed width for each column.
+   See: https://stackoverflow.com/a/8465980
+ */
+table.spark-config th:nth-child(1),
+table.spark-config td:nth-child(1) {
+  width: 30%;
+}
+
+table.spark-config th:nth-child(2),
+table.spark-config td:nth-child(2) {
+  width: 20%;
+}
+
+table.spark-config th:nth-child(4),
+table.spark-config td:nth-child(4) {
+  width: 90px;
+}
+
+table#error-conditions {
+  table-layout: fixed;
+
+  span.error-condition-name {
+    /* Any error names that wrap will have the wrapped lines indented
+       relative to the first line thanks to these three rules.
+     */
+    padding-left: 2em;
+    text-indent: -2em;
+    display: block;
+  }
+
+  th:nth-child(1),
+  td:nth-child(1) {
+    /* width: 85px; */
+    width: 105px;
+  }
+
+  td.error-sub-condition {
+    padding-left: 2.5em;
+  }
+}

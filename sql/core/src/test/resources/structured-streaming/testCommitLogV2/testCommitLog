@@ -1,0 +1,2 @@
+v2
+{"nextBatchWatermarkMs":0,"stateUniqueIds":{"0":[["unique_id1","unique_id2"],["unique_id3","unique_id4"]],"1":[["unique_id5","unique_id6"],["unique_id7","unique_id8"]]}}

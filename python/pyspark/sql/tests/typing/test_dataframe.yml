@@ -1,0 +1,140 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: sampling
+  main: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    df = spark.range(1)
+    df.sample(1.0)
+    df.sample(0.5, 3)
+    df.sample(fraction=0.5, seed=3)
+    df.sample(withReplacement=True, fraction=0.5, seed=3)
+    df.sample(fraction=1.0)
+    df.sample(False, fraction=1.0)
+
+    # Will raise a runtime error, though not a typecheck error, as bool is
+    # duck-type compatible with float.
+    df.sample(True)
+
+    df.sample(withReplacement=False)
+
+  out: |
+    main:16: error: No overload variant of "sample" of "DataFrame" matches argument type "bool"  [call-overload]
+    main:16: note: Possible overload variants:
+    main:16: note:     def sample(self, fraction: float, seed: Optional[int] = ...) -> DataFrame
+    main:16: note:     def sample(self, withReplacement: Optional[bool], fraction: float, seed: Optional[int] = ...) -> DataFrame
+
+
+- case: selectColumns
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.functions import col
+
+    spark = SparkSession.builder.getOrCreate()
+
+    data = [('Alice', 1)]
+    df = spark.createDataFrame(data, schema="name str, age int")
+
+    df.select(["name", "age"])
+    df.select([col("name"), col("age")])
+
+    df.select(["name", col("age")])  # E: Argument 1 to "select" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str]]"  [arg-type]
+
+
+- case: groupBy
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.functions import col
+
+    spark = SparkSession.builder.getOrCreate()
+
+    data = [('Alice', 1)]
+    df = spark.createDataFrame(data, schema="name str, age int")
+
+    df.groupBy(["name", "age"])
+    df.groupby(["name", "age"])
+    df.groupBy([col("name"), col("age")])
+    df.groupby([col("name"), col("age")])
+    df.groupBy(["name", col("age")])  # E: Argument 1 to "groupBy" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str], list[int]]"  [arg-type]
+
+
+- case: rollup
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.functions import col
+
+    spark = SparkSession.builder.getOrCreate()
+
+    data = [('Alice', 1)]
+    df = spark.createDataFrame(data, schema="name str, age int")
+
+    df.rollup(["name", "age"])
+    df.rollup([col("name"), col("age")])
+
+
+    df.rollup(["name", col("age")])  # E: Argument 1 to "rollup" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str]]"  [arg-type]
+
+
+- case: cube
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.functions import col
+
+    spark = SparkSession.builder.getOrCreate()
+
+    data = [('Alice', 1)]
+    df = spark.createDataFrame(data, schema="name str, age int")
+
+    df.cube(["name", "age"])
+    df.cube([col("name"), col("age")])
+
+
+    df.cube(["name", col("age")])  # E: Argument 1 to "cube" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str]]"  [arg-type]
+
+
+- case: dropColumns
+  main: |
+    from pyspark.sql import SparkSession
+    from pyspark.sql.functions import lit, col
+
+    spark = SparkSession.builder.getOrCreate()
+    df = spark.range(1)
+    df.drop("id")
+    df.drop("id", "foo")
+    df.drop(df.id)
+
+    df.drop(col("id"), col("foo"))
+
+  out: |
+    main:10: error: No overload variant of "drop" of "DataFrame" matches argument types "Column", "Column"  [call-overload]
+    main:10: note: Possible overload variants:
+    main:10: note:     def drop(self, cols: Union[Column, str]) -> DataFrame
+    main:10: note:     def drop(self, *cols: str) -> DataFrame
+
+
+- case: fillNullValues
+  main: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    df = spark.createDataFrame([(1,2)], schema=("id1", "id2"))
+
+    df.fillna(value=1, subset="id1")
+    df.fillna(value=1, subset=("id1", "id2"))
+    df.fillna(value=1, subset=["id1"])

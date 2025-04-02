@@ -1,0 +1,104 @@
+WholeStageCodegen (12)
+  HashAggregate [sum,sum,count] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),count(ws_order_number),order count ,total shipping cost ,total net profit ,sum,sum,count]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (11)
+          HashAggregate [ws_order_number] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),count(ws_order_number),sum,sum,count,sum,sum,count]
+            HashAggregate [ws_order_number] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
+              HashAggregate [ws_order_number,ws_ext_ship_cost,ws_net_profit] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
+                Project [ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                  BroadcastHashJoin [ws_ship_date_sk,d_date_sk]
+                    Project [ws_ship_date_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                      BroadcastHashJoin [ws_web_site_sk,web_site_sk]
+                        Project [ws_ship_date_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                          BroadcastHashJoin [ws_ship_addr_sk,ca_address_sk]
+                            SortMergeJoin [ws_order_number,wr_order_number]
+                              InputAdapter
+                                WholeStageCodegen (5)
+                                  Project [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                                    SortMergeJoin [ws_order_number,ws_order_number,ws_warehouse_sk,ws_warehouse_sk]
+                                      InputAdapter
+                                        WholeStageCodegen (2)
+                                          Sort [ws_order_number]
+                                            InputAdapter
+                                              Exchange [ws_order_number] #2
+                                                WholeStageCodegen (1)
+                                                  Project [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_warehouse_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                                                    Filter [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk]
+                                                      Subquery #1
+                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
+                                                          Exchange #3
+                                                            ObjectHashAggregate [ca_address_sk] [buf,buf]
+                                                              WholeStageCodegen (1)
+                                                                Project [ca_address_sk]
+                                                                  Filter [ca_state,ca_address_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
+                                                      Subquery #2
+                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(web_site_sk, 42), 4, 144, 0, 0),bloomFilter,buf]
+                                                          Exchange #4
+                                                            ObjectHashAggregate [web_site_sk] [buf,buf]
+                                                              WholeStageCodegen (1)
+                                                                Project [web_site_sk]
+                                                                  Filter [web_company_name,web_site_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet spark_catalog.default.web_site [web_site_sk,web_company_name]
+                                                      Subquery #3
+                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_date_sk, 42), 73049, 1141755, 0, 0),bloomFilter,buf]
+                                                          Exchange #5
+                                                            ObjectHashAggregate [d_date_sk] [buf,buf]
+                                                              WholeStageCodegen (1)
+                                                                Project [d_date_sk]
+                                                                  Filter [d_date,d_date_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet spark_catalog.default.web_sales [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_warehouse_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit,ws_sold_date_sk]
+                                      InputAdapter
+                                        WholeStageCodegen (4)
+                                          Sort [ws_order_number]
+                                            InputAdapter
+                                              Exchange [ws_order_number] #6
+                                                WholeStageCodegen (3)
+                                                  Project [ws_warehouse_sk,ws_order_number]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet spark_catalog.default.web_sales [ws_warehouse_sk,ws_order_number,ws_sold_date_sk]
+                              InputAdapter
+                                WholeStageCodegen (7)
+                                  Sort [wr_order_number]
+                                    InputAdapter
+                                      Exchange [wr_order_number] #7
+                                        WholeStageCodegen (6)
+                                          Project [wr_order_number]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet spark_catalog.default.web_returns [wr_order_number,wr_returned_date_sk]
+                            InputAdapter
+                              BroadcastExchange #8
+                                WholeStageCodegen (8)
+                                  Project [ca_address_sk]
+                                    Filter [ca_state,ca_address_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
+                        InputAdapter
+                          BroadcastExchange #9
+                            WholeStageCodegen (9)
+                              Project [web_site_sk]
+                                Filter [web_company_name,web_site_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.web_site [web_site_sk,web_company_name]
+                    InputAdapter
+                      BroadcastExchange #10
+                        WholeStageCodegen (10)
+                          Project [d_date_sk]
+                            Filter [d_date,d_date_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]

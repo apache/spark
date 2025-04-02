@@ -1,0 +1,130 @@
+== Physical Plan ==
+* Sort (13)
++- Exchange (12)
+   +- * HashAggregate (11)
+      +- Exchange (10)
+         +- * HashAggregate (9)
+            +- * Project (8)
+               +- * BroadcastHashJoin LeftAnti BuildRight (7)
+                  :- * Filter (3)
+                  :  +- * ColumnarToRow (2)
+                  :     +- Scan parquet spark_catalog.default.customer (1)
+                  +- BroadcastExchange (6)
+                     +- * ColumnarToRow (5)
+                        +- Scan parquet spark_catalog.default.orders (4)
+
+
+(1) Scan parquet spark_catalog.default.customer
+Output [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_acctbal)]
+ReadSchema: struct<c_custkey:bigint,c_phone:string,c_acctbal:decimal(10,0)>
+
+(2) ColumnarToRow [codegen id : 2]
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+
+(3) Filter [codegen id : 2]
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+Condition : ((isnotnull(c_acctbal#3) AND substring(c_phone#2, 1, 2) IN (13,31,23,29,30,18,17)) AND (cast(c_acctbal#3 as decimal(14,4)) > ReusedSubquery Subquery scalar-subquery#4, [id=#5]))
+
+(4) Scan parquet spark_catalog.default.orders
+Output [1]: [o_custkey#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/orders]
+ReadSchema: struct<o_custkey:bigint>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [1]: [o_custkey#6]
+
+(6) BroadcastExchange
+Input [1]: [o_custkey#6]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
+
+(7) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#6]
+Join type: LeftAnti
+Join condition: None
+
+(8) Project [codegen id : 2]
+Output [2]: [substring(c_phone#2, 1, 2) AS cntrycode#7, c_acctbal#3]
+Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
+
+(9) HashAggregate [codegen id : 2]
+Input [2]: [cntrycode#7, c_acctbal#3]
+Keys [1]: [cntrycode#7]
+Functions [2]: [partial_count(1), partial_sum(c_acctbal#3)]
+Aggregate Attributes [3]: [count#8, sum#9, isEmpty#10]
+Results [4]: [cntrycode#7, count#11, sum#12, isEmpty#13]
+
+(10) Exchange
+Input [4]: [cntrycode#7, count#11, sum#12, isEmpty#13]
+Arguments: hashpartitioning(cntrycode#7, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(11) HashAggregate [codegen id : 3]
+Input [4]: [cntrycode#7, count#11, sum#12, isEmpty#13]
+Keys [1]: [cntrycode#7]
+Functions [2]: [count(1), sum(c_acctbal#3)]
+Aggregate Attributes [2]: [count(1)#14, sum(c_acctbal#3)#15]
+Results [3]: [cntrycode#7, count(1)#14 AS numcust#16, sum(c_acctbal#3)#15 AS totacctbal#17]
+
+(12) Exchange
+Input [3]: [cntrycode#7, numcust#16, totacctbal#17]
+Arguments: rangepartitioning(cntrycode#7 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(13) Sort [codegen id : 4]
+Input [3]: [cntrycode#7, numcust#16, totacctbal#17]
+Arguments: [cntrycode#7 ASC NULLS FIRST], true, 0
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#4, [id=#5]
+
+Subquery:2 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
+* HashAggregate (20)
++- Exchange (19)
+   +- * HashAggregate (18)
+      +- * Project (17)
+         +- * Filter (16)
+            +- * ColumnarToRow (15)
+               +- Scan parquet spark_catalog.default.customer (14)
+
+
+(14) Scan parquet spark_catalog.default.customer
+Output [2]: [c_phone#18, c_acctbal#19]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_acctbal), GreaterThan(c_acctbal,0)]
+ReadSchema: struct<c_phone:string,c_acctbal:decimal(10,0)>
+
+(15) ColumnarToRow [codegen id : 1]
+Input [2]: [c_phone#18, c_acctbal#19]
+
+(16) Filter [codegen id : 1]
+Input [2]: [c_phone#18, c_acctbal#19]
+Condition : ((isnotnull(c_acctbal#19) AND (c_acctbal#19 > 0)) AND substring(c_phone#18, 1, 2) IN (13,31,23,29,30,18,17))
+
+(17) Project [codegen id : 1]
+Output [1]: [c_acctbal#19]
+Input [2]: [c_phone#18, c_acctbal#19]
+
+(18) HashAggregate [codegen id : 1]
+Input [1]: [c_acctbal#19]
+Keys: []
+Functions [1]: [partial_avg(UnscaledValue(c_acctbal#19))]
+Aggregate Attributes [2]: [sum#20, count#21]
+Results [2]: [sum#22, count#23]
+
+(19) Exchange
+Input [2]: [sum#22, count#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
+
+(20) HashAggregate [codegen id : 2]
+Input [2]: [sum#22, count#23]
+Keys: []
+Functions [1]: [avg(UnscaledValue(c_acctbal#19))]
+Aggregate Attributes [1]: [avg(UnscaledValue(c_acctbal#19))#24]
+Results [1]: [cast((avg(UnscaledValue(c_acctbal#19))#24 / 1.0) as decimal(14,4)) AS avg(c_acctbal)#25]
+
+

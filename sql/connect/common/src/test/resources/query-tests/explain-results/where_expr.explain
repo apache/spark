@@ -1,0 +1,2 @@
+Filter ((cast(a#0 as bigint) + id#0L) < cast(1000 as bigint))
++- LocalRelation <empty>, [id#0L, a#0, b#0]

@@ -1,0 +1,57 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package org.apache.spark.sql.protobuf.protos;
+option java_outer_classname = "Proto2Messages";
+
+
+// Used to test missing required field bar in top level schema.
+message FoobarWithRequiredFieldBar {
+  optional string foo = 1;
+  required int32 bar = 2;
+}
+
+// Used to test missing required field bar in nested struct.
+message NestedFoobarWithRequiredFieldBar {
+  optional FoobarWithRequiredFieldBar nested_foobar = 1;
+}
+
+// Contains a representative sample of all types, using the groupings defined
+// here: https://protobuf.dev/programming-guides/field_presence/#presence-in-proto3-apis
+message Proto2AllTypes {
+  enum NestedEnum {
+    NOTHING = 0;
+    FIRST = 1;
+    SECOND = 2;
+  }
+
+  optional int64 int = 1;
+  optional string text = 2;
+  optional NestedEnum enum_val = 3;
+  optional FoobarWithRequiredFieldBar message = 4;
+
+  repeated int64 repeated_num = 5;
+  repeated FoobarWithRequiredFieldBar repeated_message = 6;
+
+  oneof payload {
+    int32 option_a = 11;
+    string option_b = 12;
+  }
+  map<string, string> map = 13;
+}

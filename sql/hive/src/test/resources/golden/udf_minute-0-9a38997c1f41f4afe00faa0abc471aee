@@ -1,0 +1,1 @@
+minute(param) - Returns the minute component of the string/timestamp/interval

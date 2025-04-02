@@ -1,0 +1,12 @@
+================================================================================================
+Int In-memory with 1000000 rows
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Int In-Memory scan:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+columnar deserialization + columnar-to-row            179            220          36          5.6         178.7       1.0X
+row-based deserialization                             171            219          70          5.9         170.5       1.0X
+
+

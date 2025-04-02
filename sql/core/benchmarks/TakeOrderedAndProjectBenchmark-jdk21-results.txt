@@ -1,0 +1,12 @@
+================================================================================================
+TakeOrderedAndProject
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+TakeOrderedAndProject with SMJ:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+TakeOrderedAndProject with SMJ for doExecute                 173            201          30          0.1       17333.6       1.0X
+TakeOrderedAndProject with SMJ for executeCollect            112            117           5          0.1       11175.1       1.6X
+
+

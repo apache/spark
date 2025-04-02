@@ -1,0 +1,4 @@
+~ n - Bitwise not
+Example:
+  > SELECT ~ 0 FROM src LIMIT 1;
+  -1

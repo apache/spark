@@ -1,0 +1,25 @@
+{
+  "common": {
+    "planId": "2"
+  },
+  "setOp": {
+    "leftInput": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "rightInput": {
+      "common": {
+        "planId": "1"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "setOpType": "SET_OP_TYPE_INTERSECT",
+    "isAll": true
+  }
+}

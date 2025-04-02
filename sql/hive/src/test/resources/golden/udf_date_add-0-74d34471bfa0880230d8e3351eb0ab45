@@ -1,0 +1,1 @@
+date_add(start_date, num_days) - Returns the date that is num_days after start_date.
