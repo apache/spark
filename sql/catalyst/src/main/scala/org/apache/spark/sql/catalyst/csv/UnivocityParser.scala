@@ -500,7 +500,7 @@ class UnivocityParser(
             // possible decimal type to store the value.
             DecimalType.USER_DEFAULT
           } else {
-            parseDate()
+            if (options.preferDate) parseDate() else parseTimestampNTZ()
           }
         } catch {
           case NonFatal(_) =>
@@ -513,7 +513,7 @@ class UnivocityParser(
           builder.appendDate(dateFormatter.parse(s))
           DateType
         } catch {
-          case NonFatal(_) => parseTimestamp()
+          case NonFatal(_) => parseTimestampNTZ()
         }
       }
 

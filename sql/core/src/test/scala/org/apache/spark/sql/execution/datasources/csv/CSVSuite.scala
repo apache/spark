@@ -3599,6 +3599,55 @@ abstract class CSVSuite
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> """["1e9","hello"]""", "failFastMode" -> "FAILFAST")
       )
+
+      // Tests focusing on datetime parsing.
+      val datetimeData =
+        """2000-01-01
+          |2000-01-01 01:02:03
+          |2000-01-01 01:02:03+01:00
+          |""".stripMargin
+      Files.write(path.toPath, datetimeData.getBytes(StandardCharsets.UTF_8))
+
+      // Default options. Row 1 is date. Row 2/3 is timestamp.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03-08:00"}""",
+          """{"_c0":"1999-12-31 16:02:03-08:00"}""")
+      }
+
+      // `preferDate` disabled. Row 1/2/3 is timestamp.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("preferDate" -> "false"),
+          """{"_c0":"2000-01-01 00:00:00+00:00"}""",
+          """{"_c0":"2000-01-01 01:02:03+00:00"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+
+      // Session timestamp type is set to timestamp_ntz. Row 1 is date. Row 2 is timestamp_ntz.
+      // Row 3 is timestamp.
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map(),
+          """{"_c0":"2000-01-01"}""",
+          """{"_c0":"2000-01-01 01:02:03"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
+
+      // `preferDate` disabled + timestamp_ntz. Row 1/2 is timestamp_ntz. Row 3 is timestamp.
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(Map("preferDate" -> "false"),
+          """{"_c0":"2000-01-01 00:00:00"}""",
+          """{"_c0":"2000-01-01 01:02:03"}""",
+          """{"_c0":"2000-01-01 00:02:03+00:00"}""")
+      }
     }
   }
 
