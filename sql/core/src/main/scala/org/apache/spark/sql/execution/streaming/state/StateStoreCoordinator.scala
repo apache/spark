@@ -70,7 +70,10 @@ private case class ReportSnapshotUploaded(
  * This message is used for the coordinator to look for all state stores that are lagging behind
  * in snapshot uploads. The coordinator will then log a warning message for each lagging instance.
  */
-private case class LogLaggingStateStores(queryRunId: UUID, latestVersion: Long)
+private case class LogLaggingStateStores(
+    queryRunId: UUID,
+    latestVersion: Long,
+    isTerminatingTrigger: Boolean)
   extends StateStoreCoordinatorMessage
 
 /**
@@ -86,7 +89,10 @@ private case class GetLatestSnapshotVersionForTesting(providerId: StateStoreProv
  * This message is used to retrieve all active state store instances falling behind in
  * snapshot uploads, using version and time criteria.
  */
-private case class GetLaggingStoresForTesting(queryRunId: UUID, latestVersion: Long)
+private case class GetLaggingStoresForTesting(
+    queryRunId: UUID,
+    latestVersion: Long,
+    isTerminatingTrigger: Boolean)
   extends StateStoreCoordinatorMessage
 
 private object StopCoordinator
@@ -162,8 +168,12 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
   }
 
   /** Ask the coordinator to log all state store instances that are lagging behind in uploads */
-  private[sql] def logLaggingStateStores(queryRunId: UUID, latestVersion: Long): Unit = {
-    rpcEndpointRef.askSync[Boolean](LogLaggingStateStores(queryRunId, latestVersion))
+  private[sql] def logLaggingStateStores(
+      queryRunId: UUID,
+      latestVersion: Long,
+      isTerminatingTrigger: Boolean): Unit = {
+    rpcEndpointRef.askSync[Boolean](
+      LogLaggingStateStores(queryRunId, latestVersion, isTerminatingTrigger))
   }
 
   /**
@@ -182,9 +192,10 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
    */
   private[state] def getLaggingStoresForTesting(
       queryRunId: UUID,
-      latestVersion: Long): Seq[StateStoreProviderId] = {
+      latestVersion: Long,
+      isTerminatingTrigger: Boolean = false): Seq[StateStoreProviderId] = {
     rpcEndpointRef.askSync[Seq[StateStoreProviderId]](
-      GetLaggingStoresForTesting(queryRunId, latestVersion)
+      GetLaggingStoresForTesting(queryRunId, latestVersion, isTerminatingTrigger)
     )
   }
 
@@ -216,47 +227,11 @@ private class StateStoreCoordinator(
   // The initial timestamp is defaulted to 0 milliseconds.
   private val lastFullSnapshotLagReportTimeMs = new mutable.HashMap[UUID, Long]
 
-  // Stores the time and version registered at the query run's start.
-  // Queries that started recently should not have their state stores reported as lagging
-  // since we may not have all the information yet.
-  private val queryRunStartingPoint = new mutable.HashMap[UUID, QueryStartInfo]
+  private def shouldCoordinatorReportSnapshotLag: Boolean =
+    sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
-  def shouldCoordinatorReportSnapshotLag(
-      runId: UUID,
-      referenceVersion: Long,
-      referenceTimestamp: Long): Boolean = {
-    // Definitely do not report if it is disabled or the corresponding run id did not start yet.
-    if (!sqlConf.stateStoreCoordinatorReportSnapshotUploadLag ||
-        !queryRunStartingPoint.contains(runId)) {
-      false
-    } else {
-      // Determine alert thresholds from configurations for both time and version differences.
-      val snapshotVersionDeltaMultiplier =
-        sqlConf.stateStoreCoordinatorMultiplierForMinVersionDiffToLog
-      val maintenanceIntervalMultiplier = sqlConf.stateStoreCoordinatorMultiplierForMinTimeDiffToLog
-      val minDeltasForSnapshot = sqlConf.stateStoreMinDeltasForSnapshot
-      val maintenanceInterval = sqlConf.streamingMaintenanceInterval
-
-      // Use the configured multipliers to determine the proper alert thresholds
-      val minVersionDeltaForLogging = snapshotVersionDeltaMultiplier * minDeltasForSnapshot
-      val minTimeDeltaForLogging = maintenanceIntervalMultiplier * maintenanceInterval
-
-      // Do not report any instance as lagging if this query run started recently, since the
-      // coordinator may be missing some information from the state stores.
-      // A run is considered recent if the time between now and the start of the run does not pass
-      // the time requirement for lagging instances.
-      // Similarly, the run is also considered too recent if not enough versions have passed
-      // since the start of the run.
-      val queryStartInfo = queryRunStartingPoint(runId)
-
-      referenceTimestamp - queryStartInfo.timestamp > minTimeDeltaForLogging &&
-      referenceVersion - queryStartInfo.version > minVersionDeltaForLogging
-    }
-  }
-
-  def coordinatorLagReportInterval: Long = {
+  private def coordinatorLagReportInterval: Long =
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
-  }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId, providerIdsToCheck) =>
@@ -293,7 +268,6 @@ private class StateStoreCoordinator(
       stateStoreLatestUploadedSnapshot --= storeIdsToRemove
       // Remove the corresponding run id entries for report time and starting time
       lastFullSnapshotLagReportTimeMs -= runId
-      queryRunStartingPoint -= runId
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
@@ -308,16 +282,13 @@ private class StateStoreCoordinator(
       }
       context.reply(true)
 
-    case LogLaggingStateStores(queryRunId, latestVersion) =>
+    case LogLaggingStateStores(queryRunId, latestVersion, isTerminatingTrigger) =>
       val currentTimestamp = System.currentTimeMillis()
-      // Mark the query run's starting timestamp and latest version if the coordinator
-      // has never seen this query run before.
-      if (!queryRunStartingPoint.contains(queryRunId)) {
-        queryRunStartingPoint.put(queryRunId, QueryStartInfo(latestVersion, currentTimestamp))
-      } else if (shouldCoordinatorReportSnapshotLag(queryRunId, latestVersion, currentTimestamp)) {
-        // Only log lagging instances if the snapshot report upload is enabled,
-        // otherwise all instances will be considered lagging.
-        val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
+      // Only log lagging instances if snapshot lag reporting and uploading is enabled,
+      // otherwise all instances will be considered lagging.
+      if (shouldCoordinatorReportSnapshotLag) {
+        val laggingStores =
+          findLaggingStores(queryRunId, latestVersion, currentTimestamp, isTerminatingTrigger)
         if (laggingStores.nonEmpty) {
           logWarning(
             log"StateStoreCoordinator Snapshot Lag Report for " +
@@ -370,11 +341,12 @@ private class StateStoreCoordinator(
       logDebug(s"Got latest snapshot version of the state store $providerId: $version")
       context.reply(version)
 
-    case GetLaggingStoresForTesting(queryRunId, latestVersion) =>
+    case GetLaggingStoresForTesting(queryRunId, latestVersion, isTerminatingTrigger) =>
       val currentTimestamp = System.currentTimeMillis()
-      // Only report if the corresponding run has all the necessary information to start reporting
-      if (shouldCoordinatorReportSnapshotLag(queryRunId, latestVersion, currentTimestamp)) {
-        val laggingStores = findLaggingStores(queryRunId, latestVersion, currentTimestamp)
+      // Only report if snapshot lag reporting is enabled
+      if (shouldCoordinatorReportSnapshotLag) {
+        val laggingStores =
+          findLaggingStores(queryRunId, latestVersion, currentTimestamp, isTerminatingTrigger)
         logDebug(s"Got lagging state stores: ${laggingStores.mkString(", ")}")
         context.reply(laggingStores)
       } else {
@@ -390,7 +362,8 @@ private class StateStoreCoordinator(
   private def findLaggingStores(
       queryRunId: UUID,
       referenceVersion: Long,
-      referenceTimestamp: Long): Seq[StateStoreProviderId] = {
+      referenceTimestamp: Long,
+      isTerminatingTrigger: Boolean): Seq[StateStoreProviderId] = {
     // Determine alert thresholds from configurations for both time and version differences.
     val snapshotVersionDeltaMultiplier =
       sqlConf.stateStoreCoordinatorMultiplierForMinVersionDiffToLog
@@ -407,6 +380,8 @@ private class StateStoreCoordinator(
     instances.view.keys
       .filter(_.queryRunId == queryRunId)
       .filter { storeProviderId =>
+        // Stores that didn't upload a snapshot will be treated as a store with a snapshot of
+        // version 0 and timestamp 0ms.
         val latestSnapshot = stateStoreLatestUploadedSnapshot.getOrElse(
           storeProviderId,
           defaultSnapshotUploadEvent
@@ -414,15 +389,17 @@ private class StateStoreCoordinator(
         // Mark a state store as lagging if it's behind in both version and time.
         // A state store is considered lagging if it's behind in both version and time according
         // to the configured thresholds.
-        // Stores that didn't upload a snapshot will be treated as a store with a snapshot of
-        // version 0 and timestamp 0ms.
-        referenceVersion - latestSnapshot.version > minVersionDeltaForLogging &&
+        val isBehindOnVersions =
+          referenceVersion - latestSnapshot.version > minVersionDeltaForLogging
+        val isBehindOnTime =
           referenceTimestamp - latestSnapshot.timestamp > minTimeDeltaForLogging
+        // If the query is using a trigger that self-terminates like OneTimeTrigger
+        // and AvailableNowTrigger, we ignore the time threshold check as the upload frequency
+        // is not fully dependent on the maintenance interval.
+        isBehindOnVersions && (isTerminatingTrigger || isBehindOnTime)
       }.toSeq
   }
 }
-
-case class QueryStartInfo(version: Long, timestamp: Long)
 
 case class SnapshotUploadEvent(
     version: Long,

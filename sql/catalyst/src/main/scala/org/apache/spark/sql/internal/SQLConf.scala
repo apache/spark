@@ -2353,7 +2353,7 @@ object SQLConf {
       .version("4.1.0")
       .intConf
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
-      .createWithDefault(10)
+      .createWithDefault(5)
 
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")

@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWra
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.functions.{count, expr}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.util.Utils
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
@@ -471,7 +471,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .option("checkpointLocation", checkpointLocation2.toString)
           .start()
         // Go through several rounds of input to force snapshot uploads for both queries
-        (0 until 3).foreach { _ =>
+        (0 until 2).foreach { _ =>
           input1.addData(1, 2, 3)
           input2.addData(1, 2, 3)
           query1.processAllAvailable()
@@ -611,7 +611,7 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
       SQLConf.SHUFFLE_PARTITIONS.key -> "3",
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
-      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2",
       SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName,
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
@@ -624,13 +624,13 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
         val inputData = MemoryStream[Int]
         val query = inputData.toDF().dropDuplicates()
         val numPartitions = query.sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-        // Keep track of state checkpoint directory and latest version for the second run
+        // Keep track of state checkpoint directory for the second run
         var stateCheckpoint = ""
-        var firstRunLatestVersion = 0L
 
         testStream(query)(
           StartStream(checkpointLocation = srcDir.getCanonicalPath),
-          // Process 4 batches so that the coordinator can start reporting lagging instances
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
           AddData(inputData, 1, 2, 3),
           ProcessAllAvailable(),
           AddData(inputData, 1, 2, 3),
@@ -643,9 +643,9 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
             val coordRef =
               query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
             stateCheckpoint = query.lastExecution.checkpointLocation
-            firstRunLatestVersion = query.lastProgress.batchId + 1
+            val latestVersion = query.lastProgress.batchId + 1
 
-            // Verify all stores have uploaded a snapshot and it's logged by the coordinator
+            // Verify the coordinator logged snapshot uploads
             (0 until numPartitions).map { partitionId =>
               val storeId = StateStoreId(stateCheckpoint, 0, partitionId)
               val providerId = StateStoreProviderId(storeId, query.runId)
@@ -657,13 +657,10 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
                 assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
               }
             }
-            // Sleep a bit to ensure that the coordinator can start reporting lagging stores.
-            // The sleep duration is the maintenance interval times the config's multiplier.
-            Thread.sleep(5 * 100)
             // Verify that the normal state store (partitionId=2) is not lagging behind,
             // and the faulty stores are reported as lagging.
             val laggingStores =
-              coordRef.getLaggingStoresForTesting(query.runId, firstRunLatestVersion)
+              coordRef.getLaggingStoresForTesting(query.runId, latestVersion)
             assert(laggingStores.size == 2)
             assert(laggingStores.forall(_.storeId.partitionId <= 1))
           },
@@ -685,9 +682,8 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
             assert(coordRef.getLaggingStoresForTesting(query.runId, latestVersion).isEmpty)
           }
         )
-        // Restart the query, but do not add too much data so that the associated
-        // StateStoreProviderId (store id + query run id) in the coordinator does
-        // not have any uploads linked to it.
+        // Restart the query, but do not add too much data so that we don't associate
+        // the current StateStoreProviderId (store id + query run id) with any new uploads.
         testStream(query)(
           StartStream(checkpointLocation = srcDir.getCanonicalPath),
           // Perform one round of data, which is enough to activate instances and force a
@@ -698,23 +694,8 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
             val coordRef =
               query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
             val latestVersion = query.lastProgress.batchId + 1
-            // Verify that we are not reporting any lagging stores despite restarting,
-            // because the query started too recently.
-            assert(coordRef.getLaggingStoresForTesting(query.runId, latestVersion).isEmpty)
-          },
-          // Process 3 more batches, so that we pass the version threshold for lag reports
-          AddData(inputData, 1, 2, 3),
-          ProcessAllAvailable(),
-          AddData(inputData, 1, 2, 3),
-          ProcessAllAvailable(),
-          AddData(inputData, 1, 2, 3),
-          ProcessAllAvailable(),
-          Execute { query =>
-            val coordRef =
-              query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
-            val latestVersion = query.lastProgress.batchId + 1
-
-            // Verify that these state stores are properly restored from the checkpoint
+            // Verify that the state stores have restored their snapshot version from the
+            // checkpoint and reported their current version
             (0 until numPartitions).map { partitionId =>
               val storeId = StateStoreId(stateCheckpoint, 0, partitionId)
               val providerId = StateStoreProviderId(storeId, query.runId)
@@ -724,14 +705,10 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
                 assert(latestSnapshotVersion.isEmpty)
               } else {
                 // Verify other stores have uploaded a snapshot and it's properly logged
-                assert(latestSnapshotVersion.get >= firstRunLatestVersion)
+                assert(latestSnapshotVersion.get > 0)
               }
             }
-            // Sleep a bit to ensure that the coordinator has enough time to receive upload events
-            // The sleep duration is the maintenance interval times the config's multiplier
-            Thread.sleep(5 * 100)
-            // Verify that we're back to reporting the faulty state stores (partitionId 0 and 1)
-            // since enough versions and time has passed since the query's restart.
+            // Verify that we're reporting the faulty state stores (partitionId 0 and 1)
             val laggingStores =
               coordRef.getLaggingStoresForTesting(query.runId, latestVersion)
             assert(laggingStores.size == 2)
@@ -760,8 +737,6 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
       withTempDir { srcDir =>
         val inputData = MemoryStream[Int]
         val query = inputData.toDF().dropDuplicates()
-        // Keep track of state checkpoint directory and latest version for the second run
-        var stateCheckpoint = ""
 
         testStream(query)(
           StartStream(checkpointLocation = srcDir.getCanonicalPath),
@@ -775,11 +750,7 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
           Execute { query =>
             val coordRef =
               query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
-            stateCheckpoint = query.lastExecution.checkpointLocation
             val latestVersion = query.lastProgress.batchId + 1
-            // Sleep a bit to ensure that the coordinator can start reporting lagging stores.
-            // The sleep duration is the maintenance interval times the config's multiplier.
-            Thread.sleep(5 * 100)
             // Verify that only the faulty stores are reported as lagging
             val laggingStores =
               coordRef.getLaggingStoresForTesting(query.runId, latestVersion)
@@ -807,11 +778,75 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
             val coordRef =
               query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
             val latestVersion = query.lastProgress.batchId + 1
-            // Sleep a bit to ensure that the coordinator can start reporting lagging stores.
-            Thread.sleep(5 * 100)
             // Verify that we are not reporting any lagging stores despite restarting
             // because of the higher version multiplier
             assert(coordRef.getLaggingStoresForTesting(query.runId, latestVersion).isEmpty)
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("SPARK-51358: Infrequent maintenance using Trigger.AvailableNow should be reported") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
+      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG.key -> "50",
+      SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
+    ) {
+      withTempDir { srcDir =>
+        val inputData = MemoryStream[Int]
+        val query = inputData.toDF().dropDuplicates()
+
+        // Populate state stores with an initial snapshot, so that timestamp isn't marked
+        // as the default 0ms.
+        testStream(query)(
+          StartStream(checkpointLocation = srcDir.getCanonicalPath),
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable()
+        )
+        // Increase maintenance interval to a much larger value to stop snapshot uploads
+        spark.conf.set(SQLConf.STREAMING_MAINTENANCE_INTERVAL.key, "60000")
+        // Execute a few batches in a short span
+        testStream(query)(
+          AddData(inputData, 1, 2, 3),
+          StartStream(Trigger.AvailableNow, checkpointLocation = srcDir.getCanonicalPath),
+          Execute { query =>
+            query.awaitTermination()
+            // Verify the query ran with the AvailableNow trigger
+            assert(query.lastExecution.isTerminatingTrigger)
+          },
+          AddData(inputData, 1, 2, 3),
+          StartStream(Trigger.AvailableNow, checkpointLocation = srcDir.getCanonicalPath),
+          Execute { query => query.awaitTermination() },
+          // Start without available now, otherwise the stream closes too quickly for the
+          // testing RPC call to report lagging state stores
+          StartStream(checkpointLocation = srcDir.getCanonicalPath),
+          // Process data to activate state stores, but not enough to trigger snapshot uploads
+          AddData(inputData, 1, 2, 3),
+          ProcessAllAvailable(),
+          Execute { query =>
+            val coordRef =
+              query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
+            val latestVersion = query.lastProgress.batchId + 1
+            // Verify that all faulty stores are reported as lagging despite the short burst.
+            // This test scenario mimics cases where snapshots have not been uploaded for a while
+            // due to the short running duration of AvailableNow.
+            val laggingStores = coordRef.
+              getLaggingStoresForTesting(query.runId, latestVersion, isTerminatingTrigger = true)
+            assert(laggingStores.size == 2)
+            assert(laggingStores.forall(_.storeId.partitionId <= 1))
           },
           StopStream
         )

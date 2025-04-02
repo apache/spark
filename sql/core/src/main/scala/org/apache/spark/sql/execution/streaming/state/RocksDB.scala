@@ -64,7 +64,6 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  * @param stateStoreId StateStoreId for the state store
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
- * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
  * @param eventListener The RocksDBEventListener object for reporting events to the coordinator
  */
 class RocksDB(
@@ -390,6 +389,9 @@ class RocksDB(
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
+        // Report this snapshot version to the coordinator
+        reportSnapshotVersionToCoordinator(latestSnapshotVersion)
+
         openLocalRocksDB(metadata)
 
         if (loadedVersion != version) {
@@ -466,6 +468,9 @@ class RocksDB(
 
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
+
+        // Report this snapshot version to the coordinator
+        reportSnapshotVersionToCoordinator(latestSnapshotVersion)
 
         openLocalRocksDB(metadata)
 
@@ -604,6 +609,8 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
+    // Report this snapshot version to the coordinator
+    reportSnapshotVersionToCoordinator(snapshotVersion)
     this
   }
 
@@ -1478,17 +1485,30 @@ class RocksDB(
       // Compare and update with the version that was just uploaded.
       lastUploadedSnapshotVersion.updateAndGet(v => Math.max(snapshot.version, v))
       // Report snapshot upload event to the coordinator.
-      if (conf.reportSnapshotUploadLag) {
-        // Note that we still report uploads even when changelog checkpointing is disabled.
-        // The coordinator needs a way to determine whether upload messages are disabled or not,
-        // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
-        eventListener.foreach(_.reportSnapshotUploaded(snapshot.version))
-      }
+      reportSnapshotUploadToCoordinator(snapshot.version)
     } finally {
       snapshot.close()
     }
 
     fileManagerMetrics
+  }
+
+  /** Reports to the coordinator with the event listener that a snapshot finished uploading */
+  private def reportSnapshotUploadToCoordinator(version: Long): Unit = {
+    if (conf.reportSnapshotUploadLag) {
+      // Note that we still report snapshot versions even when changelog checkpointing is disabled.
+      // The coordinator needs a way to determine whether upload messages are disabled or not,
+      // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
+      eventListener.foreach(_.reportSnapshotUploaded(version))
+    }
+  }
+
+  /** Reports to the coordinator the store's latest loaded snapshot version */
+  private def reportSnapshotVersionToCoordinator(version: Long): Unit = {
+    // Skip reporting if the snapshot version is 0, which means there are no snapshots
+    if (conf.reportSnapshotUploadLag && version > 0L) {
+      eventListener.foreach(_.reportSnapshotVersion(version))
+    }
   }
 
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */

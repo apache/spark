@@ -1038,6 +1038,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     logDebug(s"Loading snapshot at version $snapshotVersion and apply delta files to version " +
       s"$endVersion takes $elapsedMs ms.")
 
+    // Report snapshot version loaded to the coordinator, and include the store ID with the message
+    if (storeConf.reportSnapshotUploadLag) {
+      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+      // Since the snapshot was uploaded at a previous time, we set the upload timestamp as 0ms.
+      StateStoreProvider.coordinatorRef.foreach(
+        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), snapshotVersion, 0L))
+    }
+
     result
   }
 

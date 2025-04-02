@@ -533,8 +533,17 @@ private[sql] class RocksDBStateStoreProvider
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId, Some(rocksDBEventListener))
+    new RocksDB(
+      dfsRootDir,
+      RocksDBConf(storeConf),
+      localRootDir,
+      hadoopConf,
+      storeIdStr,
+      useColumnFamilies,
+      storeConf.enableStateStoreCheckpointIds,
+      stateStoreId.partitionId,
+      Some(rocksDBEventListener)
+    )
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -974,6 +983,7 @@ class RocksDBStateStoreChangeDataReader(
 private[state] case class RocksDBEventListener(queryRunId: String, stateStoreId: StateStoreId) {
   // Build the state store provider ID from the query run ID and the state store ID
   private val providerId = StateStoreProviderId(stateStoreId, UUID.fromString(queryRunId))
+
   /**
    * Callback function from RocksDB to report events to the coordinator.
    * Information from the store provider such as the state store ID and query run ID are
@@ -991,5 +1001,20 @@ private[state] case class RocksDBEventListener(queryRunId: String, stateStoreId:
         currentTimestamp
       )
     )
+  }
+
+  /**
+   * Report the state store's last loaded snapshot version to the coordinator.
+   * This method is used when the store loads a snapshot version instead of
+   * uploading a snapshot version, as the context of the snapshot upload timestamp
+   * is missing.
+   *
+   * @param version The snapshot version that was just uploaded from RocksDB
+   */
+  def reportSnapshotVersion(version: Long): Unit = {
+    // Report the state store provider ID and the version to the coordinator.
+    // Since this is not the time when the snapshot was uploaded, we'll use 0ms to
+    // prevent the coordinator to use time lag checks for this store.
+    StateStoreProvider.coordinatorRef.foreach(_.snapshotUploaded(providerId, version, 0L))
   }
 }

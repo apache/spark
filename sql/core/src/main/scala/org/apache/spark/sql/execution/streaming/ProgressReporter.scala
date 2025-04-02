@@ -294,7 +294,11 @@ abstract class ProgressContext(
     if (progressReporter.coordinatorReportSnapshotUploadLag) {
       val latestVersion = lastEpochId + 1
       progressReporter.stateStoreCoordinator
-        .logLaggingStateStores(lastExecution.runId, latestVersion)
+        .logLaggingStateStores(
+          lastExecution.runId,
+          latestVersion,
+          lastExecution.isTerminatingTrigger
+        )
     }
 
     // Update the value since this trigger executes a batch successfully.
