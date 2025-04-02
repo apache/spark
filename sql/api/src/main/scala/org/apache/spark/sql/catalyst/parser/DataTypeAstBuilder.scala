@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.util.{CollationFactory, SparkParserUtils}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -43,78 +43,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
   override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
-  }
-
-  override def visitSingleRoutineParamList(ctx: SingleRoutineParamListContext): StructType = {
-    withOrigin(ctx)(StructType(visitSimplifiedColDefinitionList(ctx.colDefinitionList())))
-  }
-
-  private def visitSimplifiedColDefinitionList(
-      ctx: ColDefinitionListContext): Seq[StructField] = withOrigin(ctx) {
-    ctx.colDefinition().asScala.map(visitStructField).toSeq
-  }
-
-  /**
-   * Create a [[StructField]] from a column definition which allows options like COMMENT and
-   * DEFAULT.
-   *
-   * Don't handle generation expression since this function is currently only used for creating
-   * SQL functions which don't support generation expressions. The rejection logic is in
-   * [[SqlBaseParserVisitor#visitCreateUserDefinedFunction()]] implementation.
-   */
-  private def visitStructField(
-      ctx: ColDefinitionContext): StructField =
-    withOrigin(ctx) {
-    import ctx._
-
-    // Check that no duplicates exist among any CREATE TABLE column options specified.
-    var nullable = true
-    var defaultSpec: Option[DefaultExpressionContext] = None
-    var commentSpec: Option[CommentSpecContext] = None
-    ctx.colDefinitionOption().asScala.foreach { option =>
-      if (option.NULL != null) {
-        if (!nullable) {
-          throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "NOT NULL")
-        }
-        nullable = false
-      }
-      Option(option.defaultExpression()).foreach { expr =>
-        if (defaultSpec.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "DEFAULT")
-        }
-        defaultSpec = Some(expr)
-      }
-      Option(option.commentSpec()).foreach { spec =>
-        if (commentSpec.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "COMMENT")
-        }
-        commentSpec = Some(spec)
-      }
-    }
-
-    val dataType = typedVisit[DataType](ctx.dataType)
-
-    val builder = new MetadataBuilder
-    // Add comment to metadata
-    commentSpec.map(visitCommentSpec).foreach {
-      builder.putString("comment", _)
-    }
-    // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
-    defaultSpec.foreach { ctx =>
-      // Make sure it can be converted to Catalyst expressions.
-      typedVisit(ctx.expression)
-      // Metadata for SQL UDF
-      builder.putString("default", SparkParserUtils.source(ctx.expression))
-    }
-
-    StructField(
-      name = colName.getText,
-      dataType = dataType,
-      nullable = nullable,
-      metadata = builder.build())
   }
 
   override def visitStringLit(ctx: StringLitContext): Token = {

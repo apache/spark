@@ -80,6 +80,7 @@ case class ColumnDefinition(
         case _ => default.originalSQL
       }
       metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsSQL)
+      metadataBuilder.putString(StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY, default.originalSQL)
     }
     generationExpression.foreach { generationExpr =>
       metadataBuilder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, generationExpr)
