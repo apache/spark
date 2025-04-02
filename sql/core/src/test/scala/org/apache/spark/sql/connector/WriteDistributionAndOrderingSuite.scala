@@ -978,7 +978,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     val distribution = Distributions.ordered(ordering)
 
     catalog.createTable(ident, columns, Array.empty, emptyProps,
-      distribution, ordering, None, None, Array.empty)
+      distribution, ordering, None, None)
 
     withTempDir { checkpointDir =>
       val inputData = ContinuousMemoryStream[(Long, String, Date)]
@@ -1219,7 +1219,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     // scalastyle:on argcount
 
     catalog.createTable(ident, columns, Array.empty, emptyProps, tableDistribution,
-      tableOrdering, tableNumPartitions, tablePartitionSize, Array.empty,
+      tableOrdering, tableNumPartitions, tablePartitionSize,
       distributionStrictlyRequired)
 
     val df = if (!dataSkewed) {
@@ -1322,7 +1322,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       expectAnalysisException: Boolean = false): Unit = {
 
     catalog.createTable(ident, columns, Array.empty, emptyProps, tableDistribution,
-      tableOrdering, tableNumPartitions, tablePartitionSize, Array.empty)
+      tableOrdering, tableNumPartitions, tablePartitionSize)
 
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[(Long, String, Date)]

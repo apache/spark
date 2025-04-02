@@ -295,10 +295,7 @@ case class AlterTableCollation(
 case class AddConstraint(
     table: LogicalPlan,
     tableConstraint: TableConstraint) extends AlterTableCommand {
-  override def changes: Seq[TableChange] = {
-    val constraint = tableConstraint.asConstraint(isCreateTable = false)
-    Seq(TableChange.addConstraint(constraint, constraint.enforced()))
-  }
+  override def changes: Seq[TableChange] = Seq.empty
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }
@@ -311,8 +308,7 @@ case class DropConstraint(
     name: String,
     ifExists: Boolean,
     cascade: Boolean) extends AlterTableCommand {
-  override def changes: Seq[TableChange] =
-    Seq(TableChange.dropConstraint(name, ifExists, cascade))
+  override def changes: Seq[TableChange] = Seq.empty
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

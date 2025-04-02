@@ -19,14 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.antlr.v4.runtime.ParserRuleContext
 
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
-import org.apache.spark.sql.connector.catalog.constraints.Constraint
-import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.types.{DataType, StringType}
 
 trait TableConstraint {
-  // Convert to a data source v2 constraint
-  def asConstraint(isCreateTable: Boolean): Constraint
 
   def withNameAndCharacteristic(
       name: String,
@@ -75,26 +70,6 @@ case class CheckConstraint(
   with Unevaluable
   with TableConstraint {
 
-  def asConstraint(isCreateTable: Boolean): Constraint = {
-    val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
-    val (rely, enforced) = getCharacteristicValues
-    // The validation status is set to UNVALIDATED for create table and
-    // VALID for alter table.
-    val validateStatus = if (isCreateTable) {
-      Constraint.ValidationStatus.UNVALIDATED
-    } else {
-      Constraint.ValidationStatus.VALID
-    }
-    Constraint
-      .check(name)
-      .sql(condition)
-      .predicate(predicate)
-      .rely(rely)
-      .enforced(enforced)
-      .validationStatus(validateStatus)
-      .build()
-  }
-
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
@@ -125,16 +100,6 @@ case class PrimaryKeyConstraint(
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
 
-  override def asConstraint(isCreateTable: Boolean): Constraint = {
-    val (rely, enforced) = getCharacteristicValues
-    Constraint
-      .primaryKey(name, columns.map(FieldReference.column).toArray)
-      .rely(rely)
-      .enforced(enforced)
-      .validationStatus(Constraint.ValidationStatus.UNVALIDATED)
-      .build()
-  }
-
   override def withNameAndCharacteristic(
       name: String,
       c: ConstraintCharacteristic,
@@ -162,16 +127,6 @@ case class UniqueConstraint(
     override val name: String = null,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
     extends TableConstraint {
-
-  override def asConstraint(isCreateTable: Boolean): Constraint = {
-    val (rely, enforced) = getCharacteristicValues
-    Constraint
-      .unique(name, columns.map(FieldReference.column).toArray)
-      .rely(rely)
-      .enforced(enforced)
-      .validationStatus(Constraint.ValidationStatus.UNVALIDATED)
-      .build()
-  }
 
   override def withNameAndCharacteristic(
     name: String,
@@ -206,21 +161,6 @@ case class ForeignKeyConstraint(
     parentColumns: Seq[String] = Seq.empty,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  override def asConstraint(isCreateTable: Boolean): Constraint = {
-    val (rely, enforced) = getCharacteristicValues
-    Constraint
-      .foreignKey(name,
-        childColumns.map(FieldReference.column).toArray,
-        parentTableId.asIdentifier,
-        parentColumns.map(FieldReference.column).toArray)
-      .rely(rely)
-      .enforced(enforced)
-      .validationStatus(Constraint.ValidationStatus.UNVALIDATED)
-      .build()
-  }
-
   override def withNameAndCharacteristic(
       name: String,
       c: ConstraintCharacteristic,
