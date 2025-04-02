@@ -4780,11 +4780,11 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
-  override def visitTableElementList(ctx: TableElementListContext): TableElementList =
+  override def visitTableElementList(ctx: TableElementListContext): TableElementList = {
+    if (ctx == null) {
+      return (Nil, Nil)
+    }
     withOrigin(ctx) {
-      if (ctx == null) {
-        return (Nil, Nil)
-      }
       val columnDefs = new ArrayBuffer[ColumnDefinition]()
       val constraints = new ArrayBuffer[TableConstraint]()
 
@@ -4806,6 +4806,7 @@ class AstBuilder extends DataTypeAstBuilder
 
       (columnDefs.toSeq, constraints.toSeq)
     }
+  }
 
   /**
    * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelect]] logical plan.
