@@ -2231,7 +2231,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  test("SPARK-36866: filter pushdown - time") {
+  test("SPARK-51687: filter pushdown - time") {
     def secs(s: Int): LocalTime = LocalTime.ofSecondOfDay(s)
     def secsLit(s: Int): Literal = Literal(secs(s))
     val data = (1 to 4).map(i => Tuple1(secs(i)))
