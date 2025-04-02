@@ -1805,6 +1805,61 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
     checkAnswer(df, Nil)
   }
 
+  test("SPARK-51692: Fix bug while replace cte ref which contains dynamic pruning") {
+    val df = sql(
+      """
+        |WITH cte_define AS (
+        |  SELECT
+        |     t3.store_id store_id,t3.date_id date_id,t3.code code,
+        |     row_number() over (partition by t4.product_id,t3.store_id order by rand() desc) as rn
+        |  FROM
+        |  (
+        |     SELECT
+        |         t1.store_id,t1.date_id,t2.code
+        |     FROM
+        |         (SELECT * FROM fact_stats WHERE store_id < 5 and units_sold<20) t1
+        |     LEFT JOIN
+        |         code_stats t2
+        |     ON t1.units_sold = t2.code
+        |     GROUP BY 1,2,3
+        |  ) t3
+        |  LEFT JOIN
+        |  (
+        |     SELECT
+        |       store_id, product_id, units_sold
+        |     FROM
+        |       fact_sk
+        |      GROUP BY 1,2,3
+        |  ) t4
+        |  ON t3.store_id = t4.store_id
+        |),
+        |cte_define2 AS (
+        |  SELECT
+        |     store_id,date_id
+        |  FROM
+        |     cte_define
+        |  GROUP BY 1,2
+        |),
+        |cte_define3 AS (
+        |  SELECT
+        |     store_id,count(1) as cnt3
+        |  FROM
+        |     cte_define
+        |  GROUP BY 1
+        |)
+        |SELECT
+        |   *
+        |FROM
+        |  cte_define2
+        |LEFT JOIN
+        |  cte_define3
+        |ON cte_define2.store_id = cte_define3.store_id
+      """.stripMargin)
+
+    val count = df.count()
+    assert(count == 7)
+  }
+
   test("SPARK-37995: PlanAdaptiveDynamicPruningFilters should use prepareExecutedPlan " +
     "rather than createSparkPlan to re-plan subquery") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
