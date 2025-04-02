@@ -278,7 +278,34 @@ val query = df.groupBy("key")
 </div>
 </div>
 
-## Integration with state data source
+## State Schema Evolution
+
+TransformWithState also allows for performing schema evolution of the managed state. There are 2 parts here:
+- evolution across state variables
+- evolution within a state variable
+
+Note that schema evolution is only supported on the value side. Key side state schema evolution is not supported.
+
+### Evolution across state variables
+
+This operator allows for state variables to be added and removed across different runs of the same streaming query. In order to remove a variable, we also need to inform the engine so that the underlying state can be purged. Users can achieve this by invoking the `deleteIfExists` method for a given state variable within the `init` method of the StatefulProcessor.
+
+### Evolution within a state variable
+
+This operator also allows for the state schema of a specific state variable to also be evolved. For example, if you are using a case class to store the state within a `ValueState` variable, then it's possible for you to evolve this case class by adding/removing/widening fields.
+We support such schema evolution only when the underlying encoding format is set to `Avro`. In order to enable this, please set the following Spark config as `spark.conf.set("spark.sql.streaming.stateStore.encodingFormat", "avro")`.
+
+The following evolution operations are supported within Avro rules:
+- Adding a new field
+- Removing a field
+- Type widening
+- Reordering fields
+
+The following evolution operations are not supported:
+- Renaming a field
+- Type narrowing
+
+## Integration with State Data Source
 
 TransformWithState is a stateful operator that allows users to maintain arbitrary state across batches. In order to read this state, the user needs to provide some additional options in the state data source reader query.
 This operator allows for multiple state variables to be used within the same query. However, because they could be of different composite types and encoding formats, they need to be read within a batch query one variable at a time.
