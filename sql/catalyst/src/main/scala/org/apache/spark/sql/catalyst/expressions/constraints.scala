@@ -23,14 +23,14 @@ import org.apache.spark.sql.types.{DataType, StringType}
 
 trait TableConstraint {
 
+  def name: String
+
+  def characteristic: ConstraintCharacteristic
+
   def withNameAndCharacteristic(
       name: String,
       c: ConstraintCharacteristic,
       ctx: ParserRuleContext): TableConstraint
-
-  def name: String
-
-  def characteristic: ConstraintCharacteristic
 
   def generateConstraintNameIfNeeded(tableName: String): TableConstraint = {
     if (name == null || name.isEmpty) {
@@ -45,14 +45,6 @@ trait TableConstraint {
 
   // Generate a constraint name based on the table name if the name is not specified
   protected def generateConstraintName(tableName: String): String
-
-  protected def defaultConstraintCharacteristic: ConstraintCharacteristic
-
-  protected def getCharacteristicValues: (Boolean, Boolean) = {
-    val rely = characteristic.rely.getOrElse(defaultConstraintCharacteristic.rely.get)
-    val enforced = characteristic.enforced.getOrElse(defaultConstraintCharacteristic.enforced.get)
-    (rely, enforced)
-  }
 }
 
 case class ConstraintCharacteristic(enforced: Option[Boolean], rely: Option[Boolean])
@@ -86,9 +78,6 @@ case class CheckConstraint(
     s"${tableName}_chk_${base}_$rand"
   }
 
-  override def defaultConstraintCharacteristic: ConstraintCharacteristic =
-    ConstraintCharacteristic(enforced = Some(true), rely = Some(false))
-
   override def sql: String = s"CONSTRAINT $name CHECK ($condition)"
 
   override def dataType: DataType = StringType
@@ -117,9 +106,6 @@ case class PrimaryKeyConstraint(
   }
 
   override protected def generateConstraintName(tableName: String): String = s"${tableName}_pk"
-
-  override def defaultConstraintCharacteristic: ConstraintCharacteristic =
-    ConstraintCharacteristic(enforced = Some(false), rely = Some(false))
 }
 
 case class UniqueConstraint(
@@ -149,9 +135,6 @@ case class UniqueConstraint(
     val rand = scala.util.Random.alphanumeric.take(6).mkString
     s"${tableName}_uk_${base}_$rand"
   }
-
-  override def defaultConstraintCharacteristic: ConstraintCharacteristic =
-    ConstraintCharacteristic(enforced = Some(false), rely = Some(false))
 }
 
 case class ForeignKeyConstraint(
@@ -179,7 +162,4 @@ case class ForeignKeyConstraint(
 
   override protected def generateConstraintName(tableName: String): String =
     s"${tableName}_${parentTableId.last}_fk"
-
-  override def defaultConstraintCharacteristic: ConstraintCharacteristic =
-    ConstraintCharacteristic(enforced = Some(false), rely = Some(false))
 }
