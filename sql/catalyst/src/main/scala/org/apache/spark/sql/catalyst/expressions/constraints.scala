@@ -23,21 +23,32 @@ import org.apache.spark.sql.types.{DataType, StringType}
 
 trait TableConstraint {
 
+  /** Returns the name of the constraint */
   def name: String
 
+  /** Returns the characteristics of the constraint (e.g., ENFORCED, RELY) */
   def characteristic: ConstraintCharacteristic
 
-  def withNameAndCharacteristic(
-      name: String,
-      c: ConstraintCharacteristic,
-      ctx: ParserRuleContext): TableConstraint
+  /** Creates a new constraint with the given name
+   * @param name Constraint name
+   * @return New TableConstraint instance
+   */
+  def withName(name: String): TableConstraint
 
+  /** Creates a new constraint with the given characteristic
+   * @param c Constraint characteristic (ENFORCED, RELY)
+   * @param ctx Parser context for error reporting
+   * @return New TableConstraint instance
+   */
+  def withCharacteristic(c: ConstraintCharacteristic, ctx: ParserRuleContext): TableConstraint
+
+  /** Generates a constraint name if one is not provided
+   * @param tableName Name of the table containing this constraint
+   * @return TableConstraint with a generated name if original name was null/empty
+   */
   def generateConstraintNameIfNeeded(tableName: String): TableConstraint = {
     if (name == null || name.isEmpty) {
-      this.withNameAndCharacteristic(
-        name = generateConstraintName(tableName),
-        c = characteristic,
-        ctx = null)
+      this.withName(name = generateConstraintName(tableName))
     } else {
       this
     }
@@ -65,13 +76,6 @@ case class CheckConstraint(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
-  override def withNameAndCharacteristic(
-      name: String,
-      c: ConstraintCharacteristic,
-      ctx: ParserRuleContext): TableConstraint = {
-    copy(name = name, characteristic = c)
-  }
-
   override protected def generateConstraintName(tableName: String): String = {
     val base = condition.filter(_.isLetterOrDigit).take(20)
     val rand = scala.util.Random.alphanumeric.take(6).mkString
@@ -81,6 +85,13 @@ case class CheckConstraint(
   override def sql: String = s"CONSTRAINT $name CHECK ($condition)"
 
   override def dataType: DataType = StringType
+
+  override def withName(name: String): TableConstraint = copy(name = name)
+
+  override def withCharacteristic(
+      c: ConstraintCharacteristic,
+      ctx: ParserRuleContext): TableConstraint =
+    copy(characteristic = c)
 }
 
 case class PrimaryKeyConstraint(
@@ -88,11 +99,13 @@ case class PrimaryKeyConstraint(
     override val name: String = null,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
+  override protected def generateConstraintName(tableName: String): String = s"${tableName}_pk"
 
-  override def withNameAndCharacteristic(
-      name: String,
-      c: ConstraintCharacteristic,
-      ctx: ParserRuleContext): TableConstraint = {
+  override def withName(name: String): TableConstraint = copy(name = name)
+
+  override def withCharacteristic(
+    c: ConstraintCharacteristic,
+    ctx: ParserRuleContext): TableConstraint = {
     if (c.enforced.contains(true)) {
       throw new ParseException(
         errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
@@ -102,10 +115,8 @@ case class PrimaryKeyConstraint(
         ctx = ctx
       )
     }
-    copy(name = name, characteristic = c)
+    copy(characteristic = c)
   }
-
-  override protected def generateConstraintName(tableName: String): String = s"${tableName}_pk"
 }
 
 case class UniqueConstraint(
@@ -114,8 +125,15 @@ case class UniqueConstraint(
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
     extends TableConstraint {
 
-  override def withNameAndCharacteristic(
-    name: String,
+  override protected def generateConstraintName(tableName: String): String = {
+    val base = columns.map(_.filter(_.isLetterOrDigit)).sorted.mkString("_").take(20)
+    val rand = scala.util.Random.alphanumeric.take(6).mkString
+    s"${tableName}_uk_${base}_$rand"
+  }
+
+  override def withName(name: String): TableConstraint = copy(name = name)
+
+  override def withCharacteristic(
     c: ConstraintCharacteristic,
     ctx: ParserRuleContext): TableConstraint = {
     if (c.enforced.contains(true)) {
@@ -127,13 +145,7 @@ case class UniqueConstraint(
         ctx = ctx
       )
     }
-    copy(name = name, characteristic = c)
-  }
-
-  override protected def generateConstraintName(tableName: String): String = {
-    val base = columns.map(_.filter(_.isLetterOrDigit)).sorted.mkString("_").take(20)
-    val rand = scala.util.Random.alphanumeric.take(6).mkString
-    s"${tableName}_uk_${base}_$rand"
+    copy(characteristic = c)
   }
 }
 
@@ -144,10 +156,15 @@ case class ForeignKeyConstraint(
     parentColumns: Seq[String] = Seq.empty,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
-  override def withNameAndCharacteristic(
-      name: String,
-      c: ConstraintCharacteristic,
-      ctx: ParserRuleContext): TableConstraint = {
+
+  override protected def generateConstraintName(tableName: String): String =
+    s"${tableName}_${parentTableId.last}_fk"
+
+  override def withName(name: String): TableConstraint = copy(name = name)
+
+  override def withCharacteristic(
+    c: ConstraintCharacteristic,
+    ctx: ParserRuleContext): TableConstraint = {
     if (c.enforced.contains(true)) {
       throw new ParseException(
         errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
@@ -159,7 +176,4 @@ case class ForeignKeyConstraint(
     }
     copy(name = name, characteristic = c)
   }
-
-  override protected def generateConstraintName(tableName: String): String =
-    s"${tableName}_${parentTableId.last}_fk"
 }
