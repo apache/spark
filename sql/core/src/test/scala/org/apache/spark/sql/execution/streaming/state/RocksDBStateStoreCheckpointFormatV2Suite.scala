@@ -23,12 +23,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.{SparkContext, SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, ForeachWriter}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
@@ -833,6 +833,61 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       assert(pickedCheckpointInfoList.isDefined, "No lineage information matches with commit log")
 
       checkpointInfoLineageVerification(pickedCheckpointInfoList.get)
+    }
+  }
+
+  /**
+   * This test verifies when there are failures when executing the query.
+   * When restarts happens, the job should still be recovered to the last committed batch.
+   */
+  testWithCheckpointInfoTracked(s"checkpointFormatVersion2 query failure and restart") {
+    withTempDir { checkpointDir =>
+
+      var forceTaskFailure = false
+      val failUDF = udf((value: Int) => {
+        if (forceTaskFailure) {
+          // This will fail all close() call to trigger query failures in execution phase.
+          throw new RuntimeException("Ingest task failure")
+        }
+        value
+      })
+
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .select(failUDF($"value").as("value"))
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        Execute { _ =>
+          forceTaskFailure = true
+        },
+        AddData(inputData, 3, 2),
+        ExpectFailure[SparkException] { ex =>
+          ex.getCause.getMessage.contains("FAILED_EXECUTE_UDF")
+        }
+      )
+
+      forceTaskFailure = false
+
+      // Test recovery
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3, 2, 1),
+        CheckLastBatch((3, 3), (2, 2), (1, 1)),
+        // By default we run in new tuple mode.
+        AddData(inputData, 4, 4, 4, 4),
+        CheckLastBatch((4, 4)),
+        AddData(inputData, 5, 5),
+        CheckLastBatch((5, 2)),
+        StopStream
+      )
     }
   }
 
