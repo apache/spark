@@ -78,4 +78,7 @@ class MemoryStateStore extends StateStore() {
   override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(id.partitionId, version + 1, None, None)
   }
+
+  override def iteratorForTesting(colFamilyName: String): Iterator[UnsafeRowPair] =
+    iterator(colFamilyName)
 }
