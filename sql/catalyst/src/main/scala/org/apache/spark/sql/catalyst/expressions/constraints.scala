@@ -150,10 +150,10 @@ case class UniqueConstraint(
 }
 
 case class ForeignKeyConstraint(
-    override val name: String = null,
     childColumns: Seq[String] = Seq.empty,
     parentTableId: Seq[String] = Seq.empty,
     parentColumns: Seq[String] = Seq.empty,
+    override val name: String = null,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
 
