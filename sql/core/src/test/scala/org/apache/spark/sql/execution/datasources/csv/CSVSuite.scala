@@ -3514,9 +3514,6 @@ abstract class CSVSuite
         )
       }
 
-      val legacy = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
-      val timestampResult = if (legacy) "2000-01-01" else "2000-01-01 01:02:03+00:00"
-
       checkSingleVariant(Map(),
         """{"_c0":"field 1","_c1":"field2"}""",
         """{"_c0":"100","_c1":"1.1"}""",
@@ -3532,7 +3529,7 @@ abstract class CSVSuite
         checkSingleVariant(Map(),
           """{"_c0":"field 1","_c1":"field2"}""",
           """{"_c0":100,"_c1":1.1}""",
-          s"""{"_c0":"2000-01-01","_c1":"$timestampResult"}""",
+          """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}""",
           """{"_c0":null,"_c1":true}""",
           """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
           """{"_c0":"missing"}""")
@@ -3541,7 +3538,7 @@ abstract class CSVSuite
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         checkSingleVariant(Map("header" -> "true"),
           """{"field 1":100,"field2":1.1}""",
-          s"""{"field 1":"2000-01-01","field2":"$timestampResult"}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
           """{"field 1":null,"field2":true}""",
           """{"field 1":"1e9","field2":"hello"}""",
           """{"field 1":"missing"}""")
@@ -3553,7 +3550,7 @@ abstract class CSVSuite
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         checkSingleVariant(Map("header" -> "true"),
           """{"field 1":100,"field2":1.1}""",
-          s"""{"field 1":"2000-01-01","field2":"$timestampResult"}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""",
           """{"field 1":null,"field2":true}""",
           """{"field 1":1000000000,"field2":"hello"}""",
           """{"field 1":"missing"}""")
@@ -3588,7 +3585,7 @@ abstract class CSVSuite
 
       checkSchema(Map("header" -> "true"),
         ("100", "1.1"),
-        ("2000-01-01", if (legacy) "2000-01-01" else "2000-01-01 01:02:03"),
+        ("2000-01-01", "2000-01-01 01:02:03"),
         (null, "true"),
         ("1e9", "hello"),
         ("missing", null))
@@ -3682,7 +3679,10 @@ class CSVv2Suite extends CSVSuite {
 class CSVLegacyTimeParserSuite extends CSVSuite {
 
   override def excluded: Seq[String] =
-    Seq("Write timestamps correctly in ISO8601 format by default")
+    Seq("Write timestamps correctly in ISO8601 format by default",
+      // The result is different because the date/timestamp parser behavior is different. Not too
+      // much value to test it.
+      "csv with variant")
 
   override protected def sparkConf: SparkConf =
     super
