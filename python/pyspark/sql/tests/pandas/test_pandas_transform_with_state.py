@@ -261,11 +261,15 @@ class TransformWithStateInPandasTestsMixin:
         }
 
     def test_transform_with_state_in_pandas_list_state(self):
-        def check_results(batch_df, _):
-            assert set(batch_df.sort("id").collect()) == {
-                Row(id="0", countAsString="2"),
-                Row(id="1", countAsString="2"),
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", countAsString="2"),
+                    Row(id="1", countAsString="2"),
             }
+            else:
+                for q in self.spark.streams.active:
+                    q.stop()
 
         self._test_transform_with_state_in_pandas_basic(
             ListStateProcessor(), check_results, True, "processingTime"
