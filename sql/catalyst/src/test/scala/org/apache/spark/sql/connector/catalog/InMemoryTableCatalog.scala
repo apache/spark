@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
@@ -89,15 +90,12 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     invalidatedTables.add(ident)
   }
 
-  override def createTable(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    createTable(ident, columns, partitions, properties, Distributions.unspecified(),
-      Array.empty, None, None)
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+      Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
   }
 
+  // scalastyle:off argcount
   def createTable(
       ident: Identifier,
       columns: Array[Column],
@@ -107,8 +105,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       ordering: Array[SortOrder],
       requiredNumPartitions: Option[Int],
       advisoryPartitionSize: Option[Long],
+      constraints: Array[Constraint] = Array.empty,
       distributionStrictlyRequired: Boolean = true,
       numRowsPerSplit: Int = Int.MaxValue): Table = {
+    // scalastyle:on argcount
     val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
@@ -117,9 +117,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
-      ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
-      numRowsPerSplit)
+    val table = new InMemoryTable(tableName, schema, partitions, properties, constraints,
+      distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
+      distributionStrictlyRequired, numRowsPerSplit)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
