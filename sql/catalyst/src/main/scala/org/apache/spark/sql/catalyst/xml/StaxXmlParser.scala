@@ -958,8 +958,8 @@ object StaxXmlParser {
           )
 
         case c: Characters if !c.isWhiteSpace =>
-          // Treat the CDATA as a value tag field, where we use the [[XMLOptions.valueTag]] as the
-          // field key
+          // Treat the character as a value tag field, where we use the [[XMLOptions.valueTag]] as
+          // the field key
           val builder = new VariantBuilder(false)
           appendXMLCharacterToVariant(builder, c.getData, options)
           addOrUpdateVariantFields(fieldToVariants, options.valueTag, builder.result())

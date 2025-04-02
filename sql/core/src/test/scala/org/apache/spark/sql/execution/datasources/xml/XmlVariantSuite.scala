@@ -94,21 +94,7 @@ class XmlVariantSuite
     )
   }
 
-  test("Parser: parse XML elements as variant object") {
-    testParser(
-      xml = "<ROW><info><name>Sam</name><amount>93</amount></info></ROW>",
-      expectedJsonStr = """{"info":{"amount":93,"name":"Sam"}}"""
-    )
-  }
-
-  test("Parser: parse XML elements as variant array") {
-    testParser(
-      xml = "<ROW><array>1</array><array>2</array></ROW>",
-      expectedJsonStr = """{"array":[1,2]}"""
-    )
-  }
-
-  test("Parser: parser XML attributes as variants") {
+  test("Parser: parse XML attributes as variants") {
     // XML elements with only attributes
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\" amount=\"93\"></ROW>",
@@ -148,6 +134,20 @@ class XmlVariantSuite
     )
   }
 
+  test("Parser: parse XML elements as variant object") {
+    testParser(
+      xml = "<ROW><info><name>Sam</name><amount>93</amount></info></ROW>",
+      expectedJsonStr = """{"info":{"amount":93,"name":"Sam"}}"""
+    )
+  }
+
+  test("Parser: parse XML elements as variant array") {
+    testParser(
+      xml = "<ROW><array>1</array><array>2</array></ROW>",
+      expectedJsonStr = """{"array":[1,2]}"""
+    )
+  }
+
   test("Parser: null and empty XML elements are parsed as variant null") {
     // XML elements with null and empty values
     testParser(
@@ -158,6 +158,49 @@ class XmlVariantSuite
       xml = "<ROW><name>Sam</name><amount>n/a</amount></ROW>",
       expectedJsonStr = """{"amount":null,"name":"Sam"}""",
       extraOptions = Map("nullValue" -> "n/a")
+    )
+  }
+
+  test("Parser: Parse whitespaces with quotes") {
+    // XML elements with whitespaces
+    testParser(
+      xml = s"""
+               |<ROW>
+               |  <a>" "</a>
+               |  <b>" "<c>1</c></b>
+               |  <d><e attr=" "></e></d>
+               |</ROW>
+               |""".stripMargin,
+      expectedJsonStr =
+        """{"a":"\" \"","b":{"_VALUE":"\" \"","c":1},"d":{"e":{"_attr":" "}}}""",
+      extraOptions = Map("ignoreSurroundingSpaces" -> "false")
+    )
+  }
+
+  test("Parser: Comments are ignored") {
+    testParser(
+      xml = """
+              |<ROW>
+              |   <!-- comment -->
+              |   <name><!-- before value --> Sam <!-- after value --></name>
+              |   <!-- comment -->
+              |   <amount>93</amount>
+              |</ROW>
+              |""".stripMargin,
+      expectedJsonStr = """{"amount":93,"name":"Sam"}"""
+    )
+  }
+
+  test("Parser: CDATA should be handled properly") {
+    testParser(
+      xml = """
+              |<!-- CDATA outside row should be ignored -->
+              |<ROW>
+              |   <name><![CDATA[Sam]]></name>
+              |   <amount>93</amount>
+              |</ROW>
+              |""".stripMargin,
+      expectedJsonStr = """{"amount":93,"name":"Sam"}"""
     )
   }
 
@@ -264,6 +307,63 @@ class XmlVariantSuite
         expectedJsonStr = """{"A":{"_VALUE":3,"b":4},"a":{"_VALUE":1,"b":2}}"""
       )
     }
+  }
+
+  test("Parser: XML array elements interspersed between other elements") {
+    testParser(
+      xml = """
+              |<ROW>
+              |   <a>1</a>
+              |   <b>2</b>
+              |   <a>3</a>
+              |</ROW>
+              |""".stripMargin,
+      expectedJsonStr = """{"a":[1,3],"b":2}"""
+    )
+
+    testParser(
+      xml = """
+              |<ROW>
+              |   value1
+              |   <a>1</a>
+              |   value2
+              |   <a>2</a>
+              |   value3
+              |</ROW>
+              |""".stripMargin,
+      expectedJsonStr = """{"_VALUE":["value1","value2","value3"],"a":[1,2]}"""
+    )
+
+    // long and double
+    testParser(
+      xml = """
+              |<ROW>
+              |  <a>
+              |    1
+              |    <b>2</b>
+              |    3
+              |    <b>4</b>
+              |    5.0
+              |  </a>
+              |</ROW>
+              |""".stripMargin,
+      expectedJsonStr = """{"a":{"_VALUE":[1,3,5.0],"b":[2,4]}}"""
+    )
+
+    // Comments
+    testParser(
+      xml = """
+              |<ROW>
+              |   <!-- comment -->
+              |   <a>1</a>
+              |   <!-- comment -->
+              |   <b>2</b>
+              |   <!-- comment -->
+              |   <a>3</a>
+              |</ROW>
+              |""".stripMargin,
+      expectedJsonStr = """{"a":[1,3],"b":2}"""
+    )
   }
 
   test("DSL: read XML files using singleVariantColumn") {
