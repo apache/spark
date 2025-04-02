@@ -376,9 +376,8 @@ private[spark] object JsonProtocol extends JsonUtils {
       g.writeNumberField("Task ID", taskId)
       g.writeNumberField("Stage ID", stageId)
       g.writeNumberField("Stage Attempt ID", stageAttemptId)
-      g.writeArrayFieldStart("Accumulator Updates")
-      updates.foreach(accumulableInfoToJson(_, g))
-      g.writeEndArray()
+      g.writeFieldName("Accumulator Updates")
+      accumulablesToJson(updates, g)
       g.writeEndObject()
     }
     g.writeEndArray()
@@ -496,7 +495,7 @@ private[spark] object JsonProtocol extends JsonUtils {
   def accumulablesToJson(
       accumulables: Iterable[AccumulableInfo],
       g: JsonGenerator,
-    includeTaskMetricsAccumulators: Boolean = true): Unit = {
+      includeTaskMetricsAccumulators: Boolean = true): Unit = {
     g.writeStartArray()
     accumulables
         .filterNot { acc =>
@@ -714,11 +713,8 @@ private[spark] object JsonProtocol extends JsonUtils {
         reason.foreach(g.writeStringField("Loss Reason", _))
       case taskKilled: TaskKilled =>
         g.writeStringField("Kill Reason", taskKilled.reason)
-        g.writeArrayFieldStart("Accumulator Updates")
-        taskKilled.accumUpdates.foreach { info =>
-          accumulableInfoToJson(info, g)
-        }
-        g.writeEndArray()
+        g.writeFieldName("Accumulator Updates")
+        accumulablesToJson(taskKilled.accumUpdates, g)
       case _ =>
         // no extra fields to write
     }

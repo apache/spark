@@ -21,7 +21,7 @@ import sys
 from typing import IO, Iterable, Iterator
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.serializers import (
     read_bool,

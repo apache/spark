@@ -230,10 +230,12 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    var checkpointInfo: Option[StateStoreCheckpointInfo] = None
     override def commit(): Long = synchronized {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        val newVersion = rocksDB.commit()
+        val (newVersion, newCheckpointInfo) = rocksDB.commit()
+        checkpointInfo = Some(newCheckpointInfo)
         state = COMMITTED
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
@@ -316,20 +318,30 @@ private[sql] class RocksDBStateStoreProvider
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
+        val stateStoreInstanceMetrics = Map[StateStoreInstanceMetric, Long](
+          CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED
+            .withNewId(id.partitionId, id.storeName) -> rocksDBMetrics.lastUploadedSnapshotVersion
+        )
+
         StateStoreMetrics(
           rocksDBMetrics.numUncommittedKeys,
           rocksDBMetrics.totalMemUsageBytes,
-          stateStoreCustomMetrics)
+          stateStoreCustomMetrics,
+          stateStoreInstanceMetrics
+        )
       } else {
         logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
           log"and version=${MDC(VERSION_NUM, version)}")
-        StateStoreMetrics(0, 0, Map.empty)
+        StateStoreMetrics(0, 0, Map.empty, Map.empty)
       }
     }
 
     override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
-      val checkpointInfo = rocksDB.getLatestCheckpointInfo(id.partitionId)
-      checkpointInfo
+      checkpointInfo match {
+        case Some(info) => info
+        case None => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+          "Cannot get checkpointInfo without committing the store")
+      }
     }
 
     override def hasCommitted: Boolean = state == COMMITTED
@@ -497,6 +509,8 @@ private[sql] class RocksDBStateStoreProvider
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
 
+  override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = ALL_INSTANCE_METRICS
+
   private[state] def latestVersion: Long = rocksDB.getLatestVersion()
 
   /** Internal fields and methods */
@@ -517,7 +531,7 @@ private[sql] class RocksDBStateStoreProvider
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId)
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -888,6 +902,10 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
     CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES)
+
+  val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
+
+  val ALL_INSTANCE_METRICS = Seq(CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED)
 }
 
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */

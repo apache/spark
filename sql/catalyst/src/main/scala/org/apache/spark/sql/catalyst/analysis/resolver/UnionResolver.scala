@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   TypeCoercionBase
 }
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, ExprId}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
@@ -52,8 +52,6 @@ class UnionResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    *    for partially resolved subtrees from DataFrame programs.
    *  - Resolve each child in the context of a) New [[NameScope]] b) New [[ExpressionIdAssigner]]
    *    mapping. Collect child outputs to coerce them later.
-   *  - Perform projection-based expression ID deduplication if required. This is a hack to stay
-   *    compatible with fixed-point [[Analyzer]].
    *  - Perform individual output deduplication to handle the distinct union case described in
    *    [[performIndividualOutputExpressionIdDeduplication]] scaladoc.
    *  - Validate that child outputs have same length or throw "NUM_COLUMNS_MISMATCH" otherwise.
@@ -68,10 +66,10 @@ class UnionResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    *  - Return the resolved [[Union]] with new children.
    */
   override def resolve(unresolvedUnion: Union): Union = {
-    val (oldOutput, oldChildOutputs) = if (unresolvedUnion.resolved) {
-      (Some(unresolvedUnion.output), Some(unresolvedUnion.children.map(_.output)))
+    val oldOutput = if (unresolvedUnion.resolved) {
+      Some(unresolvedUnion.output)
     } else {
-      (None, None)
+      None
     }
 
     val (resolvedChildren, childOutputs) = unresolvedUnion.children.zipWithIndex.map {
@@ -84,16 +82,10 @@ class UnionResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
         }
     }.unzip
 
-    val (projectBasedDeduplicatedChildren, projectBasedDeduplicatedChildOutputs) =
-      performProjectionBasedExpressionIdDeduplication(
-        resolvedChildren,
-        childOutputs,
-        oldChildOutputs
-      )
     val (deduplicatedChildren, deduplicatedChildOutputs) =
       performIndividualOutputExpressionIdDeduplication(
-        projectBasedDeduplicatedChildren,
-        projectBasedDeduplicatedChildOutputs
+        resolvedChildren,
+        childOutputs
       )
 
     val (newChildren, newChildOutputs) = if (needToCoerceChildOutputs(deduplicatedChildOutputs)) {
@@ -115,64 +107,6 @@ class UnionResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     expressionIdAssigner.createMapping(scopes.top.output, oldOutput)
 
     unresolvedUnion.copy(children = newChildren)
-  }
-
-  /**
-   * Fixed-point [[Analyzer]] uses [[DeduplicateRelations]] rule to handle duplicate expression IDs
-   * in multi-child operator outputs. For [[Union]]s it uses a "projection-based deduplication",
-   * i.e. places another [[Project]] operator with new [[Alias]]es on the right child if duplicate
-   * expression IDs detected. New [[Alias]] "covers" the original attribute with new expression ID.
-   * This is done for all child operators except [[LeafNode]]s.
-   *
-   * We don't need this operation in single-pass [[Resolver]], since we have
-   * [[ExpressionIdAssigner]] for expression ID deduplication, but perform it nevertheless to stay
-   * compatible with fixed-point [[Analyzer]]. Since new outputs are already deduplicated by
-   * [[ExpressionIdAssigner]], we check the _old_ outputs for duplicates and place a [[Project]]
-   * only if old outputs are available (i.e. we are dealing with a resolved subtree from
-   * DataFrame program).
-   */
-  private def performProjectionBasedExpressionIdDeduplication(
-      children: Seq[LogicalPlan],
-      childOutputs: Seq[Seq[Attribute]],
-      oldChildOutputs: Option[Seq[Seq[Attribute]]]
-  ): (Seq[LogicalPlan], Seq[Seq[Attribute]]) = {
-    oldChildOutputs match {
-      case Some(oldChildOutputs) =>
-        val oldExpressionIds = new HashSet[ExprId]
-
-        children
-          .zip(childOutputs)
-          .zip(oldChildOutputs)
-          .map {
-            case ((child: LeafNode, output), _) =>
-              (child, output)
-
-            case ((child, output), oldOutput) =>
-              val oldOutputExpressionIds = new HashSet[ExprId]
-
-              val hasConflicting = oldOutput.exists { oldAttribute =>
-                oldOutputExpressionIds.add(oldAttribute.exprId)
-                oldExpressionIds.contains(oldAttribute.exprId)
-              }
-
-              if (hasConflicting) {
-                val newExpressions = output.map { attribute =>
-                  Alias(attribute, attribute.name)()
-                }
-                (
-                  Project(projectList = newExpressions, child = child),
-                  newExpressions.map(_.toAttribute)
-                )
-              } else {
-                oldExpressionIds.addAll(oldOutputExpressionIds)
-
-                (child, output)
-              }
-          }
-          .unzip
-      case _ =>
-        (children, childOutputs)
-    }
   }
 
   /**

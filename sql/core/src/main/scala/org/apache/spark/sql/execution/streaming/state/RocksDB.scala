@@ -22,7 +22,7 @@ import java.util.Locale
 import java.util.Set
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
@@ -60,11 +60,10 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  *
  * @note This class is not thread-safe, so use it only from one thread.
  * @see [[RocksDBFileManager]] to see how the files are laid out in local disk and DFS.
- * @param dfsRootDir  Remote directory where checkpoints are going to be written
  * @param conf         Configuration for RocksDB
+ * @param stateStoreId StateStoreId for the state store
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
- * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
  */
 class RocksDB(
     dfsRootDir: String,
@@ -73,7 +72,8 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
-    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
+    enableStateStoreCheckpointIds: Boolean = false,
+    partitionId: Int = 0) extends Logging {
 
   import RocksDB._
 
@@ -146,6 +146,10 @@ class RocksDB(
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
+
+  // Can be updated by whichever thread uploaded a snapshot, which could be either task,
+  // maintenance, or both. -1 represents no version has ever been uploaded.
+  protected val lastUploadedSnapshotVersion: AtomicLong = new AtomicLong(-1L)
 
   // variables to manage checkpoint ID. Once a checkpointing finishes, it needs to return
   // `lastCommittedStateStoreCkptId` as the committed checkpointID, as well as
@@ -528,11 +532,13 @@ class RocksDB(
       maxColumnFamilyId.set(maxId)
     }
 
+    openDB()
+    // Call this after opening the DB to ensure that forcing snapshot is not triggered
+    // unnecessarily.
     if (useColumnFamilies) {
       createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
     }
 
-    openDB()
     val (numKeys, numInternalKeys) = {
       if (!conf.trackTotalNumberOfRows) {
         // we don't track the total number of rows - discard the number being track
@@ -667,16 +673,15 @@ class RocksDB(
 
         if (useColumnFamilies) {
           changelogReader.foreach { case (recordType, key, value) =>
-            val (keyWithoutPrefix, cfName) = decodeStateRowWithPrefix(key)
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(keyWithoutPrefix, value, cfName)
+                put(key, value, includesPrefix = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(keyWithoutPrefix, cfName)
+                remove(key, includesPrefix = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(keyWithoutPrefix, value, cfName)
+                merge(key, value, includesPrefix = true)
             }
           }
         } else {
@@ -797,8 +802,9 @@ class RocksDB(
   def put(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -823,8 +829,9 @@ class RocksDB(
   def merge(
       key: Array[Byte],
       value: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -839,8 +846,11 @@ class RocksDB(
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte], cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    val keyWithPrefix = if (useColumnFamilies) {
+  def remove(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false): Unit = {
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
@@ -983,7 +993,7 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): Long = {
+  def commit(): (Long, StateStoreCheckpointInfo) = {
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -1052,7 +1062,7 @@ class RocksDB(
       recordedMetrics = Some(metrics)
       logInfo(log"Committed ${MDC(LogKeys.VERSION_NUM, newVersion)}, " +
         log"stats = ${MDC(LogKeys.METRICS_JSON, recordedMetrics.get.json)}")
-      loadedVersion
+      (loadedVersion, getLatestCheckpointInfo)
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded version
@@ -1220,11 +1230,11 @@ class RocksDB(
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
 
   /**
-   * Called by RocksDBStateStoreProvider to retrieve the checkpoint information to be
+   * Called by commit() to retrieve the checkpoint information to be
    * passed back to the stateful operator. It will return the information for the latest
    * state store checkpointing.
    */
-  def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
+  private def getLatestCheckpointInfo: StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(
       partitionId,
       loadedVersion,
@@ -1293,6 +1303,7 @@ class RocksDB(
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
+      lastUploadedSnapshotVersion = lastUploadedSnapshotVersion.get(),
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics)
   }
@@ -1461,6 +1472,8 @@ class RocksDB(
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
         log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
+      // Compare and update with the version that was just uploaded.
+      lastUploadedSnapshotVersion.updateAndGet(v => Math.max(snapshot.version, v))
     } finally {
       snapshot.close()
     }
@@ -1912,7 +1925,8 @@ case class RocksDBMetrics(
     bytesCopied: Long,
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
-    nativeOpsMetrics: Map[String, Long]) {
+    nativeOpsMetrics: Map[String, Long],
+    lastUploadedSnapshotVersion: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

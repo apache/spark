@@ -84,15 +84,15 @@ Input [3]: [l_orderkey#7, sum#11, isEmpty#12]
 Keys [1]: [l_orderkey#7]
 Functions [1]: [sum(l_quantity#8)]
 Aggregate Attributes [1]: [sum(l_quantity#8)#13]
-Results [2]: [l_orderkey#7, sum(l_quantity#8)#13 AS sum(l_quantity#14)#15]
+Results [2]: [l_orderkey#7, sum(l_quantity#8)#13 AS sum(l_quantity)#14]
 
 (12) Filter [codegen id : 2]
-Input [2]: [l_orderkey#7, sum(l_quantity#14)#15]
-Condition : (isnotnull(sum(l_quantity#14)#15) AND (sum(l_quantity#14)#15 > 300))
+Input [2]: [l_orderkey#7, sum(l_quantity)#14]
+Condition : (isnotnull(sum(l_quantity)#14) AND (sum(l_quantity)#14 > 300))
 
 (13) Project [codegen id : 2]
 Output [1]: [l_orderkey#7]
-Input [2]: [l_orderkey#7, sum(l_quantity#14)#15]
+Input [2]: [l_orderkey#7, sum(l_quantity)#14]
 
 (14) BroadcastExchange
 Input [1]: [l_orderkey#7]
@@ -119,46 +119,46 @@ Output [5]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6]
 Input [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_custkey#4, o_totalprice#5, o_orderdate#6]
 
 (19) Scan parquet spark_catalog.default.lineitem
-Output [2]: [l_orderkey#16, l_quantity#14]
+Output [2]: [l_orderkey#15, l_quantity#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
 PushedFilters: [IsNotNull(l_orderkey)]
 ReadSchema: struct<l_orderkey:bigint,l_quantity:decimal(10,0)>
 
 (20) ColumnarToRow [codegen id : 6]
-Input [2]: [l_orderkey#16, l_quantity#14]
+Input [2]: [l_orderkey#15, l_quantity#16]
 
 (21) Filter [codegen id : 6]
-Input [2]: [l_orderkey#16, l_quantity#14]
-Condition : isnotnull(l_orderkey#16)
+Input [2]: [l_orderkey#15, l_quantity#16]
+Condition : isnotnull(l_orderkey#15)
 
 (22) ReusedExchange [Reuses operator id: 14]
 Output [1]: [l_orderkey#7]
 
 (23) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [l_orderkey#16]
+Left keys [1]: [l_orderkey#15]
 Right keys [1]: [l_orderkey#7]
 Join type: LeftSemi
 Join condition: None
 
 (24) BroadcastExchange
-Input [2]: [l_orderkey#16, l_quantity#14]
+Input [2]: [l_orderkey#15, l_quantity#16]
 Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=4]
 
 (25) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [o_orderkey#3]
-Right keys [1]: [l_orderkey#16]
+Right keys [1]: [l_orderkey#15]
 Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 7]
-Output [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_quantity#14]
-Input [7]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_orderkey#16, l_quantity#14]
+Output [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_quantity#16]
+Input [7]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_orderkey#15, l_quantity#16]
 
 (27) HashAggregate [codegen id : 7]
-Input [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_quantity#14]
+Input [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_quantity#16]
 Keys [5]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5]
-Functions [1]: [partial_sum(l_quantity#14)]
+Functions [1]: [partial_sum(l_quantity#16)]
 Aggregate Attributes [2]: [sum#17, isEmpty#18]
 Results [7]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum#19, isEmpty#20]
 
@@ -169,9 +169,9 @@ Arguments: hashpartitioning(c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, 
 (29) HashAggregate [codegen id : 8]
 Input [7]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum#19, isEmpty#20]
 Keys [5]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5]
-Functions [1]: [sum(l_quantity#14)]
-Aggregate Attributes [1]: [sum(l_quantity#14)#21]
-Results [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity#14)#21 AS sum(l_quantity)#22]
+Functions [1]: [sum(l_quantity#16)]
+Aggregate Attributes [1]: [sum(l_quantity#16)#21]
+Results [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity#16)#21 AS sum(l_quantity)#22]
 
 (30) TakeOrderedAndProject
 Input [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#22]

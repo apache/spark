@@ -282,8 +282,8 @@ Sort [cast(udf(cast(1 as string)) as int) ASC NULLS FIRST], true
 select max(unique2) from tenk1 order by max(udf(unique2))
 -- !query analysis
 Project [max(unique2)#x]
-+- Sort [max(cast(udf(cast(unique2#x as string)) as int))#x ASC NULLS FIRST], true
-   +- Aggregate [max(unique2#x) AS max(unique2)#x, max(cast(udf(cast(unique2#x as string)) as int)) AS max(cast(udf(cast(unique2#x as string)) as int))#x]
++- Sort [max(udf(unique2))#x ASC NULLS FIRST], true
+   +- Aggregate [max(unique2#x) AS max(unique2)#x, max(cast(udf(cast(unique2#x as string)) as int)) AS max(udf(unique2))#x]
       +- SubqueryAlias spark_catalog.default.tenk1
          +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
 
@@ -292,8 +292,8 @@ Project [max(unique2)#x]
 select udf(max(udf(unique2))) from tenk1 order by udf(max(unique2))+1
 -- !query analysis
 Project [udf(max(udf(unique2)))#x]
-+- Sort [(cast(udf(cast(max(unique2#x)#x as string)) as int) + 1) ASC NULLS FIRST], true
-   +- Aggregate [cast(udf(cast(max(cast(udf(cast(unique2#x as string)) as int)) as string)) as int) AS udf(max(udf(unique2)))#x, max(unique2#x) AS max(unique2#x)#x]
++- Sort [(cast(udf(cast(max(unique2)#x as string)) as int) + 1) ASC NULLS FIRST], true
+   +- Aggregate [cast(udf(cast(max(cast(udf(cast(unique2#x as string)) as int)) as string)) as int) AS udf(max(udf(unique2)))#x, max(unique2#x) AS max(unique2)#x]
       +- SubqueryAlias spark_catalog.default.tenk1
          +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
 

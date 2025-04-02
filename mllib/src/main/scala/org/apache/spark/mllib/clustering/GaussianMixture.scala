@@ -201,7 +201,12 @@ class GaussianMixture private (
       val compute = sc.broadcast(ExpectationSum.add(weights, gaussians)_)
 
       // aggregate the cluster contribution for all sample points
-      val sums = breezeData.treeAggregate(ExpectationSum.zero(k, d))(compute.value, _ += _)
+      val sums = breezeData.treeAggregate[ExpectationSum](
+        zeroValue = ExpectationSum.zero(k, d),
+        seqOp = (agg: ExpectationSum, v: BV[Double]) => compute.value(agg, v),
+        combOp = (agg1: ExpectationSum, agg2: ExpectationSum) => agg1 += agg2,
+        depth = 2,
+        finalAggregateOnExecutor = true)
 
       // Create new distributions based on the partial assignments
       // (often referred to as the "M" step in literature)

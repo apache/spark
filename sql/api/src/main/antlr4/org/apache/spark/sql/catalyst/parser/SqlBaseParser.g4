@@ -308,6 +308,7 @@ statement
     | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
+    | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
@@ -1194,6 +1195,7 @@ primaryExpression
 
 literalType
     : DATE
+    | TIME
     | TIMESTAMP | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | INTERVAL
     | BINARY_HEX
@@ -1283,6 +1285,7 @@ type
     | FLOAT | REAL
     | DOUBLE
     | DATE
+    | TIME
     | TIMESTAMP | TIMESTAMP_NTZ | TIMESTAMP_LTZ
     | STRING collateClause?
     | CHARACTER | CHAR
@@ -1853,6 +1856,7 @@ ansiNonReserved
     | POSITION
     | PRECEDING
     | PRINCIPALS
+    | PROCEDURES
     | PROPERTIES
     | PURGE
     | QUARTER
@@ -2235,6 +2239,7 @@ nonReserved
     | PRECEDING
     | PRIMARY
     | PRINCIPALS
+    | PROCEDURES
     | PROPERTIES
     | PURGE
     | QUARTER

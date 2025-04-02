@@ -319,3 +319,68 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 }
+
+/** Represents JSON output of DESCRIBE TABLE AS JSON */
+case class DescribeTableJson(
+    table_name: Option[String] = None,
+    catalog_name: Option[String] = None,
+    namespace: Option[List[String]] = Some(Nil),
+    schema_name: Option[String] = None,
+    columns: Option[List[TableColumn]] = Some(Nil),
+    created_time: Option[String] = None,
+    last_access: Option[String] = None,
+    created_by: Option[String] = None,
+    `type`: Option[String] = None,
+    collation: Option[String] = None,
+    provider: Option[String] = None,
+    bucket_columns: Option[List[String]] = Some(Nil),
+    sort_columns: Option[List[String]] = Some(Nil),
+    comment: Option[String] = None,
+    table_properties: Option[Map[String, String]] = None,
+    location: Option[String] = None,
+    serde_library: Option[String] = None,
+    storage_properties: Option[Map[String, String]] = None,
+    partition_provider: Option[String] = None,
+    partition_columns: Option[List[String]] = Some(Nil),
+    partition_values: Option[Map[String, String]] = None,
+    clustering_columns: Option[List[String]] = None,
+    statistics: Option[Map[String, Any]] = None,
+    view_text: Option[String] = None,
+    view_original_text: Option[String] = None,
+    view_schema_mode: Option[String] = None,
+    view_catalog_and_namespace: Option[String] = None,
+    view_query_output_columns: Option[List[String]] = None,
+    view_creation_spark_configuration: Option[Map[String, String]] = None
+)
+
+/** Used for columns field of DescribeTableJson */
+case class TableColumn(
+    name: String,
+    `type`: Type,
+    element_nullable: Boolean = true,
+    comment: Option[String] = None,
+    default: Option[String] = None
+)
+
+case class Type(
+    name: String,
+    collation: Option[String] = None,
+    fields: Option[List[Field]] = None,
+    `type`: Option[Type] = None,
+    element_type: Option[Type] = None,
+    key_type: Option[Type] = None,
+    value_type: Option[Type] = None,
+    comment: Option[String] = None,
+    default: Option[String] = None,
+    element_nullable: Option[Boolean] = Some(true),
+    value_nullable: Option[Boolean] = Some(true),
+    nullable: Option[Boolean] = Some(true)
+)
+
+case class Field(
+    name: String,
+    `type`: Type,
+    element_nullable: Boolean = true,
+    comment: Option[String] = None,
+    default: Option[String] = None
+)

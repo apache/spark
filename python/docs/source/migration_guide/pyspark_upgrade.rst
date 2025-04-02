@@ -19,6 +19,11 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.0 to 4.1
+---------------------------------
+
+* In Spark 4.1, Arrow-optimized Python UDF supports UDT input / output instead of falling back to the regular UDF. To restore the legacy behavior, set ``spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT`` to ``true``.
+
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 

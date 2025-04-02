@@ -18,7 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.functions.{array_to_vector, vector_to_array}
+import org.apache.spark.ml.functions._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
@@ -101,5 +101,33 @@ class FunctionsSuite extends MLTest {
     val df3 = Seq(Tuple1(Array(1, 2))).toDF("c1")
     val resultVec3 = df3.select(array_to_vector(col("c1"))).collect()(0)(0).asInstanceOf[Vector]
     assert(resultVec3 === Vectors.dense(Array(1.0, 2.0)))
+  }
+
+  test("test get_vector") {
+    val df = Seq(
+      (Vectors.dense(1.0, 2.0, 3.0), 0),
+      (Vectors.dense(1.0, 2.0, 3.0), 1),
+      (Vectors.dense(1.0, 2.0, 3.0), 2),
+      (Vectors.sparse(3, Seq((0, -1.0))), 0),
+      (Vectors.sparse(3, Seq((0, -1.0))), 1),
+      (Vectors.sparse(3, Seq((0, -1.0))), 2)
+    ).toDF("vec", "idx")
+
+    val result = df.select(vector_get(col("vec"), col("idx"))).as[Double].collect()
+    assert(result === Array(1.0, 2.0, 3.0, -1.0, 0.0, 0.0))
+  }
+
+  test("test array_argmax") {
+    val df = Seq(
+      Tuple1.apply(Array(1.0, 2.0, 3.0)),
+      Tuple1.apply(Array(1.0, 3.0, 2.0)),
+      Tuple1.apply(Array(3.0, 2.0, 1.0)),
+      Tuple1.apply(Array(1.0, 3.0, 3.0)),
+      Tuple1.apply(Array(3.0, 3.0, 3.0)),
+      Tuple1.apply(Array.emptyDoubleArray)
+    ).toDF("arr")
+
+    val result = df.select(array_argmax(col("arr"))).as[Int].collect()
+    assert(result === Array(2, 1, 0, 1, 0, -1))
   }
 }

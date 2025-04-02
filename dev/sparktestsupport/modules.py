@@ -1035,12 +1035,14 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_dataframe_property",
+        "pyspark.sql.tests.connect.test_connect_channel",
         "pyspark.sql.tests.connect.test_connect_error",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",
         "pyspark.sql.tests.connect.test_connect_column",
         "pyspark.sql.tests.connect.test_connect_creation",
         "pyspark.sql.tests.connect.test_connect_readwriter",
+        "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
         "pyspark.sql.tests.connect.test_connect_stat",
         "pyspark.sql.tests.connect.test_parity_datasources",
@@ -1095,6 +1097,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1463,6 +1466,8 @@ pyspark_errors = Module(
     python_test_goals=[
         # unittests
         "pyspark.errors.tests.test_errors",
+        "pyspark.errors.tests.test_traceback",
+        "pyspark.errors.tests.connect.test_parity_traceback",
     ],
 )
 
@@ -1471,6 +1476,8 @@ pyspark_logger = Module(
     dependencies=[],
     source_file_regexes=["python/pyspark/logger"],
     python_test_goals=[
+        # doctests
+        "pyspark.logger.logger",
         # unittests
         "pyspark.logger.tests.test_logger",
         "pyspark.logger.tests.connect.test_parity_logger",

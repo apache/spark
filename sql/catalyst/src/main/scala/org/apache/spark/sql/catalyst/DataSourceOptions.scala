@@ -64,3 +64,11 @@ trait DataSourceOptions {
    */
   def getAlternativeOption(name: String): Option[String] = validOptions.get(name).flatten
 }
+
+object DataSourceOptions {
+  // The common option name for all data sources that supports single-variant-column parsing mode.
+  // The option should take in a column name and specifies that the entire record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("<data-source-format>").option("singleVariantColumn", "colName")
+  val SINGLE_VARIANT_COLUMN = "singleVariantColumn"
+}

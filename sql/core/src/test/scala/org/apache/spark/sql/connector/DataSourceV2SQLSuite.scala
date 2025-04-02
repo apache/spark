@@ -1388,16 +1388,6 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  private def testShowNamespaces(
-      sqlText: String,
-      expected: Seq[String]): Unit = {
-    val schema = new StructType().add("namespace", StringType, nullable = false)
-
-    val df = spark.sql(sqlText)
-    assert(df.schema === schema)
-    assert(df.collect().map(_.getAs[String](0)).sorted === expected.sorted)
-  }
-
   test("Use: basic tests with USE statements") {
     val catalogManager = spark.sessionState.catalogManager
 
@@ -3792,6 +3782,33 @@ class DataSourceV2SQLSuiteV1Filter
         checkAnswer(spark.table("fakeStagedCat.t"), Row(2))
         sql("CREATE OR REPLACE TABLE fakeStagedCat.t AS SELECT 1 c1, 2 c2")
         checkAnswer(spark.table("fakeStagedCat.t"), Row(1, 2))
+      }
+    }
+  }
+
+  test("micro batch streaming write with default values") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    withTable(t) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $t (id INT, data STRING DEFAULT 'txt', salary INT DEFAULT -1) USING foo")
+
+        val inputData = MemoryStream[Int]
+        val df = inputData.toDF().toDF("id")
+        val query = df
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(t)
+
+        val newData = Seq(1, 2)
+        inputData.addData(newData)
+        query.processAllAvailable()
+        query.stop()
+
+        checkAnswer(
+          sql(s"SELECT * FROM $t"),
+          Row(1, "txt", -1) :: Row(2, "txt", -1) :: Nil)
       }
     }
   }

@@ -141,6 +141,7 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
             raise PySparkRuntimeError(
                 errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
                 messageParameters={
+                    "udf_type": "pandas_udf",
                     "expected": str(length),
                     "actual": str(len(result)),
                 },
@@ -160,6 +161,10 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
     import pandas as pd
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+    zero_arg_exec = False
+    if len(args_kwargs_offsets) == 0:
+        args_kwargs_offsets = (0,)  # Series([pyspark._NoValue, ...]) is used for 0-arg execution.
+        zero_arg_exec = True
 
     arrow_return_type = to_arrow_type(
         return_type, prefers_large_types=use_large_var_types(runner_conf)
@@ -176,6 +181,16 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
+    if zero_arg_exec:
+
+        def get_args(*args: pd.Series):
+            return [() for _ in args[0]]
+
+    else:
+
+        def get_args(*args: pd.Series):
+            return zip(*args)
+
     if "spark.sql.execution.pythonUDF.arrow.concurrency.level" in runner_conf:
         from concurrent.futures import ThreadPoolExecutor
 
@@ -184,19 +199,22 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
         @fail_on_stopiteration
         def evaluate(*args: pd.Series) -> pd.Series:
             with ThreadPoolExecutor(max_workers=c) as pool:
-                return pd.Series(list(pool.map(lambda row: result_func(func(*row)), zip(*args))))
+                return pd.Series(
+                    list(pool.map(lambda row: result_func(func(*row)), get_args(*args)))
+                )
 
     else:
 
         @fail_on_stopiteration
         def evaluate(*args: pd.Series) -> pd.Series:
-            return pd.Series([result_func(func(*row)) for row in zip(*args)])
+            return pd.Series([result_func(func(*row)) for row in get_args(*args)])
 
     def verify_result_length(result, length):
         if len(result) != length:
             raise PySparkRuntimeError(
                 errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
                 messageParameters={
+                    "udf_type": "arrow_batch_udf",
                     "expected": str(length),
                     "actual": str(len(result)),
                 },
@@ -205,7 +223,7 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
 
     return (
         args_kwargs_offsets,
-        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type),
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type, return_type),
     )
 
 
@@ -1596,6 +1614,13 @@ def read_udfs(pickleSer, infile, eval_type):
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF uses explicit Arrow cast for type coercion
             arrow_cast = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            # Arrow-optimized Python UDF takes input types
+            input_types = (
+                [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
+                if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                else None
+            )
+
             ser = ArrowStreamPandasUDFSerializer(
                 timezone,
                 safecheck,
@@ -1604,6 +1629,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 struct_in_pandas,
                 ndarray_as_list,
                 arrow_cast,
+                input_types,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))

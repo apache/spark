@@ -744,18 +744,28 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-24500: create union with stream of children") {
-    @scala.annotation.nowarn("cat=deprecation")
-    val df = Union(Stream(
-      Range(1, 1, 1, 1),
-      Range(1, 2, 1, 1)))
-    df.queryExecution.executedPlan.execute()
+    withSQLConf(
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false"
+    ) {
+      @scala.annotation.nowarn("cat=deprecation")
+      val df = Union(Stream(
+        Range(1, 1, 1, 1),
+        Range(1, 2, 1, 1)))
+      df.queryExecution.executedPlan.execute()
+    }
   }
 
   test("SPARK-45685: create union with LazyList of children") {
-    val df = Union(LazyList(
-      Range(1, 1, 1, 1),
-      Range(1, 2, 1, 1)))
-    df.queryExecution.executedPlan.execute()
+    withSQLConf(
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false"
+    ) {
+      val df = Union(LazyList(
+        Range(1, 1, 1, 1),
+        Range(1, 2, 1, 1)))
+      df.queryExecution.executedPlan.execute()
+    }
   }
 
   test("SPARK-25278: physical nodes should be different instances for same logical nodes") {

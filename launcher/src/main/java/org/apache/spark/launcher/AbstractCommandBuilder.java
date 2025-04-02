@@ -178,9 +178,13 @@ abstract class AbstractCommandBuilder {
             "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
             "assembly.");
         }
-        boolean shouldPrePendSparkHive = isJarAvailable(jarsDir, "spark-hive_");
-        boolean shouldPrePendSparkHiveThriftServer =
-          shouldPrePendSparkHive && isJarAvailable(jarsDir, "spark-hive-thriftserver_");
+        // SPARK-51600: Add a condition check for `isTesting || isTestingSql` to
+        // `shouldPrePendSparkHive/shouldPrePendSparkHiveThriftServer`. When running Maven tests,
+        // prepend classes should be performed for "sql/hive" and "sql/hive-thriftserver"
+        boolean shouldPrePendSparkHive =
+          isTesting || isTestingSql || isJarAvailable(jarsDir, "spark-hive_");
+        boolean shouldPrePendSparkHiveThriftServer = isTesting || isTestingSql ||
+          (shouldPrePendSparkHive && isJarAvailable(jarsDir, "spark-hive-thriftserver_"));
         for (String project : projects) {
           // Do not use locally compiled class files for Spark server because it should use shaded
           // dependencies.
@@ -235,9 +239,8 @@ abstract class AbstractCommandBuilder {
           addToClassPath(cp, f.toString());
         }
       }
-      // If we're in 'spark.local.connect', it should create a Spark Classic Spark Context
-      // that launches Spark Connect server.
-      if (isRemote && System.getenv("SPARK_LOCAL_CONNECT") == null) {
+
+      if (isRemote) {
         for (File f: new File(jarsDir).listFiles()) {
           // Exclude Spark Classic SQL and Spark Connect server jars
           // if we're in Spark Connect Shell. Also exclude Spark SQL API and

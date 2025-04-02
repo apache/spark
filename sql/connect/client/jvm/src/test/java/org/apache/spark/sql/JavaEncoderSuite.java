@@ -28,6 +28,7 @@ import static org.apache.spark.sql.Encoders.*;
 import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.RowFactory.create;
 import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.sql.connect.test.IntegrationTestUtils;
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils;
 import org.apache.spark.sql.types.StructType;
 
@@ -39,14 +40,18 @@ public class JavaEncoderSuite implements Serializable {
 
   @BeforeAll
   public static void setup() {
+    Assumptions.assumeTrue(IntegrationTestUtils.isAssemblyJarsDirExists(),
+      "Skipping all tests because assembly jars directory does not exist.");
     spark = SparkConnectServerUtils.createSparkSession();
   }
 
   @AfterAll
   public static void tearDown() {
-    spark.stop();
-    spark = null;
-    SparkConnectServerUtils.stop();
+    if (spark != null) {
+      spark.stop();
+      spark = null;
+      SparkConnectServerUtils.stop();
+    }
   }
 
   private static BigDecimal bigDec(long unscaled, int scale) {
