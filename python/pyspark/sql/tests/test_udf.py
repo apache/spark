@@ -46,6 +46,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
+    ExamplePoint,
+    ExamplePointUDT,
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,
@@ -1273,6 +1275,100 @@ class BaseUDFTestsMixin(object):
         # causing a TimeoutError in pyspark connect
         with self.assertRaises(Exception):
             timeout_func()
+
+    def test_udf_with_udt(self):
+        row = Row(
+            label=1.0,
+            point=ExamplePoint(1.0, 2.0),
+            points=[ExamplePoint(4.0, 5.0), ExamplePoint(6.0, 7.0)],
+        )
+        df = self.spark.createDataFrame([row])
+
+        @udf(returnType=ExamplePointUDT())
+        def doubleInUDTOut(d):
+            return ExamplePoint(d, 10 * d)
+
+        @udf(returnType=DoubleType())
+        def udtInDoubleOut(e):
+            return e.y
+
+        @udf(returnType=ArrayType(ExamplePointUDT()))
+        def doubleInUDTArrayOut(d):
+            return [ExamplePoint(d + i, 10 * d + i) for i in range(2)]
+
+        @udf(returnType=DoubleType())
+        def udtArrayInDoubleOut(es):
+            return es[-1].y
+
+        @udf(returnType=ExamplePointUDT())
+        def udtInUDTOut(e):
+            return ExamplePoint(e.x * 10.0, e.y * 10.0)
+
+        @udf(returnType=DoubleType())
+        def doubleInDoubleOut(d):
+            return d * 100.0
+
+        queries = [
+            (
+                "double -> UDT",
+                df.select(doubleInUDTOut(df.label)),
+                [Row(ExamplePoint(1.0, 10.0))],
+            ),
+            (
+                "UDT -> double",
+                df.select(udtInDoubleOut(df.point)),
+                [Row(2.0)],
+            ),
+            (
+                "double -> array of UDT",
+                df.select(doubleInUDTArrayOut(df.label)),
+                [Row([ExamplePoint(1.0, 10.0), ExamplePoint(2.0, 11.0)])],
+            ),
+            (
+                "array of UDT -> double",
+                df.select(udtArrayInDoubleOut(df.points)),
+                [Row(7.0)],
+            ),
+            (
+                "double -> UDT -> double",
+                df.select(udtInDoubleOut(doubleInUDTOut(df.label))),
+                [Row(10.0)],
+            ),
+            (
+                "double -> UDT -> UDT",
+                df.select(udtInUDTOut(doubleInUDTOut(df.label))),
+                [Row(ExamplePoint(10.0, 100.0))],
+            ),
+            (
+                "double -> double -> UDT",
+                df.select(doubleInUDTOut(doubleInDoubleOut(df.label))),
+                [Row(ExamplePoint(100.0, 1000.0))],
+            ),
+            (
+                "UDT -> UDT -> double",
+                df.select(udtInDoubleOut(udtInUDTOut(df.point))),
+                [Row(20.0)],
+            ),
+            (
+                "UDT -> UDT -> UDT",
+                df.select(udtInUDTOut(udtInUDTOut(df.point))),
+                [Row(ExamplePoint(100.0, 200.0))],
+            ),
+            (
+                "UDT -> double -> double",
+                df.select(doubleInDoubleOut(udtInDoubleOut(df.point))),
+                [Row(200.0)],
+            ),
+            (
+                "UDT -> double -> UDT",
+                df.select(doubleInUDTOut(udtInDoubleOut(df.point))),
+                [Row(ExamplePoint(2.0, 20.0))],
+            ),
+        ]
+
+        for chain, actual, expected in queries:
+            with self.subTest(chain=chain):
+                assertDataFrameEqual(actual=actual, expected=expected)
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

@@ -60,8 +60,8 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  *
  * @note This class is not thread-safe, so use it only from one thread.
  * @see [[RocksDBFileManager]] to see how the files are laid out in local disk and DFS.
- * @param dfsRootDir  Remote directory where checkpoints are going to be written
  * @param conf         Configuration for RocksDB
+ * @param stateStoreId StateStoreId for the state store
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
@@ -75,6 +75,7 @@ class RocksDB(
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
     enableStateStoreCheckpointIds: Boolean = false,
+    partitionId: Int = 0,
     eventListener: Option[RocksDBEventListener] = None) extends Logging {
 
   import RocksDB._
@@ -534,11 +535,13 @@ class RocksDB(
       maxColumnFamilyId.set(maxId)
     }
 
+    openDB()
+    // Call this after opening the DB to ensure that forcing snapshot is not triggered
+    // unnecessarily.
     if (useColumnFamilies) {
       createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
     }
 
-    openDB()
     val (numKeys, numInternalKeys) = {
       if (!conf.trackTotalNumberOfRows) {
         // we don't track the total number of rows - discard the number being track
@@ -993,7 +996,7 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): Long = {
+  def commit(): (Long, StateStoreCheckpointInfo) = {
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -1062,7 +1065,7 @@ class RocksDB(
       recordedMetrics = Some(metrics)
       logInfo(log"Committed ${MDC(LogKeys.VERSION_NUM, newVersion)}, " +
         log"stats = ${MDC(LogKeys.METRICS_JSON, recordedMetrics.get.json)}")
-      loadedVersion
+      (loadedVersion, getLatestCheckpointInfo)
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded version
@@ -1230,11 +1233,11 @@ class RocksDB(
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
 
   /**
-   * Called by RocksDBStateStoreProvider to retrieve the checkpoint information to be
+   * Called by commit() to retrieve the checkpoint information to be
    * passed back to the stateful operator. It will return the information for the latest
    * state store checkpointing.
    */
-  def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
+  private def getLatestCheckpointInfo: StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(
       partitionId,
       loadedVersion,

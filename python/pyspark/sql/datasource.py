@@ -282,9 +282,6 @@ class Filter(ABC):
     See `Data Types <https://spark.apache.org/docs/latest/sql-ref-datatypes.html>`_
     for more information about how values are represented in Python.
 
-    Currently only the equality of attribute and literal value is supported for
-    filter pushdown. Other types of filters cannot be pushed down.
-
     Examples
     --------
     Supported filters
@@ -293,9 +290,22 @@ class Filter(ABC):
     | SQL filter          | Representation                             |
     +---------------------+--------------------------------------------+
     | `a.b.c = 1`         | `EqualTo(("a", "b", "c"), 1)`              |
-    | `a = 1`             | `EqualTo(("a", "b", "c"), 1)`              |
+    | `a = 1`             | `EqualTo(("a",), 1)`                       |
     | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
     | `a = array(1, 2)`   | `EqualTo(("a",), [1, 2])`                  |
+    | `a`                 | `EqualTo(("a",), True)`                    |
+    | `not a`             | `Not(EqualTo(("a",), True))`               |
+    | `a <> 1`            | `Not(EqualTo(("a",), 1))`                  |
+    | `a > 1`             | `GreaterThan(("a",), 1)`                   |
+    | `a >= 1`            | `GreaterThanOrEqual(("a",), 1)`            |
+    | `a < 1`             | `LessThan(("a",), 1)`                      |
+    | `a <= 1`            | `LessThanOrEqual(("a",), 1)`               |
+    | `a in (1, 2, 3)`    | `In(("a",), (1, 2, 3))`                    |
+    | `a is null`         | `IsNull(("a",))`                           |
+    | `a is not null`     | `IsNotNull(("a",))`                        |
+    | `a like 'abc%'`     | `StringStartsWith(("a",), "abc")`          |
+    | `a like '%abc'`     | `StringEndsWith(("a",), "abc")`            |
+    | `a like '%abc%'`    | `StringContains(("a",), "abc")`            |
     +---------------------+--------------------------------------------+
 
     Unsupported filters
@@ -303,13 +313,149 @@ class Filter(ABC):
     - `f(a, b) = 1`
     - `a % 2 = 1`
     - `a[0] = 1`
+    - `a < 0 or a > 1`
+    - `a like 'c%c%'`
+    - `a ilike 'hi'`
+    - `a = 'hi' collate zh`
     """
 
 
 @dataclass(frozen=True)
 class EqualTo(Filter):
+    """
+    A filter that evaluates to `True` iff the column evaluates to a value
+    equal to `value`.
+    """
+
     attribute: ColumnPath
     value: Any
+
+
+@dataclass(frozen=True)
+class EqualNullSafe(Filter):
+    """
+    Performs equality comparison, similar to EqualTo. However, this differs from EqualTo
+    in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
+    (rather than NULL) if one of the input is NULL and the other is not NULL.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class GreaterThan(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    greater than `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class GreaterThanOrEqual(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    greater than or equal to `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class LessThan(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    less than `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class LessThanOrEqual(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    less than or equal to `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class In(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to one of the values
+    in the array.
+    """
+
+    attribute: ColumnPath
+    value: Tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class IsNull(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to null.
+    """
+
+    attribute: ColumnPath
+
+
+@dataclass(frozen=True)
+class IsNotNull(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a non-null value.
+    """
+
+    attribute: ColumnPath
+
+
+@dataclass(frozen=True)
+class Not(Filter):
+    """
+    A filter that evaluates to `True` iff `child` is evaluated to `False`.
+    """
+
+    child: Filter
+
+
+@dataclass(frozen=True)
+class StringStartsWith(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that starts with `value`.
+    """
+
+    attribute: ColumnPath
+    value: str
+
+
+@dataclass(frozen=True)
+class StringEndsWith(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that ends with `value`.
+    """
+
+    attribute: ColumnPath
+    value: str
+
+
+@dataclass(frozen=True)
+class StringContains(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that contains the string `value`.
+    """
+
+    attribute: ColumnPath
+    value: str
 
 
 class InputPartition:

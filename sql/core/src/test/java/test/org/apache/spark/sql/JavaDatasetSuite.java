@@ -801,6 +801,14 @@ public class JavaDatasetSuite implements Serializable {
     Assertions.assertEquals(data, ds.collectAsList());
   }
 
+  @Test
+  public void testLocalTimeEncoder() {
+    Encoder<LocalTime> encoder = Encoders.LOCALTIME();
+    List<LocalTime> data = Arrays.asList(LocalTime.NOON, LocalTime.MIDNIGHT);
+    Dataset<LocalTime> ds = spark.createDataset(data, encoder);
+    Assertions.assertEquals(data, ds.collectAsList());
+  }
+
   public static class KryoSerializable {
     String value;
 

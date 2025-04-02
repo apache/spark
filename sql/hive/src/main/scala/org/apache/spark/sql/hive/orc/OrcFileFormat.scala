@@ -61,6 +61,10 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
   override def toString: String = "ORC"
 
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[OrcFileFormat]
+
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
