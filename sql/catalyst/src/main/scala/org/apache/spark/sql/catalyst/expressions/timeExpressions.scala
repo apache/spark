@@ -21,12 +21,11 @@ import java.time.DateTimeException
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, DoubleType, IntegerType, LongType, ObjectType, StringType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, IntegerType, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -195,46 +194,7 @@ object TryToTimeExpressionBuilder extends ExpressionBuilder {
 case class Time(expr: Expression)
   extends RuntimeReplaceable with ExpectsInputTypes {
 
-  private def invokeTimeParser(arguments: Seq[Expression] = children): Expression = {
-    Invoke(
-      targetObject = Literal.create(TimeParser(), ObjectType(classOf[TimeParser])),
-      functionName = "parse",
-      dataType = TimeType(),
-      arguments = arguments,
-      methodInputTypes = arguments.map(_.dataType)
-    )
-  }
-
-  override lazy val replacement: Expression = expr.dataType match {
-    // For timestamp type inputs, use direct timestamp handling
-    case TimestampType =>
-      Invoke(
-        targetObject = Literal.create(TimeParser(), ObjectType(classOf[TimeParser])),
-        functionName = "parse",
-        dataType = TimeType(),
-        arguments = Seq(expr),
-        methodInputTypes = Seq(expr.dataType)
-      )
-
-    // For numeric types, use TimeParser
-    case IntegerType | LongType | DoubleType =>
-      Invoke(
-        targetObject = Literal.create(TimeParser(), ObjectType(classOf[TimeParser])),
-        functionName = "parse",
-        dataType = TimeType(),
-        arguments = Seq(expr),
-        methodInputTypes = Seq(expr.dataType)
-      )
-
-    // For string types, delegate to to_time for consistency
-    case StringType =>
-      ToTime(expr, None)
-
-    // For other types, still try with TimeParser
-    case _ =>
-      invokeTimeParser()
-
-  }
+  override lazy val replacement: Expression = Cast(expr, TimeType())
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
@@ -244,67 +204,41 @@ case class Time(expr: Expression)
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): Expression = {
-    copy(expr = newChildren.head)
-  }
-}
-
-case class TimeParser() {
-  private def withErrorCondition[T](input: => Any)(f: => T): T = {
-    try f
-    catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.timeParseError(input, None, e)
-    }
-  }
-
-  def parse(value: Any): Long = withErrorCondition(value) {
-    value match {
-      // String input - parse as time
-      case s: UTF8String =>
-        try {
-          val formatter = TimeFormatter(None, isParsing = true)
-          formatter.parse(s.toString)
-        } catch {
-          case _: Exception =>
-            val stringVal = s.toString
-            // Attempt to parse as a time string
-            TimeFormatter(Some("HH:mm:ss.SSS"), isParsing = true).parse(stringVal)
-        }
-
-      // Timestamp input - extract time part
-      case timestamp: Long =>
-        // Extract hours, minutes, seconds from the timestamp
-        val localDate = DateTimeUtils.toJavaTimestamp(timestamp).toLocalDateTime()
-        val hour = localDate.getHour
-        val minute = localDate.getMinute
-        val second = localDate.getSecond
-        val nano = localDate.getNano
-
-        // Convert to microseconds format
-        val micros = (hour * 3600 + minute * 60 + second) * MICROS_PER_SECOND + nano / 1000
-        micros
-
-      // Numeric input - convert to time
-      case seconds: Int =>
-        seconds.toLong * MICROS_PER_SECOND
-
-      case d: Double =>
-        (d * MICROS_PER_SECOND).toLong
-
-      case _ =>
-        throw new IllegalArgumentException(s"Cannot convert ${value.getClass} to time")
-    }
+      copy(expr = newChildren.head)
   }
 }
 
 /**
  * Similar to Time but returns NULL instead of raising an error on invalid input.
  */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Extracts the time part from or converts the given expression to a time.
+    If the conversion fails, it returns NULL. The expression can be a string, timestamp, or numeric value.
+  """,
+  arguments = """
+    Arguments:
+      * expr - An expression that can be one of:
+          - A string representing a time
+          - A timestamp value
+          - A numeric value representing total seconds
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_('invalid');
+       NULL
+      > SELECT _FUNC_(timestamp'2020-04-30 12:25:13.45');
+       12:25:13.45
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
 case class TryTime(expr: Expression)
   extends RuntimeReplaceable with ExpectsInputTypes {
 
   override def replacement: Expression =
-    TryEval(Time(expr))
+    TryEval(Cast(expr, TimeType()))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
@@ -316,7 +250,7 @@ case class TryTime(expr: Expression)
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): Expression = {
-    copy(expr = newChildren.head)
+      copy(expr = newChildren.head)
   }
 }
 
@@ -357,7 +291,6 @@ object TryTimeExpressionBuilder extends ExpressionBuilder {
     }
   }
 }
-
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
