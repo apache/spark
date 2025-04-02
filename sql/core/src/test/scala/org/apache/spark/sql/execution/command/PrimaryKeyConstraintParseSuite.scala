@@ -81,6 +81,62 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       queryContext = Array(expectedContext))
   }
 
+  test("Replace table with primary key - table level") {
+    val sql = "REPLACE TABLE t (a INT, b STRING, PRIMARY KEY (a)) USING parquet"
+    val constraint = PrimaryKeyConstraint(columns = Seq("a"), name = "t_pk")
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with named primary key - table level") {
+    val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT pk1 PRIMARY KEY (a)) USING parquet"
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a"),
+      name = "pk1"
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with composite primary key - table level") {
+    val sql = "REPLACE TABLE t (a INT, b STRING, PRIMARY KEY (a, b)) USING parquet"
+    val constraint = PrimaryKeyConstraint(columns = Seq("a", "b"), name = "t_pk")
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with primary key - column level") {
+    val sql = "REPLACE TABLE t (a INT PRIMARY KEY, b STRING) USING parquet"
+    val constraint = PrimaryKeyConstraint(columns = Seq("a"), name = "t_pk")
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with named primary key - column level") {
+    val sql = "REPLACE TABLE t (a INT CONSTRAINT pk1 PRIMARY KEY, b STRING) USING parquet"
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("a"),
+      name = "pk1"
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with multiple primary keys should fail") {
+    val expectedContext = ExpectedContext(
+      fragment = "a INT PRIMARY KEY, b STRING, PRIMARY KEY (b)",
+      start = 17,
+      stop = 60
+    )
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan("REPLACE TABLE t (a INT PRIMARY KEY, b STRING, PRIMARY KEY (b)) USING parquet")
+      },
+      condition = "MULTIPLE_PRIMARY_KEYS",
+      parameters = Map.empty[String, String],
+      queryContext = Array(expectedContext))
+  }
+
   test("Add primary key constraint") {
     Seq(("", "c_pk"), ("CONSTRAINT pk1", "pk1")).foreach { case (constraintName, expectedName) =>
       val sql =

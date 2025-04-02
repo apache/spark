@@ -83,25 +83,6 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
     }
   }
 
-  test("Replace table with unnamed unique constraint") {
-    Seq(
-      "REPLACE TABLE t (a INT, b STRING, UNIQUE (a))",
-      "REPLACE TABLE t (a INT UNIQUE, b STRING)"
-    ).foreach { sql =>
-      val plan = parsePlan(sql)
-      plan match {
-        case c: ReplaceTable =>
-          val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
-          assert(tableSpec.constraints.size == 1)
-          assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_uk_a_[0-9a-zA-Z]{6}"))
-
-        case other =>
-          fail(s"Expected ReplaceTable, but got: $other")
-      }
-    }
-  }
-
   test("Add unnamed unique constraint") {
     val sql =
       """
@@ -138,6 +119,85 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
     )
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
+  }
+
+  test("Replace table with unnamed unique constraint") {
+    Seq(
+      "REPLACE TABLE t (a INT, b STRING, UNIQUE (a))",
+      "REPLACE TABLE t (a INT UNIQUE, b STRING)"
+    ).foreach { sql =>
+      val plan = parsePlan(sql)
+      plan match {
+        case c: ReplaceTable =>
+          val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
+          assert(tableSpec.constraints.size == 1)
+          assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
+          assert(tableSpec.constraints.head.name.matches("t_uk_a_[0-9a-zA-Z]{6}"))
+
+        case other =>
+          fail(s"Expected ReplaceTable, but got: $other")
+      }
+    }
+  }
+
+  test("Replace table with composite unique constraint - table level") {
+    Seq(
+      "REPLACE TABLE t (a INT, b STRING, UNIQUE (a, b))",
+      "REPLACE TABLE t (a INT, b STRING, UNIQUE (b, a))"
+    ).foreach { sql =>
+      val plan = parsePlan(sql)
+      plan match {
+        case c: ReplaceTable =>
+          val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
+          assert(tableSpec.constraints.size == 1)
+          assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
+          assert(tableSpec.constraints.head.name.matches("t_uk_a_b_[0-9a-zA-Z]{6}"))
+
+        case other =>
+          fail(s"Expected ReplaceTable, but got: $other")
+      }
+    }
+  }
+
+  test("Replace table with multiple unique constraints") {
+    Seq(
+      "REPLACE TABLE t (a INT UNIQUE, b STRING, UNIQUE (b))",
+      "REPLACE TABLE t (a INT, UNIQUE (a), b STRING UNIQUE)"
+    ).foreach { sql =>
+      val plan = parsePlan(sql)
+      plan match {
+        case c: ReplaceTable =>
+          val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
+          assert(tableSpec.constraints.size == 2)
+          assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
+          assert(tableSpec.constraints.head.name.matches("t_uk_a_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.last.isInstanceOf[UniqueConstraint])
+          assert(tableSpec.constraints.last.name.matches("t_uk_b_[0-9a-zA-Z]{6}"))
+
+        case other =>
+          fail(s"Expected ReplaceTable, but got: $other")
+      }
+    }
+  }
+
+  test("Replace table with named unique constraint - table level") {
+    val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT uk1 UNIQUE (a)) USING parquet"
+    val constraint = UniqueConstraint(
+      columns = Seq("a"),
+      name = "uk1"
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with named unique constraint - column level") {
+    val sql = "REPLACE TABLE t (a INT CONSTRAINT uk1 UNIQUE, b STRING) USING parquet"
+    val constraint = UniqueConstraint(
+      columns = Seq("a"),
+      name = "uk1"
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
   }
 
   test("Add unique constraint") {
