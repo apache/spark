@@ -21,7 +21,6 @@ import java.io.{DataInputStream, DataOutputStream, EOFException, File, InputStre
 import java.net.{InetAddress, InetSocketAddress, SocketException, StandardProtocolFamily, UnixDomainSocketAddress}
 import java.net.SocketTimeoutException
 import java.nio.channels._
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Arrays
 import java.util.UUID
 import java.util.concurrent.TimeUnit

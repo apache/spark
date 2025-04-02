@@ -76,7 +76,7 @@ private[spark] object Python {
       "is only effective for Spark Classic.")
     .version("4.1.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   private val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY = "spark.python.worker.idleTimeoutSeconds"
   private val PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY = "spark.python.worker.killOnIdleTimeout"
