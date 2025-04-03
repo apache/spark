@@ -266,7 +266,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[CheckConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_chk_a0_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_chk_a_gt_0_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected CreateTable, but got: $other")
@@ -276,8 +276,8 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Replace table with unnamed check constraint") {
     Seq(
-      "REPLACE TABLE t (a INT, b STRING, CHECK (a > 0))",
-      "REPLACE TABLE t (a INT CHECK (a > 0), b STRING)"
+      "REPLACE TABLE t (a INT, b STRING, CHECK (a < 0))",
+      "REPLACE TABLE t (a INT CHECK (a < 0), b STRING)"
     ).foreach { sql =>
       val plan = parsePlan(sql)
       plan match {
@@ -285,7 +285,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[CheckConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_chk_a0_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_chk_a_lt_0_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected ReplaceTable, but got: $other")
@@ -296,7 +296,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Add unnamed check constraint") {
     val sql =
       """
-        |ALTER TABLE a.b.c ADD CHECK (d > 0)
+        |ALTER TABLE a.b.c ADD CHECK (d != 0)
         |""".stripMargin
     val plan = parsePlan(sql)
     plan match {
@@ -304,7 +304,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         val table = a.table.asInstanceOf[UnresolvedTable]
         assert(table.multipartIdentifier == Seq("a", "b", "c"))
         assert(a.tableConstraint.isInstanceOf[CheckConstraint])
-        assert(a.tableConstraint.name.matches("c_chk_d0_[0-9a-zA-Z]{6}"))
+        assert(a.tableConstraint.name.matches("c_chk_d_ne_0_[0-9a-zA-Z]{6}"))
 
       case other =>
         fail(s"Expected AddConstraint, but got: $other")
