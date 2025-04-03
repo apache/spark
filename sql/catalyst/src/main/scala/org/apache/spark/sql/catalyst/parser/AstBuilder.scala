@@ -4864,7 +4864,8 @@ class AstBuilder extends DataTypeAstBuilder
         bucketSpec.map(_.asTransform) ++
         clusterBySpec.map(_.asTransform)
 
-    withIdentClause(identifierContext, identifiers => {
+    val asSelectPlan = Option(ctx.query).map(plan).toSeq
+    withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
       val namedConstraints =
         constraints.map(c => c.generateConstraintNameIfNeeded(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
@@ -4872,7 +4873,7 @@ class AstBuilder extends DataTypeAstBuilder
       val identifier = withOrigin(identifierContext) {
         UnresolvedIdentifier(identifiers)
       }
-      Option(ctx.query).map(plan) match {
+      otherPlans.headOption match {
         case Some(_) if columns.nonEmpty =>
           operationNotAllowed(
             "Schema may not be specified in a Create Table As Select (CTAS) statement",
@@ -4942,7 +4943,8 @@ class AstBuilder extends DataTypeAstBuilder
         clusterBySpec.map(_.asTransform)
 
     val identifierContext = ctx.replaceTableHeader().identifierReference()
-    withIdentClause(identifierContext, identifiers => {
+    val asSelectPlan = Option(ctx.query).map(plan).toSeq
+    withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
       val namedConstraints =
         constraints.map(c => c.generateConstraintNameIfNeeded(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
@@ -4950,7 +4952,7 @@ class AstBuilder extends DataTypeAstBuilder
       val identifier = withOrigin(identifierContext) {
         UnresolvedIdentifier(identifiers)
       }
-      Option(ctx.query).map(plan) match {
+      otherPlans.headOption match {
         case Some(_) if columns.nonEmpty =>
           operationNotAllowed(
             "Schema may not be specified in a Replace Table As Select (RTAS) statement",
