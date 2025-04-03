@@ -1986,10 +1986,11 @@ def main(infile, outfile):
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)
         boundPort = read_int(infile)
+        secret = None
         if boundPort == -1:
             boundPort = utf8_deserializer.loads(infile)
-
-        secret = UTF8Deserializer().loads(infile)
+        else:
+            secret = UTF8Deserializer().loads(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)

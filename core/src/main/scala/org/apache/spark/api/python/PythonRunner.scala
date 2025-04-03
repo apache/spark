@@ -418,7 +418,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val secret = if (isBarrier && !isUnixDomainSock) {
           authHelper.secret
         } else {
-          ""
+          null
         }
         if (isBarrier) {
           // Close ServerSocket on task completion.
@@ -446,9 +446,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           dataOut.writeInt(0)
         }
         // Write out the TaskContextInfo
-        val secretBytes = secret.getBytes(UTF_8)
-        dataOut.writeInt(secretBytes.length)
-        dataOut.write(secretBytes, 0, secretBytes.length)
+        if (secret != null) {
+          val secretBytes = secret.getBytes(UTF_8)
+          dataOut.writeInt(secretBytes.length)
+          dataOut.write(secretBytes, 0, secretBytes.length)
+        }
         dataOut.writeInt(context.stageId())
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
