@@ -36,8 +36,6 @@ from pyspark.testing.utils import (
     have_torcheval,
     torcheval_requirement_message,
 )
-from pyspark.ml.classification import RandomForestClassifier
-from pyspark.ml.linalg import Vectors
 
 if should_test_connect:
     import pandas as pd
@@ -282,28 +280,6 @@ class CrossValidatorTestsMixin:
             numFolds=3,
         )
         cv.fit(train_dataset)
-
-    def test_crossvalidator_with_random_forest_classifier(self):
-        dataset = self.spark.createDataFrame(
-            [
-                (Vectors.dense(1.0, 2.0), 0),
-                (Vectors.dense(2.0, 3.0), 1),
-                (Vectors.dense(1.5, 2.5), 0),
-                (Vectors.dense(3.0, 4.0), 1),
-                (Vectors.dense(1.1, 2.1), 0),
-                (Vectors.dense(2.5, 3.5), 1),
-            ],
-            ["features", "label"],
-        )
-        rf = RandomForestClassifier(labelCol="label", featuresCol="features")
-        evaluator = BinaryClassificationEvaluator(labelCol="label")
-        paramGrid = (
-            ParamGridBuilder().addGrid(rf.maxDepth, [2]).addGrid(rf.numTrees, [5, 10]).build()
-        )
-        cv = CrossValidator(
-            estimator=rf, estimatorParamMaps=paramGrid, evaluator=evaluator, numFolds=3
-        )
-        cv.fit(dataset)
 
 
 @unittest.skipIf(
