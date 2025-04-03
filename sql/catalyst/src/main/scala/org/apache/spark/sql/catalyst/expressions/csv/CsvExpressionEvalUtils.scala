@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.csv.{CSVInferSchema, CSVOptions, UnivocityP
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{DataType, NullType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -65,6 +65,11 @@ case class CsvToStructsEvaluator(
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
+    }
+    if (parsedOptions.singleVariantColumn.isDefined) {
+      if (nullableSchema.length != 1 || nullableSchema.head.dataType != VariantType) {
+        throw QueryCompilationErrors.invalidSingleVariantColumn()
+      }
     }
     ExprUtils.verifyColumnNameOfCorruptRecord(
       nullableSchema,

@@ -91,7 +91,8 @@ case class UnionLoopExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"))
+    "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"),
+    "numAnchorOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of anchor output rows"))
 
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
@@ -123,6 +124,7 @@ case class UnionLoopExec(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val numOutputRows = longMetric("numOutputRows")
     val numIterations = longMetric("numIterations")
+    val numAnchorOutputRows = longMetric("numAnchorOutputRows")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
 
@@ -135,6 +137,8 @@ case class UnionLoopExec(
     val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
+
+    numAnchorOutputRows += prevCount
 
     var currentLevel = 1
 
@@ -177,7 +181,6 @@ case class UnionLoopExec(
       // Update metrics
       numOutputRows += prevCount
       numIterations += 1
-      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
       if (!limitReached) {
         // the current plan is created by substituting UnionLoopRef node with the project node of
@@ -199,6 +202,8 @@ case class UnionLoopExec(
         currentLevel += 1
       }
     }
+
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
     if (unionChildren.isEmpty) {
       new EmptyRDD[InternalRow](sparkContext)

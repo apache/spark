@@ -122,5 +122,6 @@ node_modules
 
 # For Antlr
 sql/api/gen/
+sql/api/src/main/gen/
 sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
 sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/

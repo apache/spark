@@ -116,4 +116,32 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
       }
     }
   }
+
+  test("SPARK-51537 Executor isolation session classloader inherits from " +
+    "default session classloader") {
+    assume(jarURL2 != null)
+    sc = new SparkContext(new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set("spark.jars", jar2))
+
+    // TestHelloV2's test method returns '2'
+    val artifactSetWithHelloV2 = new JobArtifactSet(
+      Some(JobArtifactState(uuid = "hello2", replClassDirUri = None)),
+      jars = Map.empty,
+      files = Map.empty,
+      archives = Map.empty
+    )
+
+    JobArtifactSet.withActiveJobArtifactState(artifactSetWithHelloV2.state.get) {
+      sc.parallelize(1 to 1).foreach { i =>
+        val cls = Utils.classForName("com.example.Hello$")
+        val module = cls.getField("MODULE$").get(null)
+        val result = cls.getMethod("test").invoke(module).asInstanceOf[Int]
+        if (result != 2) {
+          throw new RuntimeException("Unexpected result: " + result)
+        }
+      }
+    }
+  }
 }

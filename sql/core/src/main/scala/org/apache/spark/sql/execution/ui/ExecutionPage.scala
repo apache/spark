@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
@@ -33,6 +34,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private val pandasOnSparkConfPrefix = "pandas_on_Spark."
 
   private val sqlStore = parent.sqlStore
+  private val groupSubExecutionEnabled = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)
+
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val parameterExecutionId = request.getParameter("id")
@@ -79,6 +82,22 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
                     {executionUIData.rootExecutionId}
                   </a>
                 </li>
+              }
+            }
+            {
+              if (groupSubExecutionEnabled) {
+                val subExecutions = sqlStore.executionsList()
+                  .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
+                if (subExecutions.nonEmpty) {
+                  <li>
+                    <strong>Sub Executions: </strong>
+                    {
+                      subExecutions.map { e =>
+                        <a href={"?id=" + e.executionId}>{e.executionId}</a><span>&nbsp;</span>
+                      }
+                    }
+                  </li>
+                }
               }
             }
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}

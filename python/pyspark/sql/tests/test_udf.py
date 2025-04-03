@@ -45,9 +45,8 @@ from pyspark.sql.types import (
     VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
+from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
-    ExamplePoint,
-    ExamplePointUDT,
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,

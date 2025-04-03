@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.{mutable, Map}
+import scala.math._
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -516,7 +517,9 @@ class RocksDBFileManager(
         logInfo(log"Estimated maximum version is " +
           log"${MDC(LogKeys.MAX_SEEN_VERSION, maxSeenVersion.get)}" +
           log" and minimum version is ${MDC(LogKeys.MIN_SEEN_VERSION, minSeenVersion)}")
-        val versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
+        // If the number of versions to delete is negative, that means that none of the versions
+        // are eligible for deletion and we set the variable to 0
+        val versionsToDelete = max(maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain, 0)
         if (versionsToDelete < minVersionsToDelete) {
           logInfo(log"Skipping deleting files." +
             log" Need at least ${MDC(LogKeys.MIN_VERSIONS_TO_DELETE, minVersionsToDelete)}" +
