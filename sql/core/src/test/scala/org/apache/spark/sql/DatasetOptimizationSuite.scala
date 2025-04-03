@@ -32,10 +32,11 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
     val ds = data.toDS().map(t => (t._1, t._2 + 1)).select("_1")
-    val serializer = ds.queryExecution.optimizedPlan.collectFirst {
+    val serializerOpt = ds.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.get
-    assert(serializer.serializer.size == 1)
+    }
+    assert(serializerOpt.isDefined)
+    assert(serializerOpt.get.serializer.size == 1)
     checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
 
