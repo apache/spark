@@ -243,8 +243,8 @@ object FailureInjectionRocksDBStateStoreProvider {
           codecName,
           loggingId = loggingId) {
           override def getFileSystem(
-                                      myDfsRootDir: String,
-                                      myHadoopConf: Configuration): FileSystem = {
+              myDfsRootDir: String,
+              myHadoopConf: Configuration): FileSystem = {
             new FailureInjectionFileSystem(new Path(myDfsRootDir).getFileSystem(myHadoopConf))
           }
         }
