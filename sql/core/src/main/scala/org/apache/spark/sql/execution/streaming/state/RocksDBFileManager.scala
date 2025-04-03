@@ -290,8 +290,8 @@ class RocksDBFileManager(
       colFamilyIdMapping, colFamilyTypeMapping, maxColumnFamilyId)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
-    logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}")
-    logDebug(log"Metadata:\n\t${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
+    logDebug(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
+      log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
     if (version <= 1 && numKeys <= 0) {
       // If we're writing the initial version and there's no data, we have to explicitly initialize
@@ -340,8 +340,8 @@ class RocksDBFileManager(
       // Copy the necessary immutable files
       val metadataFile = localMetadataFile(localDir)
       val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
-      logInfo(log"Read metadata for version ${MDC(LogKeys.VERSION_NUM, version)}")
-      logDebug(log"Metadata:\n\t${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
+      logInfo(log"Read metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
+        log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
       loadImmutableFilesFromDfs(metadata.immutableFiles, localDir, rocksDBFileMapping, version)
       versionToRocksDBFiles.put((version, checkpointUniqueId), metadata.immutableFiles)
       metadataFile.delete()
