@@ -551,6 +551,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       val snapshotCurrentVersionMap = readSnapshotFile(version)
       if (snapshotCurrentVersionMap.isDefined) {
         synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
+
+        // Report the loaded snapshot's version to the coordinator
+        reportSnapshotVersionToCoordinator(version)
+
         return snapshotCurrentVersionMap.get
       }
 
@@ -580,6 +584,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
 
       synchronized { putStateIntoStateCacheMap(version, resultMap) }
+
+      // Report the last available snapshot's version to the coordinator
+      reportSnapshotVersionToCoordinator(lastAvailableVersion)
+
       resultMap
     }
 
@@ -1038,14 +1046,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     logDebug(s"Loading snapshot at version $snapshotVersion and apply delta files to version " +
       s"$endVersion takes $elapsedMs ms.")
 
-    // Report snapshot version loaded to the coordinator, and include the store ID with the message
-    if (storeConf.reportSnapshotUploadLag) {
-      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
-      // Since the snapshot was uploaded at a previous time, we set the upload timestamp as 0ms.
-      StateStoreProvider.coordinatorRef.foreach(
-        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), snapshotVersion, 0L))
-    }
-
     result
   }
 
@@ -1062,6 +1062,19 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keySchema, valueSchema)
+  }
+
+  /** Reports to the coordinator the store's loaded snapshot version */
+  private def reportSnapshotVersionToCoordinator(version: Long): Unit = {
+    // Skip reporting if the snapshot version is 0, which means there are no snapshots
+    if (storeConf.reportSnapshotUploadLag && version > 0L) {
+      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+      // Since this is not the time when the snapshot was uploaded, we'll use 0ms to
+      // prevent the coordinator to use time lag checks for this store.
+      StateStoreProvider.coordinatorRef.foreach(
+        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), version, 0L)
+      )
+    }
   }
 }
 
