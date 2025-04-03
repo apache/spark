@@ -3949,9 +3949,9 @@
   },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
-      "Multiple primary keys are defined. Please ensure that only one primary key is defined for the table."
+      "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
     ],
-    "sqlState" : "42K0E"
+    "sqlState" : "42P16"
   },
   "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
     "message" : [

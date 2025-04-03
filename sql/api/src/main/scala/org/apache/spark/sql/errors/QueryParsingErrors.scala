@@ -801,7 +801,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def multiplePrimaryKeysError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "MULTIPLE_PRIMARY_KEYS", ctx)
+  def multiplePrimaryKeysError(ctx: ParserRuleContext, columns: String): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_PRIMARY_KEYS",
+      messageParameters = Map("columns" -> columns),
+      ctx)
   }
 }

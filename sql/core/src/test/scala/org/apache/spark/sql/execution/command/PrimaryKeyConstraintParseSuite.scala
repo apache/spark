@@ -68,16 +68,16 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Create table with multiple primary keys should fail") {
     val expectedContext = ExpectedContext(
-      fragment = "a INT PRIMARY KEY, b STRING, PRIMARY KEY (b)",
+      fragment = "a INT PRIMARY KEY, b STRING, PRIMARY KEY (a, b)",
       start = 16,
-      stop = 59
+      stop = 62
     )
     checkError(
       exception = intercept[ParseException] {
-        parsePlan("CREATE TABLE t (a INT PRIMARY KEY, b STRING, PRIMARY KEY (b)) USING parquet")
+        parsePlan("CREATE TABLE t (a INT PRIMARY KEY, b STRING, PRIMARY KEY (a, b)) USING parquet")
       },
       condition = "MULTIPLE_PRIMARY_KEYS",
-      parameters = Map.empty[String, String],
+      parameters = Map("columns" -> "(a), (a, b)"),
       queryContext = Array(expectedContext))
   }
 
@@ -133,7 +133,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
         parsePlan("REPLACE TABLE t (a INT PRIMARY KEY, b STRING, PRIMARY KEY (b)) USING parquet")
       },
       condition = "MULTIPLE_PRIMARY_KEYS",
-      parameters = Map.empty[String, String],
+      parameters = Map("columns" -> "(a), (b)"),
       queryContext = Array(expectedContext))
   }
 

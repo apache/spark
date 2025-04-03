@@ -30,12 +30,14 @@ trait TableConstraint {
   def characteristic: ConstraintCharacteristic
 
   /** Creates a new constraint with the given name
+   *
    * @param name Constraint name
    * @return New TableConstraint instance
    */
   def withName(name: String): TableConstraint
 
   /** Creates a new constraint with the given characteristic
+   *
    * @param c Constraint characteristic (ENFORCED, RELY)
    * @param ctx Parser context for error reporting
    * @return New TableConstraint instance
@@ -43,6 +45,7 @@ trait TableConstraint {
   def withCharacteristic(c: ConstraintCharacteristic, ctx: ParserRuleContext): TableConstraint
 
   /** Generates a constraint name if one is not provided
+   *
    * @param tableName Name of the table containing this constraint
    * @return TableConstraint with a generated name if original name was null/empty
    */

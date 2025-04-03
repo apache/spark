@@ -4801,7 +4801,13 @@ class AstBuilder extends DataTypeAstBuilder
       // check if there are multiple primary keys
       val primaryKeys = constraints.filter(_.isInstanceOf[PrimaryKeyConstraint])
       if (primaryKeys.size > 1) {
-        throw QueryParsingErrors.multiplePrimaryKeysError(ctx)
+        val primaryKeyColumns =
+          primaryKeys
+            .map(_.asInstanceOf[PrimaryKeyConstraint]
+            .columns
+            .mkString("(", ", ", ")"))
+            .mkString(", ")
+        throw QueryParsingErrors.multiplePrimaryKeysError(ctx, primaryKeyColumns)
       }
 
       (columnDefs.toSeq, constraints.toSeq)
