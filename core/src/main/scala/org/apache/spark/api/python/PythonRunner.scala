@@ -21,7 +21,6 @@ import java.io._
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, Channels, SelectionKey, ServerSocketChannel, SocketChannel}
-import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files => JavaFiles, Path}
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
@@ -415,11 +414,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             }
           }.start()
         }
-        val secret = if (isBarrier && !isUnixDomainSock) {
-          authHelper.secret
-        } else {
-          null
-        }
         if (isBarrier) {
           // Close ServerSocket on task completion.
           serverSocketChannel.foreach { server =>
@@ -440,17 +434,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             logDebug(s"Started ServerSocket on port $boundPort.")
             dataOut.writeBoolean(/* isBarrier = */true)
             dataOut.writeInt(boundPort)
+            PythonRDD.writeUTF(authHelper.secret, dataOut)
           }
         } else {
           dataOut.writeBoolean(/* isBarrier = */false)
-          dataOut.writeInt(0)
         }
         // Write out the TaskContextInfo
-        if (secret != null) {
-          val secretBytes = secret.getBytes(UTF_8)
-          dataOut.writeInt(secretBytes.length)
-          dataOut.write(secretBytes, 0, secretBytes.length)
-        }
         dataOut.writeInt(context.stageId())
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
