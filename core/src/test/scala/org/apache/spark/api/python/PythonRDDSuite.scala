@@ -18,6 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{ByteArrayOutputStream, DataOutputStream, File}
+import java.net.{InetAddress, InetSocketAddress}
 import java.nio.channels.SocketChannel
 import java.nio.charset.StandardCharsets
 import java.util
@@ -33,6 +34,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer}
 import org.apache.spark.util.Utils
@@ -77,9 +79,12 @@ class PythonRDDSuite extends SparkFunSuite with LocalSparkContext {
 
   test("python server error handling") {
     val conf = new SparkConf()
+    conf.set(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key, false.toString)
     val authHelper = new SocketAuthHelper(conf)
     val errorServer = new ExceptionPythonServer(authHelper)
-    val socketChannel = SocketChannel.open()
+    val socketChannel = SocketChannel.open(
+      new InetSocketAddress(InetAddress.getLoopbackAddress(),
+        errorServer.connInfo.asInstanceOf[Int]))
     authHelper.authToServer(socketChannel)
     val ex = intercept[Exception] { errorServer.getResult(Duration(1, "second")) }
     assert(ex.getCause().getMessage().contains("exception within handleConnection"))
