@@ -32,9 +32,9 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
     val ds = data.toDS().map(t => (t._1, t._2 + 1)).select("_1")
-    val serializer = ds.queryExecution.optimizedPlan.collect {
+    val serializer = ds.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.head
+    }.get
     assert(serializer.serializer.size == 1)
     checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
@@ -45,9 +45,9 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   // serializers. The first `structFields` is aligned with first serializer and ditto
   // for other `structFields`.
   private def testSerializer(df: DataFrame, structFields: Seq[Seq[String]]*): Unit = {
-    val serializer = df.queryExecution.optimizedPlan.collect {
+    val serializer = df.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.head
+    }.get
 
     def collectNamedStruct: PartialFunction[Expression, Seq[CreateNamedStruct]] = {
       case c: CreateNamedStruct => Seq(c)
