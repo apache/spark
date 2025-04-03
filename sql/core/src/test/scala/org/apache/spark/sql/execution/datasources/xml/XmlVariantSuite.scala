@@ -375,12 +375,13 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   private def createDSLDataFrame(
       fileName: String,
       singleVariantColumn: Option[String] = None,
-      schemaDDL: Option[String] = None): DataFrame = {
+      schemaDDL: Option[String] = None,
+      extraOptions: Map[String, String] = Map.empty): DataFrame = {
     assert(
       singleVariantColumn.isDefined || schemaDDL.isDefined,
       "Either singleVariantColumn or schema must be defined to ingest XML files as variants via DSL"
     )
-    var reader = spark.read.format("xml").options(baseOptions)
+    var reader = spark.read.format("xml").options(baseOptions ++ extraOptions)
     singleVariantColumn.foreach(
       singleVariantColumnName =>
         reader = reader.option("singleVariantColumn", singleVariantColumnName)
@@ -409,6 +410,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
+  // TODO: This should be allowed once we support variant ingestion with malformed record handling
   test("DSL: read XML files using both singleVariantColumn and schema should fail") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -423,7 +425,25 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  test("DSL: failing test") {}
+  test("DSL: test XSD validation") {
+    val df = createDSLDataFrame(
+      fileName = "basket_invalid.xml",
+      singleVariantColumn = Some("var"),
+      extraOptions = Map(
+        "rowTag" -> "basket",
+        "rowValidationXSDPath" -> getTestResourcePath(resDir + "basket.xsd").replace("file:/", "/")
+      )
+    )
+    checkAnswer(
+      df.select(variant_get(col("var"), "$", "string")),
+      Seq(
+        // The first row matches the XSD and thus is parsed as Variant successfully
+        Row("""{"entry":[{"key":1,"value":"fork"},{"key":2,"value":"cup"}]}"""),
+        // The second row fails the XSD validation and is not parsed
+        Row(null)
+      )
+    )
+  }
 
   // =======================
   // ====== SQL tests ======
