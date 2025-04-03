@@ -84,7 +84,6 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
     } else {
       ret
     }
-
   }
 
   override def renameTempFile(srcPath: Path, dstPath: Path,
@@ -188,14 +187,14 @@ class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
  */
 class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvider {
   override def createRocksDB(
-                              dfsRootDir: String,
-                              conf: RocksDBConf,
-                              localRootDir: File,
-                              hadoopConf: Configuration,
-                              loggingId: String,
-                              useColumnFamilies: Boolean,
-                              enableStateStoreCheckpointIds: Boolean,
-                              partitionId: Int): RocksDB = {
+      dfsRootDir: String,
+      conf: RocksDBConf,
+      localRootDir: File,
+      hadoopConf: Configuration,
+      loggingId: String,
+      useColumnFamilies: Boolean,
+      enableStateStoreCheckpointIds: Boolean,
+      partitionId: Int): RocksDB = {
     FailureInjectionRocksDBStateStoreProvider.createRocksDBWithFaultInjection(
       dfsRootDir,
       conf,
@@ -214,14 +213,14 @@ object FailureInjectionRocksDBStateStoreProvider {
    * we made RocksDB create a RocksDBFileManager but a different FileSystem here.
    * */
   def createRocksDBWithFaultInjection(
-                                       dfsRootDir: String,
-                                       conf: RocksDBConf,
-                                       localRootDir: File,
-                                       hadoopConf: Configuration,
-                                       loggingId: String,
-                                       useColumnFamilies: Boolean,
-                                       enableStateStoreCheckpointIds: Boolean,
-                                       partitionId: Int): RocksDB = {
+      dfsRootDir: String,
+      conf: RocksDBConf,
+      localRootDir: File,
+      hadoopConf: Configuration,
+      loggingId: String,
+      useColumnFamilies: Boolean,
+      enableStateStoreCheckpointIds: Boolean,
+      partitionId: Int): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf = conf,
@@ -233,18 +232,17 @@ object FailureInjectionRocksDBStateStoreProvider {
       partitionId = partitionId
     ) {
       override def createFileManager(
-                                      dfsRootDir: String,
-                                      localTempDir: File,
-                                      hadoopConf: Configuration,
-                                      codecName: String,
-                                      loggingId: String): RocksDBFileManager = {
+          dfsRootDir: String,
+          localTempDir: File,
+          hadoopConf: Configuration,
+          codecName: String,
+          loggingId: String): RocksDBFileManager = {
         new RocksDBFileManager(
           dfsRootDir,
           localTempDir,
           hadoopConf,
           codecName,
-          loggingId = loggingId
-        ) {
+          loggingId = loggingId) {
           override def getFileSystem(
                                       myDfsRootDir: String,
                                       myHadoopConf: Configuration): FileSystem = {
