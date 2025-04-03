@@ -132,12 +132,12 @@ class RocksDBFileManager(
 
   import RocksDBImmutableFile._
 
-  protected def GetFileSystem(myDfsRootDir: String, myHadoopConf: Configuration) : FileSystem = {
+  protected def getFileSystem(myDfsRootDir: String, myHadoopConf: Configuration) : FileSystem = {
     new Path(myDfsRootDir).getFileSystem(myHadoopConf)
   }
 
   private lazy val fm = CheckpointFileManager.create(new Path(dfsRootDir), hadoopConf)
-  private val fs = GetFileSystem(dfsRootDir, hadoopConf)
+  private val fs = getFileSystem(dfsRootDir, hadoopConf)
   private val onlyZipFiles = new PathFilter {
     override def accept(path: Path): Boolean = path.toString.endsWith(".zip")
   }

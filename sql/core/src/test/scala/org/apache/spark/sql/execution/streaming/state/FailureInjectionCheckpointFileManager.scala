@@ -28,8 +28,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
 
-/** A wrapper file output stream that will throw exception in close() and put the underlying
- * stream to FailureInjectionFileSystem.delayedStreams  */
+/**
+ * A wrapper file output stream that will throw exception in close() and put the underlying
+ * stream to FailureInjectionFileSystem.delayedStreams
+ * @param stream stream to be wrapped
+ */
 class DelayCloseFSDataOutputStreamWrapper(stream: CancellableFSDataOutputStream)
   extends CancellableFSDataOutputStream(stream.getWrappedStream) with Logging {
   val originalStream: CancellableFSDataOutputStream = stream
@@ -49,10 +52,14 @@ class DelayCloseFSDataOutputStreamWrapper(stream: CancellableFSDataOutputStream)
   override def cancel(): Unit = {}
 }
 
-/** A wrapper checkpoint file manager that might inject functions in some function calls.
+/**
+ * A wrapper checkpoint file manager that might inject functions in some function calls.
  * Used in unit tests to simulate failure scenarios.
  * This can be put into SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS to provide failure
  * injection behavior.
+ *
+ * @param path
+ * @param hadoopConf
  */
 class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) with Logging {
@@ -119,8 +126,11 @@ object FailureInjectionFileSystem {
   var delayedStreams: Seq[CancellableFSDataOutputStream] = Seq.empty
 }
 
-/** A wrapper FileSystem that inject some failures. This class can used to replace the
- * FileSystem in RocksDBFileManager. */
+/**
+ * A wrapper FileSystem that inject some failures. This class can used to replace the
+ * FileSystem in RocksDBFileManager.
+ * @param innerFs  the FileSystem to be wrapped
+ */
 class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
 
   override def getConf: Configuration = innerFs.getConf
@@ -169,10 +179,12 @@ class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
   }
 }
 
-/** A rapper RocksDB State Store Provider that replaces FileSystem used in RocksDBFileManager
- * to FailureInjectionFileSystem. */
+/**
+ * A rapper RocksDB State Store Provider that replaces FileSystem used in RocksDBFileManager
+ * to FailureInjectionFileSystem.
+ */
 class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvider {
-  override def CreateRocksDB(
+  override def createRocksDB(
                               dfsRootDir: String,
                               conf: RocksDBConf,
                               localRootDir: File,
@@ -194,8 +206,10 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
 }
 
 object FailureInjectionRocksDBStateStoreProvider {
-  /** RocksDBFieManager is created by RocksDB class where it creates a default FileSystem.
-   * we made RocksDB create a RocksDBFileManager but a different FileSystem here. */
+  /**
+   * RocksDBFieManager is created by RocksDB class where it creates a default FileSystem.
+   * we made RocksDB create a RocksDBFileManager but a different FileSystem here.
+   * */
   def createRocksDBWithFaultInjection(
                                        dfsRootDir: String,
                                        conf: RocksDBConf,
@@ -215,7 +229,7 @@ object FailureInjectionRocksDBStateStoreProvider {
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       partitionId = partitionId
     ) {
-      override def CreateFileManager(
+      override def createFileManager(
                                       dfsRootDir: String,
                                       localTempDir: File,
                                       hadoopConf: Configuration,
@@ -228,7 +242,7 @@ object FailureInjectionRocksDBStateStoreProvider {
           codecName,
           loggingId = loggingId
         ) {
-          override def GetFileSystem(
+          override def getFileSystem(
                                       myDfsRootDir: String,
                                       myHadoopConf: Configuration): FileSystem = {
             new FailureInjectionFileSystem(new Path(myDfsRootDir).getFileSystem(myHadoopConf))

@@ -524,7 +524,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var stateStoreEncoding: String = _
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
 
-  protected def CreateRocksDB(
+  protected def createRocksDB(
       dfsRootDir: String,
       conf: RocksDBConf,
       localRootDir: File,
@@ -550,7 +550,7 @@ private[sql] class RocksDBStateStoreProvider
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    CreateRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+    createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId)
   }
 

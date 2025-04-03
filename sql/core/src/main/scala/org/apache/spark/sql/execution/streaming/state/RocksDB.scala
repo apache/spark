@@ -136,7 +136,7 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
-  protected def CreateFileManager(
+  protected def createFileManager(
       dfsRootDir: String,
       localTempDir: File,
       hadoopConf: Configuration,
@@ -151,7 +151,7 @@ class RocksDB(
     )
   }
 
-  private val fileManager = CreateFileManager(dfsRootDir, createTempDir("fileManager"),
+  private val fileManager = createFileManager(dfsRootDir, createTempDir("fileManager"),
     hadoopConf, conf.compressionCodec, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
