@@ -748,7 +748,7 @@ def local_connect_and_auth(
     tuple
         with (sockfile, sock)
     """
-    is_unix_domain_socket = str(conn_info) and auth_secret is None
+    is_unix_domain_socket = isinstance(conn_info, str) and auth_secret is None
     if is_unix_domain_socket:
         sock_path = conn_info
         assert isinstance(sock_path, str)
