@@ -97,7 +97,7 @@ case class XmlToStructs(
   }
 
   @transient
-  lazy val evaluator: XmlToStructsEvaluator =
+  private lazy val evaluator: XmlToStructsEvaluator =
     XmlToStructsEvaluator(options, nullableSchema, nameOfCorruptRecord, timeZoneId, child)
 
   private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)

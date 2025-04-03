@@ -137,6 +137,7 @@ case class XmlToStructsEvaluator(
   private lazy val converter =
     (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
 
+  // Parser that parse XML strings as internal rows
   @transient
   private lazy val parser = {
     val parsedOptions = new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord)

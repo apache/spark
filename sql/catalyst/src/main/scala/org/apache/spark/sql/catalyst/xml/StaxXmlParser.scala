@@ -145,9 +145,11 @@ class StaxXmlParser(
       }
       options.singleVariantColumn match {
         case Some(_) =>
+          // If the singleVariantColumn is specified, parse the entire xml string as a Variant
           val v = StaxXmlParser.parseVariant(xml, options)
           Some(InternalRow(v))
         case _ =>
+          // Otherwise, parse the xml string as Structs
           val parser = StaxXmlParserUtils.filteredReader(xml)
           val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
           val result = Some(convertObject(parser, schema, rootAttributes))
@@ -913,6 +915,9 @@ object StaxXmlParser {
     }
   }
 
+  /**
+   * Parse the input XML string as a Varaint value
+   */
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
     val rootEvent =
@@ -924,6 +929,16 @@ object StaxXmlParser {
     v
   }
 
+  /**
+   * Parse an XML element from the XML event stream into a Variant.
+   * This method transforms the XML element along with its attributes and child elements
+   * into a hierarchical Variant data structure that preserves the XML structure.
+   *
+   * @param parser The XML event stream reader positioned after the start element
+   * @param attributes The attributes of the current XML element to be included in the Variant
+   * @param options Configuration options that control how XML is parsed into Variants
+   * @return A Variant representing the XML element with its attributes and child content
+   */
   def convertVariant(
       parser: XMLEventReader,
       attributes: Array[Attribute],
@@ -932,7 +947,7 @@ object StaxXmlParser {
     val rootBuilder = new VariantBuilder(false)
     val start = rootBuilder.getWritePos
 
-    // Map to store the variants of all child fields
+    // Map to store the variant values of all child fields
     // Each field could have multiple entries, which means it's an array
     val fieldToVariants = collection.mutable.TreeMap.empty[String, java.util.ArrayList[Variant]]
 
@@ -948,7 +963,8 @@ object StaxXmlParser {
     while (!shouldStop) {
       parser.nextEvent() match {
         case s: StartElement =>
-          // For each nested field, convert it to a variant and track it in the fieldsToVariants map
+          // For each child element, convert it to a variant and keep track of it in
+          // fieldsToVariants
           val attributes = s.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
           val field = StaxXmlParserUtils.getName(s.asStartElement.getName, options)
           addOrUpdateVariantFields(
@@ -962,12 +978,16 @@ object StaxXmlParser {
           // the field key
           val builder = new VariantBuilder(false)
           appendXMLCharacterToVariant(builder, c.getData, options)
-          addOrUpdateVariantFields(fieldToVariants, options.valueTag, builder.result())
+          addOrUpdateVariantFields(
+            fieldToVariants = fieldToVariants,
+            field = options.valueTag,
+            variant = builder.result()
+          )
 
         case _: EndElement =>
           if (fieldToVariants.nonEmpty) {
-            val onlyValueTagFields = fieldToVariants.keySet.forall(_ == options.valueTag)
-            if (onlyValueTagFields) {
+            val onlyValueTagField = fieldToVariants.keySet.forall(_ == options.valueTag)
+            if (onlyValueTagField) {
               // If the element only has value tag field, parse the element as a variant primitive
               rootBuilder.appendVariant(fieldToVariants(options.valueTag).get(0))
             } else {
@@ -1003,7 +1023,8 @@ object StaxXmlParser {
                   rootBuilder.appendVariant(fieldValue)
               }
 
-              // Finish writing the root element as an object if it has more than one nested fields
+              // Finish writing the root element as an object if it has more than one child element
+              // or attribute
               rootBuilder.finishWritingObject(start, rootFieldEntries)
             }
           }
@@ -1015,7 +1036,7 @@ object StaxXmlParser {
       }
     }
 
-    // If the element is empty, we treat it as a null field
+    // If the element is empty, we treat it as a Variant null
     if (rootBuilder.getWritePos == start) {
       if (options.nullValue == null) {
         rootBuilder.appendNull()
@@ -1028,8 +1049,8 @@ object StaxXmlParser {
   }
 
   /**
-   * Add or update the given field and its corresponding variant in the fieldToVariants map. If
-   * a field has multiple variants, it will be parsed as a Variant array.
+   * Add or update the given field and its corresponding variant values in the fieldToVariants map.
+   * If a field has multiple variant values, it will be parsed as a Variant array.
    *
    * This method handles the case sensitivity of the field names based on the SQLConf setting.
    */
