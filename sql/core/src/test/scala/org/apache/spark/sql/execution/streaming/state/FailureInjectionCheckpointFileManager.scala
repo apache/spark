@@ -86,8 +86,7 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
     }
   }
 
-  override def renameTempFile(srcPath: Path, dstPath: Path,
-                              overwriteIfPossible: Boolean): Unit = {
+  override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (FailureInjectionFileSystem.allowOverwriteInRename || !fs.exists(dstPath)) {
       super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
     } else {
