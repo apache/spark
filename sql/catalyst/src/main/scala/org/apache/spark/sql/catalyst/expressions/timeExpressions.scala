@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
@@ -192,20 +193,28 @@ object TryToTimeExpressionBuilder extends ExpressionBuilder {
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class Time(expr: Expression)
-  extends RuntimeReplaceable with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes {
 
-  override lazy val replacement: Expression = Cast(expr, TimeType())
+  override def child: Expression = expr
+
+  override def dataType: DataType = TimeType()
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def prettyName: String = "time"
 
-  override def children: Seq[Expression] = Seq(expr)
-
-  override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
-      copy(expr = newChildren.head)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val castExpr = Cast(child, TimeType())
+    castExpr.genCode(ctx)
   }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    Cast(child, TimeType()).eval(null)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression):
+    Expression = copy(expr = newChild)
+
 }
 
 /**
@@ -214,7 +223,8 @@ case class Time(expr: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Extracts the time part from or converts the given expression to a time.
-    If the conversion fails, it returns NULL. The expression can be a string, timestamp, or numeric value.
+    If the conversion fails, it returns NULL. The expression can be a string, timestamp,
+    or numeric value.
   """,
   arguments = """
     Arguments:
@@ -235,22 +245,64 @@ case class Time(expr: Expression)
   group = "datetime_funcs",
   since = "4.1.0")
 case class TryTime(expr: Expression)
-  extends RuntimeReplaceable with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes {
 
-  override def replacement: Expression =
-    TryEval(Cast(expr, TimeType()))
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def child: Expression = expr
 
   override def dataType: DataType = TimeType()
 
-  override def prettyName: String = "try_time"
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  override def children: Seq[Expression] = Seq(expr)
+  override def prettyName: String = "time"
 
-  override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
-      copy(expr = newChildren.head)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val castExpr = Cast(child, TimeType())
+    castExpr.genCode(ctx)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    Cast(child, TimeType()).eval(null)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression):
+  Expression = copy(expr = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Parses the `expr` expression to a time. If the parsing fails, it returns NULL.
+    The expression can be a string, timestamp, or numeric value.
+  """,
+  arguments = """
+    Arguments:
+      * expr - An expression that can be one of:
+          - A string representing a time
+          - A timestamp value
+          - A numeric value representing total seconds
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_('invalid time');
+       NULL
+      > SELECT _FUNC_(timestamp'2020-04-30 12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_(123);
+       00:02:03
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+object TimeExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      Time(expressions.head)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
+    }
   }
 }
 
