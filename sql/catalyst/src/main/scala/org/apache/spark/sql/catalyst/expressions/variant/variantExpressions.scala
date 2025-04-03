@@ -332,6 +332,8 @@ case class VariantGet(
       newPath: Expression): VariantGet = copy(child = newChild, path = newPath)
 
   override def withTimeZone(timeZoneId: String): VariantGet = copy(timeZoneId = Option(timeZoneId))
+
+  override def sql: String = s"$prettyName(${child.sql}, ${path.sql}, '${targetType.sql}')"
 }
 
 // Several parameters used by `VariantGet.cast`. Packed together to simplify parameter passing.
