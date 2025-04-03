@@ -331,7 +331,7 @@ class BarrierTaskContext(TaskContext):
     [1]
     """
 
-    _port: ClassVar[Optional[Union[str, int]]] = None
+    _conn_info: ClassVar[Optional[Union[str, int]]] = None
     _secret: ClassVar[Optional[str]] = None
 
     @classmethod

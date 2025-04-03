@@ -22,11 +22,13 @@ import java.nio.channels.{ServerSocketChannel, SocketChannel}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.util.Utils
 
 class SocketAuthHelperSuite extends SparkFunSuite {
 
   private val conf = new SparkConf()
+  conf.set(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key, false.toString)
   private val authHelper = new SocketAuthHelper(conf)
 
   test("successful auth") {
