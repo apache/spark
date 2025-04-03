@@ -82,7 +82,9 @@ class TransformWithStateInPandasStateServer(
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = outputStreamForTest
 
-  private val isUnixDomainSock = SparkEnv.get.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
+  private val isUnixDomainSock = Option(SparkEnv.get)
+    .map(_.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED))
+    .getOrElse(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.defaultValue.get)
 
   /** State variable related class variables */
   // A map to store the value state name -> (value state, schema, value row deserializer) mapping.
