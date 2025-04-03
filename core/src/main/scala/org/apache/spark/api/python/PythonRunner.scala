@@ -431,7 +431,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             dataOut.writeInt(-1)
             PythonWorkerUtils.writeUTF(sockPath.getPath, dataOut)
           } else {
-            val boundPort: Int = serverSocketChannel.map(_.socket().getLocalPort).getOrElse(0)
+            val boundPort: Int = serverSocketChannel.map(_.socket().getLocalPort).getOrElse(-1)
+            if (boundPort == -1) {
+              val message = "ServerSocket failed to bind to Java side."
+              logError(message)
+              throw new SparkException(message)
+            }
             logDebug(s"Started ServerSocket on port $boundPort.")
             dataOut.writeBoolean(/* isBarrier = */true)
             dataOut.writeInt(boundPort)
