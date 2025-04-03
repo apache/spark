@@ -94,6 +94,4 @@ private[spark] class ShuffleMapStage(
       .findMissingPartitions(shuffleDep.shuffleId)
       .getOrElse(0 until numPartitions)
   }
-
-  override def isIndeterminate: Boolean = this.shuffleDep.isInDeterministic || super.isIndeterminate
 }
