@@ -18,8 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{ByteArrayOutputStream, DataOutputStream, File}
-import java.net.{InetAddress, InetSocketAddress}
-import java.nio.channels.{ServerSocketChannel, SocketChannel}
+import java.nio.channels.SocketChannel
 import java.nio.charset.StandardCharsets
 import java.util
 
