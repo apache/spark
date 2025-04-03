@@ -68,8 +68,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           remoteDir.getAbsolutePath,
           version = 0,
           conf = conf,
-          hadoopConf = hadoopConf
-        ) { db =>
+          hadoopConf = hadoopConf) { db =>
           db.put("version", "1.1")
           commitAndGetCheckpointId(db)
 
@@ -116,8 +115,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           remoteDir.getAbsolutePath,
           version = 0,
           conf = conf,
-          hadoopConf = hadoopConf
-        ) { db =>
+          hadoopConf = hadoopConf) { db =>
           db.put("version", "1.1")
           commitAndGetCheckpointId(db)
 
@@ -174,8 +172,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           remoteDir.getAbsolutePath,
           version = 0,
           conf = conf,
-          hadoopConf = hadoopConf
-        ) { db =>
+          hadoopConf = hadoopConf) { db =>
           db.put("version", "1.1")
           commitAndGetCheckpointId(db)
 
@@ -200,8 +197,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           remoteDir.getAbsolutePath,
           version = 2,
           conf = conf,
-          hadoopConf = hadoopConf
-        ) { db =>
+          hadoopConf = hadoopConf) { db =>
           // Assuming previous 2.zip overwrites, we should see the previous value.
           assert(new String(db.get("version"), "UTF-8") == "2.1")
         }
@@ -229,8 +225,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           version = 0,
           conf = conf,
           hadoopConf = hadoopConf,
-          enableStateStoreCheckpointIds = true
-        ) { db =>
+          enableStateStoreCheckpointIds = true) { db =>
           db.put("version", "1.1")
           val checkpointId1 = commitAndGetCheckpointId(db)
 
@@ -257,8 +252,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           conf = conf,
           hadoopConf = hadoopConf,
           enableStateStoreCheckpointIds = true,
-          checkpointId = checkpointId2
-        ) { db =>
+          checkpointId = checkpointId2 ) { db =>
           assert(new String(db.get("version"), "UTF-8") == "2.2")
         }
       }
@@ -288,8 +282,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           version = 0,
           conf = conf,
           hadoopConf = hadoopConf,
-          enableStateStoreCheckpointIds = false
-        ) { db =>
+          enableStateStoreCheckpointIds = false) { db =>
           db.put("version", "1.1")
           commitAndGetCheckpointId(db)
 
@@ -317,8 +310,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           version = 2,
           conf = conf,
           hadoopConf = hadoopConf,
-          enableStateStoreCheckpointIds = false
-        ) { db =>
+          enableStateStoreCheckpointIds = false ) { db =>
 
           assert(new String(db.get("version"), "UTF-8") == "2.1")
         }
@@ -348,8 +340,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           version = 0,
           conf = conf,
           hadoopConf = hadoopConf,
-          enableStateStoreCheckpointIds = true
-        ) { db =>
+          enableStateStoreCheckpointIds = true) { db =>
           db.put("version", "1.1")
           val checkpointId1 = commitAndGetCheckpointId(db)
 
@@ -381,8 +372,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           conf = conf,
           hadoopConf = hadoopConf,
           enableStateStoreCheckpointIds = true,
-          checkpointId = checkpointId2
-        ) { db =>
+          checkpointId = checkpointId2) { db =>
           assert(new String(db.get("version"), "UTF-8") == "2.2")
         }
       }
@@ -414,8 +404,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           version = 0,
           conf = conf,
           hadoopConf = hadoopConf,
-          enableStateStoreCheckpointIds = true
-        ) { db =>
+          enableStateStoreCheckpointIds = true) { db =>
           db.put("version", "1.1")
           val checkpointId1 = commitAndGetCheckpointId(db)
 
@@ -425,8 +414,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
             conf = conf,
             hadoopConf = hadoopConf,
             enableStateStoreCheckpointIds = true,
-            checkpointId = checkpointId1
-          ) { db2 =>
+            checkpointId = checkpointId1) { db2 =>
             db2.put("version", "2.1")
             db2.commit()
 
@@ -447,8 +435,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           conf = conf,
           hadoopConf = hadoopConf,
           enableStateStoreCheckpointIds = true,
-          checkpointId = checkpointId3
-        ) { db =>
+          checkpointId = checkpointId3) { db =>
           assert(new String(db.get("version"), "UTF-8") == "2.2")
           assert(new String(db.get("foo"), "UTF-8") == "bar")
         }
