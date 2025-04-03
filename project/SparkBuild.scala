@@ -52,9 +52,9 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
-  val connectProjects@Seq(connectCommon, connect, connectClient, connectShims) =
-    Seq("connect-common", "connect", "connect-client-jvm", "connect-shims")
-      .map(ProjectRef(buildLocation, _))
+  val connectProjects@Seq(connectCommon, connect, connectClient, connectClientIT, connectShims) =
+    Seq("connect-common", "connect", "connect-client-jvm", "connect-client-integration-tests",
+      "connect-shims").map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
@@ -369,7 +369,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      variant, connectShims, profiler
+      variant, connectShims, connectClientIT, profiler
     ).contains(x)
   }
 
@@ -417,6 +417,7 @@ object SparkBuild extends PomBuild {
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
   enable(SparkConnectClient.settings)(connectClient)
+  enable(SparkConnectClientIT.settings)(connectClientIT)
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
@@ -804,7 +805,6 @@ object SparkConnect {
 
 object SparkConnectClient {
   import BuildCommons.protoVersion
-  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
   lazy val settings = Seq(
     // For some reason the resolution from the imported Maven build does not work for some
@@ -828,18 +828,6 @@ object SparkConnectClient {
       )
     },
 
-    buildTestDeps := {
-      (LocalProject("assembly") / Compile / Keys.`package`).value
-      (LocalProject("catalyst") / Test / Keys.`package`).value
-    },
-
-    // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
-    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
-    // so no additional configuration is required.
-    test := ((Test / test) dependsOn (buildTestDeps)).value,
-
-    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
-
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
@@ -859,11 +847,11 @@ object SparkConnectClient {
     },
 
     (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.com.google.protobuf.@1").inAll,
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
       ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
       ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
-      ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
@@ -874,6 +862,44 @@ object SparkConnectClient {
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
+    }
+  )
+}
+
+object SparkConnectClientIT {
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
+
+  def filterSparkDependencies(
+      files: Seq[Attributed[File]],
+      scalaBinaryVer: String): Seq[Attributed[File]] = {
+    val packageNames = Seq(
+      "spark-connect-client-jvm",
+      "spark-connect-common",
+      "spark-connect",
+      "spark-sql"
+    ).map(name => s"${name}_$scalaBinaryVer")
+
+    files.filterNot(f => packageNames.exists(name => f.toString.contains(name)))
+  }
+
+  lazy val settings = Seq(
+    buildTestDeps := {
+      (LocalProject("connect-client-jvm") / assembly).value
+      (LocalProject("catalyst") / Test / Keys.`package`).value
+    },
+
+    (Test / compile) := ((Test / compile) dependsOn buildTestDeps).value,
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
+    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
+
+    (Test / dependencyClasspath) :=
+      filterSparkDependencies((Test / dependencyClasspath).value, scalaBinaryVersion.value),
+    (Test / fullClasspath) :=
+      filterSparkDependencies((Test / fullClasspath).value, scalaBinaryVersion.value),
+    (Test / unmanagedJars) += {
+      val jarName = s"spark-connect-client-jvm-assembly-${version.value}.jar"
+      val basePath = s"${baseDirectory.value}/../jvm/target/scala-${scalaBinaryVersion.value}"
+      Attributed.blank(file(s"$basePath/$jarName"))
     }
   )
 }

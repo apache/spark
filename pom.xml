@@ -98,6 +98,7 @@
     <module>sql/connect/server</module>
     <module>sql/connect/common</module>
     <module>sql/connect/client/jvm</module>
+    <module>sql/connect/client/integration-tests</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>

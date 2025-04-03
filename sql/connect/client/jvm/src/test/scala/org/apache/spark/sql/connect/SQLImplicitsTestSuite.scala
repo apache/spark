@@ -189,3 +189,5 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(Set(1, 2, 4))
   }
 }
+
+private[sql] case class MyType(id: Long, a: Double, b: Double)
