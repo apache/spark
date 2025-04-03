@@ -500,6 +500,34 @@ class SubqueryTestsMixin:
                     ),
                 )
 
+            with self.subTest("IN with struct"), self.tempView("ll", "rr"):
+                ll = self.spark.table("l").select("*", sf.struct("a", "b").alias("sab"))
+                ll.createOrReplaceTempView("ll")
+                rr = self.spark.table("r").select(
+                    "*", sf.struct(sf.col("c").alias("a"), sf.col("d").alias("b")).alias("scd")
+                )
+                rr.createOrReplaceTempView("rr")
+
+                for col, values in [
+                    (sf.col("sab"), "sab"),
+                    (sf.struct(sf.struct(sf.col("a"), sf.col("b"))), "struct(struct(a, b))"),
+                ]:
+                    for df, query in [
+                        (self.spark.table("rr").select(sf.col("scd")), "select scd from rr"),
+                        (
+                            self.spark.table("rr").select(
+                                sf.struct(sf.col("c").alias("a"), sf.col("d").alias("b"))
+                            ),
+                            "select struct(c as a, d as b) from rr",
+                        ),
+                    ]:
+                        sqlQuery = f"""select a, b from ll where {values} in ({query})"""
+                        with self.subTest(query=sqlQuery):
+                            assertDataFrameEqual(
+                                self.spark.table("ll").where(col.isin(df)).select("a", "b"),
+                                self.spark.sql(sqlQuery),
+                            )
+
             with self.subTest("NOT IN"):
                 assertDataFrameEqual(
                     self.spark.table("l").where(
