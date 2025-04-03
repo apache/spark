@@ -338,7 +338,6 @@ trait TransformWithStateInPandasPythonRunnerUtils extends Logging {
           .bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1)
         stateServerSocketPort = stateServerSocket.socket().getLocalPort
       }
-      stateServerSocket.configureBlocking(true)
     } catch {
       case e: Throwable =>
         failed = true

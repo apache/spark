@@ -67,8 +67,6 @@ private[spark] abstract class SocketAuthServer[T](
       (serverChannel, address)
     }
 
-    serverSocketChannel.configureBlocking(true)
-
     // Close the socket if no connection in the configured seconds
     val timeout = authHelper.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT).toInt
     logTrace(s"Setting timeout to $timeout sec")

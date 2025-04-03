@@ -144,7 +144,6 @@ class TransformWithStateInPandasStateServer(
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
-    listeningSocket.configureBlocking(true)
 
     // SPARK-51667: We have a pattern of sending messages continuously from one side
     // (Python -> JVM, and vice versa) before getting response from other side. Since most

@@ -59,7 +59,6 @@ class SocketAuthHelperSuite extends SparkFunSuite {
   private class ServerThread extends Thread with Closeable {
     private val serverSocketChannel = ServerSocketChannel.open()
     serverSocketChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
-    serverSocketChannel.configureBlocking(true)
 
     @volatile var error: Exception = _
     @volatile var authenticated = false
@@ -68,10 +67,8 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     start()
 
     def createClient(): SocketChannel = {
-      val socket = SocketChannel.open(new InetSocketAddress(
+      SocketChannel.open(new InetSocketAddress(
         InetAddress.getLoopbackAddress(), serverSocketChannel.socket().getLocalPort))
-      socket.configureBlocking(true)
-      socket
     }
 
     override def run(): Unit = {

@@ -370,8 +370,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             serverSocketChannel.foreach(_.socket().setSoTimeout(0))
           }
 
-          serverSocketChannel.foreach(_.configureBlocking(true))
-
           new Thread("accept-connections") {
             setDaemon(true)
 
@@ -380,7 +378,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                 var sock: SocketChannel = null
                 try {
                   sock = serverSocketChannel.get.accept()
-                  sock.configureBlocking(true)
                   // Wait for function call from python side.
                   if (!isUnixDomainSock) sock.socket().setSoTimeout(10000)
                   authHelper.authClient(sock)
