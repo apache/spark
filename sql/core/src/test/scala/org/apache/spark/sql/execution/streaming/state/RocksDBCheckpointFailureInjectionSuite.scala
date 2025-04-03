@@ -568,7 +568,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
             // If we call StoreStore.stop(), or let testStream() call it implicitly, it will
             // cause deadlock. This is a work-around here before we make StateStore.stop() not
             // deadlock.
-            StateStore.stopMaintenanceTaskNoLock()
+            StateStore.stopMaintenanceTaskWithoutLock()
           },
           StopStream
         )

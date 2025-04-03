@@ -108,7 +108,12 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
   }
 }
 
-/** Contains a list of variables for failure ingestion conditions */
+/**
+ * Contains a list of variables for failure ingestion conditions.
+ * These are singleton instances accessed by all instances of FailureInjectionCheckpointFileManager
+ * and FailureInjectionFileSystem. This allows a unit test to have a global control of failure
+ * and access to the delayed streams.
+ */
 object FailureInjectionFileSystem {
   // File names matching this regex will cause the copyFromLocalFile to fail
   var failPreCopyFromLocalFileNameRegex: Seq[String] = Seq.empty
@@ -144,13 +149,13 @@ class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
   override def open(f: Path, bufferSize: Int): FSDataInputStream = innerFs.open(f, bufferSize)
 
   override def create(
-                       f: Path,
-                       permission: FsPermission,
-                       overwrite: Boolean,
-                       bufferSize: Int,
-                       replication: Short,
-                       blockSize: Long,
-                       progress: Progressable): FSDataOutputStream =
+      f: Path,
+      permission: FsPermission,
+      overwrite: Boolean,
+      bufferSize: Int,
+      replication: Short,
+      blockSize: Long,
+      progress: Progressable): FSDataOutputStream =
     innerFs.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
 
   override def append(f: Path, bufferSize: Int, progress: Progressable): FSDataOutputStream =
@@ -158,9 +163,7 @@ class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
 
   override def delete(f: Path, recursive: Boolean): Boolean = innerFs.delete(f, recursive)
 
-  override def listStatus(f: Path): Array[FileStatus] = {
-    innerFs.listStatus(f)
-  }
+  override def listStatus(f: Path): Array[FileStatus] = innerFs.listStatus(f)
 
   override def setWorkingDirectory(new_dir: Path): Unit = innerFs.setWorkingDirectory(new_dir)
 
@@ -180,7 +183,7 @@ class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
 }
 
 /**
- * A rapper RocksDB State Store Provider that replaces FileSystem used in RocksDBFileManager
+ * A wrapper RocksDB State Store Provider that replaces FileSystem used in RocksDBFileManager
  * to FailureInjectionFileSystem.
  */
 class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvider {
