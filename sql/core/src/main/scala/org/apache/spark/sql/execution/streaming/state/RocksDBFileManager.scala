@@ -516,7 +516,12 @@ class RocksDBFileManager(
         logInfo(log"Estimated maximum version is " +
           log"${MDC(LogKeys.MAX_SEEN_VERSION, maxSeenVersion.get)}" +
           log" and minimum version is ${MDC(LogKeys.MIN_SEEN_VERSION, minSeenVersion)}")
-        val versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
+        var versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
+        // If the number of versions to delete is negative, that means that none of the versions
+        // are eligible for deletion and we reset the variable to 0
+        if (versionsToDelete < 0) {
+          versionsToDelete = 0
+        }
         if (versionsToDelete < minVersionsToDelete) {
           logInfo(log"Skipping deleting files." +
             log" Need at least ${MDC(LogKeys.MIN_VERSIONS_TO_DELETE, minVersionsToDelete)}" +
