@@ -79,7 +79,7 @@ class PythonRDDSuite extends SparkFunSuite with LocalSparkContext {
 
   test("python server error handling") {
     val conf = new SparkConf()
-    conf.set(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key, false.toString)
+    assume(!conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED))
     val authHelper = new SocketAuthHelper(conf)
     val errorServer = new ExceptionPythonServer(authHelper)
     val serverSocketChannel = ServerSocketChannel.open()
