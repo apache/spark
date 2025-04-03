@@ -26,7 +26,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.SparkClassUtils
 
@@ -115,7 +114,7 @@ private[spark] object SerializationDebugger extends Logging {
             val str = try {
               String.valueOf(s)
             } catch {
-              case _: SparkRuntimeException => "cannot print object"
+              case _: Throwable => "exception in toString"
             }
             val elem = s"object (class ${s.getClass.getName}, $str)"
             visitSerializable(s, elem :: stack)
