@@ -1027,6 +1027,12 @@ object StaxXmlParser {
     rootBuilder.result()
   }
 
+  /**
+   * Add or update the given field and its corresponding variant in the fieldToVariants map. If
+   * a field has multiple variants, it will be parsed as a Variant array.
+   *
+   * This method handles the case sensitivity of the field names based on the SQLConf setting.
+   */
   private def addOrUpdateVariantFields(
       fieldToVariants: collection.mutable.TreeMap[String, java.util.ArrayList[Variant]],
       field: String,
@@ -1049,87 +1055,61 @@ object StaxXmlParser {
 
   /**
    * Convert an XML Character value `s` into a variant value and append the result to `builder`.
-   * The result can only be one of a variant boolean/long/decimal/double/string. Anything other than
+   * The result can only be one of a variant boolean/long/decimal/string. Anything other than
    * the supported types will be appended to the Variant builder as a string.
+   *
+   * Floating point types (double, float) are not considered to avoid precision loss.
    */
   private def appendXMLCharacterToVariant(
       builder: VariantBuilder,
       s: String,
       options: XmlOptions): Unit = {
-    val value = if (s != null && options.ignoreSurroundingSpaces) {
-      s.trim()
-    } else {
-      s
+    if (s == null || s == options.nullValue) {
+      builder.appendNull()
+      return
     }
 
-    value match {
-      case v if v == options.nullValue || v == null =>
-        builder.appendNull()
-      case "true" => builder.appendBoolean(true)
-      case "false" => builder.appendBoolean(false)
-      case v =>
-        // Try to parse the value as a numeric type (long, decimal, or double) first
-        if (!tryAppendNumeric(builder, v, options)) {
-          // If the character is of other primitive types, parse it as a string
-          builder.appendString(value)
-        }
-    }
-  }
+    val value = if (options.ignoreSurroundingSpaces) s.trim() else s
 
-  // Try to parse the value as a numeric type (long, decimal, or double) and append it to the
-  // Variant builder
-  private def tryAppendNumeric(
-      builder: VariantBuilder,
-      value: String,
-      options: XmlOptions): Boolean = {
-    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
-      value.substring(1)
-    } else {
-      value
+    // Exit early for empty strings
+    if (s.isEmpty) {
+      builder.appendString(s)
+      return
     }
 
-    // A little shortcut to avoid trying many formatters in the common case that
-    // the input isn't a decimal. All built-in formats will start with a digit or period.
-    if (signSafeValue.isEmpty ||
-      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
-      return false
+    // Try parsing the value as boolean first
+    if (value.toLowerCase(Locale.ROOT) == "true") {
+      builder.appendBoolean(true)
+      return
     }
-    // Rule out strings ending in D or F
-    if (signSafeValue.last match {
-        case 'd' | 'D' | 'f' | 'F' => true
-        case _ => false
-      }) {
-      return false
+    if (value.toLowerCase(Locale.ROOT) == "false") {
+      builder.appendBoolean(false)
+      return
     }
 
-    // Try parse the value as a long first
+    // Try parsing the value as a long
     allCatch opt value.toLong match {
       case Some(l) =>
         builder.appendLong(l)
-        return true
+        return
       case _ =>
     }
 
-    // Try parse the value as decimal if options.tryParseDecimal is set
-    if (options.prefersDecimal) {
-      val decimalParser = ExprUtils.getDecimalParser(options.locale)
-      allCatch opt decimalParser(value) match {
-        case Some(d)
-            if d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION =>
+    // Try parsing the value as decimal
+    val decimalParser = ExprUtils.getDecimalParser(options.locale)
+    allCatch opt decimalParser(value) match {
+      case Some(d)
+          if d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION =>
+        if (d.scale() < 0) {
+          builder.appendDecimal(d.setScale(0))
+        } else {
           builder.appendDecimal(d)
-          return true
-        case _ =>
-      }
-    }
-
-    // Try parse the value as double
-    allCatch opt value.toDouble match {
-      case Some(d) =>
-        builder.appendDouble(d)
-        return true
+        }
+        return
       case _ =>
     }
 
-    false
+    // If the character is of other primitive types, parse it as a string
+    builder.appendString(value)
   }
 }

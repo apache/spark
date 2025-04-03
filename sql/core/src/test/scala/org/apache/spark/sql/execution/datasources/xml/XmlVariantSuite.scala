@@ -18,20 +18,21 @@ package org.apache.spark.sql.execution.datasources.xml
 
 import java.time.ZoneOffset
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class XmlVariantSuite
-    extends QueryTest
-    with SharedSparkSession
-    with TestXmlData {
+class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
   private val resDir = "test-data/xml-resources/"
+
+  // ==========================
+  // ====== Parser tests ======
+  // ==========================
 
   private def testParser(
       xml: String,
@@ -54,19 +55,16 @@ class XmlVariantSuite
     // Decimal -> Decimal
     testParser(
       xml = "<ROW><price>158,058,049.001</price></ROW>",
-      expectedJsonStr = """{"price":158058049.001}""",
-      extraOptions = Map("prefersDecimal" -> "true")
+      expectedJsonStr = """{"price":158058049.001}"""
     )
     testParser(
       xml = "<ROW><decimal>10.05</decimal></ROW>",
-      expectedJsonStr = """{"decimal":10.05}""",
-      extraOptions = Map("prefersDecimal" -> "true")
+      expectedJsonStr = """{"decimal":10.05}"""
     )
-
-    // Double -> Double
-    testParser("<ROW><double>1.00</double></ROW>", """{"double":1.0}""")
-    testParser("<ROW><double>+1.00</double></ROW>", """{"double":1.0}""")
-    testParser("<ROW><double>-1.00</double></ROW>", """{"double":-1.0}""")
+    testParser(
+      xml = "<ROW><amount>5.0</amount></ROW>",
+      expectedJsonStr = """{"amount":5}"""
+    )
 
     // Date -> String
     testParser(
@@ -91,6 +89,11 @@ class XmlVariantSuite
     testParser(
       xml = "<ROW><note>  hello world  </note></ROW>",
       expectedJsonStr = """{"note":"hello world"}"""
+    )
+    // Scientic numbers -> String
+    testParser(
+      xml = "<ROW><amount>4.9E-324</amount></ROW>",
+      expectedJsonStr = """{"amount":"4.9E-324"}"""
     )
   }
 
@@ -171,8 +174,7 @@ class XmlVariantSuite
                |  <d><e attr=" "></e></d>
                |</ROW>
                |""".stripMargin,
-      expectedJsonStr =
-        """{"a":"\" \"","b":{"_VALUE":"\" \"","c":1},"d":{"e":{"_attr":" "}}}""",
+      expectedJsonStr = """{"a":"\" \"","b":{"_VALUE":"\" \"","c":1},"d":{"e":{"_attr":" "}}}""",
       extraOptions = Map("ignoreSurroundingSpaces" -> "false")
     )
   }
@@ -216,9 +218,9 @@ class XmlVariantSuite
         |     {"item":[1,2,3]},
         |     {"item":[1.1,2.1,3.1]}
         |   ],
-        |   "arrayOfBigInteger":[9.223372036854776E20,-9.223372036854776E20],
+        |   "arrayOfBigInteger":[922337203685477580700,-922337203685477580800],
         |   "arrayOfBoolean":[true,false,true],
-        |   "arrayOfDouble":[1.2,1.7976931348623157,4.9E-324,2.2250738585072014E-308],
+        |   "arrayOfDouble":[1.2,1.7976931348623157,"4.9E-324","2.2250738585072014E-308"],
         |   "arrayOfInteger":[1,2147483647,-2147483648],
         |   "arrayOfLong":[21474836470,9223372036854775807,-9223372036854775808],
         |   "arrayOfNull":[null,null],
@@ -230,7 +232,7 @@ class XmlVariantSuite
         |   ],
         |   "struct":{
         |     "field1":true,
-        |     "field2":9.223372036854776E19
+        |     "field2":92233720368547758070
         |   },
         |   "structWithArrayFields":{
         |     "field1":[4,5,6],
@@ -347,7 +349,7 @@ class XmlVariantSuite
               |  </a>
               |</ROW>
               |""".stripMargin,
-      expectedJsonStr = """{"a":{"_VALUE":[1,3,5.0],"b":[2,4]}}"""
+      expectedJsonStr = """{"a":{"_VALUE":[1,3,5],"b":[2,4]}}"""
     )
 
     // Comments
@@ -366,12 +368,30 @@ class XmlVariantSuite
     )
   }
 
+  // =======================
+  // ====== DSL tests ======
+  // =======================
+
+  private def createDSLDataFrame(
+      fileName: String,
+      singleVariantColumn: Option[String] = None,
+      schemaDDL: Option[String] = None): DataFrame = {
+    assert(
+      singleVariantColumn.isDefined || schemaDDL.isDefined,
+      "Either singleVariantColumn or schema must be defined to ingest XML files as variants via DSL"
+    )
+    var reader = spark.read.format("xml").options(baseOptions)
+    singleVariantColumn.foreach(
+      singleVariantColumnName =>
+        reader = reader.option("singleVariantColumn", singleVariantColumnName)
+    )
+    schemaDDL.foreach(s => reader = reader.schema(s))
+
+    reader.load(getTestResourcePath(resDir + fileName))
+  }
+
   test("DSL: read XML files using singleVariantColumn") {
-    val df = spark.read
-      .format("xml")
-      .option("singleVariantColumn", "var")
-      .options(baseOptions)
-      .load(getTestResourcePath(resDir + "cars.xml"))
+    val df = createDSLDataFrame(fileName = "cars.xml", singleVariantColumn = Some("var"))
     checkAnswer(
       df.select(variant_get(col("var"), "$.year", "int")),
       Seq(Row(2012), Row(1997), Row(2015))
@@ -379,16 +399,35 @@ class XmlVariantSuite
   }
 
   test("DSL: read XML files with defined schema") {
-    val df = spark.read
-      .format("xml")
-      .options(baseOptions)
-      .schema("year variant, make string, model string, comment string")
-      .load(getTestResourcePath(resDir + "cars.xml"))
+    val df = createDSLDataFrame(
+      fileName = "cars.xml",
+      schemaDDL = Some("year variant, make string, model string, comment string")
+    )
     checkAnswer(
       df.select(variant_get(col("year"), "$", "int")),
       Seq(Row(2012), Row(1997), Row(2015))
     )
   }
+
+  test("DSL: read XML files using both singleVariantColumn and schema should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        createDSLDataFrame(
+          fileName = "cars.xml",
+          singleVariantColumn = Some("var"),
+          schemaDDL = Some("year variant, make string, model string, comment string")
+        )
+      },
+      condition = "INVALID_SINGLE_VARIANT_COLUMN",
+      parameters = Map.empty
+    )
+  }
+
+  test("DSL: failing test") {}
+
+  // =======================
+  // ====== SQL tests ======
+  // =======================
 
   test("SQL: read an entire XML record as variant using from_xml SQL expression") {
     val xmlStr =
