@@ -395,6 +395,10 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
+                # Propagates the active remote spark session to the current thread.
+                from pyspark.sql.connect.session import SparkSession as SCS
+
+                SCS._set_default_and_active_session(session)
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
