@@ -82,13 +82,8 @@ class PythonRDDSuite extends SparkFunSuite with LocalSparkContext {
     assume(!conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED))
     val authHelper = new SocketAuthHelper(conf)
     val errorServer = new ExceptionPythonServer(authHelper)
-    val serverSocketChannel = ServerSocketChannel.open()
-    serverSocketChannel.bind(
-      new InetSocketAddress(
-        InetAddress.getLoopbackAddress(),
-        errorServer.connInfo.asInstanceOf[Int]), 1)
-    val socket = serverSocketChannel.accept()
-    authHelper.authToServer(socket)
+    val socketChannel = SocketChannel.open()
+    authHelper.authToServer(socketChannel)
     val ex = intercept[Exception] { errorServer.getResult(Duration(1, "second")) }
     assert(ex.getCause().getMessage().contains("exception within handleConnection"))
   }
