@@ -3222,7 +3222,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-51272: retry all the partitions of result stage, if the first result task" +
     " has failed and failing ShuffleMap stage is inDeterminate") {
     this.dagSchedulerInterceptor = createDagInterceptorForSpark51272(
-      () => taskSets(2).tasks(1), "RELEASE_LATCH")
+      () => taskSets.find(_.shuffleId.isEmpty).get.tasks(1), "RELEASE_LATCH")
 
     val numPartitions = 2
     // The first shuffle stage is completed by the below function itself which creates two
@@ -3247,7 +3247,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // of result tasks (2 tasks in total), only some (1 task) get retried
     runEvent(
       makeCompletionEvent(
-        taskSets(2).tasks(0),
+        taskSets.find(_.stageId == resultStage.id).get.tasks(0),
         FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
         null))
 
@@ -3274,7 +3274,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     " has failed with failing ShuffleStage determinate but result stage has another ShuffleStage" +
     " which is indeterminate") {
     this.dagSchedulerInterceptor = createDagInterceptorForSpark51272(
-      () => taskSets(2).tasks(1), "RELEASE_LATCH")
+      () => taskSets.find(_.shuffleId.isEmpty).get.tasks(1), "RELEASE_LATCH")
 
     val numPartitions = 2
     // The first shuffle stage is completed by the below function itself which creates two
@@ -3307,7 +3307,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     //
     runEvent(
       makeCompletionEvent(
-        taskSets(2).tasks(0),
+        taskSets.find(_.shuffleId.isEmpty).get.tasks(0),
         FetchFailed(makeBlockManagerId("hostA"), detShuffleId1, 0L, 0, 0, "ignored"),
         null))
 
@@ -3340,7 +3340,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     " has failed and failing ShuffleMap stage is inDeterminate") {
     val numPartitions = 2
     this.dagSchedulerInterceptor = createDagInterceptorForSpark51272(
-      () => taskSets(1).tasks(1), makeMapStatus(host = "hostZZZ", reduces = numPartitions))
+      () => taskSets.filter(_.shuffleId.isDefined).maxBy(_.shuffleId.get).tasks(1),
+      makeMapStatus(host = "hostZZZ", reduces = numPartitions))
     // The first shuffle stage is completed by the below function itself which creates two
     // indeterminate stages.
     val (shuffleId1, shuffleId2) = constructTwoStages(
@@ -3350,15 +3351,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     )
     // This will trigger the resubmit failed stage and in before adding resubmit message to the
     // queue, a successful partition completion event will arrive.
-
     runEvent(
       makeCompletionEvent(
-        taskSets(1).tasks(0),
+        taskSets.filter(_.shuffleId.isDefined).maxBy(_.shuffleId.get).tasks(0),
         FetchFailed(makeBlockManagerId("hostB"), shuffleId2, 0L, 0, 0, "ignored"),
         null))
 
     val shuffleStage2 = scheduler.shuffleIdToMapStage(shuffleId2)
-
     import org.scalatest.concurrent.Eventually._
     import org.scalatest.matchers.should.Matchers._
     import org.scalatest.time.SpanSugar._
