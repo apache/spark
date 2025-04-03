@@ -3085,8 +3085,7 @@ private[spark] object Utils
         entry = in.getNextEntry()
       }
       in.close() // so that any error in closing does not get ignored
-      logInfo(log"Unzipped from ${MDC(PATH, dfsZipFile)}")
-      logDebug(log"Files are:\n\t${MDC(PATHS, files.mkString("\n\t"))}")
+      logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
       IOUtils.closeQuietly(in)
