@@ -284,7 +284,7 @@ class CrossValidatorTestsMixin:
         cv.fit(train_dataset)
 
     def test_crossvalidator_with_random_forest_classifier(self):
-        data = self.spark.createDataFrame(
+        dataset = self.spark.createDataFrame(
             [
                 (Vectors.dense(1.0, 2.0), 0),
                 (Vectors.dense(2.0, 3.0), 1),
@@ -303,7 +303,7 @@ class CrossValidatorTestsMixin:
         cv = CrossValidator(
             estimator=rf, estimatorParamMaps=paramGrid, evaluator=evaluator, numFolds=3
         )
-        cvModel = cv.fit(data)
+        cv.fit(dataset)
 
 
 @unittest.skipIf(
