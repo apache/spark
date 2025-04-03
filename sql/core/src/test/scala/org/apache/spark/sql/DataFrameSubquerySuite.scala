@@ -399,6 +399,29 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"))
   }
 
+  test("IN predicate subquery with struct") {
+    withTempView("ll", "rr") {
+      spark.table("l").select($"*", struct("a", "b").alias("sab")).createOrReplaceTempView("ll")
+      spark
+        .table("r")
+        .select($"*", struct($"c".as("a"), $"d".as("b")).alias("scd"))
+        .createOrReplaceTempView("rr")
+
+      for ((col, values) <- Seq(
+          ($"sab", "sab"),
+          (struct(struct($"a", $"b")), "struct(struct(a, b))"));
+        (df, query) <- Seq(
+          (spark.table("rr").select($"scd"), "select scd from rr"),
+          (
+            spark.table("rr").select(struct($"c".as("a"), $"d".as("b"))),
+            "select struct(c as a, d as b) from rr"))) {
+        checkAnswer(
+          spark.table("ll").where(col.isin(df)).select($"a", $"b"),
+          spark.sql(s"select a, b from ll where $values in ($query)"))
+      }
+    }
+  }
+
   test("NOT IN predicate subquery") {
     checkAnswer(
       spark.table("l").where(!$"a".isin(spark.table("r").select($"c"))),
