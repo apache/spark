@@ -3171,24 +3171,39 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   private def constructTwoStages(
       stage1InDeterminate: Boolean,
-      stage2InDeterminate: Boolean): (Int, Int) = {
+      stage2InDeterminate: Boolean,
+      isDependencyBetweenStagesTransitive: Boolean = true): (Int, Int) = {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = stage1InDeterminate)
 
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
     val shuffleId1 = shuffleDep1.shuffleId
-    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker,
-      indeterminate = stage2InDeterminate)
+    val shuffleMapRdd2 = if (isDependencyBetweenStagesTransitive) {
+      new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker,
+        indeterminate = stage2InDeterminate)
+    } else {
+      new MyRDD(sc, 2, Nil, tracker = mapOutputTracker, indeterminate = stage2InDeterminate)
+    }
 
     val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
     val shuffleId2 = shuffleDep2.shuffleId
-    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+
+    val finalRdd = if (isDependencyBetweenStagesTransitive) {
+      new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+    } else {
+      new MyRDD(sc, 2, List(shuffleDep1, shuffleDep2), tracker = mapOutputTracker)
+    }
 
     submit(finalRdd, Array(0, 1))
+    val stageId1 = this.scheduler.shuffleIdToMapStage(shuffleId1).id
 
     // Finish the first shuffle map stage.
-    completeShuffleMapStageSuccessfully(0, 0, 2)
-    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
-
+    completeShuffleMapStageSuccessfully(stageId1, 0, 2)
+    import org.scalatest.concurrent.Eventually._
+    import org.scalatest.matchers.should.Matchers._
+    import org.scalatest.time.SpanSugar._
+    eventually(timeout(1.minutes), interval(500.milliseconds)) {
+      mapOutputTracker.findMissingPartitions(shuffleId1) should equal(Some(Nil))
+    }
     (shuffleId1, shuffleId2)
   }
 
@@ -3211,10 +3226,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val numPartitions = 2
     // The first shuffle stage is completed by the below function itself which creates two
-    // indeterminate stages.
+    // stages.
     val (shuffleId1, shuffleId2) = constructTwoStages(
-      stage1InDeterminate = false, stage2InDeterminate = true)
-    completeShuffleMapStageSuccessfully(shuffleId2, 0, numPartitions)
+      stage1InDeterminate = false,
+      stage2InDeterminate = true,
+      isDependencyBetweenStagesTransitive = false)
+    val shuffleStage1 = this.scheduler.shuffleIdToMapStage(shuffleId1)
+    val shuffleStage2 = this.scheduler.shuffleIdToMapStage(shuffleId2)
+    completeShuffleMapStageSuccessfully(shuffleStage2.id, 0, numPartitions)
     val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
     val activeJob = resultStage.activeJob
     assert(activeJob.isDefined)
@@ -3231,20 +3250,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         taskSets(2).tasks(0),
         FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
         null))
-    val shuffleStage1 = this.scheduler.shuffleIdToMapStage(shuffleId1)
-    val shuffleStage2 = this.scheduler.shuffleIdToMapStage(shuffleId2)
+
     import org.scalatest.concurrent.Eventually._
     import org.scalatest.matchers.should.Matchers._
     import org.scalatest.time.SpanSugar._
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       shuffleStage1.latestInfo.attemptNumber() should equal(1)
     }
-    completeShuffleMapStageSuccessfully(0, 1, numPartitions)
+    completeShuffleMapStageSuccessfully(shuffleStage1.id, 1, numPartitions)
 
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       shuffleStage2.latestInfo.attemptNumber() should equal(1)
     }
-    completeShuffleMapStageSuccessfully(1, 1, numPartitions)
+    completeShuffleMapStageSuccessfully(shuffleStage2.id, 1, numPartitions)
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       resultStage.latestInfo.attemptNumber() should equal(1)
     }
@@ -3261,9 +3279,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val numPartitions = 2
     // The first shuffle stage is completed by the below function itself which creates two
     // stages.
-    val (detShuffleId1, indetShuffleId2) = constructTwoStages(stage1InDeterminate = false,
-      stage2InDeterminate = true)
-    completeShuffleMapStageSuccessfully(indetShuffleId2, 0, numPartitions)
+    val (detShuffleId1, indetShuffleId2) = constructTwoStages(
+      stage1InDeterminate = false,
+      stage2InDeterminate = true,
+      isDependencyBetweenStagesTransitive = false)
+    val detShuffleStage1 = this.scheduler.shuffleIdToMapStage(detShuffleId1)
+    val inDetshuffleStage2 = this.scheduler.shuffleIdToMapStage(indetShuffleId2)
+    completeShuffleMapStageSuccessfully(inDetshuffleStage2.id, 0, numPartitions)
     assert(mapOutputTracker.findMissingPartitions(indetShuffleId2) === Some(Seq.empty))
     val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
     val activeJob = resultStage.activeJob
@@ -3288,15 +3310,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         taskSets(2).tasks(0),
         FetchFailed(makeBlockManagerId("hostA"), detShuffleId1, 0L, 0, 0, "ignored"),
         null))
-    val detShuffleStage1 = this.scheduler.shuffleIdToMapStage(detShuffleId1)
-    val inDetshuffleStage2 = this.scheduler.shuffleIdToMapStage(indetShuffleId2)
+
     import org.scalatest.concurrent.Eventually._
     import org.scalatest.matchers.should.Matchers._
     import org.scalatest.time.SpanSugar._
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       detShuffleStage1.latestInfo.attemptNumber() should equal(1)
     }
-    completeShuffleMapStageSuccessfully(0, 1, numPartitions)
+    completeShuffleMapStageSuccessfully(detShuffleStage1.id, 1, numPartitions)
 
     // Though the inDetShuffleStage2 has not suffered any loss, but source code of DagScheduler
     // has code to remove shuffleoutputs based on the lost BlockManager , which in this case will
@@ -3308,7 +3329,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     org.scalatest.Assertions.assert(inDetshuffleStage2.latestInfo.numTasks == 2)
     org.scalatest.Assertions.assert(inDetshuffleStage2.findMissingPartitions().size == 2)
-    completeShuffleMapStageSuccessfully(1, 1, numPartitions)
+    completeShuffleMapStageSuccessfully(inDetshuffleStage2.id, 1, numPartitions)
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       resultStage.latestInfo.attemptNumber() should equal(1)
     }
@@ -3323,27 +3344,26 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // The first shuffle stage is completed by the below function itself which creates two
     // indeterminate stages.
     val (shuffleId1, shuffleId2) = constructTwoStages(
-      stage1InDeterminate = false, stage2InDeterminate = true)
+      stage1InDeterminate = false,
+      stage2InDeterminate = true,
+      isDependencyBetweenStagesTransitive = false
+    )
     // This will trigger the resubmit failed stage and in before adding resubmit message to the
     // queue, a successful partition completion event will arrive.
 
     runEvent(
       makeCompletionEvent(
         taskSets(1).tasks(0),
-        FetchFailed(makeBlockManagerId("hostA"), shuffleId2, 0L, 0, 0, "ignored"),
+        FetchFailed(makeBlockManagerId("hostB"), shuffleId2, 0L, 0, 0, "ignored"),
         null))
 
-    // run completion task for first stage as the Fetch Failed for second shuffle stage is sharing
-    // the block Id
-    completeShuffleMapStageSuccessfully(0, 1, numPartitions)
-
-    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    val shuffleStage2 = scheduler.shuffleIdToMapStage(shuffleId2)
 
     import org.scalatest.concurrent.Eventually._
     import org.scalatest.matchers.should.Matchers._
     import org.scalatest.time.SpanSugar._
 
-    eventually(timeout(3.minutes), interval(500.milliseconds)) {
+    eventually(timeout(30.seconds), interval(500.milliseconds)) {
       shuffleStage2.latestInfo.attemptNumber() should equal(1)
     }
     org.scalatest.Assertions.assert(shuffleStage2.findMissingPartitions().size == numPartitions)
