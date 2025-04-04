@@ -397,9 +397,9 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         // scalastyle:off
         sql(
           s"""CREATE OR REPLACE VIEW $testView
-            | DEFAULT COLLATION sr_ci_ai
-            | AS SELECT *, 'ć' AS c3 FROM $testTable
-            |""".stripMargin)
+             | DEFAULT COLLATION sr_ci_ai
+             | AS SELECT *, 'ć' AS c3 FROM $testTable
+             |""".stripMargin)
         val prefix = "SYSTEM.BUILTIN"
         checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testView"), Row(s"$prefix.UTF8_BINARY"))
         checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $testView"), Row(s"$prefix.UTF8_LCASE"))
