@@ -1167,3 +1167,92 @@ WithCTE
       +- Project [a#x]
          +- SubqueryAlias t1
             +- CTERelationRef xxxx, true, [a#x, b#x, c#x], false, false
+
+
+-- !query
+CREATE TABLE tb (next INT)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
+
+
+-- !query
+INSERT INTO tb VALUES (0), (1)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
++- Project [cast(col1#x as int) AS next#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT next FROM t CROSS JOIN tb
+    )
+SELECT * FROM t LIMIT 63
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [next#x]
+:              +- Join Cross
+:                 :- SubqueryAlias t
+:                 :  +- Project [1#x AS n#x]
+:                 :     +- UnionLoopRef xxxx, [1#x], false
+:                 +- SubqueryAlias spark_catalog.default.tb
+:                    +- Relation spark_catalog.default.tb[next#x] parquet
++- GlobalLimit 63
+   +- LocalLimit 63
+      +- Project [n#x]
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+DROP TABLE tb
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tb
+
+
+-- !query
+WITH RECURSIVE
+    x(id) AS (SELECT 1 UNION SELECT 2),
+    t(id, xid) AS (
+        SELECT 0 AS id, 0 AS xid
+        UNION ALL
+        SELECT t.id + 1, xid * 10 + x.id FROM t CROSS JOIN x WHERE t.id < 3
+    )
+SELECT * FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1#x AS id#x]
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [1 AS 1#x]
+:              :  +- OneRowRelation
+:              +- Project [2 AS 2#x]
+:                 +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [id#x AS id#x, xid#x AS xid#x]
+:        +- UnionLoop xxxx
+:           :- Project [0 AS id#x, 0 AS xid#x]
+:           :  +- OneRowRelation
+:           +- Project [(id#x + 1) AS (id + 1)#x, ((xid#x * 10) + id#x) AS ((xid * 10) + id)#x]
+:              +- Filter (id#x < 3)
+:                 +- Join Cross
+:                    :- SubqueryAlias t
+:                    :  +- Project [id#x AS id#x, xid#x AS xid#x]
+:                    :     +- UnionLoopRef xxxx, [id#x, xid#x], false
+:                    +- SubqueryAlias x
+:                       +- CTERelationRef xxxx, true, [id#x], false, false, 2
++- Project [id#x, xid#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [id#x, xid#x], false, false
