@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.Writer
 import java.sql.Timestamp
+import java.time.LocalDate
+import java.util.Base64
 import javax.xml.stream.XMLOutputFactory
 
 import scala.collection.Map
@@ -29,10 +31,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.types.variant.VariantUtil._
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class StaxXmlGenerator(
-    schema: StructType,
+    schema: DataType,
     writer: Writer,
     options: XmlOptions,
     validateStructure: Boolean = true) {
@@ -138,6 +141,8 @@ class StaxXmlGenerator(
     case (_, _, _) if name == options.valueTag =>
       // If this is meant to be value but in no child, write only a value
       writeElement(dt, v, options)
+    case (_, VariantType, v: VariantVal) =>
+      writeVariant(name, v, pos = 0)
     case (_, _, _) =>
       gen.writeStartElement(name)
       writeElement(dt, v, options)
@@ -240,5 +245,190 @@ class StaxXmlGenerator(
         }
       }
     }
+  }
+
+  /**
+   * Serialize the single Variant value to XML
+   */
+  def write(v: VariantVal): Unit = {
+    writeVariant(options.rowTag, v, pos = 0)
+  }
+
+  /**
+   * Write a Variant field to XML
+   *
+   * @param name The name of the field
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the field value starts
+   */
+  private def writeVariant(name: String, v: VariantVal, pos: Int): Unit = {
+    getType(v.getValue, pos) match {
+      // Because usually elements having `null` do not exist, just do not write
+      // elements when given values are `null`.
+      case Type.NULL if options.nullValue == null =>
+      case Type.OBJECT =>
+        writeVariantObjet(name, v, pos)
+      case Type.ARRAY =>
+        writeVariantArray(name, v, pos)
+      case _ =>
+        writeVariantPrimitive(name, v, pos)
+    }
+  }
+
+  /**
+   * Write a Variant object to XML. A Variant object is serialized as an XML element, with the child
+   * fields serialized as XML nodes recursively.
+   *
+   * @param name The name of the object field, which is used as the XML element name
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the object value starts
+   */
+  private def writeVariantObjet(name: String, v: VariantVal, pos: Int): Unit = {
+    gen.writeStartElement(name)
+    handleObject(
+      v.getValue,
+      pos,
+      (size, idSize, offsetSize, idStart, offsetStart, dataStart) => {
+        // Traverse the fields of the object and get their names and positions in the original
+        // Variant
+        val elementInfo = (0 until size).map { i =>
+          val id = readUnsigned(v.getValue, idStart + idSize * i, idSize)
+          val offset =
+            readUnsigned(v.getValue, offsetStart + offsetSize * i, offsetSize)
+          val elementPos = dataStart + offset
+          val elementName = getMetadataKey(v.getMetadata, id)
+          (elementName, elementPos)
+        }
+
+        // Partition the fields of the object into XML attributes and elements
+        val (attributes, elements) = elementInfo.partition {
+          case (f, _) =>
+            // Similar to the reader, we use attributePrefx option to determine whether the field is
+            // an attribute or not.
+            // In addition, we also check if the field is a value tag, in case the value tag also
+            // starts with the attribute prefix.
+            f.startsWith(options.attributePrefix) && f != options.valueTag
+        }
+
+        // We need to write attributes first before the elements.
+        (attributes ++ elements).foreach {
+          case (field, elementPos) =>
+            writeVariant(field, v, elementPos)
+        }
+      }
+    )
+    gen.writeEndElement()
+  }
+
+  /**
+   * Write a Variant array to XML. A Variant array is flattened and written as a sequence of
+   * XML element with the same element name as the array field name.
+   *
+   * @param name The name of the array field
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the array value starts
+   */
+  private def writeVariantArray(name: String, v: VariantVal, pos: Int): Unit = {
+    handleArray(
+      v.getValue,
+      pos,
+      (size, offsetSize, offsetStart, dataStart) => {
+        // Traverse each item of the array and write each of them as an XML element
+        (0 until size).foreach { i =>
+          val offset =
+            readUnsigned(v.getValue, offsetStart + offsetSize * i, offsetSize)
+          val elementPos = dataStart + offset
+          // Check if the array element is also of type ARRAY
+          if (getType(v.getValue, elementPos) == Type.ARRAY) {
+            // For the case round trip in reading and writing XML files, [[ArrayType]] cannot have
+            // [[ArrayType]] as element type. It always wraps the element with [[StructType]]. So,
+            // this case only can happen when we convert a normal [[DataFrame]] to XML file.
+            // When [[ArrayType]] has [[ArrayType]] as elements, it is confusing what is element
+            // name for XML file.
+            writeVariantArray(options.arrayElementName, v, elementPos)
+          } else {
+            writeVariant(name, v, elementPos)
+          }
+        }
+      }
+    )
+  }
+
+  /**
+   * Write a Variant primitive field to XML
+   *
+   * @param name The name of the field
+   * @param v The original Variant entity
+   * @param pos The position in the Variant data array where the field value starts
+   */
+  private def writeVariantPrimitive(name: String, v: VariantVal, pos: Int): Unit = {
+    val variantType = getType(v.getValue, pos)
+    // Handle attributes first
+    val isAttribute = name.startsWith(options.attributePrefix) && name != options.valueTag
+    if (isAttribute) {
+      if (variantType == Type.NULL) {
+        Option(options.nullValue).foreach {
+          gen.writeAttribute(name.substring(options.attributePrefix.length), _)
+        }
+      } else {
+        gen.writeAttribute(
+          name.substring(options.attributePrefix.length),
+          getString(v.getValue, pos)
+        )
+      }
+      return
+    }
+
+    def writePrimitive(): Unit = {
+      variantType match {
+        case Type.NULL =>
+          Option(options.nullValue).foreach { nullValue =>
+            gen.writeCharacters(nullValue)
+          }
+        case Type.BOOLEAN =>
+          gen.writeCharacters(getBoolean(v.getValue, pos).toString)
+        case Type.LONG =>
+          gen.writeCharacters(getLong(v.getValue, pos).toString)
+        case Type.STRING =>
+          gen.writeCharacters(getString(v.getValue, pos))
+        case Type.DOUBLE =>
+          gen.writeCharacters(getDouble(v.getValue, pos).toString)
+        case Type.DECIMAL =>
+          gen.writeCharacters(getDecimal(v.getValue, pos).toString)
+        case Type.DATE =>
+          gen.writeCharacters(
+            dateFormatter.format(LocalDate.ofEpochDay(getLong(v.getValue, pos)))
+          )
+        case Type.TIMESTAMP =>
+          gen.writeCharacters(timestampFormatter.format(getLong(v.getValue, pos)))
+        case Type.TIMESTAMP_NTZ =>
+          gen.writeCharacters(
+            timestampNTZFormatter.format(
+              DateTimeUtils.microsToLocalDateTime(getLong(v.getValue, pos))
+            )
+          )
+        case Type.FLOAT =>
+          gen.writeCharacters(getFloat(v.getValue, pos).toString)
+        case Type.BINARY =>
+          gen.writeCharacters(
+            Base64.getEncoder.encodeToString(getBinary(v.getValue, pos))
+          )
+        case Type.UUID =>
+          gen.writeCharacters(getUuid(v.getValue, pos).toString)
+        case _ =>
+          throw new SparkIllegalArgumentException("invalid variant primitive type for XML")
+      }
+    }
+
+    // Handle value tags
+    if (name == options.valueTag) {
+      writePrimitive()
+      return
+    }
+
+    // Handle child elements
+    gen.writeStartElement(name)
+    writePrimitive()
+    gen.writeEndElement()
   }
 }
