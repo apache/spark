@@ -458,30 +458,6 @@ class StringContains(Filter):
     value: str
 
 
-@dataclass(frozen=True)
-class ColumnPruning:
-    fullSchema: StructType
-    """
-    The full schema of the data source.
-    
-    This is the schema specified by the user or inferred by :meth:`DataSource.schema`.
-    """
-
-    requiredSchema: StructType
-    """
-    The schema of the data source that is required by the query.
-
-    This is a subset of the full schema. All fields that are not in this schema are
-    unecessary and can be pruned.
-    """
-
-    requiredTopLevelSchema: StructType
-    """
-    The schema containing all top level columns that are required by the query. Nested fields are
-    preserved from the full schema.
-    """
-
-
 class InputPartition:
     """
     A base class representing an input partition returned by the `partitions()`
@@ -590,7 +566,7 @@ class DataSourceReader(ABC):
         """
         return filters
 
-    def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+    def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
         """
         Returns the actual schema after pruning. :meth:`DataSourceReader.read` must return data
         following this schema.
@@ -598,7 +574,7 @@ class DataSourceReader(ABC):
         The returned schema must be a superset of the required schema and a subset of the full
         schema.
 
-        This method is called once during query planning. By default, it returns the full schema,
+        This method is called once during query planning. By default, it returns None,
         not performing any pruning. Subclasses can override this to implement column pruning.
 
         Implementation should try its best to prune the unnecessary columns or nested fields, but
@@ -607,14 +583,16 @@ class DataSourceReader(ABC):
 
         Parameters
         ----------
-        pruning : :class:`ColumnPruning`
-            The column pruning information. It contains the full schema and the required schema,
-            as well as the required top level schema for convenience.
+        requiredSchema : :class:`StructType`
+            The schema of the data source that is required by the query.
+
+            This is a subset of the full schema.
+            All fields that are not in this schema are unecessary and can be pruned.
 
         Returns
         -------
-        :class:`StructType`
-            The pruned schema.
+        :class:`StructType` or None
+            The pruned schema, or None if pruning is not supported.
 
         Side effects
         ------------
@@ -626,18 +604,19 @@ class DataSourceReader(ABC):
         Implement pushFilters to support top-level column pruning, and save all required
         columns in `self.required` for later use:
 
-        >>> def pruneColumns(self, pruning):
-        ...     schema = pruning.requiredTopLevelSchema
-        ...     self.required = schema.fieldNames
+        >>> def pruneColumns(self, requiredSchema):
+        ...     self.required = requiredSchema.fieldNames()
+        ...     required = set(requiredSchema.fieldNames())
+        ...     schema = StructType([f for f in self.schema.fields if f in required])
         ...     return schema
 
         Implement pushFilters to support nested column pruning:
 
-        >>> def pruneColumns(self, pruning):
-        ...     self.schema = pruning.requiredSchema
+        >>> def pruneColumns(self, requiredSchema):
+        ...     self.schema = requiredSchema
         ...     return self.schema
         """
-        return pruning.fullSchema
+        return None
 
     def partitions(self) -> Sequence[InputPartition]:
         """

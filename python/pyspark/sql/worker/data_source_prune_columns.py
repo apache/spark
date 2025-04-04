@@ -29,7 +29,7 @@ from pyspark.serializers import (
     write_int,
     write_with_length,
 )
-from pyspark.sql.datasource import ColumnPruning, DataSource, DataSourceReader
+from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.types import ArrayType, DataType, StructType, _parse_datatype_json_string
 from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
 from pyspark.util import handle_worker_exception, local_connect_and_auth
@@ -142,7 +142,6 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive the schemas.
         full_schema = receive_schema()
         required_schema = receive_schema()
-        required_top_level_schema = receive_schema()
 
         # Get the reader.
         reader = data_source.reader(schema=full_schema)
@@ -157,9 +156,9 @@ def main(infile: IO, outfile: IO) -> None:
             )
 
         # Push down the required schema and get the indices of the unsupported filters.
-        actual_schema = reader.pruneColumns(
-            ColumnPruning(full_schema, required_schema, required_top_level_schema)
-        )
+        actual_schema = reader.pruneColumns(required_schema)
+        if actual_schema is None:
+            actual_schema = full_schema
         if not isinstance(actual_schema, StructType):
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
@@ -171,20 +170,21 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Validate the actual schema to make sure it's a superset of the required schema and a
         # subset of the full schema.
-        validate_schema(
-            reader,
-            superset=actual_schema,
-            subset=required_schema,
-            errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET",
-            should_check_nullability=True,
-        )
-        validate_schema(
-            reader,
-            superset=full_schema,
-            subset=actual_schema,
-            errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET",
-            should_check_nullability=False,
-        )
+        if actual_schema is not full_schema and actual_schema is not required_schema:
+            validate_schema(
+                reader,
+                superset=actual_schema,
+                subset=required_schema,
+                errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET",
+                should_check_nullability=True,
+            )
+            validate_schema(
+                reader,
+                superset=full_schema,
+                subset=actual_schema,
+                errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET",
+                should_check_nullability=False,
+            )
 
         # Receive the max arrow batch size.
         max_arrow_batch_size = read_int(infile)

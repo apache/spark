@@ -20,12 +20,11 @@ import tempfile
 import unittest
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable, Iterable, List, Union
+from typing import Callable, Iterable, List, Optional, Union
 
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
-    ColumnPruning,
     DataSource,
     DataSourceArrowWriter,
     DataSourceReader,
@@ -270,19 +269,16 @@ class BasePythonDataSourceTestsMixin:
     def test_column_pruning(self):
         full_schema = StructType.fromDDL("a int, b array<struct<c: int, d: int>>")
         required_schema = StructType.fromDDL("b array<struct<c: int>>")
-        required_top_level_schema = StructType.fromDDL("b array<struct<c: int, d: int>>")
 
         class TestDataSourceReader(DataSourceReader):
             def __init__(self, schema):
                 assert schema == full_schema
                 self.pruned = False
 
-            def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
                 self.pruned = True
-                assert pruning.fullSchema == full_schema
-                assert pruning.requiredSchema == required_schema
-                assert pruning.requiredTopLevelSchema == required_top_level_schema
-                return pruning.requiredSchema
+                assert requiredSchema == required_schema
+                return requiredSchema
 
             def read(self, partition):
                 assert self.pruned
@@ -311,11 +307,9 @@ class BasePythonDataSourceTestsMixin:
         class TestDataSourceReader(DataSourceReader):
             pruned = False
 
-            def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
                 self.pruned = True
-                assert pruning.fullSchema == full_schema
-                assert pruning.requiredSchema == required_schema
-                assert pruning.requiredTopLevelSchema == required_schema
+                assert requiredSchema == required_schema
                 return full_schema
 
             def read(self, partition):
@@ -339,7 +333,8 @@ class BasePythonDataSourceTestsMixin:
         actual_schema = StructType.fromDDL(actual_ddl)
 
         class TestDataSourceReader(DataSourceReader):
-            def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
                 return actual_schema
 
             def read(self, partition):
@@ -398,6 +393,16 @@ class BasePythonDataSourceTestsMixin:
             ):
                 df.select("a.b").collect()
 
+    def test_column_pruning_missing_nested_array(self):
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            df = self.load_df_with_column_pruning(
+                "a array<struct<b int, c int>>", "a array<struct<c int>>"
+            )
+            with self.assertRaisesRegex(
+                Exception, r"DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*a\.b"
+            ):
+                df.select("a.b").collect()
+
     def test_column_pruning_reorder(self):
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             df = self.load_df_with_column_pruning(
@@ -405,6 +410,19 @@ class BasePythonDataSourceTestsMixin:
             )
             df = df.select("a", "b")
             assertDataFrameEqual(df, [Row(a="hi", b=1)])
+
+    def test_column_pruning_case_insensitive(self):
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.caseSensitive": False,
+            }
+        ):
+            df = self.load_df_with_column_pruning(
+                "aBc string, d string", "aBc string", rows=[Row(aBc="hi")]
+            )
+            df = df.select("abC")
+            assertDataFrameEqual(df, [Row(aBc="hi")])
 
     def test_combined_workers_column_pruning(self):
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
@@ -417,8 +435,8 @@ class BasePythonDataSourceTestsMixin:
                     self.pickle_count += 1
                     return self.__dict__
 
-                def pruneColumns(self, pruning: ColumnPruning):
-                    return pruning.fullSchema
+                def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+                    return None
 
                 def read(self, partition):
                     assert self.pickle_count == 1
@@ -475,9 +493,9 @@ class BasePythonDataSourceTestsMixin:
                     assert self.pickle_count == 0
                     return filters
 
-                def pruneColumns(self, pruning: ColumnPruning):
+                def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
                     assert self.pickle_count == 1
-                    return pruning.fullSchema
+                    return None
 
                 def read(self, partition):
                     assert self.pickle_count == 2
@@ -607,7 +625,8 @@ class BasePythonDataSourceTestsMixin:
 
     def test_column_pruning_disabled(self):
         class TestDataSourceReader(DataSourceReader):
-            def pruneColumns(self, pruning: ColumnPruning) -> StructType:
+
+            def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
                 assert False
 
             def read(self, partition):

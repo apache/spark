@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
@@ -524,14 +523,14 @@ case class PythonColumnPruningResult(
 )
 
 /**
- * Push down filters to a Python data source.
+ * Prune columns in a Python data source.
  *
  * @param dataSource
  *   a Python data source instance
- * @param schema
- *   output schema of the Python data source
- * @param filters
- *   all filters to be pushed down
+ * @param fullSchema
+ *   the original schema specified by user or inferred by the data source
+ * @param requiredSchema
+ *   the required schema for the query
  */
 private class UserDefinedPythonDataSourceColumnPruningRunner(
     dataSource: PythonFunction,
@@ -542,15 +541,25 @@ private class UserDefinedPythonDataSourceColumnPruningRunner(
   // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
   override val workerModule = "pyspark.sql.worker.data_source_prune_columns"
 
-  private val requiredTopLevelSchema = {
-    val isCaseSensitive = SQLConf.get.caseSensitiveAnalysis
-    val requiredCols =
-      requiredSchema.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
-    val fields = fullSchema.fields.filter { field =>
-      val colName = PartitioningUtils.getColName(field, isCaseSensitive)
-      requiredCols.contains(colName)
+  // Make sure the required schema has the exact same field names as the full schema.
+  private val requiredSchemaNormalized = if (SQLConf.get.caseSensitiveAnalysis) {
+    requiredSchema
+  } else {
+    def visit(required: DataType, full: DataType): DataType = {
+      (required, full) match {
+        case (required: StructType, full: StructType) =>
+          val fields = for (field <- required) yield {
+            val fullField = full.apply(full.getFieldIndexCaseInsensitive(field.name).get)
+            field.copy(name = fullField.name, dataType = visit(field.dataType, fullField.dataType))
+          }
+          StructType(fields)
+        case (required: ArrayType, full: ArrayType) =>
+          required.copy(elementType = visit(required.elementType, full.elementType))
+        case _ =>
+          required
+      }
     }
-    StructType(fields)
+    visit(requiredSchema, fullSchema).asInstanceOf[StructType]
   }
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -560,7 +569,6 @@ private class UserDefinedPythonDataSourceColumnPruningRunner(
     // Send schemas
     PythonWorkerUtils.writeUTF(fullSchema.json, dataOut)
     PythonWorkerUtils.writeUTF(requiredSchema.json, dataOut)
-    PythonWorkerUtils.writeUTF(requiredTopLevelSchema.json, dataOut)
 
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
