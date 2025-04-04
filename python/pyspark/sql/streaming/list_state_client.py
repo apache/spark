@@ -38,9 +38,8 @@ class ListStateClient:
             self.schema = self._stateful_processor_api_client._parse_string_schema(schema)
         else:
             self.schema = schema
-        # A dictionary to store the mapping between list state name and a tuple of pandas DataFrame
+        # A dictionary to store the mapping between list state name and a tuple of data batch
         # and the index of the last row that was read.
-        self.pandas_df_dict: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
         self.data_batch_dict: Dict[str, Tuple[Any, int]] = {}
 
     def exists(self, state_name: str) -> bool:
