@@ -1487,11 +1487,12 @@ class RocksDB(
       override def log(infoLogLevel: InfoLogLevel, logMsg: String) = {
         // Map DB log level to log4j levels
         // Warn is mapped to info because RocksDB warn is too verbose
+        // Info is mapped to debug because RocksDB info is too verbose
         // (e.g. dumps non-warning stuff like stats)
         val loggingFunc: ( => LogEntry) => Unit = infoLogLevel match {
           case InfoLogLevel.FATAL_LEVEL | InfoLogLevel.ERROR_LEVEL => logError(_)
-          case InfoLogLevel.WARN_LEVEL | InfoLogLevel.INFO_LEVEL => logInfo(_)
-          case InfoLogLevel.DEBUG_LEVEL => logDebug(_)
+          case InfoLogLevel.WARN_LEVEL => logInfo(_)
+          case InfoLogLevel.INFO_LEVEL | InfoLogLevel.DEBUG_LEVEL => logDebug(_)
           case _ => logTrace(_)
         }
         loggingFunc(log"[NativeRocksDB-${MDC(LogKeys.ROCKS_DB_LOG_LEVEL, infoLogLevel.getValue)}]" +
