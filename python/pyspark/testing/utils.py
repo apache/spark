@@ -540,6 +540,9 @@ def assertSchemaEqual(
         if dt1.typeName() == dt2.typeName():
             if dt1.typeName() == "array":
                 return compare_datatypes_ignore_nullable(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "decimal":
+                # Fix for SPARK-51062: Compare precision and scale for decimal types
+                return dt1.precision == dt2.precision and dt1.scale == dt2.scale
             elif dt1.typeName() == "struct":
                 return compare_schemas_ignore_nullable(dt1, dt2)
             else:

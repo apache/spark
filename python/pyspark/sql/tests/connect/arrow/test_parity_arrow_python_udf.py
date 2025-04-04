@@ -16,10 +16,10 @@
 #
 
 from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
-from pyspark.sql.tests.arrow.test_arrow_python_udf import PythonUDFArrowTestsMixin
+from pyspark.sql.tests.arrow.test_arrow_python_udf import ArrowPythonUDFTestsMixin
 
 
-class ArrowPythonUDFParityTests(UDFParityTests, PythonUDFArrowTestsMixin):
+class ArrowPythonUDFParityTests(UDFParityTests, ArrowPythonUDFTestsMixin):
     @classmethod
     def setUpClass(cls):
         super(ArrowPythonUDFParityTests, cls).setUpClass()

@@ -949,13 +949,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
       }
 
-      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
-        // This is because 30 is executed twice and snapshot does not overwrite in checkpoint v2
-        assert(snapshotVersionsPresent(remoteDir) === (1 to 30) :+ 30 :+ 31)
-      } else {
-        assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
-      }
-
+      assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       for (version <- 1 to 60) {
         db.load(version, versionToUniqueId.get(version), readOnly = true)
@@ -972,20 +966,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
 
-      // Behavior is slightly different when column families are enabled with checkpoint v2
-      // since snapshot version 31 was created previously.
-      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
-        assert(snapshotVersionsPresent(remoteDir) === Seq(31, 60, 60))
-      } else {
-        assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
-      }
+      assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
       if (enableStateStoreCheckpointIds) {
         // recommit version 60 creates another changelog file with different unique id
-        if (colFamiliesEnabled) {
-          assert(changelogVersionsPresent(remoteDir) === (31 to 60) :+ 60)
-        } else {
-          assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
-        }
+        assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
       } else {
         assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       }
@@ -2656,7 +2640,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("a", "5")
         db.put("b", "5")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 2)
         assert(db.metricsOpt.get.numCommittedKeys === 2)
@@ -2672,7 +2656,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("b", "7")
         db.put("c", "7")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === -1)
         assert(db.metricsOpt.get.numCommittedKeys === -1)
@@ -2688,7 +2672,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("c", "8")
         db.put("d", "8")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 4)
         assert(db.metricsOpt.get.numCommittedKeys === 4)
@@ -3523,7 +3507,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
-    override def commit(): Long = {
+    override def commit(): (Long, StateStoreCheckpointInfo) = {
       val ret = super.commit()
       // update versionToUniqueId from lineageManager
       lineageManager.getLineageForCurrVersion().foreach {

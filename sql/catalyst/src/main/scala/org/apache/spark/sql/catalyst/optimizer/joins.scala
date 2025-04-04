@@ -339,8 +339,8 @@ trait JoinSelectionHelper extends PredicateHelper {
     }
 
     getBuildSide(
-      canBuildBroadcastLeft(join.joinType), buildLeft, numAggsAndFiltersLeft,
-      canBuildBroadcastRight(join.joinType), buildRight, numAggsAndFiltersRight,
+      buildLeft && canBuildBroadcastLeft(join.joinType), numAggsAndFiltersLeft,
+      buildRight && canBuildBroadcastRight(join.joinType), numAggsAndFiltersRight,
       join.left,
       join.right,
       broadcastedCanonicalizedSubplans
@@ -368,8 +368,8 @@ trait JoinSelectionHelper extends PredicateHelper {
         forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
-      canBuildShuffledHashJoinLeft(join.joinType), buildLeft, (0, 0),
-      canBuildShuffledHashJoinRight(join.joinType), buildRight, (0, 0),
+      buildLeft && canBuildShuffledHashJoinLeft(join.joinType), (0, 0),
+      buildRight && canBuildShuffledHashJoinRight(join.joinType), (0, 0),
       join.left,
       join.right,
       mutable.Set.empty
@@ -570,32 +570,20 @@ trait JoinSelectionHelper extends PredicateHelper {
 
   private def getBuildSide(
       canBuildLeft: Boolean,
-      buildLeftFlag: Boolean,
       numAggsAndFiltersLeft: (Int, Int),
       canBuildRight: Boolean,
-      buildRightFlag: Boolean,
       numAggsAndFiltersRight: (Int, Int),
       left: LogicalPlan,
       right: LogicalPlan,
       broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan]): Option[BuildSide] = {
-    if (!(canBuildRight || canBuildLeft)) {
-      None
-    } else if (canBuildLeft && canBuildRight) {
+    if (canBuildLeft && canBuildRight) {
       // returns the smaller side base on its estimated physical size, if we want to build the
       // both sides.
-      if (buildLeftFlag && buildRightFlag) {
-        Some(getSmallerSide(left, right, broadcastedCanonicalizedSubplans, numAggsAndFiltersLeft,
-          numAggsAndFiltersRight))
-      } else if (buildLeftFlag) {
-        Some(BuildLeft)
-      } else if (buildRightFlag) {
-        Some(BuildRight)
-      } else {
-        None
-      }
-    } else if (canBuildLeft && buildLeftFlag) {
+      Some(getSmallerSide(left, right, broadcastedCanonicalizedSubplans, numAggsAndFiltersLeft,
+        numAggsAndFiltersRight))
+    } else if (canBuildLeft) {
       Some(BuildLeft)
-    } else if (canBuildRight && buildRightFlag) {
+    } else if (canBuildRight) {
       Some(BuildRight)
     } else {
       None

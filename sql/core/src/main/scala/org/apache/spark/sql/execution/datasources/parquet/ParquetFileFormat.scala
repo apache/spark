@@ -356,7 +356,6 @@ class ParquetFileFormat(override val readSchema: StructType, val partitionSchema
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

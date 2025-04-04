@@ -1802,6 +1802,38 @@ class UtilsTestsMixin:
 
         self.assertTrue(exception_thrown)
 
+    def test_assert_schema_equal_with_decimal_types(self):
+        """Test assertSchemaEqual with decimal types of different precision and scale
+        (SPARK-51062)."""
+        from pyspark.sql.types import StructType, StructField, DecimalType
+
+        # Same precision and scale - should pass
+        s1 = StructType(
+            [
+                StructField("price", DecimalType(10, 2), True),
+            ]
+        )
+
+        s1_copy = StructType(
+            [
+                StructField("price", DecimalType(10, 2), True),
+            ]
+        )
+
+        # This should pass
+        assertSchemaEqual(s1, s1_copy)
+
+        # Different precision and scale - should fail
+        s2 = StructType(
+            [
+                StructField("price", DecimalType(12, 4), True),
+            ]
+        )
+
+        # This should fail
+        with self.assertRaises(PySparkAssertionError):
+            assertSchemaEqual(s1, s2)
+
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     pass

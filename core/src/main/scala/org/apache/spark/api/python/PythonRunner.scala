@@ -274,7 +274,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           worker.stop()
         } catch {
           case e: Exception =>
-            logWarning("Failed to stop worker")
+            logWarning(log"Failed to stop worker", e)
         }
       }
     }

@@ -249,6 +249,7 @@ POSITION	false
 PRECEDING	false
 PRIMARY	true
 PRINCIPALS	false
+PROCEDURES	false
 PROPERTIES	false
 PURGE	false
 QUARTER	false

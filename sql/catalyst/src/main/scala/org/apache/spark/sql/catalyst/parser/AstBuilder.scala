@@ -4409,16 +4409,6 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a [[ShowNamespaces]] command.
-   */
-  override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
-    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowNamespaces(
-      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
-      Option(ctx.pattern).map(x => string(visitStringLit(x))))
-  }
-
-  /**
    * Create a [[DescribeNamespace]].
    *
    * For example:

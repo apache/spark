@@ -60,11 +60,10 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  *
  * @note This class is not thread-safe, so use it only from one thread.
  * @see [[RocksDBFileManager]] to see how the files are laid out in local disk and DFS.
- * @param dfsRootDir  Remote directory where checkpoints are going to be written
  * @param conf         Configuration for RocksDB
+ * @param stateStoreId StateStoreId for the state store
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
- * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
  */
 class RocksDB(
     dfsRootDir: String,
@@ -73,7 +72,8 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
-    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
+    enableStateStoreCheckpointIds: Boolean = false,
+    partitionId: Int = 0) extends Logging {
 
   import RocksDB._
 
@@ -267,7 +267,7 @@ class RocksDB(
    * @return - true if the column family exists, false otherwise
    */
   def checkColFamilyExists(colFamilyName: String): Boolean = {
-    db != null && colFamilyNameToInfoMap.containsKey(colFamilyName)
+    colFamilyNameToInfoMap.containsKey(colFamilyName)
   }
 
   // This method sets the internal column family metadata to
@@ -532,11 +532,13 @@ class RocksDB(
       maxColumnFamilyId.set(maxId)
     }
 
+    openDB()
+    // Call this after opening the DB to ensure that forcing snapshot is not triggered
+    // unnecessarily.
     if (useColumnFamilies) {
       createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME, isInternal = false)
     }
 
-    openDB()
     val (numKeys, numInternalKeys) = {
       if (!conf.trackTotalNumberOfRows) {
         // we don't track the total number of rows - discard the number being track
@@ -991,7 +993,7 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): Long = {
+  def commit(): (Long, StateStoreCheckpointInfo) = {
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -1060,7 +1062,7 @@ class RocksDB(
       recordedMetrics = Some(metrics)
       logInfo(log"Committed ${MDC(LogKeys.VERSION_NUM, newVersion)}, " +
         log"stats = ${MDC(LogKeys.METRICS_JSON, recordedMetrics.get.json)}")
-      loadedVersion
+      (loadedVersion, getLatestCheckpointInfo)
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded version
@@ -1213,6 +1215,8 @@ class RocksDB(
       }
 
       silentDeleteRecursively(localRootDir, "closing RocksDB")
+      // Clear internal maps to reset the state
+      clearColFamilyMaps()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
@@ -1228,11 +1232,11 @@ class RocksDB(
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
 
   /**
-   * Called by RocksDBStateStoreProvider to retrieve the checkpoint information to be
+   * Called by commit() to retrieve the checkpoint information to be
    * passed back to the stateful operator. It will return the information for the latest
    * state store checkpointing.
    */
-  def getLatestCheckpointInfo(partitionId: Int): StateStoreCheckpointInfo = {
+  private def getLatestCheckpointInfo: StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(
       partitionId,
       loadedVersion,
@@ -1485,11 +1489,12 @@ class RocksDB(
       override def log(infoLogLevel: InfoLogLevel, logMsg: String) = {
         // Map DB log level to log4j levels
         // Warn is mapped to info because RocksDB warn is too verbose
+        // Info is mapped to debug because RocksDB info is too verbose
         // (e.g. dumps non-warning stuff like stats)
         val loggingFunc: ( => LogEntry) => Unit = infoLogLevel match {
           case InfoLogLevel.FATAL_LEVEL | InfoLogLevel.ERROR_LEVEL => logError(_)
-          case InfoLogLevel.WARN_LEVEL | InfoLogLevel.INFO_LEVEL => logInfo(_)
-          case InfoLogLevel.DEBUG_LEVEL => logDebug(_)
+          case InfoLogLevel.WARN_LEVEL => logInfo(_)
+          case InfoLogLevel.INFO_LEVEL | InfoLogLevel.DEBUG_LEVEL => logDebug(_)
           case _ => logTrace(_)
         }
         loggingFunc(log"[NativeRocksDB-${MDC(LogKeys.ROCKS_DB_LOG_LEVEL, infoLogLevel.getValue)}]" +
