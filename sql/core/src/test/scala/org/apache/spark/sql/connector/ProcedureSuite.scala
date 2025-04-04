@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
-import scala.collection.immutable.ArraySeq
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
@@ -384,7 +382,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkAnswer(
         // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat", ArraySeq(), null, "xxx") :: Nil)
+        Row("cat", Array(), null, "xxx") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES IN ns"),
@@ -411,8 +409,8 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat2.ns_1.db_1"),
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "foo") ::
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "bar") :: Nil)
 
       // Switch catalog.
       sql("USE cat2")
@@ -425,17 +423,17 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkAnswer(
         // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat2", ArraySeq(), null, "bar") :: Nil)
+        Row("cat2", Array(), null, "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ns_1.db_1"),
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
-          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "foo") ::
+          Row("cat2", Array("ns_1", "db_1"), "db_1", "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat2.ns_1.db_1"),
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
-          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "foo") ::
+          Row("cat2", Array("ns_1", "db_1"), "db_1", "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ``"),
