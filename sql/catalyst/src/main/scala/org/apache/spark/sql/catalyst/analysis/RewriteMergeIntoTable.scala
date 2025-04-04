@@ -79,47 +79,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
-        matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
-
-      EliminateSubqueryAliases(aliasedTable) match {
-        case r: DataSourceV2Relation =>
-          validateMergeIntoConditions(m)
-
-          // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
-          // and switch to using a regular append instead of a row-level MERGE operation
-          // only unmatched source rows that match action conditions are appended to the table
-          val joinPlan = Join(source, r, LeftAnti, Some(cond), JoinHint.NONE)
-
-          val notMatchedInstructions = notMatchedActions.map {
-            case InsertAction(cond, assignments) =>
-              Keep(cond.getOrElse(TrueLiteral), assignments.map(_.value))
-            case other =>
-              throw new AnalysisException(
-                errorClass = "_LEGACY_ERROR_TEMP_3053",
-                messageParameters = Map("other" -> other.toString))
-          }
-
-          val outputs = notMatchedInstructions.flatMap(_.outputs)
-
-          // merge rows as there are multiple NOT MATCHED actions
-          val mergeRows = MergeRows(
-            isSourceRowPresent = TrueLiteral,
-            isTargetRowPresent = FalseLiteral,
-            matchedInstructions = Nil,
-            notMatchedInstructions = notMatchedInstructions,
-            notMatchedBySourceInstructions = Nil,
-            checkCardinality = false,
-            output = generateExpandOutput(r.output, outputs),
-            joinPlan)
-
-          AppendData.byPosition(r, mergeRows)
-
-        case _ =>
-          m
-      }
-
-    case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
 
       EliminateSubqueryAliases(aliasedTable) match {
