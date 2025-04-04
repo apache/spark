@@ -46,15 +46,16 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   // serializers. The first `structFields` is aligned with first serializer and ditto
   // for other `structFields`.
   private def testSerializer(df: DataFrame, structFields: Seq[Seq[String]]*): Unit = {
-    val serializer = df.queryExecution.optimizedPlan.collectFirst {
+    val serializerOpt = df.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.get
+    }
 
     def collectNamedStruct: PartialFunction[Expression, Seq[CreateNamedStruct]] = {
       case c: CreateNamedStruct => Seq(c)
     }
 
-    serializer.serializer.zip(structFields).foreach { case (ser, fields) =>
+    assert(serializerOpt.isDefined)
+    serializerOpt.get.serializer.zip(structFields).foreach { case (ser, fields) =>
       val structs: Seq[CreateNamedStruct] = ser.collect(collectNamedStruct).flatten
       assert(structs.size == fields.size)
       structs.zip(fields).foreach { case (struct, fieldNames) =>
