@@ -1170,9 +1170,7 @@ WithCTE
 
 
 -- !query
-CREATE TABLE tb (
-                    next INT
-)
+CREATE TABLE tb (next INT)
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
 
@@ -1219,3 +1217,42 @@ DROP TABLE tb
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tb
+
+
+-- !query
+WITH RECURSIVE
+    x(id) AS (SELECT 1 UNION SELECT 2),
+    t(id, xid) AS (
+        SELECT 0 AS id, 0 AS xid
+        UNION ALL
+        SELECT t.id + 1, xid * 10 + x.id FROM t CROSS JOIN x WHERE t.id < 3
+    )
+SELECT * FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1#x AS id#x]
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [1 AS 1#x]
+:              :  +- OneRowRelation
+:              +- Project [2 AS 2#x]
+:                 +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [id#x AS id#x, xid#x AS xid#x]
+:        +- UnionLoop xxxx
+:           :- Project [0 AS id#x, 0 AS xid#x]
+:           :  +- OneRowRelation
+:           +- Project [(id#x + 1) AS (id + 1)#x, ((xid#x * 10) + id#x) AS ((xid * 10) + id)#x]
+:              +- Filter (id#x < 3)
+:                 +- Join Cross
+:                    :- SubqueryAlias t
+:                    :  +- Project [id#x AS id#x, xid#x AS xid#x]
+:                    :     +- UnionLoopRef xxxx, [id#x, xid#x], false
+:                    +- SubqueryAlias x
+:                       +- CTERelationRef xxxx, true, [id#x], false, false, 2
++- Project [id#x, xid#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [id#x, xid#x], false, false
