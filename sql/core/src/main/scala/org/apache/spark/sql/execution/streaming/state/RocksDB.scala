@@ -390,7 +390,7 @@ class RocksDB(
         fileManager.setMaxSeenVersion(version)
 
         // Report this snapshot version to the coordinator
-        reportSnapshotVersionToCoordinator(latestSnapshotVersion)
+        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
 
         openLocalRocksDB(metadata)
 
@@ -470,7 +470,7 @@ class RocksDB(
         fileManager.setMaxSeenVersion(version)
 
         // Report this snapshot version to the coordinator
-        reportSnapshotVersionToCoordinator(latestSnapshotVersion)
+        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
 
         openLocalRocksDB(metadata)
 
@@ -610,7 +610,7 @@ class RocksDB(
         throw t
     }
     // Report this snapshot version to the coordinator
-    reportSnapshotVersionToCoordinator(snapshotVersion)
+    reportSnapshotUploadToCoordinator(snapshotVersion)
     this
   }
 
@@ -1500,14 +1500,6 @@ class RocksDB(
       // The coordinator needs a way to determine whether upload messages are disabled or not,
       // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
       eventListener.foreach(_.reportSnapshotUploaded(version))
-    }
-  }
-
-  /** Reports to the coordinator the store's latest loaded snapshot version */
-  private def reportSnapshotVersionToCoordinator(version: Long): Unit = {
-    // Skip reporting if the snapshot version is 0, which means there are no snapshots
-    if (conf.reportSnapshotUploadLag && version > 0L) {
-      eventListener.foreach(_.reportSnapshotVersion(version))
     }
   }
 

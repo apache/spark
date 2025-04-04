@@ -553,7 +553,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
 
         // Report the loaded snapshot's version to the coordinator
-        reportSnapshotVersionToCoordinator(version)
+        reportSnapshotUploadToCoordinator(version)
 
         return snapshotCurrentVersionMap.get
       }
@@ -586,7 +586,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       synchronized { putStateIntoStateCacheMap(version, resultMap) }
 
       // Report the last available snapshot's version to the coordinator
-      reportSnapshotVersionToCoordinator(lastAvailableVersion)
+      reportSnapshotUploadToCoordinator(lastAvailableVersion)
 
       resultMap
     }
@@ -707,18 +707,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       log"for ${MDC(LogKeys.OP_TYPE, opType)}")
     // Compare and update with the version that was just uploaded.
     lastUploadedSnapshotVersion.updateAndGet(v => Math.max(version, v))
-    // Report snapshot upload event to the coordinator, and include the store ID with the message.
-    if (storeConf.reportSnapshotUploadLag) {
-      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
-      val currentTimestamp = System.currentTimeMillis()
-      StateStoreProvider.coordinatorRef.foreach(
-        _.snapshotUploaded(
-          StateStoreProviderId(stateStoreId, runId),
-          version,
-          currentTimestamp
-        )
-      )
-    }
+    // Report the snapshot upload event to the coordinator
+    reportSnapshotUploadToCoordinator(version)
   }
 
   /**
@@ -1064,15 +1054,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       keySchema, valueSchema)
   }
 
-  /** Reports to the coordinator the store's loaded snapshot version */
-  private def reportSnapshotVersionToCoordinator(version: Long): Unit = {
-    // Skip reporting if the snapshot version is 0, which means there are no snapshots
-    if (storeConf.reportSnapshotUploadLag && version > 0L) {
+  /** Reports to the coordinator the store's latest snapshot version */
+  private def reportSnapshotUploadToCoordinator(version: Long): Unit = {
+    if (storeConf.reportSnapshotUploadLag) {
+      // Attach the query run ID and current timestamp to the RPC message
       val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
-      // Since this is not the time when the snapshot was uploaded, we'll use 0ms to
-      // prevent the coordinator to use time lag checks for this store.
+      val currentTimestamp = System.currentTimeMillis()
       StateStoreProvider.coordinatorRef.foreach(
-        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), version, 0L)
+        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), version, currentTimestamp)
       )
     }
   }

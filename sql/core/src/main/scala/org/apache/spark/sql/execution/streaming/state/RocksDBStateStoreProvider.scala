@@ -1002,19 +1002,4 @@ private[state] case class RocksDBEventListener(queryRunId: String, stateStoreId:
       )
     )
   }
-
-  /**
-   * Report the state store's last loaded snapshot version to the coordinator.
-   * This method is used when the store loads a snapshot version instead of
-   * uploading a snapshot version, as the context of the snapshot upload timestamp
-   * is missing.
-   *
-   * @param version The snapshot version that was just uploaded from RocksDB
-   */
-  def reportSnapshotVersion(version: Long): Unit = {
-    // Report the state store provider ID and the version to the coordinator.
-    // Since this is not the time when the snapshot was uploaded, we'll use 0ms to
-    // prevent the coordinator to use time lag checks for this store.
-    StateStoreProvider.coordinatorRef.foreach(_.snapshotUploaded(providerId, version, 0L))
-  }
 }

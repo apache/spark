@@ -271,10 +271,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
                 val storeId = StateStoreId(stateCheckpointDir, 0, partitionId)
                 val providerId = StateStoreProviderId(storeId, query.runId)
                 if (partitionId <= 1) {
-                  // Verify state stores in partition 0 and 1 are lagging and didn't upload anything
-                  assert(coordRef.getLatestSnapshotVersionForTesting(providerId).isEmpty)
+                  // Verify state stores in partition 0/1 are lagging and didn't upload anything
+                  assert(coordRef.getLatestSnapshotVersionForTesting(providerId).getOrElse(0) == 0)
                 } else {
-                  // Verify other stores have uploaded a snapshot and it's logged by the coordinator
+                  // Verify other stores uploaded a snapshot and it's logged by the coordinator
                   assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
                 }
             }
@@ -417,7 +417,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
                   val providerId = StateStoreProviderId(storeId, query.runId)
                   if (partitionId <= 1) {
                     // Verify state stores in partition 0 and 1 are lagging and didn't upload
-                    assert(coordRef.getLatestSnapshotVersionForTesting(providerId).isEmpty)
+                    assert(
+                      coordRef.getLatestSnapshotVersionForTesting(providerId).getOrElse(0) == 0
+                    )
                   } else {
                     // Verify other stores have uploaded a snapshot and it's properly logged
                     assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
@@ -658,7 +660,9 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
                     val providerId = StateStoreProviderId(storeId, query.runId)
                     if (partitionId <= 1) {
                       // Verify state stores in partition 0 and 1 are lagging and didn't upload
-                      assert(coordRef.getLatestSnapshotVersionForTesting(providerId).isEmpty)
+                      assert(
+                        coordRef.getLatestSnapshotVersionForTesting(providerId).getOrElse(0) == 0
+                      )
                     } else {
                       // Verify other stores have uploaded a snapshot and it's properly logged
                       assert(coordRef.getLatestSnapshotVersionForTesting(providerId).get >= 0)
@@ -711,12 +715,14 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
                       coordRef.getLatestSnapshotVersionForTesting(providerId)
                     if (partitionId <= 1) {
                       // Verify state stores in partition 0/1 are still lagging and didn't upload
-                      assert(latestSnapshotVersion.isEmpty)
+                      assert(latestSnapshotVersion.getOrElse(0) == 0)
                     } else {
                       // Verify other stores have uploaded a snapshot and it's properly logged
                       assert(latestSnapshotVersion.get > 0)
                     }
                 }
+                // Sleep a bit to allow the coordinator to pass the time threshold and report lag
+                Thread.sleep(5 * 100)
                 // Verify that we're reporting the faulty state stores (partitionId 0 and 1)
                 val laggingStores =
                   coordRef.getLaggingStoresForTesting(query.runId, latestVersion)
@@ -761,6 +767,8 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
             val coordRef =
               query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
             val latestVersion = query.lastProgress.batchId + 1
+            // Sleep a bit to allow the coordinator to pass the time threshold and report lag
+            Thread.sleep(5 * 100)
             // Verify that only the faulty stores are reported as lagging
             val laggingStores =
               coordRef.getLaggingStoresForTesting(query.runId, latestVersion)
@@ -788,6 +796,8 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
             val coordRef =
               query.sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
             val latestVersion = query.lastProgress.batchId + 1
+            // Sleep the same amount to mimic conditions from first run
+            Thread.sleep(5 * 100)
             // Verify that we are not reporting any lagging stores despite restarting
             // because of the higher version multiplier
             assert(coordRef.getLaggingStoresForTesting(query.runId, latestVersion).isEmpty)
