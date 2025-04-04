@@ -57,6 +57,8 @@ A stateful processor uses the object-oriented paradigm to define the stateful lo
 
 The methods above will be invoked by the Spark query engine when the operator is executed as part of a streaming query.
 
+Note also that not all types of operations are supported in each of the methods. For eg, users cannot register timers in the `init` method. Similarly, they cannot operate on input rows in the `handleExpiredTimer` method. The engine will detect unsupported/incompatible operations and fail the query, if needed.
+
 ### Using the StatefulProcessorHandle
 
 Many operations within the methods above can be performed using the `StatefulProcessorHandle` object. The `StatefulProcessorHandle` object provides methods to interact with the underlying state store. This object can be retrieved within the StatefulProcessor by invoking the `getHandle` method.

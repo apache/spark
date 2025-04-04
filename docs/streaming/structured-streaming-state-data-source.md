@@ -178,19 +178,19 @@ The following configurations are optional:
   <td>stateVarName</td>
   <td>string</td>
   <td></td>
-  <td>The state variable name to read as part of this batch query. This is a required option if the transformWithState operator is used.</td>
+  <td>The state variable name to read as part of this batch query. This is a required option if the transformWithState operator is used. Note that currently this option only applies to the transformWithState operator.</td>
 </tr>
 <tr>
   <td>readRegisteredTimers</td>
   <td>boolean</td>
   <td>false</td>
-  <td>If true, the user can read registered timers used within the transformWithState operator.</td>
+  <td>If true, the user can read registered timers used within the transformWithState operator. Note that currently this option only applies to the transformWithState operator.</td>
 </tr>
 <tr>
   <td>flattenCollectionTypes</td>
   <td>boolean</td>
   <td>true</td>
-  <td>If true, the collection types for state variables such as list state, map state etc are flattened out. If false, the values are provided as Array or Map type in Spark SQL.</td>  
+  <td>If true, the collection types for state variables such as list state, map state etc are flattened out. If false, the values are provided as Array or Map type in Spark SQL. Note that currently this option only applies to the transformWithState operator.</td>
 </tr>
 </table>
 
