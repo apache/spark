@@ -876,20 +876,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           // used in equality comparison, remove this type check once we support it.
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
-            o.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
-              messageParameters = Map(
-                "colName" -> toSQLId(mapCol.name),
-                "dataType" -> toSQLType(mapCol.dataType)))
+            throw QueryCompilationErrors.unsupportedSetOperationOnMapType(
+              mapCol = mapCol,
+              origin = operator.origin
+            )
 
           // TODO: Remove this type check once we support Variant ordering
           case o if variantColumnInSetOperation(o).isDefined =>
             val variantCol = variantColumnInSetOperation(o).get
-            o.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
-              messageParameters = Map(
-                "colName" -> toSQLId(variantCol.name),
-                "dataType" -> toSQLType(variantCol.dataType)))
+            throw QueryCompilationErrors.unsupportedSetOperationOnVariantType(
+              variantCol = variantCol,
+              origin = operator.origin
+            )
 
           case o if variantExprInPartitionExpression(o).isDefined =>
             val variantExpr = variantExprInPartitionExpression(o).get

@@ -3567,6 +3567,15 @@ object SQLConf {
           " must be more than one.")
       .createOptional
 
+  val PYTHON_UDF_ARROW_FALLBACK_ON_UDT =
+    buildConf("spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT")
+      .internal()
+      .doc("When true, Arrow-optimized Python UDF will fallback to the regular UDF when " +
+        "its input or output is UDT.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -5662,6 +5671,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT =
+    buildConf("spark.sql.runCollationTypeCastsBeforeAliasAssignment.enabled")
+      .internal()
+      .doc(
+        "When set to true, rules like ResolveAliases or ResolveAggregateFunctions will run " +
+        "CollationTypeCasts before alias assignment. This is necessary for correct alias " +
+        "generation."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -6402,6 +6423,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
+  def pythonUDFArrowFallbackOnUDT: Boolean = getConf(PYTHON_UDF_ARROW_FALLBACK_ON_UDT)
+
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
@@ -6675,6 +6698,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyCodingErrorAction: Boolean = getConf(SQLConf.LEGACY_CODING_ERROR_ACTION)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
+
+  def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
 
   /** ********************** SQLConf functionality methods ************ */
 

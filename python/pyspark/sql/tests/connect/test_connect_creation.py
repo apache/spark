@@ -32,7 +32,7 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
-from pyspark.testing.sqlutils import MyObject, PythonOnlyUDT
+from pyspark.testing.objects import MyObject, PythonOnlyUDT
 
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase

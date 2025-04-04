@@ -223,7 +223,7 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
 
     return (
         args_kwargs_offsets,
-        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type),
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type, return_type),
     )
 
 
@@ -1614,6 +1614,13 @@ def read_udfs(pickleSer, infile, eval_type):
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF uses explicit Arrow cast for type coercion
             arrow_cast = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            # Arrow-optimized Python UDF takes input types
+            input_types = (
+                [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
+                if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                else None
+            )
+
             ser = ArrowStreamPandasUDFSerializer(
                 timezone,
                 safecheck,
@@ -1622,6 +1629,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 struct_in_pandas,
                 ndarray_as_list,
                 arrow_cast,
+                input_types,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))

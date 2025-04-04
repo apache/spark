@@ -39,6 +39,7 @@ from pyspark.errors.exceptions.base import (
     StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
     PickleException as BasePickleException,
     UnknownException as BaseUnknownException,
+    recover_python_exception,
 )
 
 if TYPE_CHECKING:
@@ -52,6 +53,16 @@ class SparkConnectException(PySparkException):
 
 
 def convert_exception(
+    info: "ErrorInfo",
+    truncated_message: str,
+    resp: Optional[pb2.FetchErrorDetailsResponse],
+    display_server_stacktrace: bool = False,
+) -> SparkConnectException:
+    converted = _convert_exception(info, truncated_message, resp, display_server_stacktrace)
+    return recover_python_exception(converted)
+
+
+def _convert_exception(
     info: "ErrorInfo",
     truncated_message: str,
     resp: Optional[pb2.FetchErrorDetailsResponse],

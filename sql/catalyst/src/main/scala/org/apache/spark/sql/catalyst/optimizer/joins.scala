@@ -304,8 +304,8 @@ trait JoinSelectionHelper extends Logging {
       canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
     }
     getBuildSide(
-      canBuildBroadcastLeft(join.joinType) && buildLeft,
-      canBuildBroadcastRight(join.joinType) && buildRight,
+      buildLeft && canBuildBroadcastLeft(join.joinType),
+      buildRight && canBuildBroadcastRight(join.joinType),
       join.left,
       join.right
     )
@@ -332,8 +332,8 @@ trait JoinSelectionHelper extends Logging {
         forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
-      canBuildShuffledHashJoinLeft(join.joinType) && buildLeft,
-      canBuildShuffledHashJoinRight(join.joinType) && buildRight,
+      buildLeft && canBuildShuffledHashJoinLeft(join.joinType),
+      buildRight && canBuildShuffledHashJoinRight(join.joinType),
       join.left,
       join.right
     )

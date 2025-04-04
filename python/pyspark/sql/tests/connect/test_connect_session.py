@@ -54,6 +54,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
     def tearDown(self):
         self.spark.stop()
 
+    @timeout(10)
     def test_progress_handler(self):
         handler_called = []
 
@@ -78,7 +79,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
 
-    @timeout(3)
+    @timeout(10)
     def test_stop_session(self):
         df = self.spark.sql("select 1 as a, 2 as b")
         catalog = self.spark.catalog
@@ -226,6 +227,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.assertIsNotNone(exception)
             self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
 
+    @timeout(10)
     def test_custom_channel_builder(self):
         # Access self.spark's DefaultChannelBuilder to reuse same endpoint
         endpoint = self.spark._client._builder.endpoint

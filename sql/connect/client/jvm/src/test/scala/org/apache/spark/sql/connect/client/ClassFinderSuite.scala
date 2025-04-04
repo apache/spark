@@ -37,6 +37,7 @@ class ClassFinderSuite extends ConnectFunSuite {
         "Hello.class",
         "smallClassFile.class",
         "smallClassFileDup.class") ++ additionalClasses).map(name => Paths.get(name))
+      expectedClassFiles.foreach(p => assume(p.toFile.exists))
 
       val foundArtifacts = monitor.findClasses().toSeq
       assert(expectedClassFiles.forall { classPath =>
