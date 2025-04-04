@@ -17,12 +17,9 @@
 from typing import Any, Dict, Iterator, List, Union, Tuple
 
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.types import StructType, TYPE_CHECKING
+from pyspark.sql.types import StructType
 from pyspark.errors import PySparkRuntimeError
 import uuid
-
-if TYPE_CHECKING:
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["ListStateClient"]
 
