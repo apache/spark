@@ -16,13 +16,17 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
+import java.io.CharArrayWriter
 import java.time.ZoneOffset
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.VariantType
+import org.apache.spark.types.variant.{Variant, VariantBuilder}
+import org.apache.spark.unsafe.types.VariantVal
 
 class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
 
@@ -488,6 +492,183 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as car""".stripMargin)
         .select(variant_get(col("car.year"), "$", "int")),
       Seq(Row(2012))
+    )
+  }
+
+  // =============================
+  // ====== Generator tests ======
+  // =============================
+
+  private val writer = new CharArrayWriter()
+
+  private def testGenerator(
+      v: Variant,
+      expectedXml: String,
+      extraOptions: Map[String, String]): Unit = {
+    testGenerator(new VariantVal(v.getValue, v.getMetadata), expectedXml, extraOptions)
+  }
+
+  private def testGenerator(
+      v: VariantVal,
+      expectedXml: String,
+      extraOptions: Map[String, String] = Map.empty): Unit = {
+    val gen = new StaxXmlGenerator(
+      schema = VariantType,
+      writer = writer,
+      options = new XmlOptions(baseOptions ++ extraOptions),
+      validateStructure = false
+    )
+    gen.write(v)
+    gen.flush()
+    val xmlString = writer.toString
+    writer.reset()
+    assert(xmlString == expectedXml)
+  }
+
+  test("Generator: serialize Variant primitive fields to XML") {
+    def testPrimitive(
+        primitiveValue: Any,
+        expectedXml: String,
+        extraOptions: Map[String, String] = Map.empty): Unit = {
+      val builder = new VariantBuilder(false)
+      primitiveValue match {
+        case null => builder.appendNull()
+        case v: String => builder.appendString(v)
+        case v: Int => builder.appendLong(v)
+        case v: Long => builder.appendLong(v)
+        case v: Boolean => builder.appendBoolean(v)
+        case v: Double => builder.appendDouble(v)
+        case v: java.math.BigDecimal => builder.appendDecimal(v)
+        case v: Float => builder.appendFloat(v)
+        case v: java.sql.Date => builder.appendDate(v.toLocalDate.toEpochDay.toInt)
+        case v: java.sql.Timestamp =>
+          builder.appendTimestamp(v.getTime * 1000L)
+        case v: java.util.UUID => builder.appendUuid(v)
+      }
+      testGenerator(builder.result(), expectedXml, extraOptions)
+    }
+
+    // NULL
+    testPrimitive(null, "<ROW/>")
+    testPrimitive(null, "<ROW>null</ROW>", extraOptions = Map("nullValue" -> "null"))
+
+    // Long
+    testPrimitive(1, "<ROW>1</ROW>")
+    testPrimitive(9223372036854775807L, "<ROW>9223372036854775807</ROW>") // Max long
+    testPrimitive(-9223372036854775808L, "<ROW>-9223372036854775808</ROW>") // Min long
+
+    // Boolean
+    testPrimitive(true, "<ROW>true</ROW>")
+    testPrimitive(false, "<ROW>false</ROW>")
+
+    // Double
+    testPrimitive(1.0, "<ROW>1.0</ROW>")
+    testPrimitive(Double.MaxValue, "<ROW>1.7976931348623157E308</ROW>")
+    testPrimitive(Double.MinValue, "<ROW>-1.7976931348623157E308</ROW>")
+    testPrimitive(Double.MinPositiveValue, "<ROW>4.9E-324</ROW>")
+
+    // Decimal
+    testPrimitive(new java.math.BigDecimal("1.0"), "<ROW>1</ROW>")
+    testPrimitive(new java.math.BigDecimal("1E-10"), "<ROW>1E-10</ROW>")
+    testPrimitive(new java.math.BigDecimal("123456789.987654321"), "<ROW>123456789.987654321</ROW>")
+
+    // Float
+    testPrimitive(1.0f, "<ROW>1.0</ROW>")
+    testPrimitive(Float.MaxValue, "<ROW>3.4028235E38</ROW>")
+    testPrimitive(Float.MinValue, "<ROW>-3.4028235E38</ROW>")
+
+    // Date
+    testPrimitive(
+      java.sql.Date.valueOf("2023-10-01"),
+      "<ROW>2023-10-01</ROW>"
+    )
+    testPrimitive(
+      java.sql.Date.valueOf("2023-10-01"),
+      "<ROW>10/01/2023</ROW>",
+      extraOptions = Map("dateFormat" -> "MM/dd/yyyy")
+    )
+
+    // Timestamp
+    testPrimitive(
+      java.sql.Timestamp.valueOf("2023-10-01 12:00:00"),
+      "<ROW>2023-10-01T12:00:00-07</ROW>",
+      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssX")
+    )
+    testPrimitive(
+      java.sql.Timestamp.valueOf("1970-01-01 00:00:00"),
+      "<ROW>1970-01-01T00:00:00Z</ROW>",
+      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss'Z'")
+    )
+    testPrimitive(
+      java.sql.Timestamp.valueOf("1970-01-01 12:30:45"),
+      "<ROW>01/01/1970 12:30:45 PM</ROW>",
+      extraOptions = Map("timestampFormat" -> "MM/dd/yyyy hh:mm:ss a")
+    )
+
+    // UUID
+    val uuid = java.util.UUID.randomUUID()
+    testPrimitive(uuid, s"<ROW>${uuid.toString}</ROW>")
+
+    // String
+    testPrimitive("Hello World", "<ROW>Hello World</ROW>")
+  }
+
+  test("Generator: serialize Variant array fields to XML") {
+    val xmlString =
+      """<ROW>
+        |    <array>1</array>
+        |    <array>2</array>
+        |    <array>3</array>
+        |</ROW>""".stripMargin
+    testGenerator(
+      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+      expectedXml = xmlString,
+      extraOptions = Map.empty
+    )
+  }
+
+  test("Generator: serialize Variant object to XML") {
+    val xmlString =
+      """<ROW>
+        |    <struct>
+        |        <field1>1</field1>
+        |        <field2>2</field2>
+        |    </struct>
+        |</ROW>""".stripMargin
+    testGenerator(
+      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+      expectedXml = xmlString,
+      extraOptions = Map.empty
+    )
+  }
+
+  test("Generator: serialize Variant object with attribute fields to XML") {
+    val xmlString =
+      """<ROW>
+        |    <struct _attr1="1" _attr2="2">
+        |        <field1>3</field1>
+        |        <field2>4</field2>
+        |    </struct>
+        |</ROW>""".stripMargin
+    testGenerator(
+      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+      expectedXml = xmlString,
+      extraOptions = Map.empty
+    )
+  }
+
+  test("Generator: serialize Variant object with value tag to XML") {
+    val xmlString =
+      """<ROW>
+        |    <struct>value
+        |        <field1>2</field1>
+        |        <field2>3</field2>
+        |    </struct>
+        |</ROW>""".stripMargin
+    testGenerator(
+      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+      expectedXml = xmlString,
+      extraOptions = Map.empty
     )
   }
 }

@@ -263,9 +263,6 @@ class StaxXmlGenerator(
    */
   private def writeVariant(name: String, v: VariantVal, pos: Int): Unit = {
     getType(v.getValue, pos) match {
-      // Because usually elements having `null` do not exist, just do not write
-      // elements when given values are `null`.
-      case Type.NULL if options.nullValue == null =>
       case Type.OBJECT =>
         writeVariantObjet(name, v, pos)
       case Type.ARRAY =>
@@ -362,73 +359,52 @@ class StaxXmlGenerator(
    * @param pos The position in the Variant data array where the field value starts
    */
   private def writeVariantPrimitive(name: String, v: VariantVal, pos: Int): Unit = {
-    val variantType = getType(v.getValue, pos)
+    val primitiveVal = getType(v.getValue, pos) match {
+      case Type.NULL => Option(options.nullValue).orNull
+      case Type.BOOLEAN =>
+        getBoolean(v.getValue, pos)
+      case Type.LONG =>
+        getLong(v.getValue, pos)
+      case Type.STRING =>
+        getString(v.getValue, pos)
+      case Type.DOUBLE =>
+        getDouble(v.getValue, pos)
+      case Type.DECIMAL =>
+        getDecimal(v.getValue, pos)
+      case Type.DATE =>
+        dateFormatter.format(LocalDate.ofEpochDay(getLong(v.getValue, pos)))
+      case Type.TIMESTAMP =>
+        timestampFormatter.format(getLong(v.getValue, pos))
+      case Type.TIMESTAMP_NTZ =>
+        timestampNTZFormatter.format(
+          DateTimeUtils.microsToLocalDateTime(getLong(v.getValue, pos))
+        )
+      case Type.FLOAT => getFloat(v.getValue, pos)
+      case Type.BINARY => Base64.getEncoder.encodeToString(getBinary(v.getValue, pos))
+      case Type.UUID => getUuid(v.getValue, pos)
+      case _ =>
+        throw new SparkIllegalArgumentException("invalid variant primitive type for XML")
+    }
+
     // Handle attributes first
     val isAttribute = name.startsWith(options.attributePrefix) && name != options.valueTag
-    if (isAttribute) {
-      if (variantType == Type.NULL) {
-        Option(options.nullValue).foreach {
-          gen.writeAttribute(name.substring(options.attributePrefix.length), _)
-        }
-      } else {
-        gen.writeAttribute(
-          name.substring(options.attributePrefix.length),
-          getString(v.getValue, pos)
-        )
-      }
+    if (isAttribute && primitiveVal != null) {
+      gen.writeAttribute(
+        name.substring(options.attributePrefix.length),
+        primitiveVal.toString
+      )
       return
     }
 
-    def writePrimitive(): Unit = {
-      variantType match {
-        case Type.NULL =>
-          Option(options.nullValue).foreach { nullValue =>
-            gen.writeCharacters(nullValue)
-          }
-        case Type.BOOLEAN =>
-          gen.writeCharacters(getBoolean(v.getValue, pos).toString)
-        case Type.LONG =>
-          gen.writeCharacters(getLong(v.getValue, pos).toString)
-        case Type.STRING =>
-          gen.writeCharacters(getString(v.getValue, pos))
-        case Type.DOUBLE =>
-          gen.writeCharacters(getDouble(v.getValue, pos).toString)
-        case Type.DECIMAL =>
-          gen.writeCharacters(getDecimal(v.getValue, pos).toString)
-        case Type.DATE =>
-          gen.writeCharacters(
-            dateFormatter.format(LocalDate.ofEpochDay(getLong(v.getValue, pos)))
-          )
-        case Type.TIMESTAMP =>
-          gen.writeCharacters(timestampFormatter.format(getLong(v.getValue, pos)))
-        case Type.TIMESTAMP_NTZ =>
-          gen.writeCharacters(
-            timestampNTZFormatter.format(
-              DateTimeUtils.microsToLocalDateTime(getLong(v.getValue, pos))
-            )
-          )
-        case Type.FLOAT =>
-          gen.writeCharacters(getFloat(v.getValue, pos).toString)
-        case Type.BINARY =>
-          gen.writeCharacters(
-            Base64.getEncoder.encodeToString(getBinary(v.getValue, pos))
-          )
-        case Type.UUID =>
-          gen.writeCharacters(getUuid(v.getValue, pos).toString)
-        case _ =>
-          throw new SparkIllegalArgumentException("invalid variant primitive type for XML")
-      }
-    }
-
     // Handle value tags
-    if (name == options.valueTag) {
-      writePrimitive()
+    if (name == options.valueTag && primitiveVal != null) {
+      gen.writeCharacters(primitiveVal.toString)
       return
     }
 
     // Handle child elements
     gen.writeStartElement(name)
-    writePrimitive()
+    if (primitiveVal != null) gen.writeCharacters(primitiveVal.toString)
     gen.writeEndElement()
   }
 }
