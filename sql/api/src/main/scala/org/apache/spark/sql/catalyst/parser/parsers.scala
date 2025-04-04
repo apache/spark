@@ -205,10 +205,7 @@ class ParseException private (
       messageParameters)
 
   def this(errorClass: String, ctx: ParserRuleContext) =
-    this(
-      errorClass = errorClass,
-      messageParameters = Map.empty,
-      ctx = ctx)
+    this(errorClass = errorClass, messageParameters = Map.empty, ctx = ctx)
 
   /** Compose the message through SparkThrowableHelper given errorClass and messageParameters. */
   def this(
