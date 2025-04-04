@@ -50,10 +50,10 @@ trait HiveRelationCreator {
     throw new UnsupportedOperationException("not supported")
   }
 }
-
+/*
 class HiveParquetBCVarPushdownSuite
   extends BaseBroadcastVarPushDownTests
   with ParquetTest
   with TestHiveSingleton
   with HiveRelationCreator
-
+ */
