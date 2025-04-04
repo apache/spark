@@ -333,7 +333,6 @@ class BasePythonDataSourceTestsMixin:
         actual_schema = StructType.fromDDL(actual_ddl)
 
         class TestDataSourceReader(DataSourceReader):
-
             def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
                 return actual_schema
 
@@ -625,7 +624,6 @@ class BasePythonDataSourceTestsMixin:
 
     def test_column_pruning_disabled(self):
         class TestDataSourceReader(DataSourceReader):
-
             def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
                 assert False
 
