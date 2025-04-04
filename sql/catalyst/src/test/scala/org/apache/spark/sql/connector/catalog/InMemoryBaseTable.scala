@@ -605,7 +605,7 @@ abstract class InMemoryBaseTable(
     override def partitionAttributes(): Array[NamedReference] =
       InMemoryBaseTable.this.partitioning.flatMap(_.references())
 
-    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering[Scan]):
+    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering):
      Boolean = other match {
       case ims: InMemoryBatchScan => this.readSchema == ims.readSchema &&
         this.tableSchema == ims.tableSchema

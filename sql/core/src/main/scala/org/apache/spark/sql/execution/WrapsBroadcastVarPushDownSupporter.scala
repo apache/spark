@@ -28,7 +28,7 @@ trait WrapsBroadcastVarPushDownSupporter {
   self: LeafExecNode =>
   @transient val proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]
 
-  def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering[_]]
+  def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering]
 
   def resetFilteredPartitionsAndInputRdd(): Unit
 
@@ -38,13 +38,19 @@ trait WrapsBroadcastVarPushDownSupporter {
   def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]):
   WrapsBroadcastVarPushDownSupporter
 
-  def getRuntimeFilters(): Seq[Expression]
+ // def setLogicalLink(logicalPlan: LogicalPlan): Unit
 
-  def setLogicalLink(logicalPlan: LogicalPlan): Unit
-
-  def output(): Seq[Attribute]
+ // def output(): Seq[Attribute]
 
   def getTableIdentifier(): TableIdentifier
 
   def getSchema(): StructType
+
+  def setLogicalLink(logicalPlan: LogicalPlan): Unit
+
+  def output: Seq[Attribute]
+
+  def containsNonBroadcastVarRuntimeFilters: Boolean
+
+  def getNonBroadcastVarRuntimeFilters: Seq[Expression]
 }

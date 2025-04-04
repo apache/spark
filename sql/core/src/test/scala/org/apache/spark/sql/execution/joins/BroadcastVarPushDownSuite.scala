@@ -25,10 +25,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.test.SharedSparkSession
 
-abstract class BaseBroadcastVarPushDownTests
-    extends QueryTest
-   with BroadcastVarPushdownUtils {
-
+abstract class BaseBroadcastVarPushDownTests extends QueryTest with BroadcastVarPushdownUtils {
   test("test broadcast variables push on simple join") {
     val planToTest = () =>
       non_part_table1
@@ -109,6 +106,6 @@ abstract class BaseBroadcastVarPushDownTests
 }
 
 class BroadcastVarPushDownSuite
-    extends BaseBroadcastVarPushDownTests
-    with SharedSparkSession
-    with DataSourceV2RelationCreator
+  extends BaseBroadcastVarPushDownTests
+  with SharedSparkSession
+  with DataSourceV2RelationCreator

@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.StructType
 
 
 
-trait SupportsBroadcastVarPushdownFiltering[T] {
+trait SupportsBroadcastVarPushdownFiltering {
 
   def filter(predicates: Array[Predicate]): Unit
 
@@ -41,7 +41,7 @@ trait SupportsBroadcastVarPushdownFiltering[T] {
    * @param other scan to be compared to
    * @return boolean if the scans are same.
    */
-  def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering[T]): Boolean =
+  def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering): Boolean =
     this == other
 
 

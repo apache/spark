@@ -23,7 +23,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -327,12 +327,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val dataSchema = StructType(tableMeta.schema.filterNot { f =>
         tableMeta.partitionColumnNames.contains(f.name)
       })
+      val partitionSchema = tableMeta.partitionSchema
+      val (relationSchema, _) = PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
+        partitionSchema, sparkSession.sessionState.conf.caseSensitiveAnalysis)
       val relation = HadoopFsRelation(
         location = catalogFileIndex,
-        partitionSchema = tableMeta.partitionSchema,
+        partitionSchema = partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,
-        fileFormat = new ParquetFileFormat(),
+        fileFormat = new ParquetFileFormat(relationSchema, partitionSchema),
         options = Map.empty)(sparkSession = spark)
 
       val plan = LogicalRelation(relation, tableMeta)
@@ -340,14 +343,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       spark.sharedState.cacheManager.cacheQuery(df)
 
       assert(spark.sharedState.cacheManager.lookupCachedData(df).isDefined)
-
       val sameCatalog = new CatalogFileIndex(spark, tableMeta, 0)
       val sameRelation = HadoopFsRelation(
         location = sameCatalog,
         partitionSchema = tableMeta.partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,
-        fileFormat = new ParquetFileFormat(),
+        fileFormat = new ParquetFileFormat(relationSchema, partitionSchema),
         options = Map.empty)(sparkSession = spark)
       val samePlanDf = Dataset.ofRows(spark, LogicalRelation(sameRelation, tableMeta))
 

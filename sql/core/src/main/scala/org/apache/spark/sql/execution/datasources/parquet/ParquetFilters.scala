@@ -22,8 +22,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, Period}
-import java.util.HashSet
-import java.util.Locale
+import java.util.{HashSet, Locale}
 
 import scala.jdk.CollectionConverters._
 
@@ -36,8 +35,10 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition
 
+import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
+import org.apache.spark.sql.execution.datasources.parquet.bcvar.RangeInFilter
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
@@ -523,6 +524,7 @@ class ParquetFilters(
         for (value <- values) {
           set.add(Option(value).map(timestampToMicros).orNull)
         }
+
         FilterApi.in(longColumn(n), set)
 
     case ParquetTimestampMillisType if pushDownTimestamp =>
@@ -558,6 +560,63 @@ class ParquetFilters(
             .map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
         }
         FilterApi.in(binaryColumn(n), set)
+  }
+
+  private val makeRangeInPredicate:
+    PartialFunction[ParquetSchemaType, (Array[String], BroadcastedJoinKeysWrapper) =>
+      FilterPredicate] = {
+
+    case ParquetByteType | ParquetShortType | ParquetIntegerType =>
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) => {
+        val column = intColumn(n)
+        val pred = new RangeInFilter[Integer](value, column, toIntValue)
+         FilterApi.userDefined(column, pred)
+      }
+
+
+    case ParquetLongType =>
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) =>
+        val column = longColumn(n)
+        val pred = new RangeInFilter[JLong](value, column, toLongValue)
+        FilterApi.userDefined(column, pred)
+
+    case ParquetFloatType =>
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) =>
+        val column = floatColumn(n)
+        val pred = new RangeInFilter[JFloat](value, column)
+        FilterApi.userDefined(column, pred)
+
+    case ParquetDoubleType =>
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) =>
+        val column = doubleColumn(n)
+        val pred = new RangeInFilter[JDouble](value, column)
+        FilterApi.userDefined(column, pred)
+
+    case ParquetStringType =>
+      // TODO: Asif: handle this as parquet might be rerturning data as binary
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) =>
+        val column = stringColumn(n)
+        val pred = new RangeInFilter[String](value, column)
+        FilterApi.userDefined(column, pred)
+
+    case ParquetDateType =>
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) =>
+        val column = intColumn(n)
+        val pred = new RangeInFilter[Integer](value, column,
+          date => dateToDays(date).asInstanceOf[Integer])
+        FilterApi.userDefined(column, pred)
+
+    case ParquetTimestampMicrosType =>
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) =>
+        val column = longColumn(n)
+        val pred = new RangeInFilter[JLong](value, column, timestampToMicros)
+        FilterApi.userDefined(column, pred)
+
+    case ParquetTimestampMillisType =>
+      (n: Array[String], value: BroadcastedJoinKeysWrapper) =>
+        val column = longColumn(n)
+        val pred = new RangeInFilter[JLong](value, column, timestampToMillis)
+        FilterApi.userDefined(column, pred)
   }
 
   // Returns filters that can be pushed down when reading Parquet files.
@@ -649,9 +708,12 @@ class ParquetFilters(
     case _ => false
   }
 
-  private def canMakeFilterOn(name: String, value: Any): Boolean = {
-    nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value)
-  }
+  private def canMakeFilterOn(name: String, value: Any): Boolean =
+    value match {
+      case _: BroadcastedJoinKeysWrapper => true
+
+      case _ => nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value)
+    }
 
   /**
    * @param predicate the input filter predicates. Not all the predicates can be pushed down.
@@ -765,20 +827,26 @@ class ParquetFilters(
           canMakeFilterOn(name, values.head) =>
         val fieldType = nameToParquetField(name).fieldType
         val fieldNames = nameToParquetField(name).fieldNames
-        if (values.length <= pushDownInFilterThreshold) {
-          values.distinct.flatMap { v =>
-            makeEq.lift(fieldType).map(_(fieldNames, v))
-          }.reduceLeftOption(FilterApi.or)
-        } else if (canPartialPushDownConjuncts) {
-          if (values.contains(null)) {
-            Seq(makeEq.lift(fieldType).map(_(fieldNames, null)),
-              makeInPredicate.lift(fieldType).map(_(fieldNames, values.filter(_ != null)))
-            ).flatten.reduceLeftOption(FilterApi.or)
-          } else {
-            makeInPredicate.lift(fieldType).map(_(fieldNames, values))
-          }
+        val isBroadcastVar = values.headOption.exists(_.isInstanceOf[BroadcastedJoinKeysWrapper])
+        if (isBroadcastVar) {
+          val bcVar = values.head.asInstanceOf[BroadcastedJoinKeysWrapper]
+          makeRangeInPredicate.lift(fieldType).map(_ (fieldNames, bcVar))
         } else {
-          None
+          if (values.length <= pushDownInFilterThreshold) {
+            values.distinct.flatMap { v =>
+              makeEq.lift(fieldType).map(_ (fieldNames, v))
+            }.reduceLeftOption(FilterApi.or)
+          } else if (canPartialPushDownConjuncts) {
+            if (values.contains(null)) {
+              Seq(makeEq.lift(fieldType).map(_ (fieldNames, null)),
+                makeInPredicate.lift(fieldType).map(_ (fieldNames, values.filter(_ != null)))
+              ).flatten.reduceLeftOption(FilterApi.or)
+            } else {
+              makeInPredicate.lift(fieldType).map(_ (fieldNames, values))
+            }
+          } else {
+            None
+          }
         }
 
       case sources.StringStartsWith(name, prefix)

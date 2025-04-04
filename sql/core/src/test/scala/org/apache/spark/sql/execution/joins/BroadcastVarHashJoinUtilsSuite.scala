@@ -27,10 +27,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 class BroadcastVarHashJoinUtilsSuite
-    extends QueryTest
-    with SharedSparkSession
-    with BroadcastVarPushdownUtils
-    with DataSourceV2RelationCreator {
+  extends QueryTest
+  with SharedSparkSession
+  with BroadcastVarPushdownUtils
+  with DataSourceV2RelationCreator {
 
   private lazy val nonPartTable1 = non_part_table1
   private lazy val nonPartTable2 = non_part_table2

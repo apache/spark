@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.execution.datasources.parquet
+
+import java.{util => javautil}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
 
+import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.FileSplit
@@ -34,13 +36,16 @@ import org.apache.parquet.hadoop._
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.expressions.{filter => connectorFilter, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsBroadcastVarPushdownFiltering}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
@@ -49,11 +54,15 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
-class ParquetFileFormat
+class ParquetFileFormat(override val readSchema: StructType, val partitionSchema: StructType)
   extends FileFormat
   with DataSourceRegister
   with Logging
-  with Serializable {
+  with Serializable
+  with SupportsBroadcastVarPushdownFiltering {
+
+  private val broadcastVarFilterExpressions: mutable.Buffer[Filter] =
+    mutable.ListBuffer.empty
 
   override def shortName(): String = "parquet"
 
@@ -365,6 +374,60 @@ class ParquetFileFormat
   override def metadataSchemaFields: Seq[StructField] = {
     super.metadataSchemaFields :+ ParquetFileFormat.ROW_INDEX_FIELD
   }
+
+  def filter(predicates: Array[connectorFilter.Predicate]): Unit = {
+    this.broadcastVarFilterExpressions ++= ParquetFileFormat.convertToV1(predicates)
+  }
+
+  override def hasPushedBroadCastFilter(): Boolean = this.broadcastVarFilterExpressions.nonEmpty
+
+  override def allAttributes(): Array[NamedReference] =
+    readSchema.fields.map(sf => FieldReference(sf.name))
+
+    /**
+     * This method should be implemented by the DataSourceV2 Scan which should check for equality
+     * of Scan without taking into account pushed runtime filters (DPP)
+     *
+     * @param other scan to be compared to
+     * @return boolean if the scans are same.
+     */
+    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering):
+    Boolean = (this eq other) || (other match {
+      case that: ParquetFileFormat => this.partitionSchema == that.partitionSchema &&
+        this.readSchema == that.readSchema
+
+      case _ => false
+      })
+
+
+    /**
+     * This method should be implemented by the DataSourceV2 Scan to return the hashCode excluding
+     * the runtime filters (DPP) pushed to scan.
+     *
+     * @return int
+     */
+    override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(
+      getClass.hashCode(), readSchema, partitionSchema)
+
+
+  override def getPushedBroadcastFilters(): javautil.List[PushedBroadcastFilterData] = {
+    import scala.jdk.CollectionConverters._
+    this.broadcastVarFilterExpressions.map(filter => {
+      val inFilter = filter.asInstanceOf[sources.In]
+      new PushedBroadcastFilterData(inFilter.attribute,
+        inFilter.values.head.asInstanceOf[BroadcastedJoinKeysWrapper])
+    }).asJava
+  }
+
+    override def getPushedBroadcastVarIds(): javautil.Set[java.lang.Long] =
+      this.getPushedBroadcastFilters().stream().map(bcData =>
+        java.lang.Long.valueOf(bcData.bcVar.getBroadcastVarId)).collect(
+        javautil.stream.Collectors.toSet[java.lang.Long])
+
+    override def getPushedBroadcastFiltersCount(): Int = this.broadcastVarFilterExpressions.length
+
+    override def partitionAttributes(): Array[NamedReference] = this.partitionSchema.map(
+      field => FieldReference(field.name)).toArray
 }
 
 object ParquetFileFormat extends Logging {
@@ -532,5 +595,13 @@ object ParquetFileFormat extends Logging {
             log"Parquet key-value metadata:\n\t${MDC(SCHEMA, schemaString)}", cause)
         Failure(cause)
     }.toOption
+  }
+
+  def convertToV1(predicates: Array[connectorFilter.Predicate]): Array[Filter] = {
+    predicates.map(pred => {
+      val attribName = pred.children().head.asInstanceOf[NamedReference].fieldNames().mkString(".")
+      val bcVar = pred.children()(1).asInstanceOf[Literal].value
+      sources.In(attribName, Array(bcVar))
+    })
   }
 }

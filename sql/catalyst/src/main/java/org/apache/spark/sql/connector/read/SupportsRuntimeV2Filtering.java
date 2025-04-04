@@ -37,7 +37,7 @@ import org.apache.spark.sql.sources.Filter;
  */
 @Experimental
 public interface SupportsRuntimeV2Filtering extends
-    Scan, SupportsBroadcastVarPushdownFiltering<Scan> {
+    Scan, SupportsBroadcastVarPushdownFiltering {
   /**
    * Returns attributes this scan can be filtered by at runtime.
    * <p>

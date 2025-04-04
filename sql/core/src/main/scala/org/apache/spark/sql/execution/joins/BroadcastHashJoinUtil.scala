@@ -93,7 +93,7 @@ object BroadcastHashJoinUtil {
     pushDownData.headOption.foreach(_.targetBatchScanExec.resetFilteredPartitionsAndInputRdd())
   }
 
-  def getColNameFromUnderlyingScan(scan: SupportsBroadcastVarPushdownFiltering[_], index: Int):
+  def getColNameFromUnderlyingScan(scan: SupportsBroadcastVarPushdownFiltering, index: Int):
   String = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     scan.allAttributes()(index).fieldNames().toSeq.quoted
@@ -226,7 +226,7 @@ object BroadcastHashJoinUtil {
           val underlyingRuntimeFilteringScan =
             runtimeFilteringBatchScan.getBroadcastVarPushDownSupportingInstance.get
           val streamKey = currentStreamKey
-          val streamsideLeafJoinAttribIndex = runtimeFilteringBatchScan.output().indexWhere(
+          val streamsideLeafJoinAttribIndex = runtimeFilteringBatchScan.output.indexWhere(
             _.canonicalized == streamKey.canonicalized)
           if (underlyingRuntimeFilteringScan.allAttributes().nonEmpty) {
             val streamsideJoinColName = getColNameFromUnderlyingScan(
@@ -237,7 +237,7 @@ object BroadcastHashJoinUtil {
             // TODO Asif: Fix completely the push downn of broadcast var for partitioning column
             // then the below condition should be removed.
             if (!partitionCols.contains(streamsideJoinColName)) {
-              if (runtimeFilteringBatchScan.getRuntimeFilters().isEmpty) {
+              if (!runtimeFilteringBatchScan.containsNonBroadcastVarRuntimeFilters) {
                 Seq(
                   BroadcastVarPushDownData(
                     streamsideLeafJoinAttribIndex,
@@ -332,8 +332,9 @@ object BroadcastHashJoinUtil {
 
         case _: WindowExec => keepGoing = false
 
-        case batchScanExec: WrapsBroadcastVarPushDownSupporter =>
-          batchScanOfInterest = Seq(currentStreamKey -> batchScanExec)
+        case wb: WrapsBroadcastVarPushDownSupporter
+          if wb.getBroadcastVarPushDownSupportingInstance.isDefined =>
+          batchScanOfInterest = Seq(currentStreamKey -> wb)
           keepGoing = false
 
         case qse: QueryStageExec =>

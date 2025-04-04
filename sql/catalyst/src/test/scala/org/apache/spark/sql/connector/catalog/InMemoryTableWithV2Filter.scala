@@ -92,7 +92,7 @@ class InMemoryTableWithV2Filter(
       }
     }
 
-    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering[Scan]):
+    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering):
      Boolean = other match {
       case ims: InMemoryV2FilterBatchScan => this.readSchema == ims.readSchema &&
         this.tableSchema == ims.tableSchema

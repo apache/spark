@@ -72,12 +72,14 @@ case class BatchScanExec(
     case _ => false
   }
 
-  def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering[_]] =
+  def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering] =
     this.scan match {
-      case x: SupportsBroadcastVarPushdownFiltering[_] => Some(x)
+      case x: SupportsBroadcastVarPushdownFiltering => Some(x)
 
       case _ => None
     }
+
+  override def getNonBroadcastVarRuntimeFilters: Seq[Expression] = this.runtimeFilters
 
   override def hashCode(): Int = {
     val batchHashCode = scan match {
@@ -88,6 +90,8 @@ case class BatchScanExec(
     Objects.hashCode(Integer.valueOf(batchHashCode), runtimeFilters,
       this.proxyForPushedBroadcastVar, this.output, this.ordering)
   }
+
+  override def containsNonBroadcastVarRuntimeFilters: Boolean = this.runtimeFilters.nonEmpty
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
@@ -374,8 +378,6 @@ case class BatchScanExec(
 
   def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]):
   WrapsBroadcastVarPushDownSupporter = this.copy(proxyForPushedBroadcastVar = proxy)
-
-  def getRuntimeFilters(): Seq[Expression] = this.runtimeFilters
 
   def getTableIdentifier(): TableIdentifier = TableIdentifier(table.name())
 

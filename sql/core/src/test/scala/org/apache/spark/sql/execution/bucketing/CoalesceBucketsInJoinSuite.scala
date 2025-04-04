@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, PartitionSpec}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, PartitioningUtils, PartitionSpec}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -66,12 +66,16 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
   }
 
   private def newFileSourceScanExec(setting: RelationSetting): FileSourceScanExec = {
+    val dataSchema = DataTypeUtils.fromAttributes(setting.cols)
+    val partitionSchema = PartitionSpec.emptySpec.partitionColumns
+    val (relationSchema, _) = PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
+      partitionSchema, spark.sessionState.conf.caseSensitiveAnalysis)
     val relation = HadoopFsRelation(
       location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
-      partitionSchema = PartitionSpec.emptySpec.partitionColumns,
-      dataSchema = DataTypeUtils.fromAttributes(setting.cols),
+      partitionSchema,
+      dataSchema,
       bucketSpec = Some(BucketSpec(setting.numBuckets, setting.cols.map(_.name), Nil)),
-      fileFormat = new ParquetFileFormat(),
+      fileFormat = new ParquetFileFormat(relationSchema, partitionSchema),
       options = Map.empty)(spark)
     FileSourceScanExec(relation, None, setting.cols, relation.dataSchema, Nil, None, None, Nil,
       None)

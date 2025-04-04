@@ -24,6 +24,7 @@ import org.apache.parquet.filter2.predicate.Operators.DoubleColumn;
 import org.apache.parquet.filter2.predicate.Operators.FloatColumn;
 import org.apache.parquet.filter2.predicate.Operators.IntColumn;
 import org.apache.parquet.filter2.predicate.Operators.LongColumn;
+import org.apache.parquet.io.api.Binary;
 
 /**
  * TODO (PARQUET-1809): This is a temporary workaround; it is intended to be moved to Parquet.
@@ -51,5 +52,16 @@ public final class SparkFilterApi {
 
   public static BinaryColumn binaryColumn(String[] path) {
     return new BinaryColumn(ColumnPath.get(path));
+  }
+
+  public static StringColumn stringColumn(String[] path) {
+    return new StringColumn(ColumnPath.get(path));
+  }
+
+  public static final class StringColumn extends Operators.Column<String>
+      implements Operators.SupportsLtGt {
+    StringColumn(ColumnPath columnPath) {
+      super(columnPath, String.class);
+    }
   }
 }

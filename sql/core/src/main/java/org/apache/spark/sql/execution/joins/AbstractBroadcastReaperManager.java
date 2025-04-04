@@ -54,7 +54,7 @@ public abstract class AbstractBroadcastReaperManager extends SparkListener imple
     this.customCleanupOnApplicationEnd();
   }
 
-  protected void checkInstanceInitialized() {
+  public void checkInstanceInitialized() {
     if (!this.isRegistered) {
       synchronized (this) {
         if (!this.isRegistered) {

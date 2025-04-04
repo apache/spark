@@ -56,12 +56,16 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
       val dataSchema = StructType(tableMeta.schema.filterNot { f =>
         tableMeta.partitionColumnNames.contains(f.name)
       })
+
+      val partitionSchema = tableMeta.partitionSchema
+      val (relationSchema, _) = PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
+        partitionSchema, spark.sessionState.conf.caseSensitiveAnalysis)
       val relation = HadoopFsRelation(
         location = catalogFileIndex,
-        partitionSchema = tableMeta.partitionSchema,
+        partitionSchema = partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,
-        fileFormat = new ParquetFileFormat(),
+        fileFormat = new ParquetFileFormat(relationSchema, partitionSchema),
         options = Map.empty)(sparkSession = spark)
 
       val logicalRelation = LogicalRelation(relation, tableMeta)

@@ -238,7 +238,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
                   }
                   .toSeq), Seq.empty)
 
-            val dppRemoved = bs.getRuntimeFilters()
+            val dppRemoved = bs.getNonBroadcastVarRuntimeFilters
               .filter(_.isInstanceOf[DynamicPruning])
               .map(_.asInstanceOf[DynamicPruning])
             bs.logicalLink.foreach(lpForBs => {
