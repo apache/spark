@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -66,6 +66,10 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
             StringType(defaultCollation)
         }
 
+      // Check if view has default collation
+      case _ if AnalysisContext.get.collation.isDefined =>
+        StringType(AnalysisContext.get.collation.get)
+
       case _ => StringType(defaultCollation)
     }
   }
@@ -79,6 +83,8 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
     // For CREATE TABLE, only v2 CREATE TABLE command is supported.
     // Also, table DEFAULT COLLATION cannot be specified through CREATE TABLE AS SELECT command.
     case _: V2CreateTablePlan | _: ReplaceTable | _: CreateView | _: AlterViewAs => true
+    // Check if view has default collation
+    case _ if AnalysisContext.get.collation.isDefined => true
     case _ => false
   }
 
@@ -126,11 +132,22 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
     case columnDef: ColumnDefinition if hasDefaultStringType(columnDef.dataType) =>
       newType => columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
 
-    case cast: Cast if hasDefaultStringType(cast.dataType) =>
+    case cast: Cast if hasDefaultStringType(cast.dataType) &&
+      cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
       newType => cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+
+    case subquery: SubqueryExpression =>
+      val plan = subquery.plan
+      newType =>
+        val newPlan = plan resolveExpressionsUp { expression =>
+          transformExpression
+            .andThen(_.apply(newType))
+            .applyOrElse(expression, identity[Expression])
+        }
+        subquery.withNewPlan(newPlan)
   }
 
   /**
