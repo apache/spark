@@ -396,7 +396,7 @@ object CSVOptions extends DataSourceOptions {
   val EMPTY_VALUE = newOption("emptyValue")
   val LINE_SEP = newOption("lineSep")
   val INPUT_BUFFER_SIZE = newOption("inputBufferSize")
-  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
+  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val NULL_VALUE = newOption("nullValue")
   val NAN_VALUE = newOption("nanValue")
   val POSITIVE_INF = newOption("positiveInf")
