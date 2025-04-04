@@ -127,7 +127,13 @@ class StaxXmlGenerator(
    * The row to convert
    */
   def write(row: InternalRow): Unit = {
-    writeChildElement(options.rowTag, schema, row)
+    schema match {
+      case st: StructType if st.fields.forall(f => options.singleVariantColumn.contains(f.name)) =>
+        // If the top-level field is a StructType with only the single Variant column, we ignore
+        // the single variant column layer and directly write the Variant value under the row tag
+        writeChildElement(options.rowTag, VariantType, row.getVariant(0))
+      case _ => writeChildElement(options.rowTag, schema, row)
+    }
     if (indentDisabled) {
       gen.writeCharacters("\n")
     }

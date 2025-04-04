@@ -372,9 +372,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // =======================
-  // ====== DSL tests ======
-  // =======================
+  // ============================
+  // ====== DSL read tests ======
+  // ============================
 
   private def createDSLDataFrame(
       fileName: String,
@@ -449,9 +449,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // =======================
-  // ====== SQL tests ======
-  // =======================
+  // ============================
+  // ====== from_xml tests ======
+  // ============================
 
   test("SQL: read an entire XML record as variant using from_xml SQL expression") {
     val xmlStr =
@@ -670,5 +670,132 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       expectedXml = xmlString,
       extraOptions = Map.empty
     )
+  }
+
+  // =============================
+  // ====== DSL write tests ======
+  // =============================
+
+  test("DSL: save singleVariantColumn to XML") {
+    // Load the XML file as a single variant column
+    val df = spark.read
+      .format("xml")
+      .option("singleVariantColumn", "var")
+      .options(baseOptions)
+      .load(getTestResourcePath(resDir + "cars.xml"))
+
+    df.show(false)
+
+    withTempDir { dir =>
+      // Write the single Variant column Dataframe to XML
+      val outputPath = dir.getCanonicalPath
+      df.write
+        .format("xml")
+        .option("rowTag", "ROW")
+        .option("singleVariantColumn", "var")
+        .mode("overwrite")
+        .save(outputPath)
+
+      // Check if the written XML file matches the original XML file
+      val df1 = spark.read
+        .format("xml")
+        .options(baseOptions)
+        .load(getTestResourcePath(resDir + "cars.xml"))
+      val df2 = spark.read
+        .format("xml")
+        .options(baseOptions)
+        .load(outputPath)
+      checkAnswer(df1, df2)
+    }
+  }
+
+  test("DSL: save Dataframe with child variant columns to XML") {
+    // Load the XML file as a struct with two variant columns
+    val df = spark.read
+      .format("xml")
+      .option("rowTag", "book")
+      .schema(
+        "_id string, author string, title string, genre variant, price double, " +
+        "publish_dates variant"
+      )
+      .load(getTestResourcePath(resDir + "books-complicated.xml"))
+
+    withTempDir { dir =>
+      // Write the Dataframe with the two Variant columns to XML
+      val outputPath = dir.getCanonicalPath
+      df.write
+        .format("xml")
+        .option("rowTag", "book")
+        .mode("overwrite")
+        .save(outputPath)
+
+      // Check if the written XML file matches the original XML file
+      val df1 = spark.read
+        .format("xml")
+        .option("rowTag", "book")
+        .load(getTestResourcePath(resDir + "books-complicated.xml"))
+      val df2 = spark.read
+        .format("xml")
+        .option("rowTag", "book")
+        .load(outputPath)
+      checkAnswer(df1, df2)
+    }
+  }
+
+  test("SQL: to_xml with a single variant column") {
+    val xmlStr =
+      """
+        |<ROW>
+        |    <year>2012<!--A comment within tags--></year>
+        |    <make>Tesla</make>
+        |    <model>S</model>
+        |    <comment>NoComment</comment>
+        |</ROW>
+        |""".stripMargin
+
+    // Read the entire XML record as a single variant
+    val xmlResult = spark
+      .sql(s"""SELECT to_xml(from_xml('$xmlStr', 'variant'))""")
+      .collect()
+      .map(_.getString(0).replaceAll("\\s+", ""))
+    val expectedResult =
+      """<ROW>
+        |    <comment>NoComment</comment>
+        |    <make>Tesla</make>
+        |    <model>S</model>
+        |    <year>2012</year>
+        |</ROW>""".stripMargin.replaceAll("\\s+", "")
+    assert(xmlResult.head === expectedResult)
+  }
+
+  test("SQL: to_xml with a subset of variant columns") {
+    val xmlStr =
+      """
+        |<book>
+        |   <author>Gambardella</author>
+        |   <title>Hello</title>
+        |   <genre>
+        |     <genreid>1</genreid>
+        |     <name>Computer</name>
+        |   </genre>
+        |   <price>44.95</price>
+        |   <publish_dates>
+        |     <publish_date>
+        |       <day>1</day>
+        |       <month>10</month>
+        |       <year>2000</year>
+        |     </publish_date>
+        |   </publish_dates>
+        | </book>
+        | """.stripMargin.replaceAll("\\s+", "")
+
+    // Read the entire XML record as a single variant
+    val schemaDDL =
+      "author string, title string, genre variant, price double, publish_dates variant"
+    val xmlResult = spark
+      .sql(s"""SELECT to_xml(from_xml('$xmlStr', '$schemaDDL'), map('rowTag', 'book'))""")
+      .collect()
+      .map(_.getString(0).replaceAll("\\s+", ""))
+    assert(xmlResult.head === xmlStr)
   }
 }
