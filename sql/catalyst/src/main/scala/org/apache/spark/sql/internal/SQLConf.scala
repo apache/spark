@@ -284,7 +284,7 @@ object SQLConf {
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   val ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT =
     buildConf("spark.sql.analyzer.singlePassResolver.returnSinglePassResultInDualRun")
@@ -326,7 +326,7 @@ object SQLConf {
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(!Utils.isTesting)
 
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
