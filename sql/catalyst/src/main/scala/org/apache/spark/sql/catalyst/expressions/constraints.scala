@@ -80,17 +80,8 @@ case class CheckConstraint(
     copy(child = newChild)
 
   override protected def generateConstraintName(tableName: String): String = {
-    val base = condition
-      .replace("!=", "_ne_")
-      .replace("=", "_eq_")
-      .replace(">", "_gt_")
-      .replace("<", "_lt_")
-      .replace(">=", "_ge_")
-      .replace("<=", "_le_")
-      .filter(c => c.isLetterOrDigit || c == '_')
-      .take(20)
     val rand = scala.util.Random.alphanumeric.take(6).mkString
-    s"${tableName}_chk_${base}_$rand"
+    s"${tableName}_chk_$rand"
   }
 
   override def sql: String = s"CONSTRAINT $name CHECK ($condition)"
@@ -137,9 +128,8 @@ case class UniqueConstraint(
     extends TableConstraint {
 
   override protected def generateConstraintName(tableName: String): String = {
-    val base = columns.map(_.filter(_.isLetterOrDigit)).sorted.mkString("_").take(20)
     val rand = scala.util.Random.alphanumeric.take(6).mkString
-    s"${tableName}_uk_${base}_$rand"
+    s"${tableName}_uk_$rand"
   }
 
   override def withName(name: String): TableConstraint = copy(name = name)

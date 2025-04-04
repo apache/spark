@@ -35,7 +35,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_uk_a_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_uk_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected CreateTable, but got: $other")
@@ -54,7 +54,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_uk_a_b_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_uk_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected CreateTable, but got: $other")
@@ -73,9 +73,9 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 2)
           assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_uk_a_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_uk_[0-9a-zA-Z]{6}"))
           assert(tableSpec.constraints.last.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.last.name.matches("t_uk_b_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.last.name.matches("t_uk_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected CreateTable, but got: $other")
@@ -94,7 +94,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
         val table = a.table.asInstanceOf[UnresolvedTable]
         assert(table.multipartIdentifier == Seq("a", "b", "c"))
         assert(a.tableConstraint.isInstanceOf[UniqueConstraint])
-        assert(a.tableConstraint.name.matches("c_uk_d_[0-9a-zA-Z]{6}"))
+        assert(a.tableConstraint.name.matches("c_uk_[0-9a-zA-Z]{6}"))
 
       case other =>
         fail(s"Expected AddConstraint, but got: $other")
@@ -132,7 +132,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_uk_a_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_uk_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected ReplaceTable, but got: $other")
@@ -151,7 +151,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_uk_a_b_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_uk_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected ReplaceTable, but got: $other")
@@ -170,9 +170,9 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 2)
           assert(tableSpec.constraints.head.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_uk_a_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_uk_[0-9a-zA-Z]{6}"))
           assert(tableSpec.constraints.last.isInstanceOf[UniqueConstraint])
-          assert(tableSpec.constraints.last.name.matches("t_uk_b_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.last.name.matches("t_uk_[0-9a-zA-Z]{6}"))
 
         case other =>
           fail(s"Expected ReplaceTable, but got: $other")
