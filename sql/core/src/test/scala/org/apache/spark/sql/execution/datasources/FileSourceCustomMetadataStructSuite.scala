@@ -91,6 +91,13 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
     val index = TestFileIndex(files)
     val fsRelation = HadoopFsRelation(
       index, index.partitionSchema, FILE_SCHEMA, None, format, Map.empty)(spark)
+    format match {
+      case p: ParquetFileFormat =>
+        p.setReadSchema(fsRelation.schema)
+        p.setPartitionSchema(index.partitionSchema)
+
+      case _ =>
+    }
     Dataset.ofRows(spark, LogicalRelation(fsRelation))
   }
 

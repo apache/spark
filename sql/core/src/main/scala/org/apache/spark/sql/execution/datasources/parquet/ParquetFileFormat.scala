@@ -54,15 +54,24 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
-class ParquetFileFormat(override val readSchema: StructType, val partitionSchema: StructType)
+class ParquetFileFormat
   extends FileFormat
   with DataSourceRegister
   with Logging
   with Serializable
   with SupportsBroadcastVarPushdownFiltering {
 
+  private var readSchma: Option[StructType] = None
+  private var partitionSchema: Option[StructType] = None
+
   private val broadcastVarFilterExpressions: mutable.Buffer[Filter] =
     mutable.ListBuffer.empty
+
+  def setPartitionSchema(str: StructType): Unit = this.partitionSchema = Option(str)
+
+  def setReadSchema(str: StructType): Unit = this.readSchma = Option(str)
+
+  def readSchema: StructType = this.readSchma.getOrElse(StructType(Seq.empty))
 
   override def shortName(): String = "parquet"
 
@@ -425,8 +434,8 @@ class ParquetFileFormat(override val readSchema: StructType, val partitionSchema
 
     override def getPushedBroadcastFiltersCount(): Int = this.broadcastVarFilterExpressions.length
 
-    override def partitionAttributes(): Array[NamedReference] = this.partitionSchema.map(
-      field => FieldReference(field.name)).toArray
+    override def partitionAttributes(): Array[NamedReference] = this.partitionSchema.map(str =>
+      str.map(field => FieldReference(field.name)).toArray).getOrElse(Array.empty)
 }
 
 object ParquetFileFormat extends Logging {

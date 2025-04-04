@@ -680,8 +680,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
   }
 
   test("SPARK-50854: Make path fully qualified before passing it to FileStreamSink") {
-    val fileFormat = new ParquetFileFormat(
-      StructType(Seq.empty), StructType(Seq.empty)) // any valid FileFormat
+    val fileFormat = new ParquetFileFormat() // any valid FileFormat
     val partitionColumnNames = Seq.empty[String]
     val options = Map.empty[String, String]
     val exception = intercept[SparkException] {
