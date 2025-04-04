@@ -386,8 +386,7 @@ object FileSourceCustomMetadataStructSuite {
     override def partitionSchema: StructType = new StructType()
   }
 
-  class TestFileFormat(extraMetadataFields: Seq[StructField]) extends
-    ParquetFileFormat(StructType.apply(Seq.empty), StructType.apply(Seq.empty)) {
+  class TestFileFormat(extraMetadataFields: Seq[StructField]) extends ParquetFileFormat {
     override def metadataSchemaFields: Seq[StructField] = {
       super.metadataSchemaFields ++ extraMetadataFields
     }
