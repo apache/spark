@@ -24,7 +24,6 @@ import org.apache.parquet.filter2.predicate.Operators.DoubleColumn;
 import org.apache.parquet.filter2.predicate.Operators.FloatColumn;
 import org.apache.parquet.filter2.predicate.Operators.IntColumn;
 import org.apache.parquet.filter2.predicate.Operators.LongColumn;
-import org.apache.parquet.io.api.Binary;
 
 /**
  * TODO (PARQUET-1809): This is a temporary workaround; it is intended to be moved to Parquet.

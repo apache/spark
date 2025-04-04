@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.expressions.{filter => connectorFilter, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{filter => connectorFilter, FieldReference, LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsBroadcastVarPushdownFiltering}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
@@ -432,7 +432,9 @@ class ParquetFileFormat
         java.lang.Long.valueOf(bcData.bcVar.getBroadcastVarId)).collect(
         javautil.stream.Collectors.toSet[java.lang.Long])
 
-    override def getPushedBroadcastFiltersCount(): Int = this.broadcastVarFilterExpressions.length
+    // TODO: Asif fix this
+    override def getPushedBroadcastFiltersCount(): Int = 0
+  // this.broadcastVarFilterExpressions.length
 
     override def partitionAttributes(): Array[NamedReference] = this.partitionSchema.map(str =>
       str.map(field => FieldReference(field.name)).toArray).getOrElse(Array.empty)
@@ -608,7 +610,7 @@ object ParquetFileFormat extends Logging {
   def convertToV1(predicates: Array[connectorFilter.Predicate]): Array[Filter] = {
     predicates.map(pred => {
       val attribName = pred.children().head.asInstanceOf[NamedReference].fieldNames().mkString(".")
-      val bcVar = pred.children()(1).asInstanceOf[Literal].value
+      val bcVar = pred.children()(1).asInstanceOf[LiteralValue[BroadcastedJoinKeysWrapper]].value
       sources.In(attribName, Array(bcVar))
     })
   }
