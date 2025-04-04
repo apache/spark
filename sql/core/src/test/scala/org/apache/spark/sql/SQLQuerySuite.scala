@@ -821,11 +821,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       case cp: CartesianProductExec => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
-    val smj = df.queryExecution.sparkPlan.collect {
+    val smj = df.queryExecution.sparkPlan.collectFirst {
       case smj: SortMergeJoinExec => smj
       case j: BroadcastHashJoinExec => j
     }
-    assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
+    assert(smj.nonEmpty, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)
   }
 
@@ -3815,7 +3815,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1, "1, 2", null, "version()").foreach { expr =>
         val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
           .queryExecution.optimizedPlan
-        val res = plan.collect {
+        val res = plan.collectFirst {
           case r: RepartitionByExpression if r.numPartitions == 1 => true
         }
         assert(res.nonEmpty)
@@ -3827,7 +3827,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
       val df = spark.range(1).hint("REPARTITION_BY_RANGE")
       val plan = df.queryExecution.optimizedPlan
-      val res = plan.collect {
+      val res = plan.collectFirst {
         case r: RepartitionByExpression if r.numPartitions == 5 => true
       }
       assert(res.nonEmpty)
@@ -3839,7 +3839,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1, "1, 2", null, "version()").foreach { expr =>
         val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
           .queryExecution.analyzed
-        val res = plan.collect {
+        val res = plan.collectFirst {
           case r: RepartitionByExpression if r.numPartitions == 2 => true
         }
         assert(res.nonEmpty)
