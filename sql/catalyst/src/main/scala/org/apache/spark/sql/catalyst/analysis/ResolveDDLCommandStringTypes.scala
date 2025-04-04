@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterTableCommand, AlterViewAs, ColumnDefinition, CreateTable, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -66,6 +66,19 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
             StringType(defaultCollation)
         }
 
+      case alterViewAs: AlterViewAs =>
+        alterViewAs.child match {
+          case resolvedPersistentView: ResolvedPersistentView =>
+            val collation = resolvedPersistentView.metadata.collation.getOrElse(defaultCollation)
+            StringType(collation)
+          case resolvedTempView: ResolvedTempView =>
+            val collation = resolvedTempView.metadata.collation.getOrElse(defaultCollation)
+            StringType(collation)
+          case _ =>
+            // As a safeguard, use the default collation for unknown cases.
+            StringType(defaultCollation)
+        }
+
       case _ => StringType(defaultCollation)
     }
   }
@@ -109,7 +122,7 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
    * Transforms the given plan, by transforming all expressions in its operators to use the given
    * new type instead of the default string type.
    */
-  private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
+  def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     val transformedPlan = plan resolveExpressionsUp { expression =>
       transformExpression
         .andThen(_.apply(newType))
@@ -131,6 +144,16 @@ object ResolveDDLCommandStringTypes extends Rule[LogicalPlan] {
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>
       newType => Literal(value, replaceDefaultStringType(dt, newType))
+
+    case subquery: SubqueryExpression =>
+      val plan = subquery.plan
+      newType =>
+        val newPlan = plan resolveExpressionsUp { expression =>
+          transformExpression
+            .andThen(_.apply(newType))
+            .applyOrElse(expression, identity[Expression])
+        }
+        subquery.withNewPlan(newPlan)
   }
 
   /**
