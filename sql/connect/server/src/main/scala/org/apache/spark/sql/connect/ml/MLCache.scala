@@ -86,7 +86,7 @@ private[connect] class MLCache extends Logging {
 
 private[connect] object MLCache {
   // The maximum number of distinct items in the cache.
-  private val MAX_CACHED_ITEMS = 100
+  private val MAX_CACHED_ITEMS = 200
 
   // The maximum time for an item to stay in the cache.
   private val CACHE_TIMEOUT_MINUTE = 60
