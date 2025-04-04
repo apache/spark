@@ -22,9 +22,7 @@ import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.BufferedRows
-import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
-import org.apache.spark.sql.execution.joins.{BaseBroadcastVarPushDownTests, BroadcastVarPushdownUtils}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.execution.joins.BroadcastVarPushdownUtils
 import org.apache.spark.sql.types.StructType
 
 trait HiveRelationCreator {
