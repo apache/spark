@@ -263,7 +263,7 @@ class RocksDB(
    * @return - true if the column family exists, false otherwise
    */
   def checkColFamilyExists(colFamilyName: String): Boolean = {
-    db != null && colFamilyNameToInfoMap.containsKey(colFamilyName)
+    colFamilyNameToInfoMap.containsKey(colFamilyName)
   }
 
   // This method sets the internal column family metadata to
@@ -1211,6 +1211,8 @@ class RocksDB(
       }
 
       silentDeleteRecursively(localRootDir, "closing RocksDB")
+      // Clear internal maps to reset the state
+      clearColFamilyMaps()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
