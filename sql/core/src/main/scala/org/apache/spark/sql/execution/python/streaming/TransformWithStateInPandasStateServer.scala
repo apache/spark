@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.net.ServerSocket
+import java.nio.channels.{Channels, ServerSocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
@@ -27,7 +27,9 @@ import com.google.protobuf.ByteString
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -52,7 +54,7 @@ import org.apache.spark.util.Utils
  * - Requests for managing state variables (e.g. valueState).
  */
 class TransformWithStateInPandasStateServer(
-    stateServerSocket: ServerSocket,
+    stateServerSocket: ServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
     timeZoneId: String,
@@ -79,6 +81,10 @@ class TransformWithStateInPandasStateServer(
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = outputStreamForTest
+
+  private val isUnixDomainSock = Option(SparkEnv.get)
+    .map(_.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED))
+    .getOrElse(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.defaultValue.get)
 
   /** State variable related class variables */
   // A map to store the value state name -> (value state, schema, value row deserializer) mapping.
@@ -148,12 +154,12 @@ class TransformWithStateInPandasStateServer(
     // Disabling either would work, but it's more common to disable Nagle's algorithm; there is
     // lot less reference to disabling delayed ACKs, while there are lots of resources to
     // disable Nagle's algorithm.
-    listeningSocket.setTcpNoDelay(true)
+    if (!isUnixDomainSock) listeningSocket.socket().setTcpNoDelay(true)
 
     inputStream = new DataInputStream(
-      new BufferedInputStream(listeningSocket.getInputStream))
+      new BufferedInputStream(Channels.newInputStream(listeningSocket)))
     outputStream = new DataOutputStream(
-      new BufferedOutputStream(listeningSocket.getOutputStream)
+      new BufferedOutputStream(Channels.newOutputStream(listeningSocket))
     )
 
     while (listeningSocket.isConnected &&

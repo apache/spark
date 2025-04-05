@@ -18,14 +18,17 @@ package org.apache.spark.security
 
 import java.io.Closeable
 import java.net._
+import java.nio.channels.{ServerSocketChannel, SocketChannel}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.util.Utils
 
 class SocketAuthHelperSuite extends SparkFunSuite {
 
   private val conf = new SparkConf()
+  conf.set(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key, false.toString)
   private val authHelper = new SocketAuthHelper(conf)
 
   test("successful auth") {
@@ -56,9 +59,8 @@ class SocketAuthHelperSuite extends SparkFunSuite {
   }
 
   private class ServerThread extends Thread with Closeable {
-
-    private val ss = new ServerSocket()
-    ss.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
+    private val serverSocketChannel = ServerSocketChannel.open()
+    serverSocketChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
 
     @volatile var error: Exception = _
     @volatile var authenticated = false
@@ -66,14 +68,15 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     setDaemon(true)
     start()
 
-    def createClient(): Socket = {
-      new Socket(InetAddress.getLoopbackAddress(), ss.getLocalPort())
+    def createClient(): SocketChannel = {
+      SocketChannel.open(new InetSocketAddress(
+        InetAddress.getLoopbackAddress(), serverSocketChannel.socket().getLocalPort))
     }
 
     override def run(): Unit = {
-      var clientConn: Socket = null
+      var clientConn: SocketChannel = null
       try {
-        clientConn = ss.accept()
+        clientConn = serverSocketChannel.accept()
         authHelper.authClient(clientConn)
         authenticated = true
       } catch {
@@ -86,7 +89,7 @@ class SocketAuthHelperSuite extends SparkFunSuite {
 
     override def close(): Unit = {
       try {
-        ss.close()
+        serverSocketChannel.close()
       } finally {
         interrupt()
       }
