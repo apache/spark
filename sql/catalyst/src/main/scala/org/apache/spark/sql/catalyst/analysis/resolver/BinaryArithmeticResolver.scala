@@ -100,11 +100,14 @@ class BinaryArithmeticResolver(
 
   override def resolve(unresolvedBinaryArithmetic: BinaryArithmetic): Expression = {
     val binaryArithmeticWithResolvedChildren: BinaryArithmetic =
-      withResolvedChildren(unresolvedBinaryArithmetic, expressionResolver.resolve)
+      withResolvedChildren(unresolvedBinaryArithmetic, expressionResolver.resolve _)
+        .asInstanceOf[BinaryArithmetic]
+
     val binaryArithmeticWithResolvedSubtree: Expression =
       withResolvedSubtree(binaryArithmeticWithResolvedChildren, expressionResolver.resolve) {
         transformBinaryArithmeticNode(binaryArithmeticWithResolvedChildren)
       }
+
     timezoneAwareExpressionResolver.withResolvedTimezone(
       binaryArithmeticWithResolvedSubtree,
       conf.sessionLocalTimeZone

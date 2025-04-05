@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.ArrayDeque
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -110,7 +110,9 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
 
     viewResolutionContextStack.push(viewResolutionContext)
     try {
-      (body, viewResolutionContext)
+      AnalysisContext.withAnalysisContext(unresolvedView.desc) {
+        (body, viewResolutionContext)
+      }
     } finally {
       viewResolutionContextStack.pop()
     }

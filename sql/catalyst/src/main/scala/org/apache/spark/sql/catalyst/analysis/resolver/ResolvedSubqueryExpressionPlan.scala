@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * Structure used to return results of the resolved project list.
- *  - expressions: The resolved expressions. It is resolved using the
- *                 `resolveExpressionTreeInOperator`.
- *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
- *                             expressions.
- *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
+ * The result of [[SubqueryExpression.plan]] resolution. This is used internally in
+ * [[SubqueryExpressionResolver]].
+ *
+ * @param plan The resolved plan of the subquery.
+ * @param output Plan output. We don't use [[LogicalPlan.output]] in the single-pass Analyzer,
+ *   because this method is often recursive.
+ * @param outerExpressions The outer expressions that are references in the plan. [[OuterReference]]
+ *   wrapper is stripped away. These can be either actual leaf [[AttributeReference]]s or
+ *   [[AggregateExpression]]s with outer references inside.
  */
-case class ResolvedProjectList(
-    expressions: Seq[NamedExpression],
-    hasAggregateExpressions: Boolean,
-    hasLateralColumnAlias: Boolean)
+case class ResolvedSubqueryExpressionPlan(
+    plan: LogicalPlan,
+    output: Seq[Attribute],
+    outerExpressions: Seq[Expression])
