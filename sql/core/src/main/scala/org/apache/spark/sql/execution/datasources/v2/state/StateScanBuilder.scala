@@ -156,7 +156,7 @@ class StateScan(
         desc += s"[snapshotPartitionId=${fromSnapshotOptions.snapshotPartitionId}]"
       case _ =>
     }
-    sourceOptions.readChangeFeedOptions match {
+    sourceOptions.readChangeLogOptions match {
       case Some(fromSnapshotOptions) =>
         desc += s"[changeStartBatchId=${fromSnapshotOptions.changeStartBatchId}"
         desc += s"[changeEndBatchId=${fromSnapshotOptions.changeEndBatchId}"
