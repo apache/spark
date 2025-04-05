@@ -331,7 +331,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result = store.iterator(cfName).map { kv =>
+      val result = store.iteratorForTesting(cfName).map { kv =>
         val key = keyRowWithRangeScanToData(kv.key)
         key._1
       }.toSeq
@@ -349,7 +349,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
       }
 
-      val result1 = store1.iterator(cfName).map { kv =>
+      val result1 = store1.iteratorForTesting(cfName).map { kv =>
         val key = keyRowWithRangeScanToData(kv.key)
         key._1
       }.toSeq
@@ -387,7 +387,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           assert(valueRowToData(store.get(keyRow, cfName)) === 1)
         }
 
-        val result = store.iterator(cfName).map { kv =>
+        val result = store.iteratorForTesting(cfName).map { kv =>
           val key = keyRowToData(kv.key)
           key._2
         }.toSeq
@@ -404,7 +404,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
         }
 
-        val result1 = store1.iterator(cfName).map { kv =>
+        val result1 = store1.iteratorForTesting(cfName).map { kv =>
           val key = keyRowToData(kv.key)
           key._2
         }.toSeq
@@ -455,7 +455,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       // We expect to find NaNs at the beginning and end of the sorted list
       var nanIndexSet = Set(0, 1, timerTimestamps.size - 2, timerTimestamps.size - 1)
-      val result = store.iterator(cfName).zipWithIndex.map { case (kv, idx) =>
+      val result = store.iteratorForTesting(cfName).zipWithIndex.map { case (kv, idx) =>
         val keyRow = kv.key
         val key = (keyRow.getDouble(0), keyRow.getString(1))
         if (key._1.isNaN) {
@@ -497,7 +497,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result = store.iterator(cfName).map { kv =>
+      val result = store.iteratorForTesting(cfName).map { kv =>
         val key = keyRowWithRangeScanToData(kv.key)
         key._1
       }.toSeq
@@ -516,7 +516,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
       }
 
-      val result1 = store1.iterator(cfName).map { kv =>
+      val result1 = store1.iteratorForTesting(cfName).map { kv =>
         val key = keyRowWithRangeScanToData(kv.key)
         key._1
       }.toSeq
@@ -562,7 +562,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
             assert(valueRowToData(store.get(keyRow, cfName)) === 1)
           }
 
-          val result = store.iterator(cfName).map { kv =>
+          val result = store.iteratorForTesting(cfName).map { kv =>
             val keyRow = kv.key
             (keyRow.getLong(1), keyRow.getInt(2))
           }.toSeq
@@ -621,7 +621,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result = store.iterator(cfName).map { kv =>
+      val result = store.iteratorForTesting(cfName).map { kv =>
         val keyRow = kv.key
         val key = (keyRow.getLong(0), keyRow.getInt(1), keyRow.getString(2))
         (key._1, key._2)
@@ -1278,7 +1278,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
 
         val result = store
-          .iterator(cfName)
+          .iteratorForTesting(cfName)
           .map { kv =>
             val keyRow = kv.key
             (keyRow.getLong(0), keyRow.getInt(2), keyRow.getDouble(4))
@@ -1341,14 +1341,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       // verify that the expected null cols are seen
-      val nullRows = store.iterator(cfName).filter { kv =>
+      val nullRows = store.iteratorForTesting(cfName).filter { kv =>
         val keyRow = kv.key
         keyRow.isNullAt(0)
       }
       assert(nullRows.size === 5)
 
       // filter out the null rows and verify the rest
-      val result: Seq[(Long, Int)] = store.iterator(cfName).filter { kv =>
+      val result: Seq[(Long, Int)] = store.iteratorForTesting(cfName).filter { kv =>
         val keyRow = kv.key
         !keyRow.isNullAt(0)
       }.map { kv =>
@@ -1364,7 +1364,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(result === timerTimestampsWithoutNulls.sorted)
 
       // verify that the null cols are seen in the correct order filtering for nulls
-      val nullRowsWithOrder = store.iterator(cfName).filter { kv =>
+      val nullRowsWithOrder = store.iteratorForTesting(cfName).filter { kv =>
         val keyRow = kv.key
         keyRow.isNullAt(0)
       }.map { kv =>
@@ -1396,7 +1396,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       // verify that ordering for non-null columns on the right in still maintained
-      val result1: Seq[Int] = store.iterator(cfName).map { kv =>
+      val result1: Seq[Int] = store.iteratorForTesting(cfName).map { kv =>
         val keyRow = kv.key
         keyRow.getInt(1)
       }.toSeq
@@ -1442,14 +1442,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       // verify that the expected null cols are seen
-      val nullRows = store.iterator(cfName).filter { kv =>
+      val nullRows = store.iteratorForTesting(cfName).filter { kv =>
         val keyRow = kv.key
         keyRow.isNullAt(1)
       }
       assert(nullRows.size === 5)
 
       // the ordering based on first col which has non-null values should be preserved
-      val result: Seq[(Long, Int)] = store.iterator(cfName)
+      val result: Seq[(Long, Int)] = store.iteratorForTesting(cfName)
         .map { kv =>
           val keyRow = kv.key
           val key = (keyRow.getLong(0), keyRow.getInt(1), keyRow.getString(2))
@@ -1495,7 +1495,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result: Seq[(Byte, Int)] = store.iterator(cfName).map { kv =>
+      val result: Seq[(Byte, Int)] = store.iteratorForTesting(cfName).map { kv =>
         val keyRow = kv.key
         val key = (keyRow.getByte(0), keyRow.getInt(1), keyRow.getString(2))
         (key._1, key._2)
@@ -1530,7 +1530,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result = store.iterator(cfName).map { kv =>
+      val result = store.iteratorForTesting(cfName).map { kv =>
         valueRowToData(kv.key)
       }.toSeq
       assert(result === timerTimestamps.sorted)
@@ -1740,7 +1740,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       verifyStoreOperationUnsupported("iterator", colFamiliesEnabled, colFamilyName) {
-        store.iterator(colFamilyName)
+        store.iteratorForTesting(colFamilyName)
       }
 
       verifyStoreOperationUnsupported("merge", colFamiliesEnabled, colFamilyName) {
@@ -1760,7 +1760,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       def iterator(store: StateStore, colFamilyName: String): Iterator[((String, Int), Int)] = {
-        store.iterator(colFamilyName).map {
+        store.iteratorForTesting(colFamilyName).map {
           case unsafePair =>
             (keyRowToData(unsafePair.key), valueRowToData(unsafePair.value))
         }
@@ -1891,12 +1891,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
             store.put(keyRow, valueRow, cfName)
             assert(valueRowToData(store.get(keyRow, cfName)) === 1)
           }
-          assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+          assert(store.iteratorForTesting(cfName).toSeq.length == timerTimestamps.length)
 
           // remove
           store.remove(dataToKeyRow(1L.toString, 1.toInt), cfName)
           timerTimestamps = timerTimestamps.filter(_ != 1L)
-          assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+          assert(store.iteratorForTesting(cfName).toSeq.length == timerTimestamps.length)
 
           // prefix scan
           if (!keyEncoder.isInstanceOf[NoPrefixKeyStateEncoderSpec]) {
@@ -1942,9 +1942,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPair = store
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPair.isDefined && metricPair.get._2 === 4)
-        assert(rowPairsToDataSet(store.iterator(cfName)) ===
+        assert(rowPairsToDataSet(store.iteratorForTesting(cfName)) ===
           Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(store.iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(store.iteratorForTesting(internalCfName)) ===
           Set(("a", 0) -> 1, ("m", 0) -> 2, ("n", 0) -> 3, ("b", 0) -> 4))
 
         // Reload the store and remove some keys
@@ -1962,9 +1962,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPairUpdated = reloadedStore
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPairUpdated.isDefined && metricPairUpdated.get._2 === 3)
-        assert(rowPairsToDataSet(reloadedStore.iterator(cfName)) ===
+        assert(rowPairsToDataSet(reloadedStore.iteratorForTesting(cfName)) ===
           Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(reloadedStore.iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(reloadedStore.iteratorForTesting(internalCfName)) ===
           Set(("a", 0) -> 1, ("n", 0) -> 3, ("b", 0) -> 4))
       }
     }
@@ -1993,13 +1993,13 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           val valueRow = dataToValueRow(1)
           store.put(keyRow, valueRow, cfName)
         }
-        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+        assert(store.iteratorForTesting(cfName).toSeq.length == timerTimestamps.length)
 
         // assert col family existence
         assert(store.removeColFamilyIfExists(cfName))
 
         val e = intercept[Exception] {
-          store.iterator(cfName)
+          store.iteratorForTesting(cfName)
         }
 
         checkError(
@@ -2123,7 +2123,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(provider.stateStoreId,
       useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
-      reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
+      reloadedProvider.getStore(versionToRead).iteratorForTesting().map(rowPairToDataPair).toSet
     }
   }
 
