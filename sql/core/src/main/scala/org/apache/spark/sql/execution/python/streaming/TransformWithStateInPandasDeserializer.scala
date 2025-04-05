@@ -26,6 +26,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -55,6 +56,26 @@ class TransformWithStateInPandasDeserializer(deserializer: ExpressionEncoder.Des
       rows.appendAll(batch.rowIterator().asScala.map(r => deserializer(r.copy())))
     }
     reader.close(false)
+    rows.toSeq
+  }
+
+  def readListElements(stream: DataInputStream, listStateInfo: ListStateInfo): Seq[Row] = {
+    val rows = new scala.collection.mutable.ArrayBuffer[Row]
+
+    var endOfLoop = false
+    while (!endOfLoop) {
+      val size = stream.readInt()
+      if (size < 0) {
+        endOfLoop = true
+      } else {
+        val bytes = new Array[Byte](size)
+        stream.read(bytes, 0, size)
+        val newRow = PythonSQLUtils.toJVMRow(bytes, listStateInfo.schema,
+          listStateInfo.deserializer)
+        rows.append(newRow)
+      }
+    }
+
     rows.toSeq
   }
 }
