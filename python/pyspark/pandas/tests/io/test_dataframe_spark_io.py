@@ -23,6 +23,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_openpyxl, openpyxl_requirement_message
 
 
 class DataFrameSparkIOTestsMixin:
@@ -253,6 +254,7 @@ class DataFrameSparkIOTestsMixin:
                 expected_idx.sort_values(by="f").to_spark().toPandas(),
             )
 
+    @unittest.skipIf(not have_openpyxl, openpyxl_requirement_message)
     def test_read_excel(self):
         with self.temp_dir() as tmp:
             path1 = "{}/file1.xlsx".format(tmp)
@@ -344,6 +346,7 @@ class DataFrameSparkIOTestsMixin:
                     pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
                 )
 
+    @unittest.skipIf(not have_openpyxl, openpyxl_requirement_message)
     def test_read_large_excel(self):
         n = 20000
         pdf = pd.DataFrame(

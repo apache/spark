@@ -225,6 +225,8 @@ trait RemoteSparkSession
     try {
       if (spark != null) spark.stop()
     } catch {
+      case e: IllegalStateException if Option(e.getMessage).exists(_.contains("Memory leaked")) =>
+        throw e
       case e: Throwable => debug(e)
     }
     spark = null

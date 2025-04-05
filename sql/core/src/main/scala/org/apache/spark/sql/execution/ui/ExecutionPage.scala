@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
@@ -33,6 +34,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private val pandasOnSparkConfPrefix = "pandas_on_Spark."
 
   private val sqlStore = parent.sqlStore
+  private val groupSubExecutionEnabled = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)
+
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val parameterExecutionId = request.getParameter("id")
@@ -71,6 +74,32 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <li>
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
+            {
+              if (executionUIData.rootExecutionId != executionId) {
+                <li>
+                  <strong>Parent Execution: </strong>
+                  <a href={"?id=" + executionUIData.rootExecutionId}>
+                    {executionUIData.rootExecutionId}
+                  </a>
+                </li>
+              }
+            }
+            {
+              if (groupSubExecutionEnabled) {
+                val subExecutions = sqlStore.executionsList()
+                  .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
+                if (subExecutions.nonEmpty) {
+                  <li>
+                    <strong>Sub Executions: </strong>
+                    {
+                      subExecutions.map { e =>
+                        <a href={"?id=" + e.executionId}>{e.executionId}</a><span>&nbsp;</span>
+                      }
+                    }
+                  </li>
+                }
+              }
+            }
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
@@ -144,7 +173,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </div>
       </div>
       {planVisualizationResources(request)}
-      <script>$(function() {{ if (shouldRenderPlanViz()) {{ renderPlanViz(); }} }})</script>
     </div>
   }
 
@@ -163,12 +191,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     <div id="physical-plan-details" style="display: none;">
       <pre>{physicalPlanDescription}</pre>
     </div>
-    <script>
-      function clickPhysicalPlanDetails() {{
-        $('#physical-plan-details').toggle();
-        $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
-      }}
-    </script>
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {

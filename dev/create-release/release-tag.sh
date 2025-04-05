@@ -73,9 +73,11 @@ cd spark
 git config user.name "$GIT_NAME"
 git config user.email "$GIT_EMAIL"
 
-# Remove test jars that do not belong to source releases.
+# Remove test jars and classes that do not belong to source releases.
 rm $(<dev/test-jars.txt)
+:> dev/test-jars.txt
 rm $(<dev/test-classes.txt)
+:> dev/test-classes.txt
 git commit -a -m "Removing test jars and class files"
 JAR_RM_REF=$(git rev-parse HEAD)
 

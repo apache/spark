@@ -5671,6 +5671,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT =
+    buildConf("spark.sql.runCollationTypeCastsBeforeAliasAssignment.enabled")
+      .internal()
+      .doc(
+        "When set to true, rules like ResolveAliases or ResolveAggregateFunctions will run " +
+        "CollationTypeCasts before alias assignment. This is necessary for correct alias " +
+        "generation."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *

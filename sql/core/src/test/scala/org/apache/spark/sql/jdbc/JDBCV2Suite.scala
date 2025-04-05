@@ -300,7 +300,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkLimitRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val limits = df.queryExecution.optimizedPlan.collect {
+    val limits = df.queryExecution.optimizedPlan.collectFirst {
       case g: GlobalLimit => g
       case limit: LocalLimit => limit
     }
@@ -382,7 +382,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val offsets = df.queryExecution.optimizedPlan.collect {
+    val offsets = df.queryExecution.optimizedPlan.collectFirst {
       case offset: Offset => offset
     }
     if (removed) {
@@ -814,7 +814,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val sorts = df.queryExecution.optimizedPlan.collect {
+    val sorts = df.queryExecution.optimizedPlan.collectFirst {
       case s: Sort => s
     }
     if (removed) {
@@ -1851,7 +1851,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkAggregateRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
+    val aggregates = df.queryExecution.optimizedPlan.collectFirst {
       case agg: Aggregate => agg
     }
     if (removed) {
@@ -1948,7 +1948,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkFiltersRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val filters = df.queryExecution.optimizedPlan.collect {
+    val filters = df.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     if (removed) {
@@ -2245,7 +2245,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: with concat multiple group key in project") {
     val df1 = sql("SELECT concat_ws('#', DEPT, NAME), MAX(SALARY) FROM h2.test.employee" +
       " WHERE dept > 0 GROUP BY DEPT, NAME")
-    val filters1 = df1.queryExecution.optimizedPlan.collect {
+    val filters1 = df1.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     assert(filters1.isEmpty)
@@ -2259,7 +2259,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df2 = sql("SELECT concat_ws('#', DEPT, NAME), MAX(SALARY) + MIN(BONUS)" +
       " FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT, NAME")
-    val filters2 = df2.queryExecution.optimizedPlan.collect {
+    val filters2 = df2.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     assert(filters2.isEmpty)
