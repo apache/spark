@@ -200,7 +200,7 @@ object XmlOptions extends DataSourceOptions {
   val COMPRESSION = newOption("compression")
   val MULTI_LINE = newOption("multiLine")
   val SAMPLING_RATIO = newOption("samplingRatio")
-  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
+  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")

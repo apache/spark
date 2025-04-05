@@ -433,23 +433,35 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       val file = new File(dir, "file.json")
       Files.write(file.toPath, "0".getBytes(StandardCharsets.UTF_8))
 
-      // Ensure that we get an error when setting the singleVariantColumn JSON option while also
-      // specifying a schema.
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read.format("json").option("singleVariantColumn", "var").schema("var variant")
-        },
-        condition = "INVALID_SINGLE_VARIANT_COLUMN",
-        parameters = Map.empty
-      )
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read.format("json").option("singleVariantColumn", "another_name")
-            .schema("var variant").json(file.getAbsolutePath).collect()
-        },
-        condition = "INVALID_SINGLE_VARIANT_COLUMN",
-        parameters = Map.empty
-      )
+      // These are valid.
+      for ((schema, options) <- Seq(
+        ("var variant", Map()),
+        ("var variant, _corrupt_record string", Map()),
+        ("_corrupt_record string, var variant", Map()),
+        ("c string, var variant", Map("columnNameOfCorruptRecord" -> "c"))
+      )) {
+        spark.read.options(Map("singleVariantColumn" -> "var") ++ options)
+          .schema(schema).json(file.getAbsolutePath).collect()
+      }
+
+      // These are invalid.
+      for ((schema, options) <- Seq(
+        ("a variant", Map()),
+        ("var int", Map()),
+        ("var variant, c string", Map()),
+        ("var variant, _corrupt_record int", Map()),
+        ("var variant, _corrupt_record string", Map("columnNameOfCorruptRecord" -> "c")),
+        ("var variant, var string", Map("columnNameOfCorruptRecord" -> "var"))
+      )) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.read.options(Map("singleVariantColumn" -> "var") ++ options)
+              .schema(schema).json(file.getAbsolutePath).collect()
+          },
+          condition = "INVALID_SINGLE_VARIANT_COLUMN",
+          parameters = Map("schema" -> s"\"${StructType.fromDDL(schema).sql}\"")
+        )
+      }
     }
   }
 
