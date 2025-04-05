@@ -31,12 +31,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.connector.read.SupportsBroadcastVarPushdownFiltering
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
+import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -603,6 +605,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
  * @param tableIdentifier Identifier for the table in the metastore.
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * @param proxyForPushedBroadcastVar
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -614,8 +617,33 @@ case class FileSourceScanExec(
     override val optionalNumCoalescedBuckets: Option[Int],
     override val dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier],
-    override val disableBucketedScan: Boolean = false)
-  extends FileSourceScanLike {
+    override val disableBucketedScan: Boolean = false,
+    @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] =
+    None)
+  extends FileSourceScanLike with WrapsBroadcastVarPushDownSupporter {
+
+  def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering] =
+    this.relation.fileFormat match {
+      case x: SupportsBroadcastVarPushdownFiltering => Some(x)
+
+      case _ => None
+    }
+
+  def newInstance(
+      proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]],
+      runtimeFilters: Seq[Expression]): WrapsBroadcastVarPushDownSupporter =
+  this.copy(proxyForPushedBroadcastVar = proxy)
+
+  def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]):
+    WrapsBroadcastVarPushDownSupporter =
+    this.copy(proxyForPushedBroadcastVar = proxy)
+
+  def resetFilteredPartitionsAndInputRdd(): Unit = {}
+
+  def getTableIdentifier(): TableIdentifier =
+    tableIdentifier.getOrElse(throw new RuntimeException("table name not found"))
+
+  def getSchema(): StructType = this.relation.schema
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
@@ -657,7 +685,8 @@ case class FileSourceScanExec(
     sendDriverMetrics()
     readRDD
   }
-
+  override def containsNonBroadcastVarRuntimeFilters: Boolean = false
+  override def getNonBroadcastVarRuntimeFilters: Seq[Expression] = Seq.empty[Expression]
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     inputRDD :: Nil
   }

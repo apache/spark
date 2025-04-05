@@ -57,7 +57,7 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelper {
 
-  private val tpcdsDataPath = sys.env.get("SPARK_TPCDS_DATA")
+  protected val tpcdsDataPath = sys.env.get("SPARK_TPCDS_DATA")
 
   // To make output results deterministic
   override protected def sparkConf: SparkConf = super.sparkConf

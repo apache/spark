@@ -66,13 +66,24 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
   }
 
   private def newFileSourceScanExec(setting: RelationSetting): FileSourceScanExec = {
+    val dataSchema = DataTypeUtils.fromAttributes(setting.cols)
+    val partitionSchema = PartitionSpec.emptySpec.partitionColumns
+    val fileFormat = new ParquetFileFormat()
     val relation = HadoopFsRelation(
       location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
-      partitionSchema = PartitionSpec.emptySpec.partitionColumns,
-      dataSchema = DataTypeUtils.fromAttributes(setting.cols),
+      partitionSchema,
+      dataSchema,
       bucketSpec = Some(BucketSpec(setting.numBuckets, setting.cols.map(_.name), Nil)),
-      fileFormat = new ParquetFileFormat(),
+      fileFormat = fileFormat,
       options = Map.empty)(spark)
+
+    fileFormat match {
+      case p: ParquetFileFormat =>
+        p.setReadSchema(relation.schema)
+        p.setPartitionSchema(partitionSchema)
+
+      case _ =>
+    }
     FileSourceScanExec(relation, None, setting.cols, relation.dataSchema, Nil, None, None, Nil,
       None)
   }

@@ -56,14 +56,25 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
       val dataSchema = StructType(tableMeta.schema.filterNot { f =>
         tableMeta.partitionColumnNames.contains(f.name)
       })
+
+      val partitionSchema = tableMeta.partitionSchema
+      val fileFormat = new ParquetFileFormat()
+
       val relation = HadoopFsRelation(
         location = catalogFileIndex,
-        partitionSchema = tableMeta.partitionSchema,
+        partitionSchema = partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,
-        fileFormat = new ParquetFileFormat(),
+        fileFormat = fileFormat,
         options = Map.empty)(sparkSession = spark)
 
+      fileFormat match {
+        case p: ParquetFileFormat =>
+          p.setReadSchema(relation.schema)
+          p.setPartitionSchema(partitionSchema)
+
+        case _ =>
+      }
       val logicalRelation = LogicalRelation(relation, tableMeta)
       val query = Project(Seq($"id", $"p"),
         Filter($"p" === 1, logicalRelation)).analyze
@@ -170,7 +181,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
       case p: FileSourceScanExec => p.selectedPartitions.partitionCount
-      case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
+      case BatchScanExec(_, scan: FileScan, _, _, _, _, _) =>
         scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get
   }

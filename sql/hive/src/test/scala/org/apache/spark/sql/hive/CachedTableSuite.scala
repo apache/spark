@@ -327,28 +327,44 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val dataSchema = StructType(tableMeta.schema.filterNot { f =>
         tableMeta.partitionColumnNames.contains(f.name)
       })
+      val partitionSchema = tableMeta.partitionSchema
+      val fileFormat = new ParquetFileFormat()
       val relation = HadoopFsRelation(
         location = catalogFileIndex,
-        partitionSchema = tableMeta.partitionSchema,
+        partitionSchema = partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,
-        fileFormat = new ParquetFileFormat(),
+        fileFormat = fileFormat,
         options = Map.empty)(sparkSession = spark)
+      fileFormat match {
+        case p: ParquetFileFormat =>
+          p.setReadSchema(relation.schema)
+          p.setPartitionSchema(partitionSchema)
 
+        case _ =>
+      }
       val plan = LogicalRelation(relation, tableMeta)
       val df = Dataset.ofRows(spark, plan)
       spark.sharedState.cacheManager.cacheQuery(df)
 
       assert(spark.sharedState.cacheManager.lookupCachedData(df).isDefined)
-
       val sameCatalog = new CatalogFileIndex(spark, tableMeta, 0)
+      val fileFormat1 = new ParquetFileFormat()
       val sameRelation = HadoopFsRelation(
         location = sameCatalog,
         partitionSchema = tableMeta.partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,
-        fileFormat = new ParquetFileFormat(),
+        fileFormat = fileFormat1,
         options = Map.empty)(sparkSession = spark)
+
+      fileFormat1 match {
+        case p: ParquetFileFormat =>
+          p.setReadSchema(sameRelation.schema)
+          p.setPartitionSchema(tableMeta.partitionSchema)
+
+        case _ =>
+      }
       val samePlanDf = Dataset.ofRows(spark, LogicalRelation(sameRelation, tableMeta))
 
       assert(spark.sharedState.cacheManager.lookupCachedData(samePlanDf).isDefined)
