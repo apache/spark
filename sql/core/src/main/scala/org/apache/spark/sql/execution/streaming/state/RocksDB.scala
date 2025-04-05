@@ -1467,8 +1467,7 @@ class RocksDB(
       // This is relative aggressive because that even if the uploading succeeds,
       // it is not necessarily the one written to the commit log. But we can always load lineage
       // from commit log so it is fine.
-      lineageManager.resetLineage(lineageManager.getLineageForCurrVersion()
-        .filter(i => i.version >= snapshot.version))
+      lineageManager.truncateFromVersion(snapshot.version)
       logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: " +
         log"Upload snapshot of version ${MDC(LogKeys.VERSION_NUM, snapshot.version)}, " +
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
@@ -1984,27 +1983,33 @@ case class AcquiredThreadInfo(
 private[sql] class RocksDBLineageManager {
   @volatile private var lineage: Array[LineageItem] = Array.empty
 
-  override def toString: String = lineage.map {
-    case LineageItem(version, uuid) => s"$version: $uuid"
-  }.mkString(" ")
+  override def toString: String = synchronized {
+    lineage.map {
+      case LineageItem(version, uuid) => s"$version: $uuid"
+    }.mkString(" ")
+  }
 
-  def appendLineageItem(item: LineageItem): Unit = {
+  def appendLineageItem(item: LineageItem): Unit = synchronized {
     lineage = lineage :+ item
   }
 
-  def resetLineage(newLineage: Array[LineageItem]): Unit = {
+  def truncateFromVersion(versionToKeep: Long): Unit = synchronized {
+    resetLineage(getLineageForCurrVersion().filter(i => i.version >= versionToKeep))
+  }
+
+  def resetLineage(newLineage: Array[LineageItem]): Unit = synchronized {
     lineage = newLineage
   }
 
-  def getLineageForCurrVersion(): Array[LineageItem] = {
+  def getLineageForCurrVersion(): Array[LineageItem] = synchronized {
     lineage.clone()
   }
 
-  def contains(item: LineageItem): Boolean = {
+  def contains(item: LineageItem): Boolean = synchronized {
     lineage.contains(item)
   }
 
-  def clear(): Unit = {
+  def clear(): Unit = synchronized {
     lineage = Array.empty
   }
 }
