@@ -209,7 +209,7 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
 object FailureInjectionRocksDBStateStoreProvider {
   /**
    * RocksDBFieManager is created by RocksDB class where it creates a default FileSystem.
-   * we made RocksDB create a RocksDBFileManager but a different FileSystem here.
+   * We make RocksDB create a RocksDBFileManager that uses a different FileSystem here.
    * */
   def createRocksDBWithFaultInjection(
       dfsRootDir: String,
