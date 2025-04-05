@@ -819,6 +819,25 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  test("CURRENT_TIME should be case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val input = Project(Seq(
+        // The user references "current_time" or "CURRENT_TIME" in the query
+        UnresolvedAttribute("current_time"),
+        UnresolvedAttribute("CURRENT_TIME")
+      ), testRelation)
+
+      // The analyzer should resolve both to the same expression: CurrentTime()
+      val expected = Project(Seq(
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))(),
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))()
+      ), testRelation).analyze
+
+      checkAnalysis(input, expected)
+    }
+  }
+
+
   test("CTE with non-existing column alias") {
     assertAnalysisErrorCondition(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
