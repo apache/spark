@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{AtomicCreateTableAsSelectExec, AtomicReplaceTableAsSelectExec, AtomicReplaceTableExec, CreateTableAsSelectExec, ReplaceTableAsSelectExec, ReplaceTableExec}
@@ -54,30 +51,17 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
     }
   }
 
-  override def stageCreate(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
+  override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable =
     new TestStagedTableWithMetric(
       ident,
       new InMemoryTable(s"$name.${ident.quoted}",
-        CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties))
-  }
+        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties()))
 
-  override def stageReplace(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable =
-    stageCreate(ident, columns, partitions, properties)
+  override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable =
+    stageCreate(ident, tableInfo)
 
-  override def stageCreateOrReplace(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable =
-    stageCreate(ident, columns, partitions, properties)
+  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo) : StagedTable =
+    stageCreate(ident, tableInfo)
 }
 
 object StagingInMemoryTableCatalogWithMetrics {

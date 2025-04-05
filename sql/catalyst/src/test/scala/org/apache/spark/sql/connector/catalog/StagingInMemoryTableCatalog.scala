@@ -31,40 +31,28 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
   import InMemoryTableCatalog._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def stageCreate(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    validateStagedTable(partitions, properties)
+  override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable = {
+    validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedCreateTable(
       ident,
       new InMemoryTable(s"$name.${ident.quoted}",
-        CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties))
+        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties()))
   }
 
-  override def stageReplace(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    validateStagedTable(partitions, properties)
+  override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
+    validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedReplaceTable(
       ident,
       new InMemoryTable(s"$name.${ident.quoted}",
-        CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties))
+        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties()))
   }
 
-  override def stageCreateOrReplace(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    validateStagedTable(partitions, properties)
+  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo) : StagedTable = {
+    validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedCreateOrReplaceTable(
       ident,
       new InMemoryTable(s"$name.${ident.quoted}",
-        CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties))
+        tableInfo.schema(), tableInfo.partitions(), tableInfo.properties))
   }
 
   private def validateStagedTable(
