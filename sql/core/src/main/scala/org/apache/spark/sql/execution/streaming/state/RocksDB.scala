@@ -1368,7 +1368,7 @@ class RocksDBFileMapping {
       fileManager: RocksDBFileManager,
       localFileName: String,
       versionToLoad: Long): Option[RocksDBImmutableFile] = {
-    getDfsFileWithVersionCheck(
+    getDfsFileWithIncompatibilityCheck(
       fileManager,
       localFileName,
       // We can't reuse the current local file since it was added in the same or newer version
@@ -1380,8 +1380,9 @@ class RocksDBFileMapping {
   /**
    * Get the mapped DFS file for the given local file for a DFS save (i.e. checkpoint) operation.
    * If the currently mapped DFS file was mapped in the same or newer version as the version we
-   * want to save (or was generated in a version which has not been uploaded to DFS yet),
-   * the mapped DFS file is ignored. In this scenario, the local mapping to this DFS file
+   * want to save (or was generated in a version which has not been uploaded to DFS yet)
+   * or the mapped dfs file isn't the same size as the local file,
+   * then the mapped DFS file is ignored. In this scenario, the local mapping to this DFS file
    * will be cleared, and function will return None.
    *
    * @note If the file was added in current version (i.e. versionToSave - 1), we can reuse it.
@@ -1394,7 +1395,7 @@ class RocksDBFileMapping {
       fileManager: RocksDBFileManager,
       localFile: File,
       versionToSave: Long): Option[RocksDBImmutableFile] = {
-    getDfsFileWithVersionCheck(
+    getDfsFileWithIncompatibilityCheck(
       fileManager,
       localFile.getName,
       (dfsFileVersion, dfsFile) =>
@@ -1404,7 +1405,7 @@ class RocksDBFileMapping {
     )
   }
 
-  private def getDfsFileWithVersionCheck(
+  private def getDfsFileWithIncompatibilityCheck(
       fileManager: RocksDBFileManager,
       localFileName: String,
       isIncompatible: (Long, RocksDBImmutableFile) => Boolean): Option[RocksDBImmutableFile] = {
