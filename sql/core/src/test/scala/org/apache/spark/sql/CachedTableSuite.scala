@@ -1833,4 +1833,25 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
     }
   }
+
+  test("SPARK-49618: union bug causing cached plan miss") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withView("v1", "v2") {
+        Seq(
+          (7L, 45, 2.0f, 3.0d)
+        ).toDF("l", "i", "f", "d").createOrReplaceTempView("v1")
+
+        val df2 = Seq(
+          (9L, 433, 1.0f, 5.0d)
+        ).toDF("l", "i", "f", "d").createOrReplaceTempView("v2")
+
+        val u = sql("select l, i from v1 union all select l, i from v2")
+        u.cache()
+        val q = sql("select l, i from v2 union all select l, i from v1")
+        assert(q.queryExecution.withCachedData.collect {
+          case cached: InMemoryRelation => cached
+        }.nonEmpty)
+      }
+    }
+  }
 }
