@@ -64,6 +64,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  * @param stateStoreId StateStoreId for the state store
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
+ * @param eventListener The RocksDBEventListener object for reporting events to the coordinator
  */
 class RocksDB(
     dfsRootDir: String,
@@ -73,7 +74,8 @@ class RocksDB(
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
     enableStateStoreCheckpointIds: Boolean = false,
-    partitionId: Int = 0) extends Logging {
+    partitionId: Int = 0,
+    eventListener: Option[RocksDBEventListener] = None) extends Logging {
 
   import RocksDB._
 
@@ -387,6 +389,9 @@ class RocksDB(
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
+        // Report this snapshot version to the coordinator
+        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
+
         openLocalRocksDB(metadata)
 
         if (loadedVersion != version) {
@@ -463,6 +468,9 @@ class RocksDB(
 
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
+
+        // Report this snapshot version to the coordinator
+        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
 
         openLocalRocksDB(metadata)
 
@@ -601,6 +609,8 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
+    // Report this snapshot version to the coordinator
+    reportSnapshotUploadToCoordinator(snapshotVersion)
     this
   }
 
@@ -1476,11 +1486,23 @@ class RocksDB(
         log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
       // Compare and update with the version that was just uploaded.
       lastUploadedSnapshotVersion.updateAndGet(v => Math.max(snapshot.version, v))
+      // Report snapshot upload event to the coordinator.
+      reportSnapshotUploadToCoordinator(snapshot.version)
     } finally {
       snapshot.close()
     }
 
     fileManagerMetrics
+  }
+
+  /** Reports to the coordinator with the event listener that a snapshot finished uploading */
+  private def reportSnapshotUploadToCoordinator(version: Long): Unit = {
+    if (conf.reportSnapshotUploadLag) {
+      // Note that we still report snapshot versions even when changelog checkpointing is disabled.
+      // The coordinator needs a way to determine whether upload messages are disabled or not,
+      // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
+      eventListener.foreach(_.reportSnapshotUploaded(version))
+    }
   }
 
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */
@@ -1725,7 +1747,8 @@ case class RocksDBConf(
     highPriorityPoolRatio: Double,
     compressionCodec: String,
     allowFAllocate: Boolean,
-    compression: String)
+    compression: String,
+    reportSnapshotUploadLag: Boolean)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -1908,7 +1931,8 @@ object RocksDBConf {
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
       storeConf.compressionCodec,
       getBooleanConf(ALLOW_FALLOCATE_CONF),
-      getStringConf(COMPRESSION_CONF))
+      getStringConf(COMPRESSION_CONF),
+      storeConf.reportSnapshotUploadLag)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

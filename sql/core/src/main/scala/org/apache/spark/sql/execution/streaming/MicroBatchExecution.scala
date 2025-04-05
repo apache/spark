@@ -858,7 +858,8 @@ class MicroBatchExecution(
         watermarkPropagator,
         execCtx.previousContext.isEmpty,
         currentStateStoreCkptId,
-        stateSchemaMetadatas)
+        stateSchemaMetadatas,
+        isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 

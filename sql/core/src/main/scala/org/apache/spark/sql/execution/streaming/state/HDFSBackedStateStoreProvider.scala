@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.util
-import java.util.Locale
+import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.{AtomicLong, LongAdder}
 
 import scala.collection.mutable
@@ -551,6 +551,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       val snapshotCurrentVersionMap = readSnapshotFile(version)
       if (snapshotCurrentVersionMap.isDefined) {
         synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
+
+        // Report the loaded snapshot's version to the coordinator
+        reportSnapshotUploadToCoordinator(version)
+
         return snapshotCurrentVersionMap.get
       }
 
@@ -580,6 +584,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
 
       synchronized { putStateIntoStateCacheMap(version, resultMap) }
+
+      // Report the last available snapshot's version to the coordinator
+      reportSnapshotUploadToCoordinator(lastAvailableVersion)
+
       resultMap
     }
 
@@ -699,6 +707,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       log"for ${MDC(LogKeys.OP_TYPE, opType)}")
     // Compare and update with the version that was just uploaded.
     lastUploadedSnapshotVersion.updateAndGet(v => Math.max(version, v))
+    // Report the snapshot upload event to the coordinator
+    reportSnapshotUploadToCoordinator(version)
   }
 
   /**
@@ -1042,6 +1052,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keySchema, valueSchema)
+  }
+
+  /** Reports to the coordinator the store's latest snapshot version */
+  private def reportSnapshotUploadToCoordinator(version: Long): Unit = {
+    if (storeConf.reportSnapshotUploadLag) {
+      // Attach the query run ID and current timestamp to the RPC message
+      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+      val currentTimestamp = System.currentTimeMillis()
+      StateStoreProvider.coordinatorRef.foreach(
+        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), version, currentTimestamp)
+      )
+    }
   }
 }
 
