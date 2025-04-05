@@ -135,10 +135,10 @@ object NamedParametersSupport {
   }
 
   private def toInputParameter(param: ProcedureParameter): InputParameter = {
-    val defaultValue = Option(param.defaultValueExpression).map { expr =>
-      ResolveDefaultColumns.analyze(param.name, param.dataType, expr, "CALL")
+    val defaultValueExpr = Option(param.defaultValue).map { defaultValue =>
+      ResolveDefaultColumns.analyze(param.name, param.dataType, defaultValue, "CALL")
     }
-    InputParameter(param.name, defaultValue)
+    InputParameter(param.name, defaultValueExpr)
   }
 
   private def defaultRearrange(
