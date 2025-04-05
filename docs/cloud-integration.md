@@ -329,7 +329,7 @@ It is not available on Hadoop 3.3.4 or earlier.
 
 IBM provide the Stocator output committer for IBM Cloud Object Storage and OpenStack Swift.
 
-Source, documentation and releasea can be found at
+Source, documentation and release can be found at
 [Stocator - Storage Connector for Apache Spark](https://github.com/CODAIT/stocator).
 
 
