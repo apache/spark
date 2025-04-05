@@ -169,6 +169,35 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("merge into empty table with multiple NOT MATCHED clause") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, salary INT, dep STRING")
+
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (2, 200, "finance"),
+        (3, 300, "hr"))
+      sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN NOT MATCHED AND s.pk >= 2 THEN
+           | INSERT *
+           |WHEN NOT MATCHED THEN
+           | INSERT *
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // insert
+          Row(2, 200, "finance"), // insert
+          Row(3, 300, "hr"))) // insert
+    }
+  }
+
   test("merge into with conditional WHEN MATCHED clause (update)") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
