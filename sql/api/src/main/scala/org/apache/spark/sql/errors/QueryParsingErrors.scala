@@ -500,7 +500,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       command = Option(sqlText),
       start = position,
-      stop = position,
       errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
       messageParameters = Map("sqlText" -> sqlText))
   }
@@ -632,7 +631,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       command = origin.sqlText,
       start = origin,
-      stop = origin,
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       messageParameters = Map("statement" -> statement))
   }
@@ -690,7 +688,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       command = Some(command),
       start = start,
-      stop = stop,
       errorClass = "UNCLOSED_BRACKETED_COMMENT",
       messageParameters = Map.empty)
   }

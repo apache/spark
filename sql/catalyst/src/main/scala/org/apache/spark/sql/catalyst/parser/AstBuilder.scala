@@ -1800,7 +1800,6 @@ class AstBuilder extends DataTypeAstBuilder
             throw new ParseException(
               command = Some(SparkParserUtils.command(n)),
               start = Origin(),
-              stop = Origin(),
               errorClass = "PARSE_SYNTAX_ERROR",
               messageParameters = Map(
                 "error" -> s"'$error'",

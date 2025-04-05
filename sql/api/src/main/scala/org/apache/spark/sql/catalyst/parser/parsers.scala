@@ -99,7 +99,6 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
         throw new ParseException(
           command = Option(command),
           start = e.origin,
-          stop = e.origin,
           errorClass = e.getCondition,
           messageParameters = e.getMessageParameters.asScala.toMap,
           queryContext = e.getQueryContext)
@@ -158,24 +157,19 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    val (start, stop) = offendingSymbol match {
+    val start = offendingSymbol match {
       case token: CommonToken =>
-        val start = Origin(Some(line), Some(token.getCharPositionInLine))
-        val length = token.getStopIndex - token.getStartIndex + 1
-        val stop = Origin(Some(line), Some(token.getCharPositionInLine + length))
-        (start, stop)
+        Origin(Some(line), Some(token.getCharPositionInLine))
       case _ =>
-        val start = Origin(Some(line), Some(charPositionInLine))
-        (start, start)
+        Origin(Some(line), Some(charPositionInLine))
     }
     e match {
       case sre: SparkRecognitionException if sre.errorClass.isDefined =>
-        throw new ParseException(None, start, stop, sre.errorClass.get, sre.messageParameters)
+        throw new ParseException(None, start, sre.errorClass.get, sre.messageParameters)
       case _ =>
         throw new ParseException(
           command = None,
           start = start,
-          stop = stop,
           errorClass = "PARSE_SYNTAX_ERROR",
           messageParameters = Map("error" -> msg, "hint" -> ""))
     }
@@ -190,7 +184,6 @@ class ParseException private (
     val command: Option[String],
     message: String,
     val start: Origin,
-    val stop: Origin,
     errorClass: Option[String] = None,
     messageParameters: Map[String, String] = Map.empty,
     queryContext: Array[QueryContext] = ParseException.getQueryContext())
@@ -208,24 +201,22 @@ class ParseException private (
       Option(SparkParserUtils.command(ctx)),
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       SparkParserUtils.position(ctx.getStart),
-      SparkParserUtils.position(ctx.getStop),
       Some(errorClass),
       messageParameters)
 
-  def this(errorClass: String, ctx: ParserRuleContext) = this(errorClass, Map.empty, ctx)
+  def this(errorClass: String, ctx: ParserRuleContext) =
+    this(errorClass = errorClass, messageParameters = Map.empty, ctx = ctx)
 
   /** Compose the message through SparkThrowableHelper given errorClass and messageParameters. */
   def this(
       command: Option[String],
       start: Origin,
-      stop: Origin,
       errorClass: String,
       messageParameters: Map[String, String]) =
     this(
       command,
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       start,
-      stop,
       Some(errorClass),
       messageParameters,
       queryContext = ParseException.getQueryContext())
@@ -233,7 +224,6 @@ class ParseException private (
   def this(
       command: Option[String],
       start: Origin,
-      stop: Origin,
       errorClass: String,
       messageParameters: Map[String, String],
       queryContext: Array[QueryContext]) =
@@ -241,7 +231,6 @@ class ParseException private (
       command,
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       start,
-      stop,
       Some(errorClass),
       messageParameters,
       queryContext)
@@ -282,7 +271,7 @@ class ParseException private (
     } else {
       (cl, messageParameters)
     }
-    new ParseException(Option(cmd), start, stop, newCl, params, queryContext)
+    new ParseException(Option(cmd), start, newCl, params, queryContext)
   }
 
   override def getQueryContext: Array[QueryContext] = queryContext
