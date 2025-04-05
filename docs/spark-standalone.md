@@ -547,12 +547,12 @@ Note, the user does not need to specify a discovery script when submitting an ap
 
 # Connecting an Application to the Cluster
 
-To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
+To run an application on the Spark cluster, simply pass the `spark://HOST:PORT` URL of the master as to the [`SparkContext`
 constructor](rdd-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
-    ./bin/spark-shell --master spark://IP:PORT
+    ./bin/spark-shell --master spark://HOST:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
@@ -649,7 +649,7 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 The following is a <code>curl</code> CLI command example with the `pi.py` and REST API.
 
 ```bash
-$ curl -XPOST http://IP:PORT/v1/submissions/create \
+$ curl -XPOST http://HOST:PORT/v1/submissions/create \
 --header "Content-Type:application/json;charset=UTF-8" \
 --data '{
   "appResource": "",
@@ -686,7 +686,7 @@ When Spark master requires HTTP <code>Authorization</code> header via
 configurations, <code>curl</code> CLI command can provide the required header like the following.
 
 ```bash
-$ curl -XPOST http://IP:PORT/v1/submissions/create \
+$ curl -XPOST http://HOST:PORT/v1/submissions/create \
 --header "Authorization: Bearer USER-PROVIDED-WEB-TOEN-SIGNED-BY-THE-SAME-SHARED-KEY"
 ...
 ```
