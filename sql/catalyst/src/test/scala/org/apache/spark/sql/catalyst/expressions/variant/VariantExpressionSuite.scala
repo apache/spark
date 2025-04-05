@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import java.time.{LocalDateTime, Period, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDateTime, Period, ZoneId, ZoneOffset}
+import java.time.format.DateTimeFormatter.ISO_DATE_TIME
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
@@ -865,6 +867,51 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val bytes = builder.result().getValue
     checkCast(bytes, StringType,
       "01020304-0506-0708-090a-0b0c0d0e0f10")
+
+    // TimestampNanos
+    // Cast and to_json produce slightly different formats.
+    val timestamps = Seq(
+        ("2024-12-16T10:23:45-08:00", "2024-12-16 10:23:45", "2024-12-16 10:23:45-08:00"),
+        ("1970-01-01T00:00:00.123456789-08:00", "1970-01-01 00:00:00.123456789",
+         "1970-01-01 00:00:00.123456789-08:00"),
+        ("2100-12-31T23:59:59.00100-08:00", "2100-12-31 23:59:59.001",
+         "2100-12-31 23:59:59.001-08:00"),
+        ("1677-09-20T16:12:45.291448384-08:00", "1677-09-20 16:12:45.291448384",
+         "1677-09-20 16:12:45.291448384-08:00")
+    )
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "-08:00") {
+      timestamps.foreach { case (in, cast, toJson) =>
+        val instant = Instant.from(ISO_DATE_TIME.parse(in))
+        val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
+        val builder = new VariantBuilder(false)
+        builder.appendTimestampNanos(nanos)
+        val bytes = builder.result().getValue()
+        checkToJson(bytes, "\"" + toJson + "\"")
+        checkCast(bytes, StringType, cast)
+        checkCast(bytes, TimestampType, nanos / NANOS_PER_MICROS)
+      }
+    }
+
+    // TimestampNanosNtz
+    val timestamps_ntz = Seq(
+        ("2024-12-16T10:23:45Z", "2024-12-16 10:23:45", "2024-12-16 10:23:45"),
+        ("1970-01-01T00:00:00.123456789Z", "1970-01-01 00:00:00.123456789",
+         "1970-01-01 00:00:00.123456789"),
+        ("2100-12-31T23:59:59.00100Z", "2100-12-31 23:59:59.001",
+         "2100-12-31 23:59:59.001"),
+        ("1677-09-21T00:12:45.291448384Z", "1677-09-21 00:12:45.291448384",
+         "1677-09-21 00:12:45.291448384")
+    )
+    timestamps_ntz.foreach { case (in, cast, toJson) =>
+      val instant = Instant.from(ISO_DATE_TIME.parse(in))
+      val nanos = TimeUnit.SECONDS.toNanos(instant.getEpochSecond()) + instant.getNano();
+      val builder = new VariantBuilder(false)
+      builder.appendTimestampNanosNtz(nanos)
+      val bytes = builder.result().getValue()
+      checkToJson(bytes, "\"" + toJson + "\"")
+      checkCast(bytes, StringType, cast)
+      checkCast(bytes, TimestampNTZType, nanos / NANOS_PER_MICROS)
+    }
   }
 
   test("SPARK-48150: ParseJson expression nullability") {
@@ -992,6 +1039,22 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val variantString = Literal(new VariantVal(Array(shortStrHeader(1), 'x'), emptyMetadata))
     val array2 = Cast(CreateArray(Seq(uuid, variantString)), VariantType)
     checkEvaluation(SchemaOfVariant(array2), s"ARRAY<VARIANT>")
+
+    Seq((TIMESTAMP_NANOS, "TIMESTAMP_NANOS"),
+        (TIMESTAMP_NANOS_NTZ, "TIMESTAMP_NANOS_NTZ")).foreach { case (hdr, typeString) =>
+      val value = Array(primitiveHeader(hdr)) ++ Array.fill(8)(0.toByte)
+      val v = Literal(new VariantVal(value, emptyMetadata))
+      checkEvaluation(SchemaOfVariant(v), typeString)
+      // Merge with variantNull retains type.
+      val variantNull = Literal(new VariantVal(Array(primitiveHeader(NULL)), emptyMetadata))
+      val array = Cast(CreateArray(Seq(v, variantNull)), VariantType)
+      checkEvaluation(SchemaOfVariant(array), s"ARRAY<$typeString>")
+      // Merge with non-nanos timestamp type results in VARIANT.
+      val variantString = Literal(new VariantVal(
+            Array(primitiveHeader(TIMESTAMP)) ++ Array.fill(8)(0.toByte), emptyMetadata))
+      val array2 = Cast(CreateArray(Seq(v, variantString)), VariantType)
+      checkEvaluation(SchemaOfVariant(array2), s"ARRAY<VARIANT>")
+    }
   }
 
   test("schema_of_variant - schema merge") {

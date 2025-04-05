@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import java.time.ZoneId
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.util.parsing.combinator.RegexParsers
 
@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -436,14 +438,6 @@ case object VariantGet {
     }
     val variantType = v.getType
     if (variantType == Type.NULL) return null
-    if (variantType == Type.UUID) {
-      // There's no UUID type in Spark. We only allow it to be cast to string.
-      if (dataType == StringType) {
-        return UTF8String.fromString(v.getUuid.toString)
-      } else {
-        return invalidCast()
-      }
-    }
     dataType match {
       case _: AtomicType =>
         val input = variantType match {
@@ -466,6 +460,31 @@ case object VariantGet {
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
+          // Types that don't have a corresponding Spark type need more specific handling
+          case Type.UUID =>
+            return if (dataType.isInstanceOf[StringType]) {
+              UTF8String.fromString(v.getUuid.toString)
+            } else {
+              invalidCast()
+            }
+          case Type.TIMESTAMP_NANOS =>
+            // Cast to string should retain nanosecond precision. For all other casts, it should be
+            // fine to convert to microseconds and treat it as a normal timestamp.
+            if (dataType.isInstanceOf[StringType]) {
+              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
+              val result = TimestampFormatter.getFractionFormatter(castArgs.zoneId).format(instant)
+              return UTF8String.fromString(result)
+            } else {
+              Literal(v.getLong / NANOS_PER_MICROS, TimestampType)
+            }
+          case Type.TIMESTAMP_NANOS_NTZ =>
+            if (dataType.isInstanceOf[StringType]) {
+              val instant = SparkDateTimeUtils.nanosToInstant(v.getLong)
+              val result = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(instant)
+              return UTF8String.fromString(result)
+            } else {
+              Literal(v.getLong / NANOS_PER_MICROS, TimestampNTZType)
+            }
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
           case _ => throw new SparkRuntimeException(
@@ -832,13 +851,25 @@ object SchemaOfVariant {
     case _ => dataType.sql
   }
 
-  // Dummy class to use for UUID, which doesn't currently exist in Spark.
+  // Dummy classes to use for types that don't currently exist in Spark.
   private class UuidType extends DataType {
     override def defaultSize: Int = 16
     override def typeName: String = "uuid"
     private[spark] override def asNullable: UuidType = this
   }
   private case object UuidType extends UuidType
+  private class TimestampNanosType extends DataType {
+    override def defaultSize: Int = 16
+    override def typeName: String = "timestamp_nanos"
+    private[spark] override def asNullable: TimestampNanosType = this
+  }
+  private case object TimestampNanosType extends TimestampNanosType
+  private class TimestampNanosNTZType extends DataType {
+    override def defaultSize: Int = 16
+    override def typeName: String = "timestamp_nanos_ntz"
+    private[spark] override def asNullable: TimestampNanosNTZType = this
+  }
+  private case object TimestampNanosNTZType extends TimestampNanosNTZType
 
   /**
    * Return the schema of a variant. Struct fields are guaranteed to be sorted alphabetically.
@@ -879,6 +910,8 @@ object SchemaOfVariant {
     case Type.FLOAT => FloatType
     case Type.BINARY => BinaryType
     case Type.UUID => UuidType
+    case Type.TIMESTAMP_NANOS => TimestampNanosType
+    case Type.TIMESTAMP_NANOS_NTZ => TimestampNanosNTZType
   }
 
   /**
