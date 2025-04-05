@@ -30,7 +30,8 @@ import org.apache.spark.util.ArrayImplicits._
 
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
   val tableSpec =
-    UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, None, false)
+    UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, None, false,
+      Seq.empty)
   test("CreateTableAsSelect: fail missing top-level column") {
     val plan = CreateTableAsSelect(
       UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),

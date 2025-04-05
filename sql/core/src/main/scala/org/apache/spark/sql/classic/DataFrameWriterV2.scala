@@ -169,7 +169,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       comment = None,
       collation = None,
       serde = None,
-      external = false)
+      external = false,
+      constraints = Seq.empty)
   }
 
   /** @inheritdoc */
