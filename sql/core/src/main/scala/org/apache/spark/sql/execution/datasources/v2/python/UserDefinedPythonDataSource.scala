@@ -91,6 +91,21 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   }
 
   /**
+   * (Driver-side) Run Python process to push down filters, get the updated
+   * data source instance and the filter pushdown result.
+   */
+  def pruneColumnsInPython(
+      pythonResult: PythonDataSourceCreationResult,
+      fullSchema: StructType,
+      requiredSchema: StructType): PythonColumnPruningResult = {
+    new UserDefinedPythonDataSourceColumnPruningRunner(
+      createPythonFunction(pythonResult.dataSource),
+      fullSchema,
+      requiredSchema
+    ).runInPython()
+  }
+
+  /**
    * (Driver-side) Run Python process, and get the partition read functions, and
    * partition information.
    */
@@ -333,6 +348,7 @@ private class UserDefinedPythonDataSourceRunner(
  * @param isFilterPushed A sequence of bools indicating whether each filter is pushed down.
  */
 case class PythonFilterPushdownResult(
+    dataSource: Option[PythonDataSourceCreationResult],
     readInfo: PythonDataSourceReadInfo,
     isFilterPushed: collection.Seq[Boolean]
 )
@@ -460,6 +476,28 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
+    val isColumnPruningImplemented = dataIn.readInt()
+    if (isColumnPruningImplemented == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
+    }
+
+    val dataSource = Option.when(isColumnPruningImplemented != 0) {
+      // Receive the picked reader or an exception raised in Python worker.
+      val length = dataIn.readInt()
+      if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+        val msg = PythonWorkerUtils.readUTF(dataIn)
+        throw QueryCompilationErrors.pythonDataSourceError(
+          action = "plan",
+          tpe = "read",
+          msg = msg
+        )
+      }
+      // Receive the pickled data source.
+      val pickledDataSourceInstance = PythonWorkerUtils.readBytes(length, dataIn)
+      PythonDataSourceCreationResult(dataSource = pickledDataSourceInstance, schema = schema)
+    }
+
     // Receive the read function and the partitions. Also check for exceptions.
     val readInfo = PythonDataSourceReadInfo.receive(dataIn)
 
@@ -472,8 +510,85 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     }
 
     PythonFilterPushdownResult(
+      dataSource = dataSource,
       readInfo = readInfo,
       isFilterPushed = isFilterPushed
+    )
+  }
+}
+
+case class PythonColumnPruningResult(
+    readInfo: PythonDataSourceReadInfo,
+    schema: StructType
+)
+
+/**
+ * Prune columns in a Python data source.
+ *
+ * @param dataSource
+ *   a Python data source instance
+ * @param fullSchema
+ *   the original schema specified by user or inferred by the data source
+ * @param requiredSchema
+ *   the required schema for the query
+ */
+private class UserDefinedPythonDataSourceColumnPruningRunner(
+    dataSource: PythonFunction,
+    fullSchema: StructType,
+    requiredSchema: StructType)
+    extends PythonPlannerRunner[PythonColumnPruningResult](dataSource) {
+
+  // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
+  override val workerModule = "pyspark.sql.worker.data_source_prune_columns"
+
+  // Make sure the required schema has the exact same field names as the full schema.
+  private val requiredSchemaNormalized = if (SQLConf.get.caseSensitiveAnalysis) {
+    requiredSchema
+  } else {
+    def visit(required: DataType, full: DataType): DataType = {
+      (required, full) match {
+        case (required: StructType, full: StructType) =>
+          val fields = for (field <- required) yield {
+            val fullField = full.apply(full.getFieldIndexCaseInsensitive(field.name).get)
+            field.copy(name = fullField.name, dataType = visit(field.dataType, fullField.dataType))
+          }
+          StructType(fields)
+        case (required: ArrayType, full: ArrayType) =>
+          required.copy(elementType = visit(required.elementType, full.elementType))
+        case _ =>
+          required
+      }
+    }
+    visit(requiredSchema, fullSchema).asInstanceOf[StructType]
+  }
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send Python data source
+    PythonWorkerUtils.writePythonFunction(dataSource, dataOut)
+
+    // Send schemas
+    PythonWorkerUtils.writeUTF(fullSchema.json, dataOut)
+    PythonWorkerUtils.writeUTF(requiredSchema.json, dataOut)
+
+    // Send configurations
+    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
+  }
+
+  override protected def receiveFromPython(
+      dataIn: DataInputStream): PythonColumnPruningResult = {
+    // Receive the read function and the partitions. Also check for exceptions.
+    val readInfo = PythonDataSourceReadInfo.receive(dataIn)
+
+    // Receive the schema.
+    val schemaStr = PythonWorkerUtils.readUTF(dataIn)
+    val schema = DataType.fromJson(schemaStr)
+    if (!schema.isInstanceOf[StructType]) {
+      throw QueryCompilationErrors.schemaIsNotStructTypeError(schemaStr, schema)
+    }
+
+    PythonColumnPruningResult(
+      readInfo = readInfo,
+      schema = schema.asInstanceOf[StructType]
     )
   }
 }
