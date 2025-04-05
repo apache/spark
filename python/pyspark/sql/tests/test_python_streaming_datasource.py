@@ -27,6 +27,7 @@ from pyspark.sql.datasource import (
     SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
+from pyspark.sql.session import SparkSession
 from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.types import Row
 from pyspark.testing.sqlutils import (
@@ -39,6 +40,8 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonStreamingDataSourceTestsMixin:
+    spark: SparkSession
+
     def test_basic_streaming_data_source_class(self):
         class MyDataSource(DataSource):
             ...
@@ -146,7 +149,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        while len(q.recentProgress) < 10:
+        while q.isActive and len(q.recentProgress) < 10:
             time.sleep(0.2)
         q.stop()
         q.awaitTermination()
@@ -196,7 +199,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             .option("checkpointLocation", checkpoint_dir.name)
             .start(output_dir.name)
         )
-        while not q.recentProgress:
+        while q.isActive and not q.recentProgress:
             time.sleep(0.2)
         q.stop()
         q.awaitTermination()
@@ -244,7 +247,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        while len(q.recentProgress) < 10:
+        while q.isActive and len(q.recentProgress) < 10:
             time.sleep(0.2)
         q.stop()
         q.awaitTermination()
@@ -266,7 +269,7 @@ class BasePythonStreamingDataSourceTestsMixin:
                 .option("checkpointLocation", checkpoint_dir.name)
                 .start(output_dir.name)
             )
-            while not q.recentProgress:
+            while q.isActive and not q.recentProgress:
                 time.sleep(0.2)
 
             # Test stream writer write and commit.
@@ -281,7 +284,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             # Test StreamWriter write and abort.
             # When row id > 50, write tasks throw exception and fail.
             # 1.txt is written by StreamWriter.abort() to record the failure.
-            while q.exception() is None:
+            while q.isActive and q.exception() is None:
                 time.sleep(0.2)
             assertDataFrameEqual(
                 self.spark.read.text(os.path.join(output_dir.name, "1.txt")),

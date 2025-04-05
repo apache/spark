@@ -266,6 +266,27 @@ class BasePythonDataSourceTestsMixin:
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
         self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
 
+    def test_struct_array(self):
+        class TestDataSourceReader(DataSourceReader):
+            def read(self, partition):
+                yield (1, 2), [(3, (4, 5)), (6, (7, 8))]
+                yield (9, 10), [(11, (12, 13))]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "a struct<b:int, c:int>, d array<struct<e:int, f:struct<g:int, h:int>>>"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.read.format("TestDataSource").load()
+        expected_data = [
+            Row(a=Row(b=1, c=2), d=[Row(e=3, f=Row(g=4, h=5)), Row(e=6, f=Row(g=7, h=8))]),
+            Row(a=Row(b=9, c=10), d=[Row(e=11, f=Row(g=12, h=13))]),
+        ]
+        assertDataFrameEqual(df, expected_data)
+
     def test_filter_pushdown(self):
         class TestDataSourceReader(DataSourceReader):
             def __init__(self):
