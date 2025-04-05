@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
+import org.json4s._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}

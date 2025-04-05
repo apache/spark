@@ -477,7 +477,7 @@ trait SQLQueryTestHelper extends Logging {
   def normalizeTestResults(output: String): String = {
     val strippedPythonErrors: String = {
       var traceback = false
-      output.split("\n").filter { line: String =>
+      output.split("\n").filter { (line: String) =>
         if (line == "Traceback (most recent call last):") {
           traceback = true
         } else if (!line.startsWith(" ")) {

@@ -120,7 +120,7 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     }
 
     val sorted = selectedIndices.length > 1 && selectedIndices.sliding(2).forall(t => t(1) > t(0))
-    val slicer = udf { vec: Vector =>
+    val slicer = udf { (vec: Vector) =>
       vec match {
         case dv: DenseVector => Vectors.dense(selectedIndices.map(dv.apply))
         case sv: SparseVector => sv.slice(selectedIndices, sorted)

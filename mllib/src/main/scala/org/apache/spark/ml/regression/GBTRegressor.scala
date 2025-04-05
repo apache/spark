@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s._
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
@@ -275,14 +275,14 @@ class GBTRegressionModel private[ml](
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
+      val predictUDF = udf { (features: Vector) => bcastModel.value.predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
         .as($(featuresCol), outputSchema($(featuresCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
+      val leafUDF = udf { (features: Vector) => bcastModel.value.predictLeaf(features) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
         .as($(leafCol), outputSchema($(leafCol)).metadata)

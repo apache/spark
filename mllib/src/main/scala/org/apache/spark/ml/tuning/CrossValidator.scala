@@ -24,7 +24,7 @@ import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
+import org.json4s._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}

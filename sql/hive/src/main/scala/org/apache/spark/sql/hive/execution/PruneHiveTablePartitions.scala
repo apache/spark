@@ -84,7 +84,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
     }
     if (sizeOfPartitions.forall(_ > 0)) {
       val filteredStats =
-        FilterEstimation(Filter(partitionKeyFilters.reduce(And), relation)).estimate
+        FilterEstimation(Filter(partitionKeyFilters.reduce(And(_, _)), relation)).estimate
       val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
         (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
       })
@@ -114,7 +114,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
         val newRelation = relation.copy(
           tableMeta = newTableMeta, prunedPartitions = Some(newPartitions))
         // Keep partition filters so that they are visible in physical planning
-        Project(projections, Filter(filters.reduceLeft(And), newRelation))
+        Project(projections, Filter(filters.reduceLeft(And(_, _)), newRelation))
       } else {
         op
       }

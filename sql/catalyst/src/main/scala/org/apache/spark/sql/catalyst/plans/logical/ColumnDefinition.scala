@@ -89,7 +89,7 @@ case class ColumnDefinition(
   }
 
   private def encodeIdentityColumnSpec(metadataBuilder: MetadataBuilder): Unit = {
-    identityColumnSpec.foreach { spec: IdentityColumnSpec =>
+    identityColumnSpec.foreach { (spec: IdentityColumnSpec) =>
       metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_START, spec.getStart)
       metadataBuilder.putLong(IdentityColumn.IDENTITY_INFO_STEP, spec.getStep)
       metadataBuilder.putBoolean(

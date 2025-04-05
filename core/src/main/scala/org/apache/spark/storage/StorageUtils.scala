@@ -200,7 +200,7 @@ private[spark] object StorageUtils extends Logging {
     val unsafeField = classOf[Unsafe].getDeclaredField("theUnsafe")
     unsafeField.setAccessible(true)
     val unsafe = unsafeField.get(null).asInstanceOf[Unsafe]
-    buffer: ByteBuffer => unsafe.invokeCleaner(buffer)
+    (buffer: ByteBuffer) => unsafe.invokeCleaner(buffer)
   }
 
   /**

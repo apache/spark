@@ -46,7 +46,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Md5(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       "6ac1e56bc78f031059be7be854522c4c")
     checkEvaluation(Md5(Literal.create(null, BinaryType)), null)
-    checkConsistencyBetweenInterpretedAndCodegen(Md5, BinaryType)
+    checkConsistencyBetweenInterpretedAndCodegen(Md5(_), BinaryType)
   }
 
   test("sha1") {
@@ -57,7 +57,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sha1(Literal.create(null, BinaryType)), null)
     checkEvaluation(Sha1(Literal("".getBytes(StandardCharsets.UTF_8))),
       "da39a3ee5e6b4b0d3255bfef95601890afd80709")
-    checkConsistencyBetweenInterpretedAndCodegen(Sha1, BinaryType)
+    checkConsistencyBetweenInterpretedAndCodegen(Sha1(_), BinaryType)
   }
 
   test("sha2") {
@@ -86,7 +86,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Crc32(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType)),
       2180413220L)
     checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
-    checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
+    checkConsistencyBetweenInterpretedAndCodegen(Crc32(_), BinaryType)
   }
 
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {

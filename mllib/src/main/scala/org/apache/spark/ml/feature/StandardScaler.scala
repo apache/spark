@@ -291,7 +291,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
       withScale: Boolean): Vector => Vector = {
     (withShift, withScale) match {
       case (true, true) =>
-        vector: Vector =>
+        (vector: Vector) =>
           val values = vector match {
             case d: DenseVector => d.values.clone()
             case v: Vector => v.toArray
@@ -300,7 +300,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
           Vectors.dense(newValues)
 
       case (true, false) =>
-        vector: Vector =>
+        (vector: Vector) =>
           val values = vector match {
             case d: DenseVector => d.values.clone()
             case v: Vector => v.toArray
@@ -309,7 +309,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
           Vectors.dense(newValues)
 
       case (false, true) =>
-        vector: Vector =>
+        (vector: Vector) =>
           vector match {
             case DenseVector(values) =>
               val newValues = transformDenseWithScale(scale, values.clone())
@@ -322,7 +322,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
           }
 
       case (false, false) =>
-        vector: Vector => vector
+        (vector: Vector) => vector
     }
   }
 }

@@ -371,7 +371,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
 
   test("replace nulls in lambda function of ArrayFilter") {
-    testHigherOrderFunc($"a", ArrayFilter, Seq(lv(Symbol("e"))))
+    testHigherOrderFunc($"a", ArrayFilter(_, _), Seq(lv(Symbol("e"))))
   }
 
   test("replace nulls in lambda function of ArrayExists") {
@@ -390,7 +390,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("replace nulls in lambda function of MapFilter") {
-    testHigherOrderFunc($"m", MapFilter, Seq(lv(Symbol("k")), lv(Symbol("v"))))
+    testHigherOrderFunc($"m", MapFilter(_, _), Seq(lv(Symbol("k")), lv(Symbol("v"))))
   }
 
   test("inability to replace nulls in arbitrary higher-order function") {

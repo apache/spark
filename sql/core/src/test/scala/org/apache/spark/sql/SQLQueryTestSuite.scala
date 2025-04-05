@@ -411,9 +411,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     withClue(clue) {
       testCase match {
         case _: AnalyzerTest =>
-          readGoldenFileAndCompareResults(testCase.resultFile, outputs, AnalyzerOutput)
+          readGoldenFileAndCompareResults(testCase.resultFile, outputs, AnalyzerOutput(_, _, _))
         case _ =>
-          readGoldenFileAndCompareResults(testCase.resultFile, outputs, ExecutionOutput)
+          readGoldenFileAndCompareResults(testCase.resultFile, outputs, ExecutionOutput(_, _, _))
       }
     }
   }

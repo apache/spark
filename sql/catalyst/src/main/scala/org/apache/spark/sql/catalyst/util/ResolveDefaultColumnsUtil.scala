@@ -363,7 +363,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // if we encounter an unresolved existsDefault
   private def fallbackResolveExistenceDefaultValue(
       field: StructField): Expression = {
-    field.getExistenceDefaultValue().map { defaultSQL: String =>
+    field.getExistenceDefaultValue().map { defaultSQL =>
 
       logWarning(log"Encountered unresolved exists default value: " +
         log"'${MDC(COLUMN_DEFAULT_VALUE, defaultSQL)}' " +

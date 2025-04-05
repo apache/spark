@@ -751,7 +751,7 @@ object QueryPlan extends PredicateHelper {
    */
   def normalizePredicates(predicates: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
     if (predicates.nonEmpty) {
-      val normalized = normalizeExpressions(predicates.reduce(And), output)
+      val normalized = normalizeExpressions(predicates.reduce(And(_, _)), output)
       splitConjunctivePredicates(normalized)
     } else {
       Nil

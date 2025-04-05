@@ -171,10 +171,10 @@ class ComputeCurrentTimeSuite extends PlanTest {
     }
 
     val numTimezones = ZoneId.SHORT_IDS.size
-    checkLiterals({ _: String => CurrentTimestamp() }, 1)
-    checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numTimezones)
-    checkLiterals({ _: String => Now() }, 1)
-    checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numTimezones)
+    checkLiterals((_: String) => CurrentTimestamp(), 1)
+    checkLiterals((zoneId: String) => LocalTimestamp(Some(zoneId)), numTimezones)
+    checkLiterals((_: String) => Now(), 1)
+    checkLiterals((zoneId: String) => CurrentDate(Some(zoneId)), numTimezones)
   }
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {

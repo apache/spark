@@ -73,7 +73,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
           replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
       }
       val makeJoinCondition = (predicates: Seq[Expression]) => {
-        replaceAlias(predicates.reduce(And), aliasMap)
+        replaceAlias(predicates.reduce(And(_, _)), aliasMap)
       }
       pushDownJoin(join, canPushDownPredicate, makeJoinCondition)
 
@@ -81,7 +81,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)
         if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references)) ++ rightOp.outputSet
-      pushDownJoin(join, _.references.subsetOf(partitionAttrs), _.reduce(And))
+      pushDownJoin(join, _.references.subsetOf(partitionAttrs), _.reduce(And(_, _)))
 
     // LeftSemi/LeftAnti over Union
     case Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
@@ -107,7 +107,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(_), _, _)
         if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       val validAttrs = u.child.outputSet ++ rightOp.outputSet
-      pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
+      pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And(_, _)))
   }
 
   /**
@@ -160,7 +160,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
           join.joinType match {
             // In case of Left semi join, the part of the join condition which does not refer to
             // to attributes of the grandchild are kept as a Filter above.
-            case LeftSemi => Filter(stayUp.reduce(And), newPlan)
+            case LeftSemi => Filter(stayUp.reduce(And(_, _)), newPlan)
             // In case of left-anti join, the join is pushed down only when the entire join
             // condition is eligible to be pushed down to preserve the semantics of left-anti join.
             case _ => join

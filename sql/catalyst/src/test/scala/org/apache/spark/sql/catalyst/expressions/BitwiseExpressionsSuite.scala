@@ -49,7 +49,7 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseNot(negativeLongLit), ~negativeLong)
 
     DataTypeTestUtils.integralType.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(BitwiseNot, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseNot(_), dt)
     }
   }
 
@@ -76,7 +76,7 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseAnd(positiveLongLit, negativeLongLit), positiveLong & negativeLong)
 
     DataTypeTestUtils.integralType.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(BitwiseAnd, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseAnd(_, _), dt, dt)
     }
   }
 
@@ -103,7 +103,7 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseOr(positiveLongLit, negativeLongLit), positiveLong | negativeLong)
 
     DataTypeTestUtils.integralType.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(BitwiseOr, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseOr(_, _), dt, dt)
     }
   }
 
@@ -130,7 +130,7 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseXor(positiveLongLit, negativeLongLit), positiveLong ^ negativeLong)
 
     DataTypeTestUtils.integralType.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(BitwiseXor, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(BitwiseXor(_, _), dt, dt)
     }
   }
 
@@ -231,7 +231,11 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "upper" -> "8",
         "invalidValue" -> "16"))
     DataTypeTestUtils.integralType.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegenAllowingException(BitwiseGet, dt, IntegerType)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        BitwiseGet(_, _),
+        dt,
+        IntegerType
+      )
     }
   }
 }

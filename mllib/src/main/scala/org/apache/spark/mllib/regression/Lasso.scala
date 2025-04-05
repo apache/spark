@@ -92,13 +92,13 @@ class LassoWithSGD private[mllib] (
   private val gradient = new LeastSquaresGradient()
   private val updater = new L1Updater()
   @Since("0.8.0")
-  override val optimizer = new GradientDescent(gradient, updater)
+  override val optimizer: GradientDescent = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override protected def createModel(weights: Vector, intercept: Double): LassoModel = {
     new LassoModel(weights, intercept)
   }
 }

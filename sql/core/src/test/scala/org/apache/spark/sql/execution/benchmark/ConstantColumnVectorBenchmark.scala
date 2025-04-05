@@ -93,20 +93,20 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       valuesPerIteration * batchSize,
       output = output)
 
-    benchmark.addCase("ConstantColumnVector") { _: Int =>
+    benchmark.addCase("ConstantColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         ColumnVectorUtils.populate(constantColumnVector, row, 0)
       }
     }
 
-    benchmark.addCase("OnHeapColumnVector") { _: Int =>
+    benchmark.addCase("OnHeapColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         onHeapColumnVector.reset()
         populate(onHeapColumnVector, batchSize, row, 0)
       }
     }
 
-    benchmark.addCase("OffHeapColumnVector") { _: Int =>
+    benchmark.addCase("OffHeapColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         offHeapColumnVector.reset()
         populate(offHeapColumnVector, batchSize, row, 0)
@@ -146,19 +146,19 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       valuesPerIteration * batchSize,
       output = output)
 
-    benchmark.addCase("ConstantColumnVector") { _: Int =>
+    benchmark.addCase("ConstantColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         readValues(dataType, batchSize, constantColumnVector)
       }
     }
 
-    benchmark.addCase("OnHeapColumnVector") { _: Int =>
+    benchmark.addCase("OnHeapColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         readValues(dataType, batchSize, onHeapColumnVector)
       }
     }
 
-    benchmark.addCase("OffHeapColumnVector") { _: Int =>
+    benchmark.addCase("OffHeapColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         readValues(dataType, batchSize, offHeapColumnVector)
       }
@@ -191,14 +191,14 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       valuesPerIteration * batchSize,
       output = output)
 
-    benchmark.addCase("ConstantColumnVector") { _: Int =>
+    benchmark.addCase("ConstantColumnVector") { (_: Int) =>
       ColumnVectorUtils.populate(constantColumnVector, row, 0)
       for (_ <- 0 until valuesPerIteration) {
         readValues(dataType, batchSize, constantColumnVector)
       }
     }
 
-    benchmark.addCase("OnHeapColumnVector") { _: Int =>
+    benchmark.addCase("OnHeapColumnVector") { (_: Int) =>
       onHeapColumnVector.reset()
       populate(onHeapColumnVector, batchSize, row, 0)
       for (_ <- 0 until valuesPerIteration) {
@@ -206,7 +206,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       }
     }
 
-    benchmark.addCase("OffHeapColumnVector") { _: Int =>
+    benchmark.addCase("OffHeapColumnVector") { (_: Int) =>
       offHeapColumnVector.reset()
       populate(offHeapColumnVector, batchSize, row, 0)
       for (_ <- 0 until valuesPerIteration) {
@@ -238,19 +238,19 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       valuesPerIteration * batchSize,
       output = output)
 
-    benchmark.addCase("ConstantColumnVector") { _: Int =>
+    benchmark.addCase("ConstantColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         (0 until batchSize).foreach(constantColumnVector.isNullAt)
       }
     }
 
-    benchmark.addCase("OnHeapColumnVector") { _: Int =>
+    benchmark.addCase("OnHeapColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         (0 until batchSize).foreach(onHeapColumnVector.isNullAt)
       }
     }
 
-    benchmark.addCase("OffHeapColumnVector") { _: Int =>
+    benchmark.addCase("OffHeapColumnVector") { (_: Int) =>
       for (_ <- 0 until valuesPerIteration) {
         (0 until batchSize).foreach(offHeapColumnVector.isNullAt)
       }

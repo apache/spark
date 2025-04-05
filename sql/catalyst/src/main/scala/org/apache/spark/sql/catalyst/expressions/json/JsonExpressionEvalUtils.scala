@@ -62,7 +62,7 @@ private[this] object JsonPathParser extends RegexParsers {
   // parse `[*]` and `[123]` subscripts
   def subscript: Parser[List[PathInstruction]] =
     for {
-      operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index) <~ ']'
+      operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index.apply) <~ ']'
     } yield {
       Subscript :: operand :: Nil
     }
@@ -301,10 +301,11 @@ case class JsonTupleEvaluator(foldableFieldNames: Array[Option[String]]) {
 
             // SPARK-21804: json_tuple returns null values within repeated columns
             // except the first one; so that we need to check the remaining fields.
-            do {
+            while ({
               row(idx) = jsonValue
               idx = fieldNames.indexOf(jsonField, idx + 1)
-            } while (idx >= 0)
+              idx >= 0
+            }) ()
           }
         }
       }

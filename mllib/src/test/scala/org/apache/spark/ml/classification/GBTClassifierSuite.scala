@@ -155,7 +155,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     // constant threshold scaling is the same as no thresholds
     binaryModel.setThresholds(Array(1.0, 1.0))
     testTransformerByGlobalCheckFunc[(Double, Vector)](df, binaryModel, "prediction") {
-      scaledPredictions: Seq[Row] =>
+      (scaledPredictions: Seq[Row]) =>
         assert(scaledPredictions.zip(basePredictions).forall { case (scaled, base) =>
           scaled.getDouble(0) === base.getDouble(0)
         })

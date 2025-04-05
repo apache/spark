@@ -141,7 +141,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     }
     val keepInvalid = $(handleInvalid) == VectorAssembler.KEEP_INVALID
     // Data transformation.
-    val assembleFunc = udf { r: Row =>
+    val assembleFunc = udf { (r: Row) =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
     val args = inputColsWithField.map { case (c, field) =>

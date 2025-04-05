@@ -76,11 +76,11 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
     val benchmark =
       new Benchmark(s"Test create $sizeLiteral Set", valuesPerIteration, output = output)
 
-    benchmark.addCase("Use HashSet") { _: Int =>
+    benchmark.addCase("Use HashSet") { (_: Int) =>
       for (_ <- 0L until valuesPerIteration) {creatHashSetFunctions.apply()}
     }
 
-    benchmark.addCase("Use EnumSet") { _: Int =>
+    benchmark.addCase("Use EnumSet") { (_: Int) =>
       for (_ <- 0L until valuesPerIteration) {creatEnumSetFunctions.apply()}
     }
     benchmark.run()
@@ -99,13 +99,13 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
         valuesPerIteration * capabilities.length,
         output = output)
 
-    benchmark.addCase("Use HashSet") { _: Int =>
+    benchmark.addCase("Use HashSet") { (_: Int) =>
       for (_ <- 0L until valuesPerIteration) {
         capabilities.foreach(hashSet.contains)
       }
     }
 
-    benchmark.addCase("Use EnumSet") { _: Int =>
+    benchmark.addCase("Use EnumSet") { (_: Int) =>
       for (_ <- 0L until valuesPerIteration) {
         capabilities.foreach(enumSet.contains)
       }
@@ -126,13 +126,13 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
       valuesPerIteration * capabilities.length,
       output = output)
 
-    benchmark.addCase("Use HashSet") { _: Int =>
+    benchmark.addCase("Use HashSet") { (_: Int) =>
       for (_ <- 0L until valuesPerIteration) {
         capabilities.foreach(creatHashSetFunctions.apply().contains)
       }
     }
 
-    benchmark.addCase("Use EnumSet") { _: Int =>
+    benchmark.addCase("Use EnumSet") { (_: Int) =>
       for (_ <- 0L until valuesPerIteration) {
         capabilities.foreach(creatEnumSetFunctions.apply().contains)
       }

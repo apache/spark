@@ -435,12 +435,13 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     val timestampNTZLiteral = Literal(LocalDateTime.parse("2021-01-01T00:00:00"))
     val timestampLiteral = Literal(Timestamp.valueOf("2021-01-01 00:00:00"))
     Seq(
-      EqualTo,
-      EqualNullSafe,
-      GreaterThan,
-      GreaterThanOrEqual,
-      LessThan,
-      LessThanOrEqual).foreach { op =>
+      EqualTo(_, _),
+      EqualNullSafe(_, _),
+      GreaterThan(_, _),
+      GreaterThanOrEqual(_, _),
+      LessThan(_, _),
+      LessThanOrEqual(_, _)
+    ).foreach { op =>
       ruleTest(rule,
         op(dateLiteral, timestampNTZLiteral),
         op(Cast(dateLiteral, TimestampNTZType), timestampNTZLiteral))
@@ -1114,7 +1115,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   }
 
   test("greatest/least cast") {
-    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+    for (operator <- Seq(Greatest(_), Least(_))) {
       ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal(1)

@@ -51,7 +51,7 @@ object StronglyConnectedComponents {
     var iter = 0
     while (sccWorkGraph.numVertices > 0 && iter < numIter) {
       iter += 1
-      do {
+      while ({
         numVertices = sccWorkGraph.numVertices
         sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
@@ -77,7 +77,8 @@ object StronglyConnectedComponents {
 
         // only keep vertices that are not final
         sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
-      } while (sccWorkGraph.numVertices < numVertices)
+        sccWorkGraph.numVertices < numVertices
+      }) ()
 
       // if iter < numIter at this point sccGraph that is returned
       // will not be recomputed and pregel executions are pointless

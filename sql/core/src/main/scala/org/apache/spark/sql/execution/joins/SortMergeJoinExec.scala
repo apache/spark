@@ -1114,7 +1114,7 @@ private[joins] class SortMergeJoinScanner(
     } else {
       // Advance both the streamed and buffered iterators to find the next pair of matching rows.
       var comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-      do {
+      while ({
         if (streamedRowKey.anyNull) {
           advancedStreamed()
         } else {
@@ -1123,7 +1123,8 @@ private[joins] class SortMergeJoinScanner(
           if (comp > 0) advancedBufferedToRowWithNullFreeJoinKey()
           else if (comp < 0) advancedStreamed()
         }
-      } while (streamedRow != null && bufferedRow != null && comp != 0)
+        streamedRow != null && bufferedRow != null && comp != 0
+      }) ()
       if (streamedRow == null || bufferedRow == null) {
         // We have either hit the end of one of the iterators, so there can be no more matches.
         matchJoinKey = null
@@ -1165,9 +1166,10 @@ private[joins] class SortMergeJoinScanner(
           // The buffered iterator could still contain matching rows, so we'll need to walk through
           // it until we either find matches or pass where they would be found.
           var comp = 1
-          do {
+          while ({
             comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-          } while (comp > 0 && advancedBufferedToRowWithNullFreeJoinKey())
+            comp > 0 && advancedBufferedToRowWithNullFreeJoinKey()
+          }) ()
           if (comp == 0) {
             // We have found matches, so buffer them (this updates matchJoinKey)
             bufferMatchingRows()
@@ -1233,12 +1235,13 @@ private[joins] class SortMergeJoinScanner(
     // This join key may have been produced by a mutable projection, so we need to make a copy:
     matchJoinKey = streamedRowKey.copy()
     bufferedMatches.clear()
-    do {
+    while ({
       if (!onlyBufferFirstMatch || bufferedMatches.isEmpty) {
         bufferedMatches.add(bufferedRow.asInstanceOf[UnsafeRow])
       }
       advancedBufferedToRowWithNullFreeJoinKey()
-    } while (bufferedRow != null && keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0)
+      bufferedRow != null && keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0
+    }) ()
   }
 }
 

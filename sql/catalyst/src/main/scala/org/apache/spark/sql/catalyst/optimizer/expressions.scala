@@ -198,7 +198,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
       case n: Not =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
         val (newChild, _) = traverse(n.child, replaceChildren = true, nullIsFalse = false)
-        (newChild.map(Not), AttributeMap.empty)
+        (newChild.map(Not(_)), AttributeMap.empty)
       case _ => (None, AttributeMap.empty)
     }
 
@@ -425,11 +425,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
             // (a || b || c || ...) && (a || b) => (a || b)
-            common.reduce(Or)
+            common.reduce(Or(_, _))
           } else {
             // (a || b || c || ...) && (a || b || d || ...) =>
             // a || b || ((c || ...) && (d || ...))
-            (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+            (common :+ And(ldiff.reduce(Or(_, _)), rdiff.reduce(Or(_, _)))).reduce(Or(_, _))
           }
         } else {
           // No common factors from disjunctive predicates, reduce common factor from conjunction
@@ -440,7 +440,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             and
           } else {
             // (a && b) && a && (a && c) => a && b && c
-            buildBalancedPredicate(distinct.toSeq, And)
+            buildBalancedPredicate(distinct.toSeq, And(_, _))
           }
         }
 
@@ -463,11 +463,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
             // (a && b) || (a && b && c && ...) => a && b
-            common.reduce(And)
+            common.reduce(And(_, _))
           } else {
             // (a && b && c && ...) || (a && b && d && ...) =>
             // a && b && ((c && ...) || (d && ...))
-            (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+            (common :+ Or(ldiff.reduce(And(_, _)), rdiff.reduce(And(_, _)))).reduce(And(_, _))
           }
         } else {
           // No common factors in conjunctive predicates, reduce common factor from disjunction
@@ -478,7 +478,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             or
           } else {
             // (a || b) || a || (a || c) => a || b || c
-            buildBalancedPredicate(distinct.toSeq, Or)
+            buildBalancedPredicate(distinct.toSeq, Or(_, _))
           }
         }
 
@@ -792,16 +792,16 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
     } else {
       multi match {
         case l: LikeAll =>
-          val and = buildBalancedPredicate(replacements, And)
+          val and = buildBalancedPredicate(replacements, And(_, _))
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: NotLikeAll =>
-          val and = buildBalancedPredicate(replacements.map(Not(_)), And)
+          val and = buildBalancedPredicate(replacements.map(Not(_)), And(_, _))
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: LikeAny =>
-          val or = buildBalancedPredicate(replacements, Or)
+          val or = buildBalancedPredicate(replacements, Or(_, _))
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
         case l: NotLikeAny =>
-          val or = buildBalancedPredicate(replacements.map(Not(_)), Or)
+          val or = buildBalancedPredicate(replacements.map(Not(_)), Or(_, _))
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
       }
     }
@@ -930,9 +930,9 @@ object NullDownPropagation extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsPattern(NULL_CHECK), ruleId) {
       case IsNull(e) if e.nullIntolerant && supportedNullIntolerant(e) =>
-        e.children.map(IsNull(_): Expression).reduceLeft(Or)
+        e.children.map(IsNull(_): Expression).reduceLeft(Or(_, _))
       case IsNotNull(e) if e.nullIntolerant && supportedNullIntolerant(e) =>
-        e.children.map(IsNotNull(_): Expression).reduceLeft(And)
+        e.children.map(IsNotNull(_): Expression).reduceLeft(And(_, _))
     }
   }
 }

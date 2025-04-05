@@ -318,7 +318,7 @@ abstract class SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer 
 
     def ret(index: Int, cachedBatchIterator: Iterator[CachedBatch]): Iterator[CachedBatch] = {
       val partitionFilter = Predicate.create(
-        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+        partitionFilters.reduceOption(And(_, _)).getOrElse(Literal(true)),
         cachedAttributes)
 
       partitionFilter.initialize(index)

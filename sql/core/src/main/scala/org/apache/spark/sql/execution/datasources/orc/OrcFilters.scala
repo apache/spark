@@ -127,7 +127,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         } yield Or(lhs, rhs)
       case Not(pred) =>
         val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
-        childResultOptional.map(Not)
+        childResultOptional.map(Not(_))
       case other =>
         for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder())) yield other
     }

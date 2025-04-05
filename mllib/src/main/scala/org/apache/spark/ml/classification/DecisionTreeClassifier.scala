@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s._
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
@@ -213,7 +213,7 @@ class DecisionTreeClassificationModel private[ml] (
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val leafUDF = udf { (features: Vector) => predictLeaf(features) }
       outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
         outputSchema($(leafCol)).metadata)
     } else {

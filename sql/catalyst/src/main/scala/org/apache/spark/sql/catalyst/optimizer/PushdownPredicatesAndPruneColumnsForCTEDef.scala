@@ -91,7 +91,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
           if (filteredPredicates.isEmpty) {
             Seq(Literal.TrueLiteral)
           } else {
-            preds :+ filteredPredicates.reduce(And)
+            preds :+ filteredPredicates.reduce(And(_, _))
           }
         }
         val newAttributes = attrs ++
@@ -128,7 +128,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
       val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
       if (!isTruePredicate(newPreds) &&
           newPreds.exists(newPred => !preds.exists(_.semanticEquals(newPred)))) {
-        val newCombinedPred = newPreds.reduce(Or)
+        val newCombinedPred = newPreds.reduce(Or(_, _))
         val newChild = if (needsPruning(originalPlan, newAttrSet)) {
           Project(newAttrSet.toSeq, originalPlan)
         } else {

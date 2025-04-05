@@ -385,7 +385,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         // - Avoid calling `consumer.poll(0)` which may cause KAFKA-7703.
         var incorrectOffsets: Seq[(TopicPartition, Long, Long)] = Nil
         var attempt = 0
-        do {
+        while ({
           consumer.seekToEnd(partitions)
           partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
           attempt += 1
@@ -399,7 +399,8 @@ private[kafka010] class KafkaOffsetReaderConsumer(
               Thread.sleep(offsetFetchAttemptIntervalMs)
             }
           }
-        } while (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts)
+          incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts
+        }) ()
 
         logDebug(s"Got latest offsets for partition : $partitionOffsets")
         partitionOffsets

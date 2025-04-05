@@ -1476,7 +1476,7 @@ private[spark] object Utils
     var insideSpark = true
     val callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
-    Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
+    Thread.currentThread.getStackTrace().foreach { ste =>
       // When running under some profilers, the current stack trace might contain some bogus
       // frames. This is intended to ensure that we don't crash in these situations by
       // ignoring any frames that we can't examine.

@@ -335,7 +335,7 @@ object PhysicalStringType {
 case class PhysicalArrayType(
     elementType: DataType, containsNull: Boolean) extends PhysicalDataType {
   override private[sql] type InternalType = ArrayData
-  override private[sql] def ordering = interpretedOrdering
+  override private[sql] def ordering: Ordering[InternalType] = interpretedOrdering
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
   @transient
@@ -397,7 +397,7 @@ class PhysicalVariantType extends PhysicalDataType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
   // TODO(SPARK-45891): Support comparison for the Variant type.
-  override private[sql] def ordering =
+  override private[sql] def ordering: Ordering[InternalType] =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
       "PhysicalVariantType")
 }
@@ -405,7 +405,7 @@ class PhysicalVariantType extends PhysicalDataType {
 object PhysicalVariantType extends PhysicalVariantType
 
 object UninitializedPhysicalType extends PhysicalDataType {
-  override private[sql] def ordering =
+  override private[sql] def ordering: Ordering[InternalType] =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
       "UninitializedPhysicalType")
   override private[sql] type InternalType = Any

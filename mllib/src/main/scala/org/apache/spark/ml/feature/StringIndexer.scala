@@ -356,7 +356,7 @@ class StringIndexerModel (
       // expression, however, lookup for a key in a map is not efficient in SparkSQL now.
       // See `ElementAt` and `GetMapValue` expressions. If SQL's map lookup is improved,
       // we can consider to change this.
-      val filter = udf { label: String =>
+      val filter = udf { (label: String) =>
         labelToIndex.contains(label)
       }
       filter(dataset(inputColName))
@@ -369,7 +369,7 @@ class StringIndexerModel (
   private def getIndexer(labels: Seq[String], labelToIndex: OpenHashMap[String, Double]) = {
     val keepInvalid = (getHandleInvalid == StringIndexer.KEEP_INVALID)
 
-    udf { label: String =>
+    udf { (label: String) =>
       if (label == null) {
         if (keepInvalid) {
           labels.length
@@ -590,7 +590,7 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
     } else {
       $(labels)
     }
-    val indexer = udf { index: Double =>
+    val indexer = udf { (index: Double) =>
       val idx = index.toInt
       if (0 <= idx && idx < values.length) {
         values(idx)

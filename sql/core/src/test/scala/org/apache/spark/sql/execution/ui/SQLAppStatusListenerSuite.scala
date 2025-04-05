@@ -1152,9 +1152,8 @@ class SimpleCustomDriverMetric extends CustomMetric {
   }
 }
 
-class SimpleCustomDriverTaskMetric(value : Long) extends CustomTaskMetric {
+class SimpleCustomDriverTaskMetric(override val value : Long) extends CustomTaskMetric {
   override def name(): String = "custom_driver_metric_partition_count"
-  override def value(): Long = value
 }
 
 class BytesWrittenCustomMetric extends CustomMetric {

@@ -209,14 +209,15 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
           .atZone(zid)
           .toInstant)
         var micros = start
-        do {
+        while ({
           val rebased = rebaseGregorianToJulianMicros(TimeZone.getTimeZone(zid), micros)
           val rebasedAndOptimized = withDefaultTimeZone(zid) {
             rebaseGregorianToJulianMicros(micros)
           }
           assert(rebasedAndOptimized === rebased)
           micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
-        } while (micros <= end)
+          micros <= end
+        }) ()
       }
     }
   }
@@ -229,14 +230,15 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
         val end = rebaseGregorianToJulianMicros(
           instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0).atZone(zid).toInstant))
         var micros = start
-        do {
+        while ({
           val rebased = rebaseJulianToGregorianMicros(TimeZone.getTimeZone(zid), micros)
           val rebasedAndOptimized = withDefaultTimeZone(zid) {
             rebaseJulianToGregorianMicros(micros)
           }
           assert(rebasedAndOptimized === rebased)
           micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
-        } while (micros <= end)
+          micros <= end
+        }) ()
       }
     }
   }

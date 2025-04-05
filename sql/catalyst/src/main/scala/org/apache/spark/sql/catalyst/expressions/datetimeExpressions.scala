@@ -1853,8 +1853,8 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression) extends UTCTimestamp {
   override val func = DateTimeUtils.fromUTCTime
-  override val funcName: String = "fromUTCTime"
-  override val prettyName: String = "from_utc_timestamp"
+  override val funcName = "fromUTCTime"
+  override val prettyName = "from_utc_timestamp"
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): FromUTCTimestamp =
     copy(left = newLeft, right = newRight)
@@ -1887,8 +1887,8 @@ case class FromUTCTimestamp(left: Expression, right: Expression) extends UTCTime
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimestamp {
   override val func = DateTimeUtils.toUTCTime
-  override val funcName: String = "toUTCTime"
-  override val prettyName: String = "to_utc_timestamp"
+  override val funcName = "toUTCTime"
+  override val prettyName = "to_utc_timestamp"
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ToUTCTimestamp =
     copy(left = newLeft, right = newRight)

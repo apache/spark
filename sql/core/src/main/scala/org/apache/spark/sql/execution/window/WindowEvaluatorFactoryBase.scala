@@ -206,7 +206,7 @@ trait WindowEvaluatorFactoryBase {
         val factory = key match {
           // Frameless offset Frame
           case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow =>
+            (target: InternalRow) =>
               new FrameLessOffsetWindowFunctionFrame(
                 target,
                 ordinal,
@@ -218,7 +218,7 @@ trait WindowEvaluatorFactoryBase {
                 offset,
                 expr.nonEmpty)
           case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow => {
+            (target: InternalRow) => {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
                 ordinal,
@@ -231,7 +231,7 @@ trait WindowEvaluatorFactoryBase {
                 expr.nonEmpty)
             }
           case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow => {
+            (target: InternalRow) => {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
                 ordinal,
@@ -246,13 +246,13 @@ trait WindowEvaluatorFactoryBase {
 
           // Entire Partition Frame.
           case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
-            target: InternalRow => {
+            (target: InternalRow) => {
               new UnboundedWindowFunctionFrame(target, processor)
             }
 
           // Growing Frame.
           case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
-            target: InternalRow => {
+            (target: InternalRow) => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
@@ -261,7 +261,7 @@ trait WindowEvaluatorFactoryBase {
 
           // Shrinking Frame.
           case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-            target: InternalRow => {
+            (target: InternalRow) => {
               new UnboundedFollowingWindowFunctionFrame(
                 target,
                 processor,
@@ -270,7 +270,7 @@ trait WindowEvaluatorFactoryBase {
 
           // Moving Frame.
           case ("AGGREGATE", frameType, lower, upper, _) =>
-            target: InternalRow => {
+            (target: InternalRow) => {
               new SlidingWindowFunctionFrame(
                 target,
                 processor,

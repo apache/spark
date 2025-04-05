@@ -75,7 +75,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     val group = AttributeGroup.fromStructField(dataframe.schema(vecColName))
     assert(group.size === vecSize,
       s"the vector size obtained from schema should be $vecSize, but got ${group.size}")
-    val sizeUDF = udf { vector: Vector => vector.size }
+    val sizeUDF = udf { (vector: Vector) => vector.size }
     assert(dataframe.select(sizeUDF(col(vecColName)))
       .as[Int]
       .collect()
@@ -147,7 +147,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       dataframe,
       transformer,
       firstResultCol,
-      otherResultCols: _*) { rows: Seq[Row] => rows.foreach(checkFunction(_)) }
+      otherResultCols: _*) { (rows: Seq[Row]) => rows.foreach(checkFunction(_)) }
   }
 
   def testTransformerByGlobalCheckFunc[A : Encoder](

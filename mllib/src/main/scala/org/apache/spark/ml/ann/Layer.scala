@@ -19,7 +19,7 @@ package org.apache.spark.ml.ann
 
 import java.util.Random
 
-import breeze.linalg.{*, axpy => Baxpy, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
+import breeze.linalg.{`*`, axpy => Baxpy, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}

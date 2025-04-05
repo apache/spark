@@ -292,7 +292,7 @@ case class AlterTableAddColumnsCommand(
    */
   private def constantFoldCurrentDefaultsToExistDefaults(
       sparkSession: SparkSession, tableProvider: Option[String]): Seq[StructField] = {
-    colsToAdd.map { col: StructField =>
+    colsToAdd.map { col =>
       if (col.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
         val schema = StructType(Array(col))
         ResolveDefaultColumns.validateTableProviderForDefaultValue(

@@ -85,8 +85,8 @@ class ExecutorStageSummary private[spark](
     val diskBytesSpilled : Long,
     @deprecated("use isExcludedForStage instead", "3.1.0")
     val isBlacklistedForStage: Boolean,
-    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
-    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    @JsonSerialize(`using` = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(`using` = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
     val isExcludedForStage: Boolean)
 
@@ -125,8 +125,8 @@ class ExecutorSummary private[spark](
     val memoryMetrics: Option[MemoryMetrics],
     @deprecated("use excludedInStages instead", "3.1.0")
     val blacklistedInStages: Set[Int],
-    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
-    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    @JsonSerialize(`using` = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(`using` = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
     val attributes: Map[String, String],
     val resources: Map[String, ResourceInformation],
@@ -165,9 +165,9 @@ private[spark] class ExecutorMetricsJsonSerializer
     if (metrics.isEmpty) {
       jsonGenerator.writeNull()
     } else {
-      metrics.foreach { m: ExecutorMetrics =>
+      metrics.foreach { metrics =>
         val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
-          metric -> m.getMetricValue(metric)
+          metric -> metrics.getMetricValue(metric)
         }
         jsonGenerator.writeObject(metricsMap)
       }
@@ -310,8 +310,8 @@ class StageData private[spark](
     val speculationSummary: Option[SpeculationStageSummary],
     val killedTasksSummary: Map[String, Int],
     val resourceProfileId: Int,
-    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
-    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    @JsonSerialize(`using` = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(`using` = classOf[ExecutorMetricsJsonDeserializer])
     val peakExecutorMetrics: Option[ExecutorMetrics],
     val taskMetricsDistributions: Option[TaskMetricDistributions],
     val executorMetricsDistributions: Option[ExecutorMetricsDistributions],
@@ -448,11 +448,11 @@ class ExecutorMetricsDistributions private[spark](
   val shuffleWriteRecords: IndexedSeq[Double],
   val memoryBytesSpilled: IndexedSeq[Double],
   val diskBytesSpilled: IndexedSeq[Double],
-  @JsonSerialize(using = classOf[ExecutorPeakMetricsDistributionsJsonSerializer])
+  @JsonSerialize(`using` = classOf[ExecutorPeakMetricsDistributionsJsonSerializer])
   val peakMemoryMetrics: ExecutorPeakMetricsDistributions
 )
 
-@JsonSerialize(using = classOf[ExecutorPeakMetricsDistributionsJsonSerializer])
+@JsonSerialize(`using` = classOf[ExecutorPeakMetricsDistributionsJsonSerializer])
 class ExecutorPeakMetricsDistributions private[spark](
   val quantiles: IndexedSeq[Double],
   val executorMetrics: IndexedSeq[ExecutorMetrics]) {

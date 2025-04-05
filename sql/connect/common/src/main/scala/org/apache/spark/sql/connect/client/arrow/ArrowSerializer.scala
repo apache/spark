@@ -398,7 +398,7 @@ object ArrowSerializer {
 
       case (ArrayEncoder(element, _), v: ListVector) =>
         val elementSerializer = serializerFor(element, v.getDataVector)
-        val toIterator = { array: Any =>
+        val toIterator = { (array: Any) =>
           array.asInstanceOf[Array[_]].iterator
         }
         new ArraySerializer(v, toIterator, elementSerializer)

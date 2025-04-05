@@ -92,7 +92,7 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
     } else if (isSet(outputCols)) {
       $(outputCols)
     } else {
-      inputFeatures.map{field: String => s"${field}_indexed"}
+      inputFeatures.map(field => s"${field}_indexed")
     }
 
   private[feature] def validateSchema(schema: StructType, fitting: Boolean): StructType = {

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{withPosition, RelationResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisErrorAt, RelationResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.LookupCatalog
 import org.apache.spark.util.ArrayImplicits._
