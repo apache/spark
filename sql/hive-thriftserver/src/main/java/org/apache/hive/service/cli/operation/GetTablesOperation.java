@@ -66,10 +66,10 @@ public class GetTablesOperation extends MetadataOperation {
   .addStringColumn("REF_GENERATION",
       "Specifies how values in SELF_REFERENCING_COL_NAME are created.");
 
-  protected GetTablesOperation(HiveSession parentSession,
+  protected GetTablesOperation(HiveSession parentSession, OperationManager operationManager,
       String catalogName, String schemaName, String tableName,
       List<String> tableTypes) {
-    super(parentSession, OperationType.GET_TABLES);
+    super(parentSession, operationManager, OperationType.GET_TABLES);
     this.catalogName = catalogName;
     this.schemaName = schemaName;
     this.tableName = tableName;
