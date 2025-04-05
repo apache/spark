@@ -111,7 +111,12 @@ private[spark] object SerializationDebugger extends Logging {
             visitExternalizable(e, elem :: stack)
 
           case s: Object with java.io.Serializable =>
-            val elem = s"object (class ${s.getClass.getName}, $s)"
+            val str = try {
+              String.valueOf(s)
+            } catch {
+              case _: Throwable => "exception in toString"
+            }
+            val elem = s"object (class ${s.getClass.getName}, $str)"
             visitSerializable(s, elem :: stack)
 
           case _ =>
