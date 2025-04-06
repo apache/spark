@@ -649,10 +649,10 @@ case class FileSourceScanExec(
 
 
   def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering]
-  =
-  this.relation.fileFormat match {
+  = this.relation.fileFormat match {
     case x: SupportsBroadcastVarPushdownFiltering => Some(WrapperOverParquetFileFormat(x,
-      output.toStructType, relation.partitionSchema.map(sf => FieldReference(sf.name)).toArray))
+      output.toStructType, relation.partitionSchema.map(sf => FieldReference.column(sf.name)).
+        toArray))
 
     case _ => None
   }
