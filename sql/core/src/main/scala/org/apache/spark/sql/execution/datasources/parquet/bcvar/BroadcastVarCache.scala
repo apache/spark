@@ -137,12 +137,11 @@ private case class KeyIdempot (
 
   override def equals(other: Any): Boolean = {
     if (other != null) {
-      this == other ||
-        (other match {
-          case key: KeyIdempot => this.bcjk == key.bcjk
+      other match {
+        case key: KeyIdempot => this.bcjk == key.bcjk
 
-          case _ => false
-        })
+        case _ => false
+      }
     } else {
       false
     }
