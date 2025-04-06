@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.expressions.{filter => connectorFilter, FieldReference, LiteralValue, NamedReference}
+import org.apache.spark.sql.connector.expressions.{filter => connectorFilter, LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsBroadcastVarPushdownFiltering}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
@@ -61,25 +61,27 @@ class ParquetFileFormat
   with Serializable
   with SupportsBroadcastVarPushdownFiltering {
 
-  private var readSchma: Option[StructType] = None
-  private var partitionSchema: Option[StructType] = None
-
   private val broadcastVarFilterExpressions: mutable.Buffer[Filter] =
     mutable.ListBuffer.empty
-
-  def setPartitionSchema(str: StructType): Unit = this.partitionSchema = Option(str)
-
-  def setReadSchema(str: StructType): Unit = this.readSchma = Option(str)
-
-  def readSchema: StructType = this.readSchma.getOrElse(StructType(Seq.empty))
 
   override def shortName(): String = "parquet"
 
   override def toString: String = "Parquet"
 
-  override def hashCode(): Int = getClass.hashCode()
+  override def hashCode(): Int = Objects.hashCode( this.broadcastVarFilterExpressions)
 
-  override def equals(other: Any): Boolean = other.isInstanceOf[ParquetFileFormat]
+  override def equals(other: Any): Boolean = other match {
+    case pf: ParquetFileFormat =>
+      this.broadcastVarFilterExpressions == pf.broadcastVarFilterExpressions
+
+    case _ => false
+  }
+
+  override def partitionAttributes(): Array[NamedReference] =
+    throw new UnsupportedOperationException("method not implemented")
+
+  override def readSchema: StructType =
+    throw new UnsupportedOperationException("method not implemented")
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -143,9 +145,10 @@ class ParquetFileFormat
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
-      filters: Seq[Filter],
+      filtersTemp: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    val filters = filtersTemp ++ this.broadcastVarFilterExpressions
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -390,7 +393,7 @@ class ParquetFileFormat
   override def hasPushedBroadCastFilter(): Boolean = this.broadcastVarFilterExpressions.nonEmpty
 
   override def allAttributes(): Array[NamedReference] =
-    readSchema.fields.map(sf => FieldReference(sf.name))
+    throw new UnsupportedOperationException("method not implemented")
 
     /**
      * This method should be implemented by the DataSourceV2 Scan which should check for equality
@@ -401,11 +404,10 @@ class ParquetFileFormat
      */
     override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering):
     Boolean = (this eq other) || (other match {
-      case that: ParquetFileFormat => this.partitionSchema == that.partitionSchema &&
-        this.readSchema == that.readSchema
+      case that: ParquetFileFormat => true
 
       case _ => false
-      })
+   })
 
 
     /**
@@ -414,8 +416,7 @@ class ParquetFileFormat
      *
      * @return int
      */
-    override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(
-      getClass.hashCode(), readSchema, partitionSchema)
+    override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(getClass.hashCode())
 
 
   override def getPushedBroadcastFilters(): javautil.List[PushedBroadcastFilterData] = {
@@ -432,12 +433,8 @@ class ParquetFileFormat
         java.lang.Long.valueOf(bcData.bcVar.getBroadcastVarId)).collect(
         javautil.stream.Collectors.toSet[java.lang.Long])
 
-    // TODO: Asif fix this
-    override def getPushedBroadcastFiltersCount(): Int = 0
-  // this.broadcastVarFilterExpressions.length
 
-    override def partitionAttributes(): Array[NamedReference] = this.partitionSchema.map(str =>
-      str.map(field => FieldReference(field.name)).toArray).getOrElse(Array.empty)
+    override def getPushedBroadcastFiltersCount(): Int = this.broadcastVarFilterExpressions.length
 }
 
 object ParquetFileFormat extends Logging {

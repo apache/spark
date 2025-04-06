@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import com.google.common.base.Objects
+
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -71,4 +74,29 @@ case class HadoopFsRelation(
 
 
   override def inputFiles: Array[String] = location.inputFiles
+
+  def equalToIgnoreRuntimeFilters(other: Any): Boolean = other match {
+    case that: HadoopFsRelation => this.location == that.location &&
+      this.partitionSchema == that.partitionSchema && this.dataSchema == that.dataSchema &&
+      this.bucketSpec == that.bucketSpec &&
+      ((this.fileFormat, that.fileFormat) match {
+          case(pf1: ParquetFileFormat, pf2: ParquetFileFormat) =>
+            pf1.equalToIgnoreRuntimeFilters(pf2)
+
+          case _ => this.fileFormat == that.fileFormat
+    }) && this.options == that.options
+
+    case _ => false
+  }
+
+  def hashCodeIgnoreRuntimeFilters(): Int = {
+    val ffHashCode = this.fileFormat match {
+      case pf: ParquetFileFormat => pf.hashCodeIgnoreRuntimeFilters()
+
+      case other => other.hashCode()
+    }
+    Objects.hashCode(this.location,
+      this.partitionSchema, this.dataSchema, this.bucketSpec, ffHashCode, this.options)
+  }
+
 }

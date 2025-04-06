@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 
 /**
@@ -45,13 +44,6 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
         None,
         v1FileFormat,
         d.options.asScala.toMap)(sparkSession)
-      v1FileFormat match {
-        case p: ParquetFileFormat =>
-          p.setReadSchema(relation.schema)
-          p.setPartitionSchema(table.fileIndex.partitionSchema)
-
-        case _ =>
-      }
       i.copy(table = LogicalRelation(relation))
   }
 }

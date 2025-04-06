@@ -24,13 +24,15 @@ import org.apache.parquet.filter2.predicate.Statistics
 import org.apache.parquet.filter2.predicate.UserDefinedPredicate
 
 import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper
+import org.apache.spark.sql.execution.datasources.parquet.Converter
 
 class RangeInFilter[T <: Comparable[T]](
     private val bcVar: BroadcastedJoinKeysWrapper,
     column: Column[T],
-    catalystToParquetFormatConverter: Any => T = (x: Any) => x.asInstanceOf[T]) extends
+    catalystToParquetFormatConverter: Option[Converter[T]] = None) extends
   UserDefinedPredicate[T] with Serializable {
 
+  @transient
   private lazy val rangeSet: util.NavigableSet[T] = BroadcastVarCache.getNavigableSet(bcVar,
     column, catalystToParquetFormatConverter)
 

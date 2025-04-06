@@ -334,7 +334,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           None,
           rebindFileSourceMetadataAttributesInFilters(dataFilters),
           table.map(_.identifier))
-
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
         val structColumns = metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>

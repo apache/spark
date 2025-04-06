@@ -25,6 +25,7 @@ import com.google.common.collect.Sets
 import org.apache.parquet.filter2.predicate.Operators.Column
 
 import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper
+import org.apache.spark.sql.execution.datasources.parquet.Converter
 
 object BroadcastVarCache {
 
@@ -49,7 +50,8 @@ object BroadcastVarCache {
         throw new UnsupportedOperationException("comparator")).asInstanceOf[Comparator[T]])
     val array = key.bcjk.getKeysArray
     for (i <- 0 until array.getLength) {
-      tempSet.add(key.parquetFormatConverter(array.get(i)).asInstanceOf[T])
+      tempSet.add(key.parquetFormatConverter.map(converter => converter(array.get(i))).
+        getOrElse(array.get(i)).asInstanceOf[T])
     }
     tempSet
   }
@@ -58,7 +60,7 @@ object BroadcastVarCache {
   def getNavigableSet[T <: Comparable[T]](
       bcVar: BroadcastedJoinKeysWrapper,
       column: Column[T],
-      catalystToParquetFormatConverter: Any => T): util.NavigableSet[T] = {
+      catalystToParquetFormatConverter: Option[Converter[T]]): util.NavigableSet[T] = {
     val key = KeyIdempot(bcVar, column.getColumnType, catalystToParquetFormatConverter)
     idempotentializer.get(key).asInstanceOf[util.NavigableSet[T]]
   }
@@ -131,7 +133,7 @@ private object CharSeqComparator extends Comparator[CharSequence] {
 private case class KeyIdempot (
     bcjk: BroadcastedJoinKeysWrapper,
     comparatorClass: Class[_],
-    parquetFormatConverter: Any => Any) {
+    parquetFormatConverter: Option[Converter[_]]) {
 
   override def equals(other: Any): Boolean = {
     if (other != null) {
