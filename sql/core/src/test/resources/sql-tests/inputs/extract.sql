@@ -1,4 +1,4 @@
-CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c, to_timestamp_ntz('2011-05-06 07:08:09.1234567') as ntz, interval 10 year 20 month as i, interval 30 day 40 hour 50 minute 6.7890 second as j;
+CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c, to_timestamp_ntz('2011-05-06 07:08:09.1234567') as ntz, CAST('07:08:09.123456' AS TIME) as time_col, interval 10 year 20 month as i, interval 30 day 40 hour 50 minute 6.7890 second as j;
 
 select extract(year from c), extract(year from ntz), extract(year from i) from t;
 select extract(y from c), extract(y from ntz), extract(y from i) from t;
@@ -32,17 +32,17 @@ select extract(dow_iso from c), extract(dow_iso from ntz) from t;
 
 select extract(doy from c), extract(doy from ntz) from t;
 
-select extract(hour from c), extract(hour from ntz), extract(hour from j) from t;
-select extract(h from c), extract(h from ntz), extract(h from j) from t;
-select extract(hours from c), extract(hours from ntz), extract(hours from j) from t;
-select extract(hr from c), extract(hr from ntz), extract(hr from j) from t;
-select extract(hrs from c), extract(hrs from ntz), extract(hrs from j) from t;
+select extract(hour from c), extract(hour from ntz), extract(hour FROM time_col), extract(hour from j) from t;
+select extract(h from c), extract(h from ntz), extract(h FROM time_col), extract(h from j) from t;
+select extract(hours from c), extract(hours from ntz), extract(hours FROM time_col), extract(hours from j) from t;
+select extract(hr from c), extract(hr from ntz), extract(hr FROM time_col), extract(hr from j) from t;
+select extract(hrs from c), extract(hrs from ntz), extract(hrs FROM time_col), extract(hrs from j) from t;
 
-select extract(minute from c), extract(minute from ntz), extract(minute from j) from t;
-select extract(m from c), extract(m from ntz), extract(m from j) from t;
-select extract(min from c), extract(min from ntz), extract(min from j) from t;
-select extract(mins from c), extract(mins from ntz), extract(mins from j) from t;
-select extract(minutes from c), extract(minutes from ntz), extract(minutes from j) from t;
+select extract(minute from c), extract(minute from ntz), extract(minute FROM time_col), extract(minute from j) from t;
+select extract(m from c), extract(m from ntz), extract(m FROM time_col), extract(m from j) from t;
+select extract(min from c), extract(min from ntz), extract(min FROM time_col), extract(min from j) from t;
+select extract(mins from c), extract(mins from ntz), extract(mins FROM time_col), extract(mins from j) from t;
+select extract(minutes from c), extract(minutes from ntz), extract(minutes FROM time_col), extract(minutes from j) from t;
 
 select extract(second from c), extract(second from ntz), extract(second from j) from t;
 select extract(s from c), extract(s from ntz), extract(s from j) from t;
