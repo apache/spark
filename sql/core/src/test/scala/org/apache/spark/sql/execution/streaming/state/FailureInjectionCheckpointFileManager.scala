@@ -53,13 +53,13 @@ class DelayCloseFSDataOutputStreamWrapper(stream: CancellableFSDataOutputStream)
 }
 
 /**
- * A wrapper checkpoint file manager that might inject functions in some function calls.
+ * A wrapper checkpoint file manager that might inject failures in some function calls.
  * Used in unit tests to simulate failure scenarios.
  * This can be put into SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS to provide failure
  * injection behavior.
  *
- * @param path
- * @param hadoopConf
+ * @param path The path to the checkpoint directory, passing to the parent class
+ * @param hadoopConf  hadoop conf that will be passed to the parent class
  */
 class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) with Logging {

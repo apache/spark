@@ -245,7 +245,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
 
   /**
    * This test is to simulate the case where a previous task had connectivity problem that couldn't
-   * be killed or write changelog file. Only after the later one is successfully committed, it come
+   * be killed or write changelog file. Only after the later one is successfully committed, it comes
    * back and write the changelog file.
    *  */
   Seq(false, true).foreach { ifEnableStateStoreCheckpointIds =>
@@ -443,7 +443,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
   }
 
   /**
-   * An integreated test to cover this scenario:
+   * An integrated test to cover this scenario:
    * 1. A batch is running and a snapshot checkpoint is scheduled
    * 2. The batch fails
    * 3. The query restarts
