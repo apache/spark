@@ -81,7 +81,7 @@ abstract class StreamingQueryListener extends Serializable {
    * Called when a query's microbatch trigger is started.
    * @since 4.2.0
    */
-  def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
+  def onQueryTriggerStarted(event: QueryTriggerStartEvent): Unit = {}
 }
 
 /**
@@ -98,7 +98,7 @@ private[spark] trait PythonStreamingQueryListener {
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit
 
-  def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
+  def onQueryTriggerStarted(event: QueryTriggerStartEvent): Unit = {}
 }
 
 private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreamingQueryListener)
@@ -114,7 +114,7 @@ private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreami
   def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
 
   override def onQueryTrggerStart(event: QueryTriggerStartEvent): Unit = {
-    listener.onQueryTriggerStart(event)
+    listener.onQueryTriggerStarted(event)
   }
 }
 
