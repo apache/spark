@@ -84,12 +84,6 @@ abstract class StreamingQueryListener extends Serializable {
    * @since 4.2.0
    */
   def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
-
-  /**
-   * Called when a query is awaiting the next trigger to start.
-   * @since 4.2.0
-   */
-  def onQueryAwait(event: QueryAwaitEvent): Unit = {}
 }
 
 /**
@@ -107,8 +101,6 @@ private[spark] trait PythonStreamingQueryListener {
   def onQueryTerminated(event: QueryTerminatedEvent): Unit
 
   def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
-
-  def onQueryAwait(event: QueryAwaitEvent): Unit = {}
 }
 
 private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreamingQueryListener)
@@ -121,15 +113,11 @@ private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreami
 
   override def onQueryIdle(event: QueryIdleEvent): Unit = listener.onQueryIdle(event)
 
+  def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
+
   override def onQueryTrggerStart(event: QueryTriggerStartEvent): Unit = {
     listener.onQueryTriggerStart(event)
   }
-
-  override def onQueryAwait(event: QueryAwaitEvent): Unit = {
-    listener.onQueryAwait(event)
-  }
-
-  def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
 }
 
 /**
@@ -332,6 +320,16 @@ object StreamingQueryListener extends Serializable {
     }
   }
 
+  /**
+   * Event representing that the trigger of a query has started.
+   *
+   * @param id
+   *  A unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param runId
+   *  A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   * @param timestamp
+   *  The timestamp start of a query trigger
+   */
   @Evolving
   class QueryTriggerStartEvent private[sql] (
       val id: UUID,
@@ -352,32 +350,6 @@ object StreamingQueryListener extends Serializable {
     private[spark] def fromJson(json: String): QueryTriggerStartEvent = {
       val parser = EventParser(json)
       new QueryTriggerStartEvent(
-        parser.getUUID("id"),
-        parser.getUUID("runId"),
-        parser.getString("timestamp"))
-    }
-  }
-
-  @Evolving
-  class QueryAwaitEvent private[sql] (
-      val id: UUID
-      val runId: UUID,
-      val timestamp: String)
-      extends Event
-      with Serializable {
-    def json: String = compact(render(jsonValue))
-
-    private def jsonValue: JValue = {
-      ("id" -> JString(id.toString)) ~
-        ("runId" -> JString(runId.toString)) ~
-        ("timestamp" -> JString(timestamp))
-    }
-  }
-
-  private[spark] object QueryAwaitEvent {
-    private[spark] def fromJson(json: String): QueryAwaitEvent = {
-      val parser = EventParser(json)
-      new QueryAwaitEvent(
         parser.getUUID("id"),
         parser.getUUID("runId"),
         parser.getString("timestamp"))
