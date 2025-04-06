@@ -75,6 +75,12 @@ class ProgressReporter(
   val stateStoreCoordinator: StateStoreCoordinatorRef =
     sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
 
+  val queryTriggerStartEventEnabled: Boolean =
+    sparkSession.sessionState.conf.streamingQueryTriggerStartEventEnabled
+
+  val queryTriggerStartEventMinInterval: Boolean =
+    sparkSession.sessionState.conf.streamingQueryTriggerStartEventMinInterval
+
   private val timestampFormat =
     DateTimeFormatter
       .ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
@@ -125,6 +131,19 @@ class ProgressReporter(
 
       lastNoExecutionProgressEventTime = now
     }
+  }
+
+  def updateQueryTriggerStart(
+     id: UUID,
+     runId: UUID,
+     currentTriggerStartTimestamp: Long): Unit = {
+   if (queryTriggerStartEventEnabled) {
+     val now = triggerClock.getTimeMillis()
+     if (now - lastNoExecutionProgressEventTime >= queryTriggerStartEventMinInterval) {
+       postEvent(new QueryTriggerStartEvent(id, runId, formatTimestamp(currentTriggerStartTimestamp)))
+       lastNoExecutionProgressEventTime = now
+     }
+   }
   }
 
   private def postEvent(event: StreamingQueryListener.Event): Unit = {
@@ -229,6 +248,7 @@ abstract class ProgressContext(
     currentTriggerEndOffsets = null
     currentTriggerLatestOffsets = null
     currentDurationsMs.clear()
+    progressReporter.updateQueryTriggerStart(id, runId, currentTriggerStartTimestamp)
   }
 
   /**
