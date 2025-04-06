@@ -290,3 +290,61 @@ object HourExpressionBuilder extends ExpressionBuilder {
     }
   }
 }
+
+case class SecondsOfTime(child: Expression)
+  extends RuntimeReplaceable
+    with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    IntegerType,
+    "getSecondsOfTime",
+    Seq(child),
+    Seq(child.dataType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType())
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override def prettyName: String = "second"
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+      copy(child = newChildren.head)
+  }
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the second component of the given expression.
+
+    If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
+    it returns the second of that timestamp.
+    If `expr` is a TIME type (since 4.1.0), it returns the second of the time-of-day.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2018-02-14 12:58:59');
+       59
+      > SELECT _FUNC_(TIME'13:59:59.999999');
+       59
+  """,
+  since = "1.5.0",
+  group = "datetime_funcs")
+object SecondExpressionBuilder extends ExpressionBuilder {
+  override def build(name: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.isEmpty) {
+      throw QueryCompilationErrors.wrongNumArgsError(name, Seq("> 0"), expressions.length)
+    } else {
+      val child = expressions.head
+      child.dataType match {
+        case _: TimeType =>
+          SecondsOfTime(child)
+        case _ =>
+          Second(child)
+      }
+    }
+  }
+}
+
