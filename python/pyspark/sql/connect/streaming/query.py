@@ -33,6 +33,7 @@ from pyspark.sql.streaming.listener import (
     QueryProgressEvent,
     QueryIdleEvent,
     QueryTerminatedEvent,
+    QueryTriggerStartedEvent,
     StreamingQueryProgress,
 )
 from pyspark.sql.streaming.query import (
@@ -409,7 +410,7 @@ class StreamingQueryListenerBus:
     def post_to_all(
         self,
         event: Union[
-            "QueryStartedEvent", "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent"
+            "QueryStartedEvent", "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryTriggerStartedEvent"
         ],
     ) -> None:
         """
@@ -427,6 +428,8 @@ class StreamingQueryListenerBus:
                         listener.onQueryIdle(event)
                     elif isinstance(event, QueryTerminatedEvent):
                         listener.onQueryTerminated(event)
+                    elif isinstance(event, QueryTriggerStartedEvent):
+                        listener.onQueryTriggerStarted(event)
                     else:
                         warnings.warn(f"Unknown StreamingQueryListener event: {event}")
                 except Exception as e:

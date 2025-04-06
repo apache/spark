@@ -136,6 +136,9 @@ class DataFrameObservationTestsMixin:
             def onQueryTerminated(self, event):
                 pass
 
+            def onQueryTriggerStarted(self, event):
+                pass
+
         self.spark.streams.addListener(TestListener())
 
         df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
