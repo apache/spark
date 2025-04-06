@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.time.DateTimeException
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
@@ -120,6 +121,19 @@ case class ToTimeParser(fmt: Option[String]) {
     withErrorCondition(s, Some(format)) {
       TimeFormatter(format, isParsing = true).parse(s.toString)
     }
+  }
+}
+
+object TimePart {
+
+  def parseExtractField(
+      extractField: String,
+      source: Expression): Expression = extractField.toUpperCase(Locale.ROOT) match {
+    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => HoursOfTime(source)
+    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => MinutesOfTime(source)
+    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
+    case _ =>
+      throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(extractField, source)
   }
 }
 

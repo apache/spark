@@ -4292,6 +4292,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-35937: Extract time field from timestamp should work in ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq("to_time").foreach { func =>
+        checkAnswer(sql(s"select extract(hour from $func('03:04:05'))"), Row(3))
+        checkAnswer(sql(s"select extract(minute from $func('03:04:05'))"), Row(4))
+        // checkAnswer(sql(s"select extract(second from $func('03:04:05'))"), Row(5))
+      }
+    }
+  }
+
   test("SPARK-35937: Extract date field from timestamp should work in ANSI mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       Seq("to_timestamp", "to_timestamp_ntz").foreach { func =>

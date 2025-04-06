@@ -3175,6 +3175,8 @@ object Extract {
         source.dataType match {
           case _: AnsiIntervalType | CalendarIntervalType =>
             ExtractIntervalPart.parseExtractField(fieldStr.toString, source)
+          case _: TimeType =>
+            TimePart.parseExtractField(fieldStr.toString, source)
           case _ =>
             DatePart.parseExtractField(fieldStr.toString, source)
         }
