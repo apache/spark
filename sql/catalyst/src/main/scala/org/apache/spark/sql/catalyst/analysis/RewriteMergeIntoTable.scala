@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, ResolvedHint, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{OPERATION_COLUMN, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
@@ -52,27 +52,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
           validateMergeIntoConditions(m)
+          buildAppendDataPlan(r, r, source, cond, notMatchedActions)
 
-          // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
-          val insertAction = notMatchedActions.head.asInstanceOf[InsertAction]
-          val filteredSource = insertAction.condition match {
-            case Some(insertCond) => Filter(insertCond, source)
-            case None => source
-          }
-
-          // there is only one NOT MATCHED action, use a left anti join to remove any matching rows
-          // and switch to using a regular append instead of a row-level MERGE operation
-          // only unmatched source rows that match the condition are appended to the table
-          val joinPlan = Join(filteredSource, r, LeftAnti, Some(cond), JoinHint.NONE)
-
-          val output = insertAction.assignments.map(_.value)
-          val outputColNames = r.output.map(_.name)
-          val projectList = output.zip(outputColNames).map { case (expr, name) =>
-            Alias(expr, name)()
-          }
-          val project = Project(projectList, joinPlan)
-
-          AppendData.byPosition(r, project)
+        case h @ ResolvedHint(r: DataSourceV2Relation, _) =>
+          validateMergeIntoConditions(m)
+          buildAppendDataPlan(r, h, source, cond, notMatchedActions)
 
         case _ =>
           m
@@ -86,35 +70,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
           validateMergeIntoConditions(m)
+          buildAppendDataPlanForMultipleNotMatchedActions(r, r, source, cond, notMatchedActions)
 
-          // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
-          // and switch to using a regular append instead of a row-level MERGE operation
-          // only unmatched source rows that match action conditions are appended to the table
-          val joinPlan = Join(source, r, LeftAnti, Some(cond), JoinHint.NONE)
-
-          val notMatchedInstructions = notMatchedActions.map {
-            case InsertAction(cond, assignments) =>
-              Keep(Insert, cond.getOrElse(TrueLiteral), assignments.map(_.value))
-            case other =>
-              throw new AnalysisException(
-                errorClass = "_LEGACY_ERROR_TEMP_3053",
-                messageParameters = Map("other" -> other.toString))
-          }
-
-          val outputs = notMatchedInstructions.flatMap(_.outputs)
-
-          // merge rows as there are multiple NOT MATCHED actions
-          val mergeRows = MergeRows(
-            isSourceRowPresent = TrueLiteral,
-            isTargetRowPresent = FalseLiteral,
-            matchedInstructions = Nil,
-            notMatchedInstructions = notMatchedInstructions,
-            notMatchedBySourceInstructions = Nil,
-            checkCardinality = false,
-            output = generateExpandOutput(r.output, outputs),
-            joinPlan)
-
-          AppendData.byPosition(r, mergeRows)
+        case h @ ResolvedHint(r: DataSourceV2Relation, _) =>
+          validateMergeIntoConditions(m)
+          buildAppendDataPlanForMultipleNotMatchedActions(r, h, source, cond, notMatchedActions)
 
         case _ =>
           m
@@ -139,9 +99,90 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
                 notMatchedActions, notMatchedBySourceActions)
           }
 
+        case h @ ResolvedHint(
+          r @ DataSourceV2Relation(tbl: SupportsRowLevelOperations, _, _, _, _), _) =>
+          validateMergeIntoConditions(m)
+          val table = buildOperationTable(tbl, MERGE, CaseInsensitiveStringMap.empty())
+          table.operation match {
+            case _: SupportsDelta =>
+              buildWriteDeltaPlan(
+                r, table, source, cond, matchedActions,
+                notMatchedActions, notMatchedBySourceActions, Some(h))
+            case _ =>
+              buildReplaceDataPlan(
+                r, table, source, cond, matchedActions,
+                notMatchedActions, notMatchedBySourceActions, Some(h))
+          }
+
         case _ =>
           m
       }
+  }
+
+  // build a rewrite plan for sources that support appending data
+  private def buildAppendDataPlan(
+      relation: DataSourceV2Relation,
+      target: LogicalPlan,
+      source: LogicalPlan,
+      cond: Expression,
+      notMatchedActions: Seq[MergeAction]): AppendData = {
+    // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
+    val insertAction = notMatchedActions.head.asInstanceOf[InsertAction]
+    val filteredSource = insertAction.condition match {
+      case Some(insertCond) => Filter(insertCond, source)
+      case None => source
+    }
+
+    // there is only one NOT MATCHED action, use a left anti join to remove any matching rows
+    // and switch to using a regular append instead of a row-level MERGE operation
+    // only unmatched source rows that match the condition are appended to the table
+    val joinPlan = Join(filteredSource, target, LeftAnti, Some(cond), JoinHint.NONE)
+
+    val output = insertAction.assignments.map(_.value)
+    val outputColNames = relation.output.map(_.name)
+    val projectList = output.zip(outputColNames).map { case (expr, name) =>
+      Alias(expr, name)()
+    }
+    val project = Project(projectList, joinPlan)
+
+    AppendData.byPosition(relation, project)
+  }
+
+  // build a rewrite plan for sources that support appending data have multiple not matched actions
+  private def buildAppendDataPlanForMultipleNotMatchedActions(
+      relation: DataSourceV2Relation,
+      target: LogicalPlan,
+      source: LogicalPlan,
+      cond: Expression,
+      notMatchedActions: Seq[MergeAction]): AppendData = {
+    // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
+    // and switch to using a regular append instead of a row-level MERGE operation
+    // only unmatched source rows that match action conditions are appended to the table
+    val joinPlan = Join(source, target, LeftAnti, Some(cond), JoinHint.NONE)
+
+    val notMatchedInstructions = notMatchedActions.map {
+      case InsertAction(cond, assignments) =>
+        Keep(Insert, cond.getOrElse(TrueLiteral), assignments.map(_.value))
+      case other =>
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3053",
+          messageParameters = Map("other" -> other.toString))
+    }
+
+    val outputs = notMatchedInstructions.flatMap(_.outputs)
+
+    // merge rows as there are multiple NOT MATCHED actions
+    val mergeRows = MergeRows(
+      isSourceRowPresent = TrueLiteral,
+      isTargetRowPresent = FalseLiteral,
+      matchedInstructions = Nil,
+      notMatchedInstructions = notMatchedInstructions,
+      notMatchedBySourceInstructions = Nil,
+      checkCardinality = false,
+      output = generateExpandOutput(relation.output, outputs),
+      joinPlan)
+
+    AppendData.byPosition(relation, mergeRows)
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
@@ -152,7 +193,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       cond: Expression,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
-      notMatchedBySourceActions: Seq[MergeAction]): ReplaceData = {
+      notMatchedBySourceActions: Seq[MergeAction],
+      hintOption: Option[ResolvedHint] = None): ReplaceData = {
 
     // resolve all required metadata attrs that may be used for grouping data on write
     // for instance, JDBC data source may cluster data by shard/host before writing
@@ -161,12 +203,16 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // construct a read relation and include all required metadata columns
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
+    val target = hintOption.map { resolvedHint =>
+      resolvedHint.withNewChildren(Seq(readRelation))
+    }.getOrElse(readRelation)
+
     val checkCardinality = shouldCheckCardinality(matchedActions)
 
     // use left outer join if there is no NOT MATCHED action, unmatched source rows can be discarded
     // use full outer join in all other cases, unmatched source rows may be needed
     val joinType = if (notMatchedActions.isEmpty) LeftOuter else FullOuter
-    val joinPlan = join(readRelation, source, joinType, cond, checkCardinality)
+    val joinPlan = join(target, source, joinType, cond, checkCardinality)
 
     val mergeRowsPlan = buildReplaceDataMergeRowsPlan(
       readRelation, joinPlan, matchedActions, notMatchedActions,
@@ -260,7 +306,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       cond: Expression,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
-      notMatchedBySourceActions: Seq[MergeAction]): WriteDelta = {
+      notMatchedBySourceActions: Seq[MergeAction],
+      hintOption: Option[ResolvedHint] = None): WriteDelta = {
 
     val operation = operationTable.operation.asInstanceOf[SupportsDelta]
 
@@ -279,11 +326,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     } else {
       (readRelation, cond)
     }
+    val target = hintOption.map { resolvedHint =>
+      resolvedHint.withNewChildren(Seq(filteredReadRelation))
+    }.getOrElse(filteredReadRelation)
 
     val checkCardinality = shouldCheckCardinality(matchedActions)
 
     val joinType = chooseWriteDeltaJoinType(notMatchedActions, notMatchedBySourceActions)
-    val joinPlan = join(filteredReadRelation, source, joinType, joinCond, checkCardinality)
+    val joinPlan = join(target, source, joinType, joinCond, checkCardinality)
 
     val mergeRowsPlan = buildWriteDeltaMergeRowsPlan(
       readRelation, joinPlan, matchedActions, notMatchedActions,
