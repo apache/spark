@@ -1820,6 +1820,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       exprs: Seq[NamedExpression],
       child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
+        case u: UnresolvedStarExceptOrReplace =>
+          val replacementsOpt = u.replacements
+          replacementsOpt match {
+            case None =>
+              val allCols = expand(UnresolvedStar(u.target), child)
+              val exceptSet = u.excepts.map(_.map(_.toLowerCase(Locale.ROOT))).toSet
+              allCols.filterNot { col =>
+                exceptSet.contains(Seq(col.name.toLowerCase(Locale.ROOT)))
+              }
+            case Some(_) =>
+              throw new UnsupportedOperationException(
+                "UnresolvedStarExceptOrReplace with replacements is not supported yet")
+          }
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
         case s: Star => expand(s, child)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
