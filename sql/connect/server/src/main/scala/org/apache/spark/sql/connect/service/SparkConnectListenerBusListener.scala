@@ -175,10 +175,10 @@ private[sql] class SparkConnectListenerBusListener(
     send(event.json, StreamingQueryEventType.QUERY_IDLE_EVENT)
   }
 
-  override def onQueryTriggerStart(event: StreamingQueryListener.QueryTriggerStart): Unit = {
+  override def onQueryTriggerStart(event: StreamingQueryListener.QueryTriggerStartEvent): Unit = {
     logDebug(
       s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
-        s"Sending QueryTriggerStart to client, id: ${event.id} runId: ${event.runId}.")
-    send(event.json, StreamingQueryEventType.QUERY_TRIGGER_STARTED_EVENT)
+        s"Sending queryTriggerStartEvent to client, id: ${event.id} runId: ${event.runId}.")
+    send(event.json, StreamingQueryEventType.QUERY_TRIGGER_START_EVENT)
   }
 }

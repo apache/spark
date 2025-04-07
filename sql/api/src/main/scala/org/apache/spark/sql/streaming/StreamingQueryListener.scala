@@ -115,9 +115,7 @@ private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreami
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
 
-  override def onQueryTrggerStart(event: QueryTriggerStartEvent): Unit = {
-    listener.onQueryTriggerStart(event)
-  }
+  override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = listener.onQueryTriggerStart(event)
 }
 
 /**
@@ -327,6 +325,8 @@ object StreamingQueryListener extends Serializable {
    *  A unique query id that persists across restarts. See `StreamingQuery.id()`.
    * @param runId
    *  A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   * @param name
+   *  User-specified name of the query, null if not specified.
    * @param timestamp
    *  The timestamp start of a query trigger
    */
@@ -334,6 +334,7 @@ object StreamingQueryListener extends Serializable {
   class QueryTriggerStartEvent private[sql] (
       val id: UUID,
       val runId: UUID,
+      val name: String,
       val timestamp: String)
       extends Event
       with Serializable {
@@ -342,6 +343,7 @@ object StreamingQueryListener extends Serializable {
     private def jsonValue: JValue = {
       ("id" -> JString(id.toString)) ~
         ("runId" -> JString(runId.toString)) ~
+        ("name" -> JString(name)) ~
         ("timestamp" -> JString(timestamp))
     }
   }
@@ -352,6 +354,7 @@ object StreamingQueryListener extends Serializable {
       new QueryTriggerStartEvent(
         parser.getUUID("id"),
         parser.getUUID("runId"),
+        parser.getString("name"),
         parser.getString("timestamp"))
     }
   }

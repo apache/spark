@@ -691,10 +691,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       asyncTestWaiter.dismiss()
     }
 
-    protected def handleOnQueryTriggerStart(triggerStartedEvent: QueryTriggerStartEvent): Unit = {
+    protected def handleOnQueryTriggerStart(queryTriggerStart: QueryTriggerStartEvent): Unit = {
       asyncTestWaiter {
         assert(startEvent != null, "onQueryTriggerStart called before onQueryStarted")
-        triggerStartedEvent = triggerStartedEvent
+        triggerStartedEvent = queryTriggerStart
       }
     }
   }
@@ -708,8 +708,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
 
-    override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
-      handleOnQueryTerminated(event)
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit = handleOnQueryTerminated(event)
   }
 
   /**

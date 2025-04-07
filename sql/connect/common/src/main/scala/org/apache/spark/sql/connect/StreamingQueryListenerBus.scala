@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.connect.proto.{Command, ExecutePlanResponse, Plan, StreamingQueryEventType}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.sql.streaming.StreamingQueryListener.{Event, QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{Event, QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent, QueryTriggerStartEvent}
 import org.apache.spark.sql.util.CloseableIterator
 
 class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
@@ -114,6 +114,8 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
               postToAll(QueryIdleEvent.fromJson(event.getEventJson))
             case StreamingQueryEventType.QUERY_TERMINATED_EVENT =>
               postToAll(QueryTerminatedEvent.fromJson(event.getEventJson))
+            case StreamingQueryEventType.QUERY_TRIGGER_START_EVENT =>
+              postToAll(QueryTriggerStartEvent.fromJson(event.getEventJson))
             case _ =>
               logWarning(log"Unknown StreamingQueryListener event: ${MDC(LogKeys.EVENT, event)}")
           }
@@ -144,7 +146,7 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
             listener.onQueryIdle(t)
           case t: QueryTerminatedEvent =>
             listener.onQueryTerminated(t)
-          case t: QueryTriggerStart =>
+          case t: QueryTriggerStartEvent =>
             listener.onQueryTriggerStart(t)
           case _ =>
             logWarning(log"Unknown StreamingQueryListener event: ${MDC(LogKeys.EVENT, event)}")

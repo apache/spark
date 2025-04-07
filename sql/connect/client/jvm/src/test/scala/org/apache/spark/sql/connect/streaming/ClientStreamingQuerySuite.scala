@@ -34,7 +34,7 @@ import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener, Trigger}
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent, QueryTriggerStartEvent}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SparkFileUtils
 
@@ -748,7 +748,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
 
-    override def onQueryTriggerStart(event: QueryTriggerStart): Unit = {}
+    override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
   }
 
 
