@@ -4074,6 +4074,28 @@ abstract class JsonSuite
       )
     }
   }
+
+  test("from_json with variant") {
+    val df = Seq(
+      "true",
+      """{"a": [], "b": null}""",
+      """{"a": 1}""",
+      "bad json",
+      "[1, 2, 3]"
+    ).toDF("value")
+    checkAnswer(
+      df.selectExpr("cast(from_json(value, 'var variant', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true}"), Row("""{{"a":[],"b":null}}"""), Row("""{{"a":1}}"""), Row("{null}"),
+        Row("{[1,2,3]}"))
+    )
+    checkAnswer(
+      df.selectExpr("cast(from_json(value, 'var variant, _corrupt_record string', " +
+        "map('singleVariantColumn', 'var')) as string)"),
+      Seq(Row("{true, null}"), Row("""{{"a":[],"b":null}, null}"""), Row("""{{"a":1}, null}"""),
+        Row("{null, bad json}"), Row("{[1,2,3], null}"))
+    )
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

@@ -90,17 +90,18 @@ object DataSourceOptions {
       options: CaseInsensitiveMap[String],
       userSpecifiedSchema: Option[StructType]): Unit = {
     (options.get(SINGLE_VARIANT_COLUMN), userSpecifiedSchema) match {
-      case (Some(col), Some(schema)) =>
+      case (Some(variantColumnName), Some(schema)) =>
         var valid = schema.fields.exists { f =>
-          f.dataType.isInstanceOf[VariantType] && f.name == col && f.nullable
+          f.dataType.isInstanceOf[VariantType] && f.name == variantColumnName && f.nullable
         }
         schema.length match {
           case 1 =>
           case 2 =>
-            val corruptRecordName = options.getOrElse(
+            val corruptRecordColumnName = options.getOrElse(
               COLUMN_NAME_OF_CORRUPT_RECORD, SQLConf.get.columnNameOfCorruptRecord)
-            valid = valid && corruptRecordName != col && schema.fields.exists { f =>
-              f.dataType.isInstanceOf[StringType] && f.name == corruptRecordName && f.nullable
+            valid = valid && corruptRecordColumnName != variantColumnName
+            valid = valid && schema.fields.exists { f =>
+              f.dataType.isInstanceOf[StringType] && f.name == corruptRecordColumnName && f.nullable
             }
           case _ => valid = false
         }
