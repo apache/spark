@@ -541,27 +541,6 @@ private class UserDefinedPythonDataSourceColumnPruningRunner(
   // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
   override val workerModule = "pyspark.sql.worker.data_source_prune_columns"
 
-  // Make sure the required schema has the exact same field names as the full schema.
-  private val requiredSchemaNormalized = if (SQLConf.get.caseSensitiveAnalysis) {
-    requiredSchema
-  } else {
-    def visit(required: DataType, full: DataType): DataType = {
-      (required, full) match {
-        case (required: StructType, full: StructType) =>
-          val fields = for (field <- required) yield {
-            val fullField = full.apply(full.getFieldIndexCaseInsensitive(field.name).get)
-            field.copy(name = fullField.name, dataType = visit(field.dataType, fullField.dataType))
-          }
-          StructType(fields)
-        case (required: ArrayType, full: ArrayType) =>
-          required.copy(elementType = visit(required.elementType, full.elementType))
-        case _ =>
-          required
-      }
-    }
-    visit(requiredSchema, fullSchema).asInstanceOf[StructType]
-  }
-
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send Python data source
     PythonWorkerUtils.writePythonFunction(dataSource, dataOut)
