@@ -41,6 +41,7 @@ from pyspark.testing.utils import eventually
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
+    connect_requirement_message,
     ReusedConnectTestCase,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -58,7 +59,10 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
-@unittest.skipIf(is_remote_only(), "Requires JVM access")
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "Requires JVM access",
+)
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""

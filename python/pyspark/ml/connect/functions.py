@@ -49,6 +49,11 @@ predict_batch_udf.__doc__ = PyMLFunctions.predict_batch_udf.__doc__
 def _test() -> None:
     import os
     import sys
+
+    if os.environ.get("PYTHON_GIL", "?") == "0":
+        print("Not supported in no-GIL mode", file=sys.stderr)
+        sys.exit(0)
+
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.ml.connect.functions
