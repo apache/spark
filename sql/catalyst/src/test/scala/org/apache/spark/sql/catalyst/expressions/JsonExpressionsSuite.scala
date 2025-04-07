@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -45,7 +46,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       |"category":"fiction","reader":[{"age":25,"name":"bob"},{"age":26,"name":"jack"}],
       |"price":22.99,"isbn":"0-395-19395-8"}],"bicycle":{"price":19.95,"color":"red"}},
       |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
-      |"fb:testid":"1234"}
+      |"fb:testid":"1234"," leading space test":" leading space present",
+      |"leading space test":"leading space absent"}
       |""".stripMargin
 
   /* invalid json with leading nulls would trigger java.io.CharConversionException
@@ -54,6 +56,28 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("get_json_object escaping") {
     GenerateUnsafeProjection.generate(GetJsonObject(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("$[' leading space test']") {
+    withSQLConf(SQLConf.GET_JSON_OBJECT_SKIP_LEADING_SPACES.key -> "true") {
+      checkEvaluation(
+        GetJsonObject(Literal(json), Literal("$[' leading space test']")),
+        """leading space absent""")
+    }
+    withSQLConf(SQLConf.GET_JSON_OBJECT_SKIP_LEADING_SPACES.key -> "false") {
+      checkEvaluation(
+        GetJsonObject(Literal(json), Literal("$[' leading space test']")),
+        """ leading space present""")
+    }
+  }
+
+  test("$['leading space test']") {
+    Seq("false", "true").foreach { skipLeadingSpaces =>
+      withSQLConf(SQLConf.GET_JSON_OBJECT_SKIP_LEADING_SPACES.key -> skipLeadingSpaces) {
+        checkEvaluation(GetJsonObject(Literal(json), Literal("$['leading space test']")),
+          """leading space absent""")
+      }
+    }
   }
 
   test("$.store.bicycle") {

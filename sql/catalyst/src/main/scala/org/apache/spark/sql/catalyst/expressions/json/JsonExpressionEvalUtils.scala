@@ -54,6 +54,9 @@ private[this] object WriteStyle {
 private[this] object JsonPathParser extends RegexParsers {
   import PathInstruction._
 
+  override def skipWhitespace: Boolean =
+    SQLConf.get.getConf(SQLConf.GET_JSON_OBJECT_SKIP_LEADING_SPACES)
+
   def root: Parser[Char] = '$'
 
   def long: Parser[Long] = "\\d+".r ^? {

@@ -4752,6 +4752,14 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val GET_JSON_OBJECT_SKIP_LEADING_SPACES =
+    buildConf("spark.sql.getJsonObject.skipLeadingSpaces")
+      .internal()
+      .doc("When true, paths in the getJsonObject will skip leading spaces/tabs in the path.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
