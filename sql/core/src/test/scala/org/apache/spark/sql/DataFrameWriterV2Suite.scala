@@ -608,7 +608,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(replaced.columns === Array(
+    assert(replaced.columns sameElements Array(
       Column.create("id", LongType),
       Column.create("data", StringType),
       Column.create("even_or_odd", StringType)))
