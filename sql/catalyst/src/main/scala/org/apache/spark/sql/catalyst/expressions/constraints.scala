@@ -129,7 +129,7 @@ case class UniqueConstraint(
 
   override protected def generateConstraintName(tableName: String): String = {
     val rand = scala.util.Random.alphanumeric.take(6).mkString
-    s"${tableName}_uk_$rand"
+    s"${tableName}_uniq_$rand"
   }
 
   override def withName(name: String): TableConstraint = copy(name = name)
