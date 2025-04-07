@@ -20,6 +20,8 @@ package org.apache.spark.sql.classic
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CATALOG_NAME, DATABASE_NAME, TABLE_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog
 import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
@@ -48,7 +50,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Internal implementation of the user-facing `Catalog`.
  */
-class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
+class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
 
@@ -167,30 +169,40 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
   private[sql] def resolveTable(row: InternalRow, catalogName: String): Option[Table] = {
     val tableName = row.getString(1)
     val namespaceName = row.getString(0)
-    val isTemp = row.getBoolean(2)
+    val isTempView = row.getBoolean(2)
+    val ns = if (isTempView) {
+      if (namespaceName.isEmpty) Nil else Seq(namespaceName)
+    } else {
+      parseIdent(namespaceName)
+    }
+    val nameParts = if (isTempView) {
+      // Temp views do not belong to any catalog. We shouldn't prepend the catalog name here.
+      ns :+ tableName
+    } else {
+      catalogName +: ns :+ tableName
+    }
     try {
-      if (isTemp) {
-        // Temp views do not belong to any catalog. We shouldn't prepend the catalog name here.
-        val ns = if (namespaceName.isEmpty) Nil else Seq(namespaceName)
-        Some(makeTable(ns :+ tableName))
-      } else {
-        val ns = parseIdent(namespaceName)
-        try {
-          Some(makeTable(catalogName +: ns :+ tableName))
-        } catch {
-          case e: AnalysisException if e.getCondition == "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" =>
-            Some(new Table(
-              name = tableName,
-              catalog = catalogName,
-              namespace = ns.toArray,
-              description = null,
-              tableType = null,
-              isTemporary = false
-            ))
-        }
-      }
+      Some(makeTable(nameParts))
     } catch {
       case e: AnalysisException if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => None
+      // Swallow non-fatal throwables when resolving a table or view and
+      // return a table or view with partial results to
+      // prevent listTables from breaking easily due to a broken table or view.
+      case NonFatal(e) if !isTempView =>
+        val table = new Table(
+            name = tableName,
+            catalog = catalogName,
+            namespace = ns.toArray,
+            description = null,
+            tableType = null,
+            isTemporary = false
+        )
+        logWarning(log"Unable to resolve the table or view [" +
+          log"catalog=${MDC(CATALOG_NAME, table.catalog)}, " +
+          log"database=${MDC(DATABASE_NAME, table.database)}, " +
+          log"name=${MDC(TABLE_NAME, table.name)}" +
+          log"]; partial results will be returned.", e)
+        Some(table)
     }
   }
 
