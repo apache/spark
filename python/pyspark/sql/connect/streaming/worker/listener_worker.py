@@ -38,7 +38,8 @@ from pyspark.sql.streaming.listener import (
     QueryStartedEvent,
     QueryProgressEvent,
     QueryTerminatedEvent,
-    QueryIdleEvent, QueryTriggerStartEvent,
+    QueryIdleEvent,
+    QueryTriggerStartEvent,
 )
 from pyspark.worker_util import check_python_version
 

@@ -141,7 +141,8 @@ class ProgressReporter(
    if (queryTriggerStartEventEnabled) {
      val now = triggerClock.getTimeMillis()
      if (now - lastNoExecutionProgressEventTime >= queryTriggerStartEventMinInterval) {
-       postEvent(new QueryTriggerStartEvent(id, runId, name, formatTimestamp(currentTriggerStartTimestamp)))
+       postEvent(
+         new QueryTriggerStartEvent(id, runId, name, formatTimestamp(currentTriggerStartTimestamp)))
        lastNoExecutionProgressEventTime = now
      }
    }
