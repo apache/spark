@@ -763,7 +763,15 @@ object DateTimeUtils extends SparkDateTimeUtils {
       throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
   }
-  
+
+  /**
+   * Converts separate time fields in a long that represents microseconds since the start of
+   * the day
+   * @param hours the hour, from 0 to 23
+   * @param minutes the minute, from 0 to 59
+   * @param secsAndMicros the second, from 0 to 59.999999
+   * @return Time time represented as microseconds since the start of the day
+   */
   def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     assert(secsAndMicros.scale == 6,
       s"Seconds fraction must have 6 digits for microseconds but got ${secsAndMicros.scale}")
