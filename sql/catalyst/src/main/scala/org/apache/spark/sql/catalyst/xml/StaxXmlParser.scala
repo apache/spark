@@ -1038,11 +1038,7 @@ object StaxXmlParser {
 
     // If the element is empty, we treat it as a Variant null
     if (rootBuilder.getWritePos == start) {
-      if (options.nullValue == null) {
-        rootBuilder.appendNull()
-      } else {
-        rootBuilder.appendString(options.nullValue)
-      }
+      rootBuilder.appendNull()
     }
 
     rootBuilder.result()
@@ -1119,11 +1115,12 @@ object StaxXmlParser {
     // Try parsing the value as decimal
     val decimalParser = ExprUtils.getDecimalParser(options.locale)
     allCatch opt decimalParser(value) match {
-      case Some(d)
-          if d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION =>
+      case Some(decimalValue) =>
+        var d = decimalValue
         if (d.scale() < 0) {
-          builder.appendDecimal(d.setScale(0))
-        } else {
+          d = d.setScale(0)
+        }
+        if (d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION) {
           builder.appendDecimal(d)
         }
         return
