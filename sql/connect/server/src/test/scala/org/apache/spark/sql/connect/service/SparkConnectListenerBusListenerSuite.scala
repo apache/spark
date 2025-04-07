@@ -74,7 +74,7 @@ class SparkConnectListenerBusListenerSuite
       otherEvents += event
     }
 
-    override def onQueryTriggerStarted(event: StreamingQueryListener.QueryTriggerStartedEvent): Unit = {
+    override def onQueryTriggerStart(event: StreamingQueryListener.QueryTriggerStartEvent): Unit = {
       otherEvents += event
     }
   }

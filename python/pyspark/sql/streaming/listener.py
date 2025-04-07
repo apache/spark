@@ -60,7 +60,7 @@ class StreamingQueryListener(ABC):
     ...        # Do something with event.
     ...        pass
     ...
-    ...    def onQueryTriggerStarted(self, event: QueryTriggerStartedEvent) -> None:
+    ...    def onQueryTriggerStart(self, event: QueryTriggerStartEvent) -> None:
     ...        # Do something with event.
     ...        pass
     ...
@@ -133,7 +133,7 @@ class StreamingQueryListener(ABC):
 
     # NOTE: Do not mark this as abstract method, we are following the same pattern as
     # onQueryIdle to avoid breaking existing implementations.
-    def onQueryTriggerStarted(self, event: "QueryTriggerStartedEvent") -> None:
+    def onQueryTriggerStart(self, event: "QueryTriggerStartEvent") -> None:
         """
         Called when a query trigger is started.
         """
@@ -174,8 +174,8 @@ class JStreamingQueryListener:
     def onQueryTerminated(self, jevent: "JavaObject") -> None:
         self.pylistener.onQueryTerminated(QueryTerminatedEvent.fromJObject(jevent))
 
-    def onQueryTriggerStarted(self, jevent: "JavaObject") -> None:
-        self.pylistener.onQueryTriggerStarted(QueryTriggerStartedEvent.fromJObject(jevent))
+    def onQueryTriggerStart(self, jevent: "JavaObject") -> None:
+        self.pylistener.onQueryTriggerStart(QueryTriggerStartEvent.fromJObject(jevent))
 
     class Java:
         implements = ["org.apache.spark.sql.streaming.PythonStreamingQueryListener"]
@@ -433,7 +433,7 @@ class QueryTerminatedEvent:
         """
         return self._errorClassOnException
 
-class QueryTriggerStartedEvent:
+class QueryTriggerStartEvent:
     """
     Event representing the start of a query trigger.
 
@@ -456,7 +456,7 @@ class QueryTriggerStartedEvent:
         self._timestamp: str = timestamp
 
     @classmethod
-    def fromJObject(cls, jevent: "JavaObject") -> "QueryTriggerStartedEvent":
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryTriggerStartEvent":
         return cls(
             id=uuid.UUID(jevent.id().toString()),
             runId=uuid.UUID(jevent.runId().toString()),
@@ -465,7 +465,7 @@ class QueryTriggerStartedEvent:
         )
 
     @classmethod
-    def fromJson(cls, j: Dict[str, Any]) -> "QueryTriggerStartedEvent":
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryTriggerStartEvent":
         return cls(
             id=uuid.UUID(j["id"]),
             runId=uuid.UUID(j["runId"]),

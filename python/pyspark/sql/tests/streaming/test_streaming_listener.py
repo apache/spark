@@ -217,7 +217,7 @@ class StreamingListenerTestsMixin:
             def onQueryTerminated(self, event):
                 pass
 
-            def onQueryTriggerStarted(self, event):
+            def onQueryTriggerStart(self, event):
                 pass
 
         try:
@@ -362,7 +362,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 nonlocal terminated_event
                 terminated_event = event
 
-        # V3: The interface after the method `onQueryTriggerStarted` is added. It is Spark 4.1+.
+        # V3: The interface after the method `onQueryTriggerStart` is added. It is Spark 4.1+.
         class TestListenerV3(StreamingQueryListener):
             def onQueryStarted(self, event):
                 nonlocal start_event
@@ -379,7 +379,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 nonlocal terminated_event
                 terminated_event = event
 
-            def onQueryTriggerStarted(self, event):
+            def onQueryTriggerStart(self, event):
                 pass
 
         def verify(test_listener):
@@ -473,7 +473,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             def onQueryTerminated(self, event):
                 pass
 
-        # V3: The interface after the method `onQueryTriggerStarted` is added. It is Spark 4.1+.
+        # V3: The interface after the method `onQueryTriggerStart` is added. It is Spark 4.1+.
         class TestListenerV3(StreamingQueryListener):
             def onQueryStarted(self, event):
                 pass
@@ -487,7 +487,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             def onQueryTerminated(self, event):
                 pass
 
-            def onQueryTriggerStarted(self, event):
+            def onQueryTriggerStart(self, event):
                 pass
 
         def verify(test_listener):

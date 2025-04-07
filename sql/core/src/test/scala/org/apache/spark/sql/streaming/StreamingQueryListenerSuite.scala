@@ -330,7 +330,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
-        override def onQueryTriggerStarted(event: QueryTriggerStartedEvent): Unit = {
+        override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {
           numTriggerStartedEvent += 1
         }
       }
@@ -548,7 +548,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
-        override def onQueryTriggerStarted(event: QueryTriggerStartedEvent): Unit = {
+        override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {
           numTriggerStartedEvent += 1
         }
       }
@@ -637,7 +637,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     @volatile var startEvent: QueryStartedEvent = null
     @volatile var terminationEvent: QueryTerminatedEvent = null
     @volatile var idleEvent: QueryIdleEvent = null
-    @volatile var triggerStartedEvent: QueryTriggerStartedEvent = null
+    @volatile var triggerStartedEvent: QueryTriggerStartEvent = null
 
     private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
 
@@ -691,9 +691,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       asyncTestWaiter.dismiss()
     }
 
-    protected def handleOnQueryTriggerStarted(triggerStartedEvent: QueryTriggerStartedEvent): Unit = {
+    protected def handleOnQueryTriggerStart(triggerStartedEvent: QueryTriggerStartEvent): Unit = {
       asyncTestWaiter {
-        assert(startEvent != null, "onQueryTriggerStarted called before onQueryStarted")
+        assert(startEvent != null, "onQueryTriggerStart called before onQueryStarted")
         triggerStartedEvent = triggerStartedEvent
       }
     }
@@ -736,7 +736,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
 
-    override def onQueryTriggerStarted(event: QueryTriggerStartedEvent): Unit =
-      handleOnQueryTriggerStarted(event)
+    override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit =
+      handleOnQueryTriggerStart(event)
   }
 }
