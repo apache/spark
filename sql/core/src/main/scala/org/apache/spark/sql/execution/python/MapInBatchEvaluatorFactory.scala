@@ -77,13 +77,14 @@ class MapInBatchEvaluatorFactory(
       val unsafeProj = UnsafeProjection.create(output, output)
 
       columnarBatchIter.flatMap { batch =>
-        // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
-        // the children here
+        // Ensure the schema matches the expected schema
         val actualSchema = batch.column(0).dataType()
-        if (!outputSchema.sameType(actualSchema)) {
+        if (!outputSchema.sameType(actualSchema)) {  // Ignore nullability mismatch for now
           throw QueryExecutionErrors.arrowDataTypeMismatchError(
             "DataSource", Seq(outputSchema), Seq(actualSchema))
         }
+        // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
+        // the children here
         val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
         val outputVectors = output.indices.map(structVector.getChild)
         val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
