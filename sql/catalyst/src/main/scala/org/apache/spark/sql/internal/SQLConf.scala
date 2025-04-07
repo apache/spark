@@ -7710,7 +7710,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
-  def streamingQueryTriggerStartEventEnabled: Boolean = getConf(STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED)
+  def streamingQueryTriggerStartEventEnabled: Boolean =
+    getConf(STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED)
 
   def streamingQueryTriggerStartEventMinInterval: Long =
     getConf(STREAMING_QUERY_TRIGGER_START_EVENT_MIN_INTERVAL)
