@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, TaskContext}
-import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -81,7 +81,7 @@ class MapInBatchEvaluatorFactory(
         val actualSchema = batch.column(0).dataType()
         if (!outputSchema.sameType(actualSchema)) {  // Ignore nullability mismatch for now
           throw QueryExecutionErrors.arrowDataTypeMismatchError(
-            "DataSource", Seq(outputSchema), Seq(actualSchema))
+            PythonEvalType.toString(pythonEvalType), Seq(outputSchema), Seq(actualSchema))
         }
         // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
         // the children here

@@ -182,7 +182,7 @@ class MapInArrowTestsMixin(object):
                 yield pa.RecordBatch.from_arrays([struct_arr], ["x"])
 
         df = self.spark.range(1)
-        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
             df.mapInArrow(func, "x struct<b:int>").collect()
 
     def test_top_level_wrong_order(self):
@@ -191,7 +191,7 @@ class MapInArrowTestsMixin(object):
                 yield pa.RecordBatch.from_arrays([[1], [2]], ["b", "a"])
 
         df = self.spark.range(1)
-        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH"):
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
             df.mapInArrow(func, "a int, b int").collect()
 
     def test_different_nullability(self):
