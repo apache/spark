@@ -4373,7 +4373,7 @@ class DataFrame:
         ...    def onQueryTerminated(self, event):
         ...        pass
         ...
-        ...    def onQueryTriggerStarted(self, event):
+        ...    def onQueryTriggerStart(self, event):
         ...        pass
         ...
         >>> error_listener = MyErrorListener()

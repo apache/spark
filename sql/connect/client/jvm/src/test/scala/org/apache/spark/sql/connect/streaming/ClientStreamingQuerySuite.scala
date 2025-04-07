@@ -732,7 +732,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   }
 
   /**
-   * V3: The interface after the method `onQueryTriggerStarted` is added. It is Spark 4.2+.
+   * V3: The interface after the method `onQueryTriggerStart` is added. It is Spark 4.2+.
    */
   class EventCollectorV3 extends EventCollector {
     override protected def tablePostfix: String = "_v3"
@@ -746,7 +746,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
 
-    override def onQueryTriggerStarted(event: QueryTriggerStarted): Unit = {}
+    override def onQueryTriggerStart(event: QueryTriggerStart): Unit = {}
   }
 
 
