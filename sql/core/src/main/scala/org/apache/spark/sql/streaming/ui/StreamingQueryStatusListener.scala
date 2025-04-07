@@ -115,7 +115,10 @@ private[sql] class StreamingQueryStatusListener(
     ), checkTriggers = true)
     queryToProgress.remove(event.runId)
   }
+
+  override def onQueryTriggerStarted(event: StreamingQueryListener.QueryTriggerStarted): Unit = {}
 }
+
 
 private[spark] class StreamingQueryData(
     val name: String,

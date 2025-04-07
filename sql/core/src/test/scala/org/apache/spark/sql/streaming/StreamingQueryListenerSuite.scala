@@ -304,6 +304,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100ms") {
       @volatile var numProgressEvent = 0
       @volatile var numIdleEvent = 0
+      @volatile var numTriggerStartedEvent = 0
       val listener = new StreamingQueryListener {
         override def onQueryStarted(event: QueryStartedEvent): Unit = {}
         override def onQueryProgress(event: QueryProgressEvent): Unit = {
@@ -313,6 +314,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+        override def onQueryTriggerStarted(event: QueryTriggerStartedEvent): Unit = {
+          numTriggerStartedEvent += 1
+        }
       }
       spark.streams.addListener(listener)
       try {
@@ -492,6 +496,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100") {
       @volatile var numProgressEvent = 0
       @volatile var numIdleEvent = 0
+      @volatile var numTriggerStartedEvent = 0
       val listener = new StreamingQueryListener {
         override def onQueryStarted(event: QueryStartedEvent): Unit = {}
         override def onQueryProgress(event: QueryProgressEvent): Unit = {
@@ -501,6 +506,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+        override def onQueryTriggerStarted(event: QueryTriggerStartedEvent): Unit = {
+          numTriggerStartedEvent += 1
+        }
       }
       spark.streams.addListener(listener)
 
@@ -587,6 +595,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     @volatile var startEvent: QueryStartedEvent = null
     @volatile var terminationEvent: QueryTerminatedEvent = null
     @volatile var idleEvent: QueryIdleEvent = null
+    @volatile var triggerStartedEvent: QueryTriggerStartedEvent = null
 
     private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
 
@@ -639,6 +648,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       }
       asyncTestWaiter.dismiss()
     }
+
+    protected def handleOnQueryTriggerStarted(triggerStartedEvent: QueryTriggerStartedEvent): Unit = {
+      asyncTestWaiter {
+        assert(startEvent != null, "onQueryTriggerStarted called before onQueryStarted")
+        triggerStartedEvent = triggerStartedEvent
+      }
+    }
   }
 
   /**
@@ -662,9 +678,23 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
 
-    override def onQueryIdle(event: QueryIdleEvent): Unit = handleOnQueryIdle(event)
+    override def onQueryIdle(event: QueryIdleEvent): Unit =  handleOnQueryIdle(event)
 
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
+  }
+
+  class EventCollectorV3 extends EventCollectorV2 {
+    override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+    override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+    override def onQueryIdle(event: QueryIdleEvent): Unit =  handleOnQueryIdle(event)
+
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+      handleOnQueryTerminated(event)
+
+    override def onQueryTriggerStarted(event: QueryTriggerStartedEvent): Unit =
+      handleOnQueryTriggerStarted(event)
   }
 }

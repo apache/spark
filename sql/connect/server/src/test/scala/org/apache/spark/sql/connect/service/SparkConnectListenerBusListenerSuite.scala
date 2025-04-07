@@ -73,6 +73,10 @@ class SparkConnectListenerBusListenerSuite
     override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {
       otherEvents += event
     }
+
+    override def onQueryTriggerStarted(event: StreamingQueryListener.QueryTriggerStartedEvent): Unit = {
+      otherEvents += event
+    }
   }
 
   private def verifyEventsSent(

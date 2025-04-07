@@ -78,6 +78,13 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
     handlePythonWorkerError("onQueryTerminated")
   }
 
+override def onQueryTriggerStarted(event: StreamingQueryListener.QueryTriggerStartedEvent): Unit = {
+    PythonWorkerUtils.writeUTF(event.json, dataOut)
+    dataOut.writeInt(4)
+    dataOut.flush()
+    handlePythonWorkerError("onQueryTriggerStarted")
+  }
+
   private[spark] def stopListenerProcess(): Unit = {
     runner.stop()
   }
