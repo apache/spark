@@ -3330,7 +3330,7 @@
   },
   "INVALID_SINGLE_VARIANT_COLUMN" : {
     "message" : [
-      "User specified schema <schema> is invalid when the `singleVariantColumn` option is enabled."
+      "User specified schema <schema> is invalid when the `singleVariantColumn` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
     ],
     "sqlState" : "42613"
   },
