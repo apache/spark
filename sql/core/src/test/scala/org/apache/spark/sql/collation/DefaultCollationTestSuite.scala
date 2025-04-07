@@ -499,10 +499,10 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
             // scalastyle:off
             sql(
               s"""ALTER VIEW $testView AS
-                 | SELECT *, 'c' AS c4,
-                 | (SELECT (SELECT CASE 'š' = 'S' WHEN TRUE THEN 'd' ELSE 'b' END)) AS c5
-                 | FROM $testTable
-                 | WHERE c1 = 'A' AND 'ć' = 'Č'""".stripMargin)
+                | SELECT *, 'c' AS c4,
+                | (SELECT (SELECT CASE 'š' = 'S' WHEN TRUE THEN 'd' ELSE 'b' END)) AS c5
+                | FROM $testTable
+                | WHERE c1 = 'A' AND 'ć' = 'Č'""".stripMargin)
             // scalastyle:on
             val prefix = "SYSTEM.BUILTIN"
             checkAnswer(sql(s"SELECT DISTINCT COLLATION(c4) FROM $testView"),
