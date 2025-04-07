@@ -19,28 +19,27 @@ package org.apache.spark.sql.execution
 
 import java.util
 import java.util.concurrent.TimeUnit._
-
 import com.google.common.base.Objects
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.LogKeys.{COUNT, MAX_SPLIT_BYTES, OPEN_COST_IN_BYTES}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, truncatedString}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => ConnectorPredicate}
 import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsBroadcastVarPushdownFiltering}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution
+import org.apache.spark.sql.{execution, sources}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -52,6 +51,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
+
+import scala.collection.mutable
 
 trait DataSourceScanExec extends LeafExecNode with StreamSourceAwareSparkPlan {
   def relation: BaseRelation
@@ -626,13 +627,22 @@ case class FileSourceScanExec(
     None)
   extends FileSourceScanLike with WrapsBroadcastVarPushDownSupporter {
 
-  override def hashCode(): Int = Objects.hashCode(this.relation.hashCodeIgnoreRuntimeFilters(),
+  val broadcastVarCollector = this.relation.fileFormat match {
+    case _: ParquetSource => Some(BroadcastVarFilterCollector(output.toStructType,
+      relation.partitionSchema.map(sf => FieldReference.column(sf.name)).toArray))
+
+    case _ => None
+  }
+
+  override def hashCode(): Int = Objects.hashCode(this.relation,
     this.stream, this.output, this.partitionFilters, this.optionalBucketSet,
     this.optionalNumCoalescedBuckets, this.dataFilters, this.disableBucketedScan,
-    this.proxyForPushedBroadcastVar)
+    this.proxyForPushedBroadcastVar,
+    this.broadcastVarCollector.map(_.hashCodeIgnoreRuntimeFilters()).getOrElse(-1)
+  )
 
   override def equals(other: Any): Boolean = other match {
-    case fs: FileSourceScanExec => this.relation.equalToIgnoreRuntimeFilters(fs.relation) &&
+    case fs: FileSourceScanExec => this.relation == fs.relation &&
       this.stream == fs.stream &&
       this.output == fs.output && this.requiredSchema == fs.requiredSchema &&
       this.partitionFilters == fs.partitionFilters &&
@@ -640,7 +650,13 @@ case class FileSourceScanExec(
       this.optionalNumCoalescedBuckets ==fs.optionalNumCoalescedBuckets &&
       this.dataFilters == fs.dataFilters &&  this.tableIdentifier == fs.tableIdentifier &&
       this.disableBucketedScan == fs.disableBucketedScan &&
-      this.proxyForPushedBroadcastVar == fs.proxyForPushedBroadcastVar
+      this.proxyForPushedBroadcastVar == fs.proxyForPushedBroadcastVar &&
+      ((this.broadcastVarCollector, fs.broadcastVarCollector) match {
+         case (Some(x: BroadcastVarFilterCollector), Some(y: BroadcastVarFilterCollector)) =>
+           x.equalToIgnoreRuntimeFilters(y)
+
+         case _ => false
+      })
 
     case _ => false
   }
@@ -650,7 +666,7 @@ case class FileSourceScanExec(
 
   def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering]
   = this.relation.fileFormat match {
-    case x: SupportsBroadcastVarPushdownFiltering => Some(WrapperOverParquetFileFormat(x,
+    case x: SupportsBroadcastVarPushdownFiltering => Some(BroadcastVarFilterCollector(
       output.toStructType, relation.partitionSchema.map(sf => FieldReference.column(sf.name)).
         toArray))
 
@@ -925,17 +941,19 @@ case class FileSourceScanExec(
   override def getStream: Option[SparkDataStream] = stream
 }
 
-case class WrapperOverParquetFileFormat(
-      pf: SupportsBroadcastVarPushdownFiltering,
-      schema: StructType,
+case class BroadcastVarFilterCollector(
+      override val readSchema: StructType,
       pa: Array[NamedReference]) extends
   SupportsBroadcastVarPushdownFiltering {
+  private val broadcastVarFilterExpressions: mutable.Set[Filter] = mutable.LinkedHashSet.empty
 
-  override def filter(predicates: Array[ConnectorPredicate]): Unit = pf.filter(predicates)
+  override def filter(predicates: Array[ConnectorPredicate]): Unit = {
+    broadcastVarFilterExpressions ++= ParquetFileFormat.convertToV1(predicates)
+  }
 
-  override def hasPushedBroadCastFilter(): Boolean = pf.hasPushedBroadCastFilter()
+  override def hasPushedBroadCastFilter(): Boolean = this.broadcastVarFilterExpressions.nonEmpty
 
-  override def allAttributes(): Array[NamedReference] = this.schema.map(sf =>
+  override def allAttributes(): Array[NamedReference] = this.readSchema.map(sf =>
     FieldReference(sf.name)).toArray
 
   /**
@@ -946,7 +964,12 @@ case class WrapperOverParquetFileFormat(
    * @return boolean if the scans are same.
    */
   override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering): Boolean =
-    pf.equalToIgnoreRuntimeFilters(other)
+    (this eq other) || (other match {
+      case that: BroadcastVarFilterCollector => this.pa == that.pa &&
+        this.readSchema == that.readSchema
+
+      case _ => false
+    })
 
 
   /**
@@ -955,18 +978,34 @@ case class WrapperOverParquetFileFormat(
    *
    * @return int
    */
-  override def hashCodeIgnoreRuntimeFilters(): Int = pf.hashCodeIgnoreRuntimeFilters()
+  override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(getClass.hashCode(),
+    this.pa, this.readSchema)
 
-  override def getPushedBroadcastFilters(): util.List[PushedBroadcastFilterData] =
-    pf.getPushedBroadcastFilters()
+  override def getPushedBroadcastFilters(): util.List[PushedBroadcastFilterData] = {
+    import scala.jdk.CollectionConverters._
+    this.broadcastVarFilterExpressions.map(filter => {
+      val inFilter = filter.asInstanceOf[sources.In]
+      new PushedBroadcastFilterData(inFilter.attribute,
+        inFilter.values.head.asInstanceOf[BroadcastedJoinKeysWrapper])
+    }).toList.asJava
+  }
 
-  override def getPushedBroadcastVarIds(): util.Set[java.lang.Long] = pf.getPushedBroadcastVarIds()
+  override def getPushedBroadcastVarIds(): util.Set[java.lang.Long] =
+    this.getPushedBroadcastFilters().stream().map(bcData =>
+    java.lang.Long.valueOf(bcData.bcVar.getBroadcastVarId)).collect(
+      util.stream.Collectors.toSet[java.lang.Long])
 
-  override def getPushedBroadcastFiltersCount(): Int = pf.getPushedBroadcastFiltersCount()
-
-  override def postAllBroadcastVarsPushed(): Unit = pf.postAllBroadcastVarsPushed()
+  override def getPushedBroadcastFiltersCount(): Int =  this.broadcastVarFilterExpressions.size
 
   override def partitionAttributes(): Array[NamedReference] = this.pa
 
-  override def readSchema: StructType = this.schema
+  override def hashCode(): Int = Objects.hashCode(this.pa, this.readSchema, this.broadcastVarFilterExpressions)
+
+  override def equals(other: Any): Boolean = other match {
+    case bvc: BroadcastVarFilterCollector => this.pa == bvc.pa &&
+      this.readSchema == bvc.readSchema &&
+      this.broadcastVarFilterExpressions == bvc.broadcastVarFilterExpressions
+
+    case _ => false
+  }
 }

@@ -16,13 +16,11 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.{util => javautil}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
 
-import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.FileSplit
@@ -45,7 +43,6 @@ import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.{filter => connectorFilter, LiteralValue, NamedReference}
-import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsBroadcastVarPushdownFiltering}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
@@ -58,30 +55,10 @@ class ParquetFileFormat
   extends FileFormat
   with DataSourceRegister
   with Logging
-  with Serializable
-  with SupportsBroadcastVarPushdownFiltering {
-
-  private val broadcastVarFilterExpressions: mutable.Buffer[Filter] =
-    mutable.ListBuffer.empty
-
+  with Serializable {
   override def shortName(): String = "parquet"
 
   override def toString: String = "Parquet"
-
-  override def hashCode(): Int = Objects.hashCode( this.broadcastVarFilterExpressions)
-
-  override def equals(other: Any): Boolean = other match {
-    case pf: ParquetFileFormat =>
-      this.broadcastVarFilterExpressions == pf.broadcastVarFilterExpressions
-
-    case _ => false
-  }
-
-  override def partitionAttributes(): Array[NamedReference] =
-    throw new UnsupportedOperationException("method not implemented")
-
-  override def readSchema: StructType =
-    throw new UnsupportedOperationException("method not implemented")
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -145,10 +122,9 @@ class ParquetFileFormat
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
-      filtersTemp: Seq[Filter],
+      filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val filters = filtersTemp ++ this.broadcastVarFilterExpressions
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -385,56 +361,6 @@ class ParquetFileFormat
   override def metadataSchemaFields: Seq[StructField] = {
     super.metadataSchemaFields :+ ParquetFileFormat.ROW_INDEX_FIELD
   }
-
-  def filter(predicates: Array[connectorFilter.Predicate]): Unit = {
-    this.broadcastVarFilterExpressions ++= ParquetFileFormat.convertToV1(predicates)
-  }
-
-  override def hasPushedBroadCastFilter(): Boolean = this.broadcastVarFilterExpressions.nonEmpty
-
-  override def allAttributes(): Array[NamedReference] =
-    throw new UnsupportedOperationException("method not implemented")
-
-    /**
-     * This method should be implemented by the DataSourceV2 Scan which should check for equality
-     * of Scan without taking into account pushed runtime filters (DPP)
-     *
-     * @param other scan to be compared to
-     * @return boolean if the scans are same.
-     */
-    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering):
-    Boolean = (this eq other) || (other match {
-      case that: ParquetFileFormat => true
-
-      case _ => false
-   })
-
-
-    /**
-     * This method should be implemented by the DataSourceV2 Scan to return the hashCode excluding
-     * the runtime filters (DPP) pushed to scan.
-     *
-     * @return int
-     */
-    override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(getClass.hashCode())
-
-
-  override def getPushedBroadcastFilters(): javautil.List[PushedBroadcastFilterData] = {
-    import scala.jdk.CollectionConverters._
-    this.broadcastVarFilterExpressions.map(filter => {
-      val inFilter = filter.asInstanceOf[sources.In]
-      new PushedBroadcastFilterData(inFilter.attribute,
-        inFilter.values.head.asInstanceOf[BroadcastedJoinKeysWrapper])
-    }).asJava
-  }
-
-    override def getPushedBroadcastVarIds(): javautil.Set[java.lang.Long] =
-      this.getPushedBroadcastFilters().stream().map(bcData =>
-        java.lang.Long.valueOf(bcData.bcVar.getBroadcastVarId)).collect(
-        javautil.stream.Collectors.toSet[java.lang.Long])
-
-
-    override def getPushedBroadcastFiltersCount(): Int = this.broadcastVarFilterExpressions.length
 }
 
 object ParquetFileFormat extends Logging {
