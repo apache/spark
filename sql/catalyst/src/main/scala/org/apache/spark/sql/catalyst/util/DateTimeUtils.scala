@@ -771,17 +771,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
     val fullSecs = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
     val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
-    
-    try {
-      val lt = LocalTime.of(
-        hours,
-        minutes,
-        fullSecs,
-        nanos)
-      localTimeToMicros(lt)
+
+    val lt = try {
+      LocalTime.of(hours, minutes, fullSecs, nanos)
     } catch {
       case e: DateTimeException =>
         throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
     }
+
+    localTimeToMicros(lt)
   }
 }

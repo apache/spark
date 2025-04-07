@@ -174,8 +174,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("creating values of TimeType via make_time") {
     // basic case
     checkEvaluation(
-      MakeTime(Literal(13), Literal.create(2, IntegerType),
-        Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      MakeTime(Literal(13), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
       LocalTime.of(13, 2, 23, 500000000))
 
     // null cases
