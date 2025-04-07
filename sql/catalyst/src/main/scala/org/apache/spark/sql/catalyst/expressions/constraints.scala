@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.UUID
+
 import org.antlr.v4.runtime.ParserRuleContext
 
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -44,6 +46,9 @@ trait TableConstraint {
    */
   def withCharacteristic(c: ConstraintCharacteristic, ctx: ParserRuleContext): TableConstraint
 
+  // Generate a constraint name based on the table name if the name is not specified
+  protected def generateConstraintName(tableName: String): String
+
   /** Generates a constraint name if one is not provided
    *
    * @param tableName Name of the table containing this constraint
@@ -57,8 +62,12 @@ trait TableConstraint {
     }
   }
 
-  // Generate a constraint name based on the table name if the name is not specified
-  protected def generateConstraintName(tableName: String): String
+  // This method generates a random identifier that has a similar format to Git commit hashes,
+  // which provide a good balance between uniqueness and readability when used as constraint
+  // identifiers.
+  protected def randomSuffix: String = {
+    UUID.randomUUID().toString.replace("-", "").take(7)
+  }
 }
 
 case class ConstraintCharacteristic(enforced: Option[Boolean], rely: Option[Boolean])
@@ -80,8 +89,7 @@ case class CheckConstraint(
     copy(child = newChild)
 
   override protected def generateConstraintName(tableName: String): String = {
-    val rand = scala.util.Random.alphanumeric.take(6).mkString
-    s"${tableName}_chk_$rand"
+    s"${tableName}_chk_$randomSuffix"
   }
 
   override def sql: String = s"CONSTRAINT $name CHECK ($condition)"
@@ -128,8 +136,7 @@ case class UniqueConstraint(
     extends TableConstraint {
 
   override protected def generateConstraintName(tableName: String): String = {
-    val rand = scala.util.Random.alphanumeric.take(6).mkString
-    s"${tableName}_uniq_$rand"
+    s"${tableName}_uniq_$randomSuffix"
   }
 
   override def withName(name: String): TableConstraint = copy(name = name)

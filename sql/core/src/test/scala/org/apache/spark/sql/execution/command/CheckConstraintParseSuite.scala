@@ -266,7 +266,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[CheckConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
           fail(s"Expected CreateTable, but got: $other")
@@ -285,7 +285,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
           assert(tableSpec.constraints.head.isInstanceOf[CheckConstraint])
-          assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-zA-Z]{6}"))
+          assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
           fail(s"Expected ReplaceTable, but got: $other")
@@ -304,7 +304,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         val table = a.table.asInstanceOf[UnresolvedTable]
         assert(table.multipartIdentifier == Seq("a", "b", "c"))
         assert(a.tableConstraint.isInstanceOf[CheckConstraint])
-        assert(a.tableConstraint.name.matches("c_chk_[0-9a-zA-Z]{6}"))
+        assert(a.tableConstraint.name.matches("c_chk_[0-9a-f]{7}"))
 
       case other =>
         fail(s"Expected AddConstraint, but got: $other")
