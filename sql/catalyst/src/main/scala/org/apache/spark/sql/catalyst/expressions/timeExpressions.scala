@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.{DateTimeException, LocalTime}
+import java.time.DateTimeException
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.localTimeToMicros
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -315,53 +313,22 @@ object HourExpressionBuilder extends ExpressionBuilder {
 case class MakeTime(
     hours: Expression,
     minutes: Expression,
-    secAndMicros: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with SecAndNanosExtractor {
-  override def nullIntolerant: Boolean = true
+    secsAndMicros: Expression)
+  extends RuntimeReplaceable with ExpectsInputTypes {
 
-  override def first: Expression = hours
-  override def second: Expression = minutes
-  override def third: Expression = secAndMicros
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
+  override def children: Seq[Expression] = Seq(hours, minutes, secsAndMicros)
   override def dataType: DataType = TimeType(TimeType.MAX_PRECISION)
-  override def nullable: Boolean = children.exists(_.nullable)
-
-  override protected def nullSafeEval(hours: Any, minutes: Any, secAndMicros: Any): Any = {
-    val (secs, nanos) = toSecondsAndNanos(secAndMicros.asInstanceOf[Decimal])
-
-    try {
-      val lt = LocalTime.of(
-        hours.asInstanceOf[Int],
-        minutes.asInstanceOf[Int],
-        secs,
-        nanos)
-      localTimeToMicros(lt)
-    } catch {
-      case e: DateTimeException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val secs = "seconds"
-    val nanos = "nanos"
-
-    nullSafeCodeGen(ctx, ev, (hour, min, secAndMicros) => {
-      s"""
-      try {
-        ${toSecAndNanosCodeGen(secAndMicros, secs, nanos)}
-        java.time.LocalTime lt = java.time.LocalTime.of($hour, $min, $secs, $nanos);
-        ${ev.value} = $dtu.localTimeToMicros(lt);
-      } catch (java.time.DateTimeException e) {
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e);
-      }"""
-    })
-  }
-
   override def prettyName: String = "make_time"
 
-  override protected def withNewChildrenInternal(
-    newFirst: Expression, newSecond: Expression, newThird: Expression): MakeTime =
-    copy(hours = newFirst, minutes = newSecond, secAndMicros = newThird)
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    dataType,
+    "timeToMicros",
+    children,
+    inputTypes
+  )
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MakeTime =
+    copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
 }

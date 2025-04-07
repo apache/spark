@@ -763,4 +763,25 @@ object DateTimeUtils extends SparkDateTimeUtils {
       throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
   }
+  
+  def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Unit = {
+    assert(secsAndMicros.scale == 6,
+      s"Seconds fraction must have 6 digits for microseconds but got ${secsAndMicros.scale}")
+    val unscaledSecFrac = secsAndMicros.toUnscaledLong
+    val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
+    val fullSecs = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
+    val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
+    
+    try {
+      val lt = LocalTime.of(
+        hours,
+        minutes,
+        fullSecs,
+        nanos)
+      localTimeToMicros(lt)
+    } catch {
+      case e: DateTimeException =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+    }
+  }
 }
