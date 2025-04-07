@@ -18,30 +18,27 @@ struct<>
 -- !query
 SELECT hll_sketch_estimate(hll_sketch_agg(col)) AS result FROM t1
 -- !query schema
-struct<>
+struct<result:bigint>
 -- !query output
-java.lang.ExceptionInInitializerError
-null
+5
 
 
 -- !query
 SELECT hll_sketch_estimate(hll_sketch_agg(col, 12))
 FROM VALUES (50), (60), (60), (60), (75), (100) tab(col)
 -- !query schema
-struct<>
+struct<hll_sketch_estimate(hll_sketch_agg(col, 12)):bigint>
 -- !query output
-java.lang.NoClassDefFoundError
-Could not initialize class org.apache.datasketches.memory.internal.BaseWritableMemoryImpl
+4
 
 
 -- !query
 SELECT hll_sketch_estimate(hll_sketch_agg(col))
 FROM VALUES ('abc'), ('def'), ('abc'), ('ghi'), ('abc') tab(col)
 -- !query schema
-struct<>
+struct<hll_sketch_estimate(hll_sketch_agg(col, 12)):bigint>
 -- !query output
-java.lang.NoClassDefFoundError
-Could not initialize class org.apache.datasketches.memory.internal.BaseWritableMemoryImpl
+3
 
 
 -- !query
@@ -56,10 +53,9 @@ SELECT hll_sketch_estimate(
     (2, 5),
     (3, 6) AS tab(col1, col2)
 -- !query schema
-struct<>
+struct<hll_sketch_estimate(hll_union(hll_sketch_agg(col1, 12), hll_sketch_agg(col2, 12), false)):bigint>
 -- !query output
-java.lang.NoClassDefFoundError
-Could not initialize class org.apache.datasketches.memory.internal.BaseWritableMemoryImpl
+6
 
 
 -- !query
@@ -70,10 +66,9 @@ SELECT hll_sketch_estimate(hll_union_agg(sketch, true))
           SELECT hll_sketch_agg(col, 20) as sketch
             FROM VALUES (1) AS tab(col))
 -- !query schema
-struct<>
+struct<hll_sketch_estimate(hll_union_agg(sketch, true)):bigint>
 -- !query output
-java.lang.NoClassDefFoundError
-Could not initialize class org.apache.datasketches.memory.internal.BaseWritableMemoryImpl
+1
 
 
 -- !query
@@ -154,8 +149,16 @@ SELECT hll_union(
 -- !query schema
 struct<>
 -- !query output
-java.lang.NoClassDefFoundError
-Could not initialize class org.apache.datasketches.memory.internal.BaseWritableMemoryImpl
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "HLL_UNION_DIFFERENT_LG_K",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "function" : "`hll_union`",
+    "left" : "12",
+    "right" : "13"
+  }
+}
 
 
 -- !query
@@ -168,8 +171,16 @@ FROM (SELECT hll_sketch_agg(col, 12) as sketch
 -- !query schema
 struct<>
 -- !query output
-java.lang.NoClassDefFoundError
-Could not initialize class org.apache.datasketches.memory.internal.BaseWritableMemoryImpl
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "HLL_UNION_DIFFERENT_LG_K",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "function" : "`hll_union_agg`",
+    "left" : "12",
+    "right" : "20"
+  }
+}
 
 
 -- !query
