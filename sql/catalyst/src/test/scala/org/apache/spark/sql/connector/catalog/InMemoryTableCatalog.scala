@@ -90,6 +90,15 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     invalidatedTables.add(ident)
   }
 
+  override def createTable(
+    ident: Identifier,
+    columns: Array[Column],
+    partitions: Array[Transform],
+    properties: util.Map[String, String]): Table = {
+    createTable(ident, columns, partitions, properties, Distributions.unspecified(),
+      Array.empty, None, None)
+  }
+
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
       Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())

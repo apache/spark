@@ -43,4 +43,19 @@ class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
   }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    if (tables.containsKey(ident)) {
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
+    }
+
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(tableInfo.properties)
+
+    val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
+    val table = new InMemoryAtomicPartitionTable(
+      s"$name.${ident.quoted}", schema, tableInfo.partitions, tableInfo.properties)
+    tables.put(ident, table)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    table
+  }
 }
