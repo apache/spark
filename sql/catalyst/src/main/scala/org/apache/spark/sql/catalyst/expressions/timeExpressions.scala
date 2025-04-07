@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, LongType, ObjectType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -323,7 +323,7 @@ case class MakeTime(
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
-    dataType,
+    LongType,
     "timeToMicros",
     children,
     inputTypes

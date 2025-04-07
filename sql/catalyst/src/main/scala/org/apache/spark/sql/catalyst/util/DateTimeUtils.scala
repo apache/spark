@@ -764,7 +764,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
   
-  def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Unit = {
+  def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     assert(secsAndMicros.scale == 6,
       s"Seconds fraction must have 6 digits for microseconds but got ${secsAndMicros.scale}")
     val unscaledSecFrac = secsAndMicros.toUnscaledLong
