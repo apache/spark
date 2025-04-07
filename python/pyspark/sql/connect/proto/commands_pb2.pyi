@@ -67,6 +67,7 @@ class _StreamingQueryEventTypeEnumTypeWrapper(
     QUERY_PROGRESS_EVENT: _StreamingQueryEventType.ValueType  # 1
     QUERY_TERMINATED_EVENT: _StreamingQueryEventType.ValueType  # 2
     QUERY_IDLE_EVENT: _StreamingQueryEventType.ValueType  # 3
+    QUERY_TRIGGER_START_EVENT: _StreamingQueryEventType.ValueType # 4
 
 class StreamingQueryEventType(
     _StreamingQueryEventType, metaclass=_StreamingQueryEventTypeEnumTypeWrapper
@@ -80,6 +81,7 @@ QUERY_PROGRESS_UNSPECIFIED: StreamingQueryEventType.ValueType  # 0
 QUERY_PROGRESS_EVENT: StreamingQueryEventType.ValueType  # 1
 QUERY_TERMINATED_EVENT: StreamingQueryEventType.ValueType  # 2
 QUERY_IDLE_EVENT: StreamingQueryEventType.ValueType  # 3
+QUERY_TRIGGER_START_EVENT:StreamingQueryEventType.ValueType # 4
 global___StreamingQueryEventType = StreamingQueryEventType
 
 class Command(google.protobuf.message.Message):

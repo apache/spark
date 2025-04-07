@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsS
 import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryTriggerStartEvent}
 import org.apache.spark.util.{Clock, Utils}
 
 /**
@@ -64,7 +64,7 @@ class ProgressReporter(
   val queryTriggerStartEventEnabled: Boolean =
     sparkSession.sessionState.conf.streamingQueryTriggerStartEventEnabled
 
-  val queryTriggerStartEventMinInterval: Boolean =
+  val queryTriggerStartEventMinInterval: Long =
     sparkSession.sessionState.conf.streamingQueryTriggerStartEventMinInterval
 
   private val timestampFormat =
@@ -122,11 +122,12 @@ class ProgressReporter(
   def updateQueryTriggerStart(
      id: UUID,
      runId: UUID,
+     name: String,
      currentTriggerStartTimestamp: Long): Unit = {
    if (queryTriggerStartEventEnabled) {
      val now = triggerClock.getTimeMillis()
      if (now - lastNoExecutionProgressEventTime >= queryTriggerStartEventMinInterval) {
-       postEvent(new QueryTriggerStartEvent(id, runId, formatTimestamp(currentTriggerStartTimestamp)))
+       postEvent(new QueryTriggerStartEvent(id, runId, name, formatTimestamp(currentTriggerStartTimestamp)))
        lastNoExecutionProgressEventTime = now
      }
    }
@@ -234,7 +235,7 @@ abstract class ProgressContext(
     currentTriggerEndOffsets = null
     currentTriggerLatestOffsets = null
     currentDurationsMs.clear()
-    progressReporter.updateQueryTriggerStart(id, runId, currentTriggerStartTimestamp)
+    progressReporter.updateQueryTriggerStart(id, runId, name, currentTriggerStartTimestamp)
   }
 
   /**

@@ -394,13 +394,15 @@ class StreamingQueryListenerBus:
     @staticmethod
     def deserialize(
         event: pb2.StreamingQueryListenerEvent,
-    ) -> Union["QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent"]:
+    ) -> Union["QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryTriggerStartEvent"]:
         if event.event_type == proto.StreamingQueryEventType.QUERY_PROGRESS_EVENT:
             return QueryProgressEvent.fromJson(json.loads(event.event_json))
         elif event.event_type == proto.StreamingQueryEventType.QUERY_TERMINATED_EVENT:
             return QueryTerminatedEvent.fromJson(json.loads(event.event_json))
         elif event.event_type == proto.StreamingQueryEventType.QUERY_IDLE_EVENT:
             return QueryIdleEvent.fromJson(json.loads(event.event_json))
+        elif event.event_type == proto.StreamingQueryEventType.QUERY_TRIGGER_START_EVENT:
+            return QueryTriggerStartEvent.fromJson(json.loads(event.event_json))
         else:
             raise PySparkValueError(
                 errorClass="UNKNOWN_VALUE_FOR",
