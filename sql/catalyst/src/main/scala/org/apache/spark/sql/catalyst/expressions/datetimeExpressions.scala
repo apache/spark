@@ -2780,8 +2780,7 @@ case class MakeTimestamp(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled,
     override val dataType: DataType = SQLConf.get.timestampType)
-  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-  with SecAndNanosExtractor {
+  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
   def this(
@@ -2828,7 +2827,12 @@ case class MakeTimestamp(
       secAndMicros: Decimal,
       zoneId: ZoneId): Any = {
     try {
-      val (seconds, nanos) = toSecondsAndNanos(secAndMicros)
+      assert(secAndMicros.scale == 6,
+        s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
+      val unscaledSecFrac = secAndMicros.toUnscaledLong
+      val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
+      val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
+      val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
       val ldt = if (seconds == 60) {
         if (nanos == 0) {
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
@@ -2876,6 +2880,7 @@ case class MakeTimestamp(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val d = Decimal.getClass.getName.stripSuffix("$")
     val failOnErrorBranch = if (failOnError) {
       "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
     } else {
@@ -2892,24 +2897,22 @@ case class MakeTimestamp(
       } else {
         s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
       }
-
-      val secs = "seconds"
-      val nanos = "nanos"
-
       s"""
       try {
-        ${toSecAndNanosCodeGen(secAndNanos, secs, nanos)}
-
+        org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
+        org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
+        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
+        int seconds = secFloor.toInt();
         java.time.LocalDateTime ldt;
-        if ($secs == 60) {
-          if ($nanos == 0) {
+        if (seconds == 60) {
+          if (nanos == 0) {
             ldt = java.time.LocalDateTime.of(
               $year, $month, $day, $hour, $min, 0, 0).plusMinutes(1);
           } else {
             throw QueryExecutionErrors.invalidFractionOfSecondError($secAndNanos.toDouble());
           }
         } else {
-          ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, $secs, $nanos);
+          ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
         }
         $toMicrosCode
       } catch (org.apache.spark.SparkDateTimeException e) {
@@ -3550,50 +3553,5 @@ case class TimestampDiff(
       newLeft: Expression,
       newRight: Expression): TimestampDiff = {
     copy(startTimestamp = newLeft, endTimestamp = newRight)
-  }
-}
-
-/**
- * A mixin trait with methods to extract whole and fractional seconds from a decimal
- * representing seconds with microsecond precision.
- */
-trait SecAndNanosExtractor {
-  /**
-   * Extracts out the whole and fractional seconds from a decimal object representing seconds with
-   * microsecond precision
-   * @param secAndMicros
-   * @return A tuple containing the whole seconds and fractional second represented as nanoseconds
-   */
-  def toSecondsAndNanos(secAndMicros: Decimal): (Int, Int) = {
-    assert(secAndMicros.scale == 6,
-      s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
-    val unscaledSecFrac = secAndMicros.toUnscaledLong
-    val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
-    val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
-    val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
-    (seconds, nanos)
-  }
-
-  /**
-   * Geneates code to extracts out the whole and fractional seconds from a decimal object
-   * representing seconds with microsecond precision. It will create new variables that contain
-   * the extracted results.
-   * @param secAndMicros The name of the variable containing the decimal object representing
-   *                     seconds with microsecond precision
-   * @param secs The name of the variable that the while seconds will be set to. It will use this
-   *             variable name to create a new int variable.
-   * @param nanos The name of the variable that the fractional seconds will be set to as
-   *              nanoseconds. It will use this variable name to create a new int variable.
-   * @return The code to extra whole and fractional seconds
-   */
-  def toSecAndNanosCodeGen(secAndMicros: String, secs: String, nanos: String): String = {
-    val d = Decimal.getClass.getName.stripSuffix("$")
-
-    s"""
-    $d secFloor = $secAndMicros.floor();
-    $d nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-    int $nanos = (($secAndMicros.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
-    int $secs = secFloor.toInt();
-    """
   }
 }
