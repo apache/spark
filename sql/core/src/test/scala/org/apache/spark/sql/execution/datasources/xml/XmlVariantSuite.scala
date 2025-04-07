@@ -65,6 +65,11 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       xml = "<ROW><amount>5.0</amount></ROW>",
       expectedJsonStr = """{"amount":5}"""
     )
+    // This is parsed as String, because it is too large for Decimal
+    testParser(
+      xml = "<ROW><amount>1e40</amount></ROW>",
+      expectedJsonStr = """{"amount":"1e40"}"""
+    )
 
     // Date -> String
     testParser(
@@ -90,15 +95,18 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       xml = "<ROW><note>  hello world  </note></ROW>",
       expectedJsonStr = """{"note":"hello world"}"""
     )
-    // Scientic numbers -> String
-    testParser(
-      xml = "<ROW><amount>4.9E-324</amount></ROW>",
-      expectedJsonStr = """{"amount":"4.9E-324"}"""
-    )
   }
 
   test("Parser: parse XML attributes as variants") {
     // XML elements with only attributes
+    testParser(
+      xml = "<ROW id=\"2\"></ROW>",
+      expectedJsonStr = """{"_id":2}"""
+    )
+    testParser(
+      xml = "<ROW><a><b attr=\"1\"></b></a></ROW>",
+      expectedJsonStr = """{"a":{"b":{"_attr":1}}}"""
+    )
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\" amount=\"93\"></ROW>",
       expectedJsonStr = """{"_amount":93,"_id":2,"_name":"Sam"}"""
@@ -401,12 +409,16 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
 
   test("DSL: read XML files with defined schema") {
     val df = createDSLDataFrame(
-      fileName = "cars.xml",
-      schemaDDL = Some("year variant, make string, model string, comment string")
+      fileName = "books-complicated.xml",
+      schemaDDL = Some(
+        "_id string, author string, title string, genre variant, price double, " +
+          "publish_dates variant"
+      ),
+      extraOptions = Map("rowTag" -> "book")
     )
     checkAnswer(
-      df.select(variant_get(col("year"), "$", "int")),
-      Seq(Row(2012), Row(1997), Row(2015))
+      df.select(variant_get(col("genre"), "$.name", "string")),
+      Seq(Row("Computer"), Row("Fantasy"), Row("Fantasy"))
     )
   }
 
@@ -473,21 +485,32 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("SQL: read partial XML record as variant using from_xml with a defined schema") {
     val xmlStr =
       """
-        |<ROW>
-        |    <year>2012<!--A comment within tags--></year>
-        |    <make>Tesla</make>
-        |    <model>S</model>
-        |    <comment>No comment</comment>
-        |</ROW>
-        |""".stripMargin
+        |<book>
+        |   <author>Gambardella</author>
+        |   <title>Hello</title>
+        |   <genre>
+        |     <genreid>1</genreid>
+        |     <name>Computer</name>
+        |   </genre>
+        |   <price>44.95</price>
+        |   <publish_dates>
+        |     <publish_date>
+        |       <day>1</day>
+        |       <month>10</month>
+        |       <year>2000</year>
+        |     </publish_date>
+        |   </publish_dates>
+        | </book>
+        | """.stripMargin.replaceAll("\\s+", "")
     // Read specific elements in the XML record as variant
-    val schemaDDL = "year variant, make string, model string, comment string"
+    val schemaDDL =
+      "author string, title string, genre variant, price double, publish_dates variant"
     // Verify we can extract fields from the variant type
     checkAnswer(
       spark
-        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as car""".stripMargin)
-        .select(variant_get(col("car.year"), "$", "int")),
-      Seq(Row(2012))
+        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as book""".stripMargin)
+        .select(variant_get(col("book.publish_dates"), "$.publish_date.year", "int")),
+      Seq(Row(2000))
     )
   }
 }

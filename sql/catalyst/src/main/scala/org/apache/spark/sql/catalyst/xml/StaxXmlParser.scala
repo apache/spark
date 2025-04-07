@@ -1122,8 +1122,8 @@ object StaxXmlParser {
         }
         if (d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION) {
           builder.appendDecimal(d)
+          return
         }
-        return
       case _ =>
     }
 
