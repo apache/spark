@@ -23,14 +23,16 @@ import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, TaskCont
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 class MapInBatchEvaluatorFactory(
     output: Seq[Attribute],
     chainedFunc: Seq[(ChainedPythonFunctions, Long)],
-    outputTypes: StructType,
+    inputSchema: StructType,
+    outputSchema: DataType,
     batchSize: Int,
     pythonEvalType: Int,
     sessionLocalTimeZone: String,
@@ -63,7 +65,7 @@ class MapInBatchEvaluatorFactory(
         chainedFunc,
         pythonEvalType,
         argOffsets,
-        StructType(Array(StructField("struct", outputTypes))),
+        StructType(Array(StructField("struct", inputSchema))),
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
@@ -77,6 +79,11 @@ class MapInBatchEvaluatorFactory(
       columnarBatchIter.flatMap { batch =>
         // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
         // the children here
+        val actualSchema = batch.column(0).dataType()
+        if (outputSchema != actualSchema) {
+          throw QueryExecutionErrors.arrowDataTypeMismatchError(
+            "pandas_udf()", Seq(outputSchema), Seq(actualSchema))
+        }
         val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
         val outputVectors = output.indices.map(structVector.getChild)
         val flattenedBatch = new ColumnarBatch(outputVectors.toArray)

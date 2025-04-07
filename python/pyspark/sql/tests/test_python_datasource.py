@@ -732,6 +732,45 @@ class BasePythonDataSourceTestsMixin:
         ):
             df.write.format("test").mode("append").saveAsTable("test_table")
 
+    def test_data_source_nested_extraneous_field(self):
+        import pyarrow as pa
+
+        class TestDataSource(DataSource):
+            def reader(self, schema):
+                return TestReader()
+
+        class TestReader(DataSourceReader):
+            def read(self, partition):
+                struct_array = pa.StructArray.from_arrays([[1, 2], [3, 4]], names=["a", "b"])
+                yield pa.record_batch([struct_array], names=["x"])
+
+        self.spark.dataSource.register(TestDataSource)
+
+        with self.assertRaisesRegex(
+            Exception,
+            r"ARROW_TYPE_MISMATCH",
+        ):
+            self.spark.read.format("TestDataSource").schema("x struct<b:int>").load().show()
+
+    def test_data_source_top_level_wrong_order(self):
+        import pyarrow as pa
+
+        class TestDataSource(DataSource):
+            def reader(self, schema):
+                return TestReader()
+
+        class TestReader(DataSourceReader):
+            def read(self, partition):
+                yield pa.record_batch([[1], [2]], names=["b", "a"])
+
+        self.spark.dataSource.register(TestDataSource)
+
+        with self.assertRaisesRegex(
+            Exception,
+            r"ARROW_TYPE_MISMATCH",
+        ):
+            self.spark.read.format("TestDataSource").schema("a int, b int").load().show()
+
     @unittest.skipIf(
         "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
     )
