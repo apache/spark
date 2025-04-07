@@ -484,6 +484,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   test("streaming query listener") {
     testStreamingQueryListener(new EventCollectorV1, "_v1")
     testStreamingQueryListener(new EventCollectorV2, "_v2")
+    testStreamingQueryListener(new EventCollectorV3, "_v3")
   }
 
   private def testStreamingQueryListener(
@@ -731,6 +732,25 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
   }
+
+  /**
+   * V3: The interface after the method `onQueryTriggerStarted` is added. It is Spark 4.2+.
+   */
+  class EventCollectorV3 extends EventCollector {
+    override protected def tablePostfix: String = "_v3"
+
+    override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+    override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+    override def onQueryIdle(event: QueryIdleEvent): Unit = {}
+
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+      handleOnQueryTerminated(event)
+
+    override def onQueryTriggerStarted(event: QueryTriggerStarted): Unit = {}
+  }
+
 
   class MyListener extends StreamingQueryListener {
     var start: Seq[String] = Seq.empty

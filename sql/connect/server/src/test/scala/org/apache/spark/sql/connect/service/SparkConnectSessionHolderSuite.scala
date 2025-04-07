@@ -140,6 +140,9 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         |    def onQueryTerminated(e):
         |        pass
         |
+        |    def onQueryTriggerStarted(e):
+        |        pass
+        |
         |listener = MyListener()
       """.stripMargin
     withTempPath { codePath =>
