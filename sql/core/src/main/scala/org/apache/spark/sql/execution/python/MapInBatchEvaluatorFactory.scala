@@ -80,9 +80,9 @@ class MapInBatchEvaluatorFactory(
         // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
         // the children here
         val actualSchema = batch.column(0).dataType()
-        if (outputSchema != actualSchema) {
+        if (!outputSchema.sameType(actualSchema)) {
           throw QueryExecutionErrors.arrowDataTypeMismatchError(
-            "pandas_udf()", Seq(outputSchema), Seq(actualSchema))
+            "DataSource", Seq(outputSchema), Seq(actualSchema))
         }
         val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
         val outputVectors = output.indices.map(structVector.getChild)
