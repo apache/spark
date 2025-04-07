@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils, SparkParserUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils, ResolveDefaultColumnsUtils, SparkParserUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -3886,7 +3886,20 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitSingleRoutineParamList(
       ctx: SingleRoutineParamListContext): StructType = withOrigin(ctx) {
-    createSchema(ctx.colDefinitionList())
+    val schema = createSchema(ctx.colDefinitionList())
+    val fields = for (field <- schema) yield {
+      field.getCurrentDefaultValue() match {
+        case Some(default) =>
+          val metadata = new MetadataBuilder()
+            .withMetadata(field.metadata)
+            .remove(ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+            .putString(StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY, default)
+            .build()
+          field.copy(metadata = metadata)
+        case None => field
+      }
+    }
+    StructType(fields.toArray)
   }
 
   /**
