@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.RelationResolution
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -52,9 +53,31 @@ class BridgedRelationMetadataProvider(
       (unresolvedRelation, relationWithResolvedMetadata) => {
         relationsWithResolvedMetadata.put(
           relationIdFromUnresolvedRelation(unresolvedRelation),
-          relationWithResolvedMetadata
+          tryConvertUnresolvedCatalogRelation(relationWithResolvedMetadata)
         )
       }
     )
+  }
+
+  private def tryConvertUnresolvedCatalogRelation(source: LogicalPlan): LogicalPlan = {
+    source match {
+      case unresolvedCatalogRelation: UnresolvedCatalogRelation
+          if analyzerBridgeState.catalogRelationsWithResolvedMetadata
+            .containsKey(unresolvedCatalogRelation) =>
+        analyzerBridgeState.catalogRelationsWithResolvedMetadata.get(unresolvedCatalogRelation)
+
+      case SubqueryAlias(id, unresolvedCatalogRelation: UnresolvedCatalogRelation)
+          if analyzerBridgeState.catalogRelationsWithResolvedMetadata
+            .containsKey(unresolvedCatalogRelation) =>
+        SubqueryAlias(
+          id,
+          analyzerBridgeState.catalogRelationsWithResolvedMetadata.get(
+            unresolvedCatalogRelation
+          )
+        )
+
+      case _ =>
+        source
+    }
   }
 }

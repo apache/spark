@@ -17,17 +17,96 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{
+  BinaryExpression,
+  Expression,
+  QuaternaryExpression,
+  TernaryExpression,
+  UnaryExpression
+}
 
 trait ResolvesExpressionChildren {
 
   /**
+   * Resolves [[UnaryExpression]] children and returns its copy with children resolved.
+   */
+  protected def withResolvedChildren(
+      unresolvedExpression: UnaryExpression,
+      resolveChild: Expression => Expression): Expression = {
+    val newChildren = Seq(resolveChild(unresolvedExpression.child))
+    unresolvedExpression.withNewChildren(newChildren)
+  }
+
+  /**
+   * Resolves [[BinaryExpression]] children and returns its copy with children resolved.
+   */
+  protected def withResolvedChildren(
+      unresolvedExpression: BinaryExpression,
+      resolveChild: Expression => Expression): Expression = {
+    val newChildren =
+      Seq(resolveChild(unresolvedExpression.left), resolveChild(unresolvedExpression.right))
+    unresolvedExpression.withNewChildren(newChildren)
+  }
+
+  /**
+   * Resolves [[TernaryExpression]] children and returns its copy with children resolved.
+   */
+  protected def withResolvedChildren(
+      unresolvedExpression: TernaryExpression,
+      resolveChild: Expression => Expression): Expression = {
+    val newChildren = Seq(
+      resolveChild(unresolvedExpression.first),
+      resolveChild(unresolvedExpression.second),
+      resolveChild(unresolvedExpression.third)
+    )
+    unresolvedExpression.withNewChildren(newChildren)
+  }
+
+  /**
+   * Resolves [[QuaternaryExpression]] children and returns its copy with children resolved.
+   */
+  protected def withResolvedChildren(
+      unresolvedExpression: QuaternaryExpression,
+      resolveChild: Expression => Expression): Expression = {
+    val newChildren = Seq(
+      resolveChild(unresolvedExpression.first),
+      resolveChild(unresolvedExpression.second),
+      resolveChild(unresolvedExpression.third),
+      resolveChild(unresolvedExpression.fourth)
+    )
+    unresolvedExpression.withNewChildren(newChildren)
+  }
+
+  /**
    * Resolves generic [[Expression]] children and returns its copy with children resolved.
    */
-  protected def withResolvedChildren[ExpressionType <: Expression](
-      unresolvedExpression: ExpressionType,
-      resolveChild: Expression => Expression): ExpressionType = {
-    val newChildren = unresolvedExpression.children.map(resolveChild(_))
-    unresolvedExpression.withNewChildren(newChildren).asInstanceOf[ExpressionType]
+  protected def withResolvedChildren(
+      unresolvedExpression: Expression,
+      resolveChild: Expression => Expression): Expression = unresolvedExpression match {
+    case unaryExpression: UnaryExpression =>
+      withResolvedChildren(unaryExpression, resolveChild)
+    case binaryExpression: BinaryExpression =>
+      withResolvedChildren(binaryExpression, resolveChild)
+    case ternaryExpression: TernaryExpression =>
+      withResolvedChildren(ternaryExpression, resolveChild)
+    case quaternaryExpression: QuaternaryExpression =>
+      withResolvedChildren(quaternaryExpression, resolveChild)
+    case _ =>
+      withResolvedChildrenImpl(unresolvedExpression, resolveChild)
+  }
+
+  private def withResolvedChildrenImpl(
+      unresolvedExpression: Expression,
+      resolveChild: Expression => Expression): Expression = {
+    val newChildren = new mutable.ArrayBuffer[Expression](unresolvedExpression.children.size)
+
+    val childrenIterator = unresolvedExpression.children.iterator
+    while (childrenIterator.hasNext) {
+      newChildren += resolveChild(childrenIterator.next())
+    }
+
+    unresolvedExpression.withNewChildren(newChildren.toSeq)
   }
 }

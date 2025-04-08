@@ -45,14 +45,13 @@ from pyspark.sql.types import (
     NullType,
     DayTimeIntervalType,
 )
+from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ExamplePoint,
-    ExamplePointUDT,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -284,8 +284,48 @@ object ResolveDefaultColumns extends QueryErrorsBase
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
           statementType, colName, defaultSQL, ex)
     }
+    analyze(colName, dataType, parsed, defaultSQL, statementType)
+  }
+
+  /**
+   * Analyzes the connector default value.
+   *
+   * If the default value is defined as a connector expression, Spark first attempts to convert it
+   * to a Catalyst expression. If conversion fails but a SQL string is provided, the SQL is parsed
+   * instead. If only a SQL string is present, it is parsed directly.
+   *
+   * @return the result of the analysis and constant-folding operation
+   */
+  def analyze(
+      colName: String,
+      dataType: DataType,
+      defaultValue: DefaultValue,
+      statementType: String): Expression = {
+    if (defaultValue.getExpression != null) {
+      V2ExpressionUtils.toCatalyst(defaultValue.getExpression) match {
+        case Some(defaultExpr) =>
+          val defaultSQL = Option(defaultValue.getSql).getOrElse(defaultExpr.sql)
+          analyze(colName, dataType, defaultExpr, defaultSQL, statementType)
+
+        case None if defaultValue.getSql != null =>
+          analyze(colName, dataType, defaultValue.getSql, statementType)
+
+        case _ =>
+          throw SparkException.internalError(s"Can't convert $defaultValue to Catalyst")
+      }
+    } else {
+      analyze(colName, dataType, defaultValue.getSql, statementType)
+    }
+  }
+
+  private def analyze(
+      colName: String,
+      dataType: DataType,
+      defaultExpr: Expression,
+      defaultSQL: String,
+      statementType: String): Expression = {
     // Check invariants before moving on to analysis.
-    if (parsed.containsPattern(PLAN_EXPRESSION)) {
+    if (defaultExpr.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statementType, colName, defaultSQL)
     }
@@ -293,7 +333,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     // Analyze the parse result.
     val plan = try {
       val analyzer: Analyzer = DefaultColumnAnalyzer
-      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, colName)()), OneRowRelation()))
+      val analyzed = analyzer.execute(Project(Seq(Alias(defaultExpr, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
       // Eagerly execute finish-analysis and constant-folding rules before checking whether the
       // expression is foldable and resolved.

@@ -23,7 +23,8 @@ import time
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, DecimalType, BinaryType
-from pyspark.testing.sqlutils import ReusedSQLTestCase, UTCOffsetTimezone
+from pyspark.testing.objects import UTCOffsetTimezone
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class SerdeTestsMixin:
@@ -82,9 +83,6 @@ class SerdeTestsMixin:
         day = datetime.date.today()
         now = datetime.datetime.now()
         ts = time.mktime(now.timetuple())
-        # class in __main__ is not serializable
-        from pyspark.testing.sqlutils import UTCOffsetTimezone
-
         utc = UTCOffsetTimezone()
         utcnow = datetime.datetime.utcfromtimestamp(ts)  # without microseconds
         # add microseconds to utcnow (keeping year,month,day,hour,minute,second)
