@@ -978,7 +978,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     val distribution = Distributions.ordered(ordering)
 
     catalog.createTable(ident, columns, Array.empty, emptyProps,
-      distribution, ordering, None, None, Array.empty)
+      distribution, ordering, None, None)
 
     withTempDir { checkpointDir =>
       val inputData = ContinuousMemoryStream[(Long, String, Date)]

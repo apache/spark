@@ -267,7 +267,7 @@ class RocksDB(
    * @return - true if the column family exists, false otherwise
    */
   def checkColFamilyExists(colFamilyName: String): Boolean = {
-    db != null && colFamilyNameToInfoMap.containsKey(colFamilyName)
+    colFamilyNameToInfoMap.containsKey(colFamilyName)
   }
 
   // This method sets the internal column family metadata to
@@ -1215,6 +1215,8 @@ class RocksDB(
       }
 
       silentDeleteRecursively(localRootDir, "closing RocksDB")
+      // Clear internal maps to reset the state
+      clearColFamilyMaps()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
@@ -1465,8 +1467,7 @@ class RocksDB(
       // This is relative aggressive because that even if the uploading succeeds,
       // it is not necessarily the one written to the commit log. But we can always load lineage
       // from commit log so it is fine.
-      lineageManager.resetLineage(lineageManager.getLineageForCurrVersion()
-        .filter(i => i.version >= snapshot.version))
+      lineageManager.truncateFromVersion(snapshot.version)
       logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: " +
         log"Upload snapshot of version ${MDC(LogKeys.VERSION_NUM, snapshot.version)}, " +
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
@@ -1487,11 +1488,12 @@ class RocksDB(
       override def log(infoLogLevel: InfoLogLevel, logMsg: String) = {
         // Map DB log level to log4j levels
         // Warn is mapped to info because RocksDB warn is too verbose
+        // Info is mapped to debug because RocksDB info is too verbose
         // (e.g. dumps non-warning stuff like stats)
         val loggingFunc: ( => LogEntry) => Unit = infoLogLevel match {
           case InfoLogLevel.FATAL_LEVEL | InfoLogLevel.ERROR_LEVEL => logError(_)
-          case InfoLogLevel.WARN_LEVEL | InfoLogLevel.INFO_LEVEL => logInfo(_)
-          case InfoLogLevel.DEBUG_LEVEL => logDebug(_)
+          case InfoLogLevel.WARN_LEVEL => logInfo(_)
+          case InfoLogLevel.INFO_LEVEL | InfoLogLevel.DEBUG_LEVEL => logDebug(_)
           case _ => logTrace(_)
         }
         loggingFunc(log"[NativeRocksDB-${MDC(LogKeys.ROCKS_DB_LOG_LEVEL, infoLogLevel.getValue)}]" +
@@ -1981,27 +1983,33 @@ case class AcquiredThreadInfo(
 private[sql] class RocksDBLineageManager {
   @volatile private var lineage: Array[LineageItem] = Array.empty
 
-  override def toString: String = lineage.map {
-    case LineageItem(version, uuid) => s"$version: $uuid"
-  }.mkString(" ")
+  override def toString: String = synchronized {
+    lineage.map {
+      case LineageItem(version, uuid) => s"$version: $uuid"
+    }.mkString(" ")
+  }
 
-  def appendLineageItem(item: LineageItem): Unit = {
+  def appendLineageItem(item: LineageItem): Unit = synchronized {
     lineage = lineage :+ item
   }
 
-  def resetLineage(newLineage: Array[LineageItem]): Unit = {
+  def truncateFromVersion(versionToKeep: Long): Unit = synchronized {
+    resetLineage(getLineageForCurrVersion().filter(i => i.version >= versionToKeep))
+  }
+
+  def resetLineage(newLineage: Array[LineageItem]): Unit = synchronized {
     lineage = newLineage
   }
 
-  def getLineageForCurrVersion(): Array[LineageItem] = {
+  def getLineageForCurrVersion(): Array[LineageItem] = synchronized {
     lineage.clone()
   }
 
-  def contains(item: LineageItem): Boolean = {
+  def contains(item: LineageItem): Boolean = synchronized {
     lineage.contains(item)
   }
 
-  def clear(): Unit = {
+  def clear(): Unit = synchronized {
     lineage = Array.empty
   }
 }
