@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
@@ -77,17 +78,14 @@ class MapInBatchEvaluatorFactory(
       val unsafeProj = UnsafeProjection.create(output, output)
 
       columnarBatchIter.flatMap { batch =>
-        // Ensure the schema matches the expected schema
-        val actualSchema = batch.column(0).dataType()
-        val strictCheck = true
-        val isCompatible = if (strictCheck) {
-          DataType.equalsIgnoreNullability(actualSchema, outputSchema)
-        } else {
-          outputSchema.sameType(actualSchema)
-        }
-        if (!isCompatible) {
-          throw QueryExecutionErrors.arrowDataTypeMismatchError(
-            PythonEvalType.toString(pythonEvalType), Seq(outputSchema), Seq(actualSchema))
+        if (SQLConf.get.pysparkArrowValidateSchema) {
+          // Ensure the schema matches the expected schema
+          val actualSchema = batch.column(0).dataType()
+          val isCompatible = DataType.equalsIgnoreCompatibleNullability(actualSchema, outputSchema)
+          if (!isCompatible) {
+            throw QueryExecutionErrors.arrowDataTypeMismatchError(
+              PythonEvalType.toString(pythonEvalType), Seq(outputSchema), Seq(actualSchema))
+          }
         }
 
         // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
