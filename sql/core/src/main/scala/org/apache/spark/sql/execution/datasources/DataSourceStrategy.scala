@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -256,6 +257,22 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
+
+    // Invalidate the cache if the table is already cached but options have changed.
+    val cachedPlan = catalog.getCachedTable(qualifiedTableName)
+    if (cachedPlan != null) {
+      cachedPlan match {
+        case LogicalRelationWithTable(
+        HadoopFsRelation(_, _, _, _, _, options), _) =>
+          val prevOptions = new CaseInsensitiveStringMap(options.asJava)
+          val newOptions = new CaseInsensitiveStringMap(dsOptions.asJava)
+          if (prevOptions != newOptions) {
+            catalog.invalidateCachedTable(qualifiedTableName)
+          }
+        case _ =>
+      }
+    }
+
     catalog.getCachedPlan(qualifiedTableName, () => {
       val dataSource =
         DataSource(
