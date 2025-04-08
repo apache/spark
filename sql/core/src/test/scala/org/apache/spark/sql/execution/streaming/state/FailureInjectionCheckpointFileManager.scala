@@ -112,21 +112,29 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
 
 /**
  * A class that contains the failure injection state for a path.
+ * Variables in this class cannot be updated concurrently by two threads, but can have multiple
+ * readers
  */
 class FailureInjectionState {
   // File names matching this regex will cause the copyFromLocalFile to fail
+  @volatile
   var failPreCopyFromLocalFileNameRegex: Seq[String] = Seq.empty
   // File names matching this regex will cause the createAtomic to fail and put the streams in
   // `delayedStreams`
+  @volatile
   var createAtomicDelayCloseRegex: Seq[String] = Seq.empty
   // File names matching this regex will cause the createAtomic() to fail
+  @volatile
   var failureCreateAtomicRegex: Seq[String] = Seq.empty
   // If true, Exists() call will fail
+  @volatile
   var shouldFailExist: Boolean = false
   // If true, simulate a case where rename() will not overwrite an existing file.
+  @volatile
   var allowOverwriteInRename: Boolean = true
 
   // List of streams that are delayed in close() based on `createAtomicDelayCloseRegex`
+  @volatile
   var delayedStreams: Seq[CancellableFSDataOutputStream] = Seq.empty
 }
 
