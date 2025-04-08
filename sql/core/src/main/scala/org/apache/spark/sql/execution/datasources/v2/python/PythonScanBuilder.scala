@@ -46,18 +46,18 @@ class PythonScanBuilder(
     ds.source.pushdownFiltersInPython(dataSource, outputSchema, filters) match {
       case None => filters // No filters are supported.
       case Some(result) =>
-        result.dataSource match {
-          case Some(resultDataSource) =>
+        result.dataSourceOrReadInfo match {
+          case Left(resultDataSource) =>
             // Filter pushdown mutates the data source reader so save it for column pruning.
             ds.setDataSourceInPython(resultDataSource)
-          case None =>
-            // The mutated data source is only returned if column pruning is supported.
+          case Right(readInfo) =>
+            // This happens when we find out that column pruning is not implemented.
+            // At this point no more Python worker calls are needed for planning, so
+            // the worker directly returns the list of partitions and the read function.
+            // This lets us skip a dedicated Python worker call just for getting partitions.
+            ds.setReadInfo(readInfo)
             supportsColumnPruning = false
         }
-
-        // Filter pushdown also returns partitions and the read function.
-        // This helps reduce the number of Python worker calls.
-        ds.setReadInfo(result.readInfo)
 
         // Partition the filters into supported and unsupported ones.
         val isPushed = result.isFilterPushed.zip(filters)

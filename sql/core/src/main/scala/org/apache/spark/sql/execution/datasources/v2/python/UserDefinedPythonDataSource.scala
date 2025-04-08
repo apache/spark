@@ -348,8 +348,7 @@ private class UserDefinedPythonDataSourceRunner(
  * @param isFilterPushed A sequence of bools indicating whether each filter is pushed down.
  */
 case class PythonFilterPushdownResult(
-    dataSource: Option[PythonDataSourceCreationResult],
-    readInfo: PythonDataSourceReadInfo,
+    dataSourceOrReadInfo: Either[PythonDataSourceCreationResult, PythonDataSourceReadInfo],
     isFilterPushed: collection.Seq[Boolean]
 )
 
@@ -482,7 +481,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       throw QueryCompilationErrors.pythonDataSourceError(action = "plan", tpe = "read", msg = msg)
     }
 
-    val dataSource = Option.when(isColumnPruningImplemented != 0) {
+    val dataSourceOrReadInfo = if (isColumnPruningImplemented != 0) {
       // Receive the picked reader or an exception raised in Python worker.
       val length = dataIn.readInt()
       if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
@@ -495,11 +494,12 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       }
       // Receive the pickled data source.
       val pickledDataSourceInstance = PythonWorkerUtils.readBytes(length, dataIn)
-      PythonDataSourceCreationResult(dataSource = pickledDataSourceInstance, schema = schema)
+      Left(PythonDataSourceCreationResult(dataSource = pickledDataSourceInstance, schema = schema))
+    } else {
+      // Receive the read function and the partitions. Also check for exceptions.
+      val readInfo = PythonDataSourceReadInfo.receive(dataIn)
+      Right(readInfo)
     }
-
-    // Receive the read function and the partitions. Also check for exceptions.
-    val readInfo = PythonDataSourceReadInfo.receive(dataIn)
 
     // Receive the pushed filters as a list of indices.
     val numFiltersPushed = dataIn.readInt()
@@ -510,8 +510,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     }
 
     PythonFilterPushdownResult(
-      dataSource = dataSource,
-      readInfo = readInfo,
+      dataSourceOrReadInfo = dataSourceOrReadInfo,
       isFilterPushed = isFilterPushed
     )
   }

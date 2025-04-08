@@ -578,8 +578,8 @@ class DataSourceReader(ABC):
         not performing any pruning. Subclasses can override this to implement column pruning.
 
         Implementation should try its best to prune the unnecessary columns or nested fields, but
-        it's also OK to do the pruning partially, e.g., a data source may not be able to prune nested
-        fields, and only prune top-level columns.
+        it's also OK to do the pruning partially, e.g., a data source may not be able to prune
+        nested fields, and only prune top-level columns.
 
         Parameters
         ----------

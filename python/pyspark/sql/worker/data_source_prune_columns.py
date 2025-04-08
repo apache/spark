@@ -92,7 +92,24 @@ def validate_schema(
 
 def main(infile: IO, outfile: IO) -> None:
     """
-    TODO: Add docstring.
+    Main method for planning a data source read with column pruning.
+
+    This process is invoked from the `UserDefinedPythonDataSourceColumnPruningRunner.runInPython`
+    method called by `PythonScanBuilder.pruneColumns` in JVM. This process is responsible
+    for creating a `DataSourceReader` object, applying column pruning, and sending the
+    information needed back to the JVM.
+
+    The infile and outfile are connected to the JVM via a socket. The JVM sends the following
+    information to this process via the socket:
+    - a `DataSource` instance representing the data source
+    - a `StructType` instance representing the full output schema of the data source
+    - a `StructType` instance representing the required output schema
+    - configuration values
+
+    This process then creates a `DataSourceReader` instance, applies column pruning to the
+    `DataSourceReader` instance, and sends the following information back to the JVM via the socket:
+    - read function and the list of partitions
+    - pruned schema
     """
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:

@@ -122,8 +122,8 @@ def main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read with filter pushdown.
 
-    This process is invoked from the `UserDefinedPythonDataSourceReadRunner.runInPython`
-    method in the optimizer rule `PlanPythonDataSourceScan` in JVM. This process is responsible
+    This process is invoked from the `UserDefinedPythonDataSourceFilterPushdownRunner.runInPython`
+    method called by `PythonScanBuilder.pushFilters` in JVM. This process is responsible
     for creating a `DataSourceReader` object, applying filter pushdown, and sending the
     information needed back to the JVM.
 
@@ -137,7 +137,15 @@ def main(infile: IO, outfile: IO) -> None:
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. It applies the filters by calling the `pushFilters` method
     on the reader and determines which filters are supported. The indices of the supported
-    filters are sent back to the JVM, along with the list of partitions and the read function.
+    filters are sent back to the JVM.
+
+    Depending on whether column pruning is implemented, this process either returns the
+    `DataSource` instance or the `DataSourceReader` instance to the JVM.
+    - When `pruneColumns` is implemented, another Python worker call may be needed to perform the
+      pruning, so we need to return the `DataSource` instance.
+    - Otherwise, we can return the read function and the partitions directly because we are the
+      last Python worker call during planning. `PythonScanBuilder` will skip the column pruning
+      worker because it now knows that `pruneColumns` is not implemented.
     """
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
@@ -240,16 +248,16 @@ def main(infile: IO, outfile: IO) -> None:
             # pushed down filters.
             data_source.reader = lambda schema: reader  # type: ignore[method-assign]
             pickleSer._write_with_length(data_source, outfile)
-
-        # Return the read function and partitions. Doing this in the same worker as
-        # filter pushdown helps reduce the number of Python worker calls.
-        write_read_func_and_partitions(
-            outfile,
-            reader=reader,
-            data_source=data_source,
-            schema=schema,
-            max_arrow_batch_size=max_arrow_batch_size,
-        )
+        else:
+            # Return the read function and partitions. Doing this in the same worker as
+            # filter pushdown helps reduce the number of Python worker calls.
+            write_read_func_and_partitions(
+                outfile,
+                reader=reader,
+                data_source=data_source,
+                schema=schema,
+                max_arrow_batch_size=max_arrow_batch_size,
+            )
 
         # Return the supported filter indices.
         write_int(len(supported_filter_indices), outfile)
