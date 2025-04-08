@@ -114,7 +114,7 @@ private[spark] object SerializationDebugger extends Logging {
 
           case s: Object with java.io.Serializable if Utils.isTesting =>
             val str = try {
-              String.valueOf(s)
+              s.toString
             } catch {
               case _: SparkRuntimeException => "exception in toString"
             }

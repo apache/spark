@@ -216,6 +216,7 @@ class SerializableClass2(val objectField: Object) extends Serializable
 
 class SerializableClassWithStringException(val objectField: Object) extends Serializable {
   override def toString: String = {
+    // simulate the behavior of TreeNode#toString that SQLConf.get may throw exception
     throw new SparkRuntimeException(errorClass = "INTERNAL_ERROR",
       messageParameters = Map("message" -> "this is an internal error"),
       cause = null)
