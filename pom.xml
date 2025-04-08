@@ -2663,6 +2663,12 @@
         <version>${parquet.version}</version>
         <scope>${parquet.test.deps.scope}</scope>
         <classifier>tests</classifier>
+        <exclusions>
+          <exclusion>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
