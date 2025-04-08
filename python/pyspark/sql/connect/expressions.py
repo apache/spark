@@ -1289,11 +1289,14 @@ class SubqueryExpression(Expression):
     def __repr__(self) -> str:
         repr_parts = [f"plan={self._plan}", f"type={self._subquery_type}"]
 
-        if self._partition_spec:
-            repr_parts.append(f"partition_spec={self._partition_spec}")
-        if self._order_spec:
-            repr_parts.append(f"order_spec={self._order_spec}")
-        if self._with_single_partition is not None:
-            repr_parts.append(f"with_single_partition={self._with_single_partition}")
+        if self._subquery_type == "table_arg":
+            if self._partition_spec:
+                repr_parts.append(f"partition_spec={self._partition_spec}")
+            if self._order_spec:
+                repr_parts.append(f"order_spec={self._order_spec}")
+            if self._with_single_partition is not None:
+                repr_parts.append(f"with_single_partition={self._with_single_partition}")
+        elif self._subquery_type == "in":
+            repr_parts.append(f"values={self._in_subquery_values}")
 
         return f"SubqueryExpression({', '.join(repr_parts)})"
