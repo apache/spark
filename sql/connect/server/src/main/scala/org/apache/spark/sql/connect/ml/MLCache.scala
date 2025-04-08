@@ -52,10 +52,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     .weigher((key: String, value: CacheItem) => {
       Math.ceil(value.sizeBytes.toDouble / 1024).toInt
     })
-    .removalListener(
-      (removed: RemovalNotification[String, CacheItem]) =>
-        totalSizeBytes.addAndGet(-removed.getValue.sizeBytes)
-    )
+    .removalListener((removed: RemovalNotification[String, CacheItem]) =>
+      totalSizeBytes.addAndGet(-removed.getValue.sizeBytes))
     .build[String, CacheItem]()
     .asMap()
 

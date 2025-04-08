@@ -384,10 +384,8 @@ class MLSuite extends MLHelper {
   test("Memory limitation of MLCache works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val memorySizeBytes = 1024 * 16
-    sessionHolder.session.conf.set(
-      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MAX_SIZE.key,
-      memorySizeBytes
-    )
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MAX_SIZE.key, memorySizeBytes)
     trainLogisticRegressionModel(sessionHolder)
     assert(sessionHolder.mlCache.cachedModel.size() == 1)
     assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)

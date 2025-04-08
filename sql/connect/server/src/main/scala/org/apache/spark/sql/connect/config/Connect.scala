@@ -338,7 +338,7 @@ object Connect {
     buildConf("spark.connect.session.connectML.mlCache.maxSize")
       .doc("Maximum size of the MLCache per session. The cache will evict the least recently" +
         "used models if the size exceeds this limit. The size is in bytes.")
-      .version("4.0.0")
+      .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
       // By default, 1/3 of total designated memory (the configured -Xmx).
@@ -346,9 +346,10 @@ object Connect {
 
   val CONNECT_SESSION_CONNECT_ML_CACHE_TIMEOUT =
     buildConf("spark.connect.session.connectML.mlCache.timeout")
-      .doc("Timeout of models in MLCache. Models will be evicted from the cache if they are not " +
-        "used for this amount of time. The timeout is in minutes.")
-      .version("4.0.0")
+      .doc(
+        "Timeout of models in MLCache. Models will be evicted from the cache if they are not " +
+          "used for this amount of time. The timeout is in minutes.")
+      .version("4.1.0")
       .internal()
       .timeConf(TimeUnit.MINUTES)
       .createWithDefault(15)
