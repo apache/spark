@@ -483,8 +483,8 @@ message SubqueryExpression {
   // (Optional) Options specific to table arguments.
   optional TableArgOptions table_arg_options = 3;
 
-  // (Optional) IN subquery options.
-  optional InSubqueryOptions in_subquery_options = 4;
+  // (Optional) IN subquery values.
+  repeated Expression in_subquery_values = 4;
 
   enum SubqueryType {
     SUBQUERY_TYPE_UNKNOWN = 0;
@@ -504,11 +504,5 @@ message SubqueryExpression {
 
     // (Optional) Whether this is a single partition.
     optional bool with_single_partition = 3;
-  }
-
-  // Nested message for IN subquery.
-  message InSubqueryOptions {
-    // (Required) The values to be compared.
-    repeated Expression values = 1;
   }
 }

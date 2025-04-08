@@ -668,7 +668,7 @@ case class SubqueryExpression(
     extends ColumnNode {
   override def sql: String = subqueryType match {
     case SubqueryType.SCALAR => s"($ds)"
-    case SubqueryType.IN(values) => s"(${values.map(_.sql).mkString(",")}) $subqueryType ($ds)"
+    case SubqueryType.IN(values) => s"(${values.map(_.sql).mkString(",")}) IN ($ds)"
     case _ => s"$subqueryType ($ds)"
   }
   override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty

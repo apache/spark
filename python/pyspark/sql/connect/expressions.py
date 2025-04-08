@@ -1280,7 +1280,7 @@ class SubqueryExpression(Expression):
                 table_arg_options.with_single_partition = self._with_single_partition
         elif self._subquery_type == "in":
             expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_IN
-            expr.subquery_expression.in_subquery_options.values.extend(
+            expr.subquery_expression.in_subquery_values.extend(
                 [expr.to_plan(session) for expr in self._in_subquery_values]
             )
 

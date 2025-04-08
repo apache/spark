@@ -4026,11 +4026,8 @@ class SparkConnectPlanner(
           UnresolvedTableArgPlanId(planId)
         }
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN =>
-        assertPlan(
-          getSubqueryExpression.hasInSubqueryOptions,
-          "`is_subquery_options` must be present for IN subquery.")
         UnresolvedInSubqueryPlanId(
-          getSubqueryExpression.getInSubqueryOptions.getValuesList.asScala.map { value =>
+          getSubqueryExpression.getInSubqueryValuesList.asScala.map { value =>
             transformExpression(value)
           }.toSeq,
           planId)

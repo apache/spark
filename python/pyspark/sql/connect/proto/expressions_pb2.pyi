@@ -2009,32 +2009,10 @@ class SubqueryExpression(google.protobuf.message.Message):
             ],
         ) -> typing_extensions.Literal["with_single_partition"] | None: ...
 
-    class InSubqueryOptions(google.protobuf.message.Message):
-        """Nested message for IN subquery."""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        VALUES_FIELD_NUMBER: builtins.int
-        @property
-        def values(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___Expression
-        ]:
-            """(Required) The values to be compared."""
-        def __init__(
-            self,
-            *,
-            values: collections.abc.Iterable[global___Expression] | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["values", b"values"]
-        ) -> None: ...
-
     PLAN_ID_FIELD_NUMBER: builtins.int
     SUBQUERY_TYPE_FIELD_NUMBER: builtins.int
     TABLE_ARG_OPTIONS_FIELD_NUMBER: builtins.int
-    IN_SUBQUERY_OPTIONS_FIELD_NUMBER: builtins.int
+    IN_SUBQUERY_VALUES_FIELD_NUMBER: builtins.int
     plan_id: builtins.int
     """(Required) The ID of the corresponding connect plan."""
     subquery_type: global___SubqueryExpression.SubqueryType.ValueType
@@ -2043,38 +2021,31 @@ class SubqueryExpression(google.protobuf.message.Message):
     def table_arg_options(self) -> global___SubqueryExpression.TableArgOptions:
         """(Optional) Options specific to table arguments."""
     @property
-    def in_subquery_options(self) -> global___SubqueryExpression.InSubqueryOptions:
-        """(Optional) IN subquery options."""
+    def in_subquery_values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
+        """(Optional) IN subquery values."""
     def __init__(
         self,
         *,
         plan_id: builtins.int = ...,
         subquery_type: global___SubqueryExpression.SubqueryType.ValueType = ...,
         table_arg_options: global___SubqueryExpression.TableArgOptions | None = ...,
-        in_subquery_options: global___SubqueryExpression.InSubqueryOptions | None = ...,
+        in_subquery_values: collections.abc.Iterable[global___Expression] | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_in_subquery_options",
-            b"_in_subquery_options",
-            "_table_arg_options",
-            b"_table_arg_options",
-            "in_subquery_options",
-            b"in_subquery_options",
-            "table_arg_options",
-            b"table_arg_options",
+            "_table_arg_options", b"_table_arg_options", "table_arg_options", b"table_arg_options"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_in_subquery_options",
-            b"_in_subquery_options",
             "_table_arg_options",
             b"_table_arg_options",
-            "in_subquery_options",
-            b"in_subquery_options",
+            "in_subquery_values",
+            b"in_subquery_values",
             "plan_id",
             b"plan_id",
             "subquery_type",
@@ -2083,12 +2054,6 @@ class SubqueryExpression(google.protobuf.message.Message):
             b"table_arg_options",
         ],
     ) -> None: ...
-    @typing.overload
-    def WhichOneof(
-        self,
-        oneof_group: typing_extensions.Literal["_in_subquery_options", b"_in_subquery_options"],
-    ) -> typing_extensions.Literal["in_subquery_options"] | None: ...
-    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_table_arg_options", b"_table_arg_options"]
     ) -> typing_extensions.Literal["table_arg_options"] | None: ...

@@ -226,8 +226,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           case SubqueryType.SCALAR => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR
           case SubqueryType.EXISTS => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS
           case SubqueryType.IN(values) =>
-            b.getInSubqueryOptionsBuilder
-              .addAllValues(values.map(value => apply(value, e)).asJava)
+            b.addAllInSubqueryValues(values.map(value => apply(value, e)).asJava)
             proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN
         })
         assert(relation.hasCommon && relation.getCommon.hasPlanId)
