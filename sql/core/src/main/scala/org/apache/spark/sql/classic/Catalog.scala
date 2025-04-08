@@ -700,7 +700,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
       comment = { if (description.isEmpty) None else Some(description) },
       collation = None,
       serde = None,
-      external = tableType == CatalogTableType.EXTERNAL)
+      external = tableType == CatalogTableType.EXTERNAL,
+      constraints = Seq.empty)
 
     val plan = CreateTable(
       name = UnresolvedIdentifier(ident),
