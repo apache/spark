@@ -410,6 +410,70 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         // scalastyle:on
       }
     }
+    withView(testView) {
+      // scalastyle:off
+      sql(
+        s"""CREATE OR REPLACE VIEW $testView
+          | (c1)
+          | DEFAULT COLLATION sr_ai
+          | AS SELECT 'Ć' as c1 WHERE 'Ć' = 'C'
+          |""".stripMargin)
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'Č'"), Row(1))
+      // scalastyle:on
+    }
+  }
+
+  test("CREATE VIEW with DEFAULT COLLATION") {
+    withView(testView) {
+      sql(
+        s"""CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE
+          | as SELECT 'a' as c1
+          |""".stripMargin)
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(1)))
+    }
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE)")
+      sql(s"INSERT INTO $testTable VALUES ('a'), ('A')")
+      withView(testView) {
+        withSQLConf() {
+          // scalastyle:off
+          sql(
+            s"""CREATE VIEW $testView DEFAULT COLLATION SR_AI_CI
+              | AS SELECT c1 FROM $testTable
+              | WHERE 'ć' = 'č'
+              |""".stripMargin)
+          // scalastyle:on
+          checkAnswer(sql(s"SELECT COUNT(*) FROM $testView"), Seq(Row(2)))
+          checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(2)))
+        }
+      }
+    }
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE)")
+      // scalastyle:off
+      sql(s"INSERT INTO $testTable VALUES ('ć'), ('č')")
+      // scalastyle:on
+      withView(testView) {
+        sql(
+          s"""CREATE VIEW $testView DEFAULT COLLATION UNICODE
+            | AS SELECT CAST(c1 AS STRING COLLATE SR_AI) FROM $testTable
+            |""".stripMargin)
+        val prefix = "SYSTEM.BUILTIN"
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $testView"), Row(s"$prefix.sr_AI"))
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'c'"), Row(2))
+      }
+    }
+    withView(testView) {
+      sql(
+        s"""CREATE VIEW $testView DEFAULT COLLATION UTF8_LCASE
+          | AS SELECT 'a' AS c1,
+          | (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END)
+          |  WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2
+          |""".stripMargin)
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Seq(Row(1)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'a'"), Seq(Row(1)))
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c2 = 'b'"), Seq(Row(0)))
+    }
   }
 }
 

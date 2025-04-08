@@ -158,6 +158,7 @@ case class AnalysisContext(
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
     isExecuteImmediate: Boolean = false,
+    collation: Option[String] = None,
 
     /**
      * This is a bridge state between this fixed-point [[Analyzer]] and a single-pass [[Resolver]].
@@ -213,7 +214,8 @@ object AnalysisContext {
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       viewDesc.viewReferredTempVariableNames,
-      isExecuteImmediate = originContext.isExecuteImmediate)
+      isExecuteImmediate = originContext.isExecuteImmediate,
+      collation = viewDesc.collation)
     set(context)
     try f finally { set(originContext) }
   }
@@ -1831,7 +1833,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * Returns true if `exprs` contains a [[Star]].
      */
     def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+      exprs.exists(_.collectFirst { case _: Star => true }.nonEmpty)
 
     private def extractStar(exprs: Seq[Expression]): Seq[Star] =
       exprs.flatMap(_.collect { case s: Star => s })

@@ -326,7 +326,7 @@ object SQLConf {
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(true)
 
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
