@@ -154,7 +154,7 @@ case class StructField(
    * It is present when the column represents a UDF argument type with a default
    * value, such as: CREATE FUNCTION f(arg INT DEFAULT 42) RETURN ....
    */
-  private[sql] def getDefault(): Option[String] = {
+  private[sql] def getParameterDefault(): Option[String] = {
     if (metadata.contains(StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY)) {
       Option(metadata.getString(StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY))
     } else {
@@ -224,7 +224,8 @@ case class StructField(
     metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
   }
 
-  private def getDDLDefault = getDefault()
+  private def getDDLDefault =
+    getParameterDefault()
     .orElse(getCurrentDefaultValue())
     .map(" DEFAULT " + _)
     .getOrElse("")
