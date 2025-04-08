@@ -137,9 +137,6 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     ret
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
-
-  override def iteratorForTesting(colFamilyName: String): Iterator[UnsafeRowPair] =
-    iterator(colFamilyName)
 }
 
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {

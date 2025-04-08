@@ -1134,7 +1134,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(!store.hasCommitted)
       assert(get(store, "a", 0) === None)
       assert(store.iterator().isEmpty)
-      assert(store.metrics.numKeys === 0)
 
       // Verify state after updating
       put(store, "a", 0, 1)
@@ -1148,9 +1147,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "aa", 0, 3)
       remove(store, _._1.startsWith("a"))
       assert(store.commit() === 1)
+      assert(store.metrics.numKeys === 1)
 
       assert(store.hasCommitted)
-      assert(rowPairsToDataSet(store.iterator()) === Set(("b", 0) -> 2))
+      assert(rowPairsToDataSet(provider.getStore(1).iterator()) === Set(("b", 0) -> 2))
       assert(getLatestData(provider,
         useColumnFamilies = colFamiliesEnabled) === Set(("b", 0) -> 2))
 
@@ -1170,7 +1170,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         val reloadedStore = reloadedProvider.getStore(1)
         put(reloadedStore, "c", 0, 4)
         assert(reloadedStore.commit() === 2)
-        assert(rowPairsToDataSet(reloadedStore.iterator()) === Set(("b", 0) -> 2, ("c", 0) -> 4))
+        assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator()) ===
+          Set(("b", 0) -> 2, ("c", 0) -> 4))
         assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled)
           === Set(("b", 0) -> 2, ("c", 0) -> 4))
         assert(getData(provider, version = 1, useColumnFamilies = colFamiliesEnabled)
@@ -1252,15 +1253,17 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "e", 0, 5)
       assert(store.commit() === 1)
       assert(store.metrics.numKeys === 5)
-      assert(rowPairsToDataSet(store.iterator()) ===
-        Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
 
       val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
       val reloadedStore = reloadedProvider.getStore(1)
+
+      assert(rowPairsToDataSet(reloadedStore.iterator()) ===
+        Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+
       remove(reloadedStore, _._1 == "b")
       assert(reloadedStore.commit() === 2)
       assert(reloadedStore.metrics.numKeys === 4)
-      assert(rowPairsToDataSet(reloadedStore.iterator()) ===
+      assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator()) ===
         Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
     }
   }
@@ -1274,14 +1277,16 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "b", 0, 2)
 
       // Updates should work while iterating of filtered entries
-      val filtered = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("a", 0) }
+      val filtered = store.iterator().filter {
+        tuple => keyRowToData(tuple.key) == ("a", 0) }
       filtered.foreach { tuple =>
         store.put(tuple.key, dataToValueRow(valueRowToData(tuple.value) + 1))
       }
       assert(get(store, "a", 0) === Some(2))
 
       // Removes should work while iterating of filtered entries
-      val filtered2 = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("b", 0) }
+      val filtered2 = store.iterator().filter {
+        tuple => keyRowToData(tuple.key) == ("b", 0) }
       filtered2.foreach { tuple => store.remove(tuple.key) }
       assert(get(store, "b", 0) === None)
     }
@@ -1292,7 +1297,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
       store.commit()
-      assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
+      assert(rowPairsToDataSet(provider.getStore(1).iterator()) === Set(("a", 0) -> 1))
 
       // cancelUpdates should not change the data in the files
       val store1 = provider.getStore(1)
@@ -1338,7 +1343,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
       assert(store.commit() === 1)
-      assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
 
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
@@ -1351,7 +1355,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
       put(store1, "b", 0, 1)
       assert(store1.commit() === 2)
-      assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
+      val store2 = provider.getStore(2)
+      assert(rowPairsToDataSet(store2.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
 
       checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
       checkInvalidVersion(3, provider.isInstanceOf[HDFSBackedStateStoreProvider])
@@ -1376,7 +1381,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       put(store, key1, key2, 1)
       store.commit()
-      assert(rowPairsToDataSet(store.iterator()) === Set((key1, key2) -> 1))
+      assert(rowPairsToDataSet(provider0.getStore(1).iterator()) === Set((key1, key2) -> 1))
     }
 
     // two state stores
@@ -1590,11 +1595,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // minDeltasForSnapshot = 1 to enable snapshot generation here.
     tryWithProviderResource(newStoreProvider(minDeltasForSnapshot = 1,
       numOfVersToRetainInMemory = 1)) { provider =>
-      val store = provider.getStore(0)
-      val noDataMemoryUsed = store.metrics.memoryUsedBytes
-      put(store, "a", 0, 1)
-      store.commit()
-      assert(store.metrics.memoryUsedBytes > noDataMemoryUsed)
+      val store0 = provider.getStore(0)
+      put(store0, "a", 0, 1)
+      store0.commit()
+      val store0MemoryUsed = store0.metrics.memoryUsedBytes
+      val store1 = provider.getStore(1)
+      put(store1, "b", 0, 1)
+      store1.commit()
+      assert(store1.metrics.memoryUsedBytes > store0MemoryUsed)
     }
   }
 

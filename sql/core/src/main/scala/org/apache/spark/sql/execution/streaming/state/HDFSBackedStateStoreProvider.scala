@@ -101,9 +101,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
       throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
     }
-
-    override def iteratorForTesting(colFamilyName: String): Iterator[UnsafeRowPair] =
-      iterator(colFamilyName)
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
@@ -263,9 +260,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         colFamilyName: String): Unit = {
       throw StateStoreErrors.unsupportedOperationException("merge", providerName)
     }
-
-    override def iteratorForTesting(colFamilyName: String): Iterator[UnsafeRowPair] =
-      iterator(colFamilyName)
   }
 
   def getMetricsForProvider(): Map[String, Long] = synchronized {

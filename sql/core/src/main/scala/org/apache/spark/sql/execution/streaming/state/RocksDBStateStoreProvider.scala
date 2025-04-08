@@ -264,11 +264,8 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
     }
 
-    override def iteratorForTesting(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      iteratorInternal(colFamilyName)
-    }
-
-    private def iteratorInternal(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
       // but pass "iterator" to throw correct error message
@@ -299,11 +296,6 @@ private[sql] class RocksDBStateStoreProvider
           rowPair
         }
       }
-    }
-
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      validateAndTransitionState(UPDATE)
-      iteratorInternal(colFamilyName)
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):

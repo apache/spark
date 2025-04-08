@@ -109,10 +109,6 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
-  def iteratorForTesting(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    Iterator[UnsafeRowPair]
-
-  /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
 
   /**
@@ -203,10 +199,6 @@ trait StateStore extends ReadStateStore {
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[UnsafeRowPair]
 
-  /** Return an iterator containing all the key-value pairs in the StateStore. */
-  def iteratorForTesting(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    Iterator[UnsafeRowPair]
-
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
 
@@ -238,9 +230,6 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName)
 
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    Iterator[UnsafeRowPair] = store.iterator(colFamilyName)
-
-  def iteratorForTesting(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
