@@ -133,7 +133,7 @@ public final class UnsafeKVExternalSorter {
       // pages in BytesToBytesMap to hold records during sorting.
       // The only new memory we are allocating is the pointer/prefix array.
       BytesToBytesMap.MapIterator iter = map.iterator();
-      final int numKeyFields = keySchema.size();
+      final int numKeyFields = keySchema.length;
       UnsafeRow row = new UnsafeRow(numKeyFields);
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
