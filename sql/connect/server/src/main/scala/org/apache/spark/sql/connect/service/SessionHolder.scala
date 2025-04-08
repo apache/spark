@@ -112,7 +112,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     new ConcurrentHashMap()
 
   // ML model cache
-  private[connect] lazy val mlCache = new MLCache()
+  private[connect] lazy val mlCache = new MLCache(this)
 
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.

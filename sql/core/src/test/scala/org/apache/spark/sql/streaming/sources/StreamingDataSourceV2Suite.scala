@@ -352,7 +352,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       Trigger.AvailableNow()) { v2Query =>
       val sink = v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
       assert(sink.isInstanceOf[Table])
-      assert(sink.schema() == StructType(Nil))
+      assert(sink.columns.isEmpty)
     }
   }
 

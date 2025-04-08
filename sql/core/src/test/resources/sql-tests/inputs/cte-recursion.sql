@@ -463,3 +463,27 @@ WITH RECURSIVE t1(a,b,c) AS (
     UNION ALL
     SELECT a+1,a+1,a+1 FROM t1)
 SELECT a FROM t1 LIMIT 5;
+
+-- CROSS JOIN example
+CREATE TABLE tb (next INT);
+
+INSERT INTO tb VALUES (0), (1);
+
+WITH RECURSIVE t(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT next FROM t CROSS JOIN tb
+    )
+SELECT * FROM t LIMIT 63;
+
+DROP TABLE tb;
+-- CROSS JOIN example 2
+
+WITH RECURSIVE
+    x(id) AS (SELECT 1 UNION SELECT 2),
+    t(id, xid) AS (
+        SELECT 0 AS id, 0 AS xid
+        UNION ALL
+        SELECT t.id + 1, xid * 10 + x.id FROM t CROSS JOIN x WHERE t.id < 3
+    )
+SELECT * FROM t
