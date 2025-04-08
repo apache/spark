@@ -57,6 +57,8 @@ ArrowGroupedMapUDFType = Literal[209]
 ArrowCogroupedMapUDFType = Literal[210]
 PandasGroupedMapUDFTransformWithStateType = Literal[211]
 PandasGroupedMapUDFTransformWithStateInitStateType = Literal[212]
+GroupedMapUDFTransformWithStateType = Literal[213]
+GroupedMapUDFTransformWithStateInitStateType = Literal[214]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike_) -> DataFrameOrSeriesLike_: ...

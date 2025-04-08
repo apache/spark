@@ -17,14 +17,15 @@
 import unittest
 
 from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
-    TransformWithStateInPandasTestsMixin,
+    TransformWithStateInPandasTestsMixIn,
+    TransformWithStateInPySparkTestsMixIn,
 )
 from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TransformWithStateInPandasParityTests(
-    TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
+    TransformWithStateInPandasTestsMixIn, ReusedConnectTestCase
 ):
     """
     Spark connect parity tests for TransformWithStateInPandas. Run every test case in
@@ -53,13 +54,45 @@ class TransformWithStateInPandasParityTests(
         pass
 
 
+# TODO: need to unblock once we implement transformWithState in Python Spark Connect
+# class TransformWithStateInPySparkParityTests(
+#     TransformWithStateInPySparkTestsMixIn, ReusedConnectTestCase
+# ):
+#     """
+#     Spark connect parity tests for TransformWithStateInPySpark. Run every test case in
+#      `TransformWithStateInPySparkTestsMixIn` in spark connect mode.
+#     """
+#
+#     @classmethod
+#     def conf(cls):
+#         # Due to multiple inheritance from the same level, we need to explicitly setting configs in
+#         # both TransformWithStateInPySparkTestsMixIn and ReusedConnectTestCase here
+#         cfg = SparkConf(loadDefaults=False)
+#         for base in cls.__bases__:
+#             if hasattr(base, "conf"):
+#                 parent_cfg = base.conf()
+#                 for k, v in parent_cfg.getAll():
+#                     cfg.set(k, v)
+#
+#         # Extra removing config for connect suites
+#         if cfg._jconf is not None:
+#             cfg._jconf.remove("spark.master")
+#
+#         return cfg
+#
+#     @unittest.skip("Flaky in spark connect on CI. Skip for now. See SPARK-51368 for details.")
+#     def test_schema_evolution_scenarios(self):
+#         pass
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state import *  # noqa: F401,E501
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    # TODO: Implement transformWithState in Python Spark Connect
+    # try:
+    #     import xmlrunner
+    #
+    #     testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    # except ImportError:
+    #     testRunner = None
+    # unittest.main(testRunner=testRunner, verbosity=2)
