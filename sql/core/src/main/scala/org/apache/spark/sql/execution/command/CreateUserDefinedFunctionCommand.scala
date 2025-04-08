@@ -157,7 +157,7 @@ object CreateUserDefinedFunctionCommand {
     var defaultFound = false
     var previousParamName = "";
     param.fields.foreach { field =>
-      if (field.getParameterDefault().isEmpty && defaultFound) {
+      if (field.getDefault().isEmpty && defaultFound) {
         throw new AnalysisException(
           errorClass = "USER_DEFINED_FUNCTIONS.NOT_A_VALID_DEFAULT_PARAMETER_POSITION",
           messageParameters = Map(
@@ -165,7 +165,7 @@ object CreateUserDefinedFunctionCommand {
             "parameterName" -> previousParamName,
             "nextParameterName" -> field.name))
       }
-      defaultFound |= field.getParameterDefault().isDefined
+      defaultFound |= field.getDefault().isDefined
       previousParamName = field.name
     }
   }
