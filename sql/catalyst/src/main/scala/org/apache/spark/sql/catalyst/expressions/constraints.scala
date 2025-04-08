@@ -166,7 +166,7 @@ case class ForeignKeyConstraint(
   extends TableConstraint {
 
   override protected def generateConstraintName(tableName: String): String =
-    s"${tableName}_${parentTableId.last}_fk"
+    s"${tableName}_${parentTableId.last}_fk_$randomSuffix"
 
   override def withName(name: String): TableConstraint = copy(name = name)
 
