@@ -216,7 +216,9 @@ class SerializableClass2(val objectField: Object) extends Serializable
 
 class SerializableClassWithStringException(val objectField: Object) extends Serializable {
   override def toString: String = {
-    throw new SparkRuntimeException(errorClass = "INTERNAL_ERROR", Map.empty)
+    throw new SparkRuntimeException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> "this is an internal error"),
+      cause = null)
   }
 }
 

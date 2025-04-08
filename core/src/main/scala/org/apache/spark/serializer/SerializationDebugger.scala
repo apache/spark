@@ -26,8 +26,10 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.SparkClassUtils
+import org.apache.spark.util.Utils
 
 private[spark] object SerializationDebugger extends Logging {
 
@@ -110,11 +112,11 @@ private[spark] object SerializationDebugger extends Logging {
             val elem = s"externalizable object (class ${e.getClass.getName}, $e)"
             visitExternalizable(e, elem :: stack)
 
-          case s: Object with java.io.Serializable =>
+          case s: Object with java.io.Serializable if Utils.isTesting =>
             val str = try {
               String.valueOf(s)
             } catch {
-              case _: Throwable => "exception in toString"
+              case _: SparkRuntimeException => "exception in toString"
             }
             val elem = s"object (class ${s.getClass.getName}, $str)"
             visitSerializable(s, elem :: stack)
