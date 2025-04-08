@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, IntegerType, ObjectType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -303,7 +303,8 @@ case class SecondsOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType())
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -327,7 +328,7 @@ case class SecondsOfTime(child: Expression)
     Examples:
       > SELECT _FUNC_('2018-02-14 12:58:59');
        59
-      > SELECT _FUNC_(TIME'13:59:59.999999');
+      > SELECT _FUNC_(TIME'13:25:59.999999');
        59
   """,
   since = "1.5.0",
