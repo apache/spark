@@ -127,15 +127,15 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
   private var id: StateStoreId = null
 
   override def init(
-                     stateStoreId: StateStoreId,
-                     keySchema: StructType,
-                     valueSchema: StructType,
-                     keyStateEncoderSpec: KeyStateEncoderSpec,
-                     useColumnFamilies: Boolean,
-                     storeConfs: StateStoreConf,
-                     hadoopConf: Configuration,
-                     useMultipleValuesPerKey: Boolean = false,
-                     stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
     id = stateStoreId
   }
 

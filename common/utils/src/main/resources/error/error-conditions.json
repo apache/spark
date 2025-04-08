@@ -4859,7 +4859,7 @@
     ],
     "subClass" : {
       "OPERATION_OUT_OF_ORDER" : {
-        "message": [
+        "message" : [
           "A state store state machine operation is out of order. errorMsg=<errorMsg>"
         ]
       }
