@@ -587,7 +587,7 @@ class DataSourceReader(ABC):
             The schema of the data source that is required by the query.
 
             This is a subset of the full schema.
-            All fields that are not in this schema are unecessary and can be pruned.
+            All fields that are not in this schema are unnecessary and can be pruned.
 
         Returns
         -------
