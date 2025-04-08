@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.parquet
 
+package org.apache.spark.sql.execution.datasources.parquet
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -34,15 +34,13 @@ import org.apache.parquet.hadoop._
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
-import org.apache.spark.sql.{sources, SparkSession}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.expressions.{filter => connectorFilter, LiteralValue, NamedReference}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
@@ -56,9 +54,14 @@ class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
+
   override def shortName(): String = "parquet"
 
   override def toString: String = "Parquet"
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[ParquetFileFormat]
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -528,13 +531,5 @@ object ParquetFileFormat extends Logging {
             log"Parquet key-value metadata:\n\t${MDC(SCHEMA, schemaString)}", cause)
         Failure(cause)
     }.toOption
-  }
-
-  def convertToV1(predicates: Array[connectorFilter.Predicate]): Array[Filter] = {
-    predicates.map(pred => {
-      val attribName = pred.children().head.asInstanceOf[NamedReference].fieldNames().mkString(".")
-      val bcVar = pred.children()(1).asInstanceOf[LiteralValue[BroadcastedJoinKeysWrapper]].value
-      sources.In(attribName, Array(bcVar))
-    })
   }
 }

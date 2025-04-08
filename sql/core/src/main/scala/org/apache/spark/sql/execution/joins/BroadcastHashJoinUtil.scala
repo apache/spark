@@ -45,7 +45,10 @@ object BroadcastHashJoinUtil {
       batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _],
       buildLegsBlockingPushFromAncestors: java.util.IdentityHashMap[SparkPlan, _])
       : Seq[BroadcastVarPushDownData] = {
-    if (conf.pushBroadcastedJoinKeysASFilterToScan && isBuildPlanPrunable(
+    if (conf.pushBroadcastedJoinKeysASFilterToScan &&
+      !BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(buildPlan.canonicalized).sameElements(
+        BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(streamPlan.canonicalized)) &&
+      isBuildPlanPrunable(
         buildPlan,
         batchScansSelectedForBCPush)) {
       getPushDownDataSkipBuildSideCheck(

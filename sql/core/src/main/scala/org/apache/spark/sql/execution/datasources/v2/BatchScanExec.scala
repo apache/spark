@@ -83,7 +83,7 @@ case class BatchScanExec(
 
   override def hashCode(): Int = {
     val batchHashCode = scan match {
-      case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
+      case sr: SupportsBroadcastVarPushdownFiltering => sr.hashCodeIgnoreRuntimeFilters()
 
       case _ => this.batch.hashCode()
     }

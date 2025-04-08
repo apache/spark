@@ -38,10 +38,6 @@ trait WrapsBroadcastVarPushDownSupporter {
   def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]):
   WrapsBroadcastVarPushDownSupporter
 
- // def setLogicalLink(logicalPlan: LogicalPlan): Unit
-
- // def output(): Seq[Attribute]
-
   def getTableIdentifier(): TableIdentifier
 
   def getSchema(): StructType
