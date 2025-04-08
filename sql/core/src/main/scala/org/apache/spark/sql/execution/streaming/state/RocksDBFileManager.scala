@@ -322,6 +322,10 @@ class RocksDBFileManager(
     }
     logFilesInDir(localDir, log"Loaded checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
+    logInfo(log"RocksDB file mapping after loading checkpoint version " +
+      log"${MDC(LogKeys.VERSION_NUM, version)} from DFS:\n" +
+      log"${MDC(LogKeys.ROCKS_DB_FILE_MAPPING, rocksDBFileMapping)}")
+
     metadata
   }
 

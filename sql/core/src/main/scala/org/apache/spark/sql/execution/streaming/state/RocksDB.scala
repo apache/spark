@@ -885,6 +885,10 @@ class RocksDB(
 
       val (dfsFileSuffix, immutableFileMapping) = rocksDBFileMapping.createSnapshotFileMapping(
         fileManager, checkpointDir, version)
+      logInfo(log"RocksDB file mapping after creating snapshot file mapping for version " +
+        log"${MDC(LogKeys.VERSION_NUM, version)}:\n" +
+        log"${MDC(LogKeys.ROCKS_DB_FILE_MAPPING, rocksDBFileMapping)}")
+
       val newSnapshot = Some(RocksDBSnapshot(
         checkpointDir,
         version,
@@ -1351,6 +1355,8 @@ class RocksDBFileMapping {
     localFileMappings.clear()
     snapshotsPendingUpload.clear()
   }
+
+  override def toString: String = localFileMappings.toString()
 
   /**
    * Get the mapped DFS file for the given local file for a DFS load operation.
