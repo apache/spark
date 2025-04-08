@@ -314,7 +314,9 @@ case class MakeTime(
     hours: Expression,
     minutes: Expression,
     secsAndMicros: Expression)
-  extends RuntimeReplaceable with ExpectsInputTypes {
+  extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
   override def children: Seq[Expression] = Seq(hours, minutes, secsAndMicros)
