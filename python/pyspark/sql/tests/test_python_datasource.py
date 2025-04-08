@@ -372,7 +372,7 @@ class BasePythonDataSourceTestsMixin:
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             df = self.load_df_with_column_pruning("a int, foo int not null", "foo int")
             with self.assertRaisesRegex(
-                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET.*foo"
+                Exception, "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET.*foo"
             ):
                 df.select("foo").collect()
 

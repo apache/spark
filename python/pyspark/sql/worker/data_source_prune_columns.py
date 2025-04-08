@@ -48,11 +48,22 @@ utf8_deserializer = UTF8Deserializer()
 
 def validate_schema(
     reader: DataSourceReader,
+    *,
     superset: StructType,
     subset: StructType,
     errorClass: str,
     should_check_nullability: bool,
 ) -> None:
+    """
+    Verify that `subset` is actually a subset of `superset`. This is used to validate that
+    the pruned schema is a subset of the full schema and a superset of the rquired schema.
+
+    If validation fails, raises a `PySparkValueError` with useful information for diagnosing
+    the problem.
+
+    If `should_check_nullability` is True, also checks that the nullability of the fields
+    in `subset` is not greater than the nullability of the fields in `superset`.
+    """
     path: List[str] = []
 
     def fail() -> None:
@@ -67,7 +78,7 @@ def validate_schema(
         )
 
     def check_nullability(superset_nullable: bool, subset_nullable: bool) -> None:
-        if should_check_nullability and not subset_nullable and superset_nullable:
+        if should_check_nullability and subset_nullable and not superset_nullable:
             fail()
 
     def check(superset: DataType, subset: DataType) -> None:
@@ -193,14 +204,14 @@ def main(infile: IO, outfile: IO) -> None:
                 superset=actual_schema,
                 subset=required_schema,
                 errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET",
-                should_check_nullability=True,
+                should_check_nullability=False,
             )
             validate_schema(
                 reader,
                 superset=full_schema,
                 subset=actual_schema,
                 errorClass="DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET",
-                should_check_nullability=False,
+                should_check_nullability=True,
             )
 
         # Receive the max arrow batch size.
