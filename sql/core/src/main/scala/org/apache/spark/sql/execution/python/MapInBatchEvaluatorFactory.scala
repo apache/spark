@@ -79,10 +79,17 @@ class MapInBatchEvaluatorFactory(
       columnarBatchIter.flatMap { batch =>
         // Ensure the schema matches the expected schema
         val actualSchema = batch.column(0).dataType()
-        if (!outputSchema.sameType(actualSchema)) {  // Ignore nullability mismatch for now
+        val strictCheck = true
+        val isCompatible = if (strictCheck) {
+          DataType.equalsIgnoreNullability(actualSchema, outputSchema)
+        } else {
+          outputSchema.sameType(actualSchema)
+        }
+        if (!isCompatible) {
           throw QueryExecutionErrors.arrowDataTypeMismatchError(
             PythonEvalType.toString(pythonEvalType), Seq(outputSchema), Seq(actualSchema))
         }
+
         // Scalar Iterator UDF returns a StructType column in ColumnarBatch, select
         // the children here
         val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
