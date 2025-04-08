@@ -33,7 +33,9 @@ import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileMan
  * stream to FailureInjectionFileSystem.delayedStreams
  * @param stream stream to be wrapped
  */
-class DelayCloseFSDataOutputStreamWrapper(stream: CancellableFSDataOutputStream)
+class DelayCloseFSDataOutputStreamWrapper(
+    stream: CancellableFSDataOutputStream,
+    injectionState: FailureInjectionState)
   extends CancellableFSDataOutputStream(stream.getWrappedStream) with Logging {
   val originalStream: CancellableFSDataOutputStream = stream
 
@@ -42,8 +44,7 @@ class DelayCloseFSDataOutputStreamWrapper(stream: CancellableFSDataOutputStream)
   override def close(): Unit = {
     if (!closed) {
       closed = true
-      FailureInjectionFileSystem.delayedStreams =
-        FailureInjectionFileSystem.delayedStreams :+ originalStream
+      injectionState.delayedStreams = injectionState.delayedStreams :+ originalStream
       throw new IOException("Fake File Stream Close Failure")
     }
   }
@@ -64,30 +65,33 @@ class DelayCloseFSDataOutputStreamWrapper(stream: CancellableFSDataOutputStream)
 class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) with Logging {
 
+  // Injection state for the path
+  private val injectionState = FailureInjectionFileSystem.getInjectionState(path.toString)
+
   override def createAtomic(path: Path,
                             overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
-    FailureInjectionFileSystem.failureCreateAtomicRegex.foreach { pattern =>
+    injectionState.failureCreateAtomicRegex.foreach { pattern =>
       if (path.toString.matches(pattern)) {
         throw new IOException("Fake File System Create Atomic Failure")
       }
     }
 
     var shouldDelay = false
-    FailureInjectionFileSystem.createAtomicDelayCloseRegex.foreach { pattern =>
+    injectionState.createAtomicDelayCloseRegex.foreach { pattern =>
       if (path.toString.matches(pattern)) {
         shouldDelay = true
       }
     }
     val ret = new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
     if (shouldDelay) {
-      new DelayCloseFSDataOutputStreamWrapper(ret)
+      new DelayCloseFSDataOutputStreamWrapper(ret, injectionState)
     } else {
       ret
     }
   }
 
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
-    if (FailureInjectionFileSystem.allowOverwriteInRename || !fs.exists(dstPath)) {
+    if (injectionState.allowOverwriteInRename || !fs.exists(dstPath)) {
       super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
     } else {
       logWarning(s"Skip renaming temp file $srcPath to $dstPath because it already exists.")
@@ -99,7 +103,7 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
   }
 
   override def exists(path: Path): Boolean = {
-    if (FailureInjectionFileSystem.shouldFailExist) {
+    if (injectionState.shouldFailExist) {
       throw new IOException("Fake File Exists Failure")
     }
     super.exists(path)
@@ -107,12 +111,9 @@ class FailureInjectionCheckpointFileManager(path: Path, hadoopConf: Configuratio
 }
 
 /**
- * Contains a list of variables for failure ingestion conditions.
- * These are singleton instances accessed by all instances of FailureInjectionCheckpointFileManager
- * and FailureInjectionFileSystem. This allows a unit test to have a global control of failure
- * and access to the delayed streams.
+ * A class that contains the failure injection state for a path.
  */
-object FailureInjectionFileSystem {
+class FailureInjectionState {
   // File names matching this regex will cause the copyFromLocalFile to fail
   var failPreCopyFromLocalFileNameRegex: Seq[String] = Seq.empty
   // File names matching this regex will cause the createAtomic to fail and put the streams in
@@ -127,6 +128,52 @@ object FailureInjectionFileSystem {
 
   // List of streams that are delayed in close() based on `createAtomicDelayCloseRegex`
   var delayedStreams: Seq[CancellableFSDataOutputStream] = Seq.empty
+}
+
+/**
+ * Contains a list of variables for failure ingestion conditions.
+ * These are singleton instances accessed by all instances of FailureInjectionCheckpointFileManager
+ * and FailureInjectionFileSystem. This allows a unit test to have a global control of failure
+ * and access to the delayed streams.
+ */
+object FailureInjectionFileSystem {
+  // A map from a temp path to its failure injection state.
+  var tempPathToInjectionState: Map[String, FailureInjectionState] = Map.empty
+
+  /**
+   * Create a new FailureInjectionState for a temp path and add it to the map.
+   * @param path  the temp path
+   * @return  the newly created failure injection state
+   */
+  def addPathToTempToInjectionState(path: String): FailureInjectionState = synchronized {
+    // Throw exception if the path already exists in the map
+    assert(!tempPathToInjectionState.contains(path), s"Path $path already exists in the map")
+    tempPathToInjectionState = tempPathToInjectionState + (path -> new FailureInjectionState)
+    tempPathToInjectionState(path)
+  }
+
+  /**
+   * Clean up a temp path and its failure injection state
+   * @param path the temp path to be cle
+   */
+  def removePathFromTempToInjectionState(path: String): Unit = synchronized {
+    tempPathToInjectionState = tempPathToInjectionState - path
+  }
+
+  /**
+   * find injection state based on temp dir as prefix
+   * @param path a path with temp dir as prefix
+   * @return the injection state if the path is in the map. Exception if there is no match for
+   *         prefix
+   */
+  def getInjectionState(path: String): FailureInjectionState = synchronized {
+    // remove "file://" prefix from path
+    val cleanedPath = path.replace("file:/", "/")
+    // return the injection state if the path in the map is prefix of path
+    val pathPrefix = tempPathToInjectionState.keys.find(cleanedPath.startsWith)
+    assert(pathPrefix.isDefined)
+    tempPathToInjectionState.get(pathPrefix.get).get
+  }
 }
 
 /**
@@ -170,7 +217,10 @@ class FailureInjectionFileSystem(innerFs: FileSystem) extends FileSystem {
   override def getFileStatus(f: Path): FileStatus = innerFs.getFileStatus(f)
 
   override def copyFromLocalFile(src: Path, dst: Path): Unit = {
-    FailureInjectionFileSystem.failPreCopyFromLocalFileNameRegex.foreach { pattern =>
+    // Find injection state based on the destination path
+    val injectionState = FailureInjectionFileSystem.getInjectionState(dst.toString)
+
+    injectionState.failPreCopyFromLocalFileNameRegex.foreach { pattern =>
       if (src.toString.matches(pattern)) {
         throw new IOException(s"Injected failure due to source path matching pattern: $pattern")
       }
