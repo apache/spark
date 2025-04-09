@@ -257,6 +257,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
+    // If the plan is cached, additionally check if options have changed.
     var updatedOptions: Boolean = false
 
     val cachedPlan = catalog.getCachedTable(qualifiedTableName)
