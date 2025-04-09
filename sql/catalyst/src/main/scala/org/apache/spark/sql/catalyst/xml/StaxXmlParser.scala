@@ -916,7 +916,7 @@ object StaxXmlParser {
   }
 
   /**
-   * Parse the input XML string as a Varaint value
+   * Parse the input XML string as a Variant value
    */
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
@@ -956,7 +956,8 @@ object StaxXmlParser {
       case (f, v) =>
         val builder = new VariantBuilder(false)
         appendXMLCharacterToVariant(builder, v, options)
-        addOrUpdateVariantFields(fieldToVariants, f, builder.result())
+        val variants = fieldToVariants.getOrElseUpdate(f, new java.util.ArrayList[Variant]())
+        variants.add(builder.result())
     }
 
     var shouldStop = false
@@ -967,22 +968,19 @@ object StaxXmlParser {
           // fieldsToVariants
           val attributes = s.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
           val field = StaxXmlParserUtils.getName(s.asStartElement.getName, options)
-          addOrUpdateVariantFields(
-            fieldToVariants = fieldToVariants,
-            field = field,
-            variant = convertVariant(parser, attributes, options)
-          )
+          val variants = fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
+          variants.add(convertVariant(parser, attributes, options))
 
         case c: Characters if !c.isWhiteSpace =>
           // Treat the character as a value tag field, where we use the [[XMLOptions.valueTag]] as
           // the field key
           val builder = new VariantBuilder(false)
           appendXMLCharacterToVariant(builder, c.getData, options)
-          addOrUpdateVariantFields(
-            fieldToVariants = fieldToVariants,
-            field = options.valueTag,
-            variant = builder.result()
+          val variants = fieldToVariants.getOrElseUpdate(
+            options.valueTag,
+            new java.util.ArrayList[Variant]()
           )
+          variants.add(builder.result())
 
         case _: EndElement =>
           if (fieldToVariants.nonEmpty) {
@@ -991,41 +989,7 @@ object StaxXmlParser {
               // If the element only has value tag field, parse the element as a variant primitive
               rootBuilder.appendVariant(fieldToVariants(options.valueTag).get(0))
             } else {
-              // Otherwise, build the element as an object with all the fields in fieldToVariants
-              val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
-
-              fieldToVariants.foreach {
-                case (field, variants) =>
-                  // Add the field key to the variant metadata
-                  val fieldId = rootBuilder.addKey(field)
-                  rootFieldEntries.add(
-                    new FieldEntry(field, fieldId, rootBuilder.getWritePos - start)
-                  )
-
-                  val fieldValue = if (variants.size() > 1) {
-                    // If the field has more than one entry, it's an array field. Build a Variant
-                    // array as the field value
-                    val arrayBuilder = new VariantBuilder(false)
-                    val start = arrayBuilder.getWritePos
-                    val offsets = new util.ArrayList[Integer]()
-                    variants.asScala.foreach { v =>
-                      offsets.add(arrayBuilder.getWritePos - start)
-                      arrayBuilder.appendVariant(v)
-                    }
-                    arrayBuilder.finishWritingArray(start, offsets)
-                    arrayBuilder.result()
-                  } else {
-                    // Otherwise, just use the first variant as the field value
-                    variants.get(0)
-                  }
-
-                  // Append the field value to the variant builder
-                  rootBuilder.appendVariant(fieldValue)
-              }
-
-              // Finish writing the root element as an object if it has more than one child element
-              // or attribute
-              rootBuilder.finishWritingObject(start, rootFieldEntries)
+              writeVariantObject(rootBuilder, start, fieldToVariants)
             }
           }
           shouldStop = true
@@ -1045,29 +1009,66 @@ object StaxXmlParser {
   }
 
   /**
-   * Add or update the given field and its corresponding variant values in the fieldToVariants map.
-   * If a field has multiple variant values, it will be parsed as a Variant array.
+   * Write a variant object to the variant builder.
+   * This method handles the case sensitivity of field names when building the variant object. When
+   * case sensitivity is disabled, a random field name will be used for all fields with the same
+   * lowercase name.
    *
-   * This method handles the case sensitivity of the field names based on the SQLConf setting.
+   * @param builder The variant builder to write to
+   * @param start The start position of the variant object in the builder
+   * @param fieldToVariants A map of field names to their corresponding variant values of the object
    */
-  private def addOrUpdateVariantFields(
-      fieldToVariants: collection.mutable.TreeMap[String, java.util.ArrayList[Variant]],
-      field: String,
-      variant: Variant): Unit = {
-    val variants = if (SQLConf.get.caseSensitiveAnalysis) {
-      // If case-sensitive analysis is enabled, we need to use the original field name
-      // to avoid case-insensitive key collision
-      fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
-    } else {
-      // Otherwise, we can use the lower-case field name for case-insensitive key collision
-      fieldToVariants.get(field.toLowerCase(Locale.ROOT)) match {
-        case Some(variantList) => variantList
-        case _ =>
-          // If the field doesn't exist, create the entry with the original field name
-          fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
+  private def writeVariantObject(
+      builder: VariantBuilder,
+      start: Int,
+      fieldToVariants: collection.mutable.TreeMap[String, java.util.ArrayList[Variant]]): Unit = {
+    // Otherwise, build the element as an object with all the fields in fieldToVariants
+    val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
+
+    fieldToVariants
+      // Group the fields by their keys and take case sensitivity into account
+      .groupBy {
+        case (k, _) if SQLConf.get.caseSensitiveAnalysis => k
+        case (k, _) => k.toLowerCase(Locale.ROOT)
       }
-    }
-    variants.add(variant)
+      .foreach {
+        case (_, fieldToVariantsGroup) =>
+          // Pick the first field key as the field name
+          val field = fieldToVariantsGroup.head._1
+
+          // Add the field key to the variant metadata
+          val fieldId = builder.addKey(field)
+          rootFieldEntries.add(
+            new FieldEntry(field, fieldId, builder.getWritePos - start)
+          )
+
+          // Aggregate all variant values for the field
+          val variants = fieldToVariantsGroup.values.flatMap(_.asScala)
+
+          val fieldValue = if (variants.size > 1) {
+            // If the field has more than one entry, it's an array field. Build a Variant
+            // array as the field value
+            val arrayBuilder = new VariantBuilder(false)
+            val start = arrayBuilder.getWritePos
+            val offsets = new util.ArrayList[Integer]()
+            variants.foreach { v =>
+              offsets.add(arrayBuilder.getWritePos - start)
+              arrayBuilder.appendVariant(v)
+            }
+            arrayBuilder.finishWritingArray(start, offsets)
+            arrayBuilder.result()
+          } else {
+            // Otherwise, just use the first variant as the field value
+            variants.head
+          }
+
+          // Append the field value to the variant builder
+          builder.appendVariant(fieldValue)
+      }
+
+    // Finish writing the root element as an object if it has more than one child element
+    // or attribute
+    builder.finishWritingObject(start, rootFieldEntries)
   }
 
   /**
@@ -1089,8 +1090,8 @@ object StaxXmlParser {
     val value = if (options.ignoreSurroundingSpaces) s.trim() else s
 
     // Exit early for empty strings
-    if (s.isEmpty) {
-      builder.appendString(s)
+    if (value.isEmpty) {
+      builder.appendString(value)
       return
     }
 

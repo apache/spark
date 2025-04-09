@@ -308,7 +308,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       testParser(
         xml = xmlString,
-        expectedJsonStr = """{"a":[{"_VALUE":1,"b":2},{"_VALUE":3,"b":4}]}"""
+        expectedJsonStr = """{"A":[{"_VALUE":3,"b":4},{"_VALUE":1,"b":2}]}"""
       )
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {

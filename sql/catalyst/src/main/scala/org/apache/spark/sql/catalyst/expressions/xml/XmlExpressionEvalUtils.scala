@@ -140,7 +140,6 @@ case class XmlToStructsEvaluator(
   // Parser that parse XML strings as internal rows
   @transient
   private lazy val parser = {
-    val parsedOptions = new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
