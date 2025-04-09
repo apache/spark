@@ -21,7 +21,6 @@ import java.util.Locale
 
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -273,6 +272,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     cachedPlan match {
       case LogicalRelationWithTable(
       HadoopFsRelation(_, _, _, _, _, options), _) =>
+        import scala.jdk.CollectionConverters._
         val prevOptions = new CaseInsensitiveStringMap(options.asJava)
         val newOptions = new CaseInsensitiveStringMap(dsOptions.asJava)
         if (prevOptions != newOptions) {
