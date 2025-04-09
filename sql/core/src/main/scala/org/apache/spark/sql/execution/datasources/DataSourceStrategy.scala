@@ -257,6 +257,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
+    var updatedOptions: Boolean = false
 
     // Invalidate the cache if the table is already cached but options have changed.
     val cachedPlan = catalog.getCachedTable(qualifiedTableName)
@@ -266,27 +267,31 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         HadoopFsRelation(_, _, _, _, _, options), _) =>
           val prevOptions = new CaseInsensitiveStringMap(options.asJava)
           val newOptions = new CaseInsensitiveStringMap(dsOptions.asJava)
-          if (prevOptions != newOptions) {
-            catalog.invalidateCachedTable(qualifiedTableName)
-          }
+          updatedOptions = prevOptions != newOptions
         case _ =>
       }
     }
 
-    catalog.getCachedPlan(qualifiedTableName, () => {
-      val dataSource =
-        DataSource(
-          sparkSession,
-          // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
-          // inferred at runtime. We should still support it.
-          userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-          partitionColumns = table.partitionColumnNames,
-          bucketSpec = table.bucketSpec,
-          className = table.provider.get,
-          options = dsOptions,
-          catalogTable = Some(table))
+    lazy val newPlan: LogicalPlan = {
+      val dataSource = DataSource(
+        sparkSession,
+        // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+        // inferred at runtime. We should still support it.
+        userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+        partitionColumns = table.partitionColumnNames,
+        bucketSpec = table.bucketSpec,
+        className = table.provider.get,
+        options = dsOptions,
+        catalogTable = Some(table)
+      )
       LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
-    })
+    }
+
+    if (updatedOptions) {
+      newPlan
+    } else {
+      catalog.getCachedPlan(qualifiedTableName, () => {newPlan})
+    }
   }
 
   private def getStreamingRelation(
