@@ -527,7 +527,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false",
       SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
       SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG.key -> "1",
-      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
+      SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "1",
       SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
     ) {
       case (coordRef, spark) =>
@@ -544,12 +544,17 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           .queryName("query")
           .option("checkpointLocation", checkpointLocation.toString)
           .start()
-        // Go through several rounds of input to force snapshot uploads
-        (0 until 5).foreach { _ =>
-          inputData.addData(1, 2, 3)
-          query.processAllAvailable()
-          Thread.sleep(500)
-        }
+        // Go through two batches to force two snapshot uploads.
+        // This would be enough to pass the version check for lagging stores.
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+
+        // Sleep for the duration of a maintenance interval - which should be enough
+        // to pass the time check for lagging stores.
+        Thread.sleep(100)
+
         val latestVersion =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastProgress.batchId + 1
         // Verify that no instances are marked as lagging, even when upload messages are sent.

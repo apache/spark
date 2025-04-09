@@ -390,8 +390,8 @@ private[sql] class RocksDBStateStoreProvider
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
     this.stateSchemaProvider = stateSchemaProvider
-    this.rocksDBEventListener =
-      RocksDBEventListener(StateStoreProvider.getRunId(hadoopConf), stateStoreId)
+    this.rocksDBEventForwarder =
+      Some(RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -525,7 +525,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
-  @volatile private var rocksDBEventListener: RocksDBEventListener = _
+  @volatile private var rocksDBEventForwarder: Option[RocksDBEventForwarder] = _
 
   protected def createRocksDB(
       dfsRootDir: String,
@@ -536,7 +536,7 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int = 0,
-      eventListener: Option[RocksDBEventListener] = None): RocksDB = {
+      eventForwarder: Option[RocksDBEventForwarder] = None): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf,
@@ -546,7 +546,7 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies,
       enableStateStoreCheckpointIds,
       partitionId,
-      eventListener)
+      eventForwarder)
   }
 
   private[sql] lazy val rocksDB = {
@@ -557,7 +557,7 @@ private[sql] class RocksDBStateStoreProvider
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
-      Some(rocksDBEventListener))
+      rocksDBEventForwarder)
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -994,7 +994,7 @@ class RocksDBStateStoreChangeDataReader(
  * We pass this into the RocksDB instance to report specific events like snapshot uploads.
  * This should only be used to report back to the coordinator for metrics and monitoring purposes.
  */
-private[state] case class RocksDBEventListener(queryRunId: String, stateStoreId: StateStoreId) {
+private[state] case class RocksDBEventForwarder(queryRunId: String, stateStoreId: StateStoreId) {
   // Build the state store provider ID from the query run ID and the state store ID
   private val providerId = StateStoreProviderId(stateStoreId, UUID.fromString(queryRunId))
 

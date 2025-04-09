@@ -163,7 +163,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
   private[sql] def snapshotUploaded(
       providerId: StateStoreProviderId,
       version: Long,
-      timestamp: Long): Unit = {
+      timestamp: Long): Boolean = {
     rpcEndpointRef.askSync[Boolean](ReportSnapshotUploaded(providerId, version, timestamp))
   }
 
@@ -171,7 +171,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
   private[sql] def logLaggingStateStores(
       queryRunId: UUID,
       latestVersion: Long,
-      isTerminatingTrigger: Boolean): Unit = {
+      isTerminatingTrigger: Boolean): Boolean = {
     rpcEndpointRef.askSync[Boolean](
       LogLaggingStateStores(queryRunId, latestVersion, isTerminatingTrigger))
   }
@@ -371,7 +371,8 @@ private class StateStoreCoordinator(
     val minDeltasForSnapshot = sqlConf.stateStoreMinDeltasForSnapshot
     val maintenanceInterval = sqlConf.streamingMaintenanceInterval
 
-    // Use the configured multipliers to determine the proper alert thresholds
+    // Use the configured multipliers multiplierForMinVersionDiffToLog and
+    // multiplierForMinTimeDiffToLog to determine the proper alert thresholds.
     val minVersionDeltaForLogging = snapshotVersionDeltaMultiplier * minDeltasForSnapshot
     val minTimeDeltaForLogging = maintenanceIntervalMultiplier * maintenanceInterval
 

@@ -64,7 +64,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
  * @param stateStoreId StateStoreId for the state store
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
- * @param eventListener The RocksDBEventListener object for reporting events to the coordinator
+ * @param eventForwarder The RocksDBEventForwarder object for reporting events to the coordinator
  */
 class RocksDB(
     dfsRootDir: String,
@@ -75,7 +75,7 @@ class RocksDB(
     useColumnFamilies: Boolean = false,
     enableStateStoreCheckpointIds: Boolean = false,
     partitionId: Int = 0,
-    eventListener: Option[RocksDBEventListener] = None) extends Logging {
+    eventForwarder: Option[RocksDBEventForwarder] = None) extends Logging {
 
   import RocksDB._
 
@@ -1520,7 +1520,7 @@ class RocksDB(
       // Note that we still report snapshot versions even when changelog checkpointing is disabled.
       // The coordinator needs a way to determine whether upload messages are disabled or not,
       // which would be different between RocksDB and HDFS stores due to changelog checkpointing.
-      eventListener.foreach(_.reportSnapshotUploaded(version))
+      eventForwarder.foreach(_.reportSnapshotUploaded(version))
     }
   }
 
