@@ -577,7 +577,7 @@ abstract class ProgressContext(
       hasNewData: Boolean,
       sourceToNumInputRows: Map[SparkDataStream, Long],
       lastExecution: IncrementalExecution): ExecutionStats = {
-    val hasEventTime = progressReporter.logicalPlan().collect {
+    val hasEventTime = progressReporter.logicalPlan().collectFirst {
       case e: EventTimeWatermark => e
     }.nonEmpty
 

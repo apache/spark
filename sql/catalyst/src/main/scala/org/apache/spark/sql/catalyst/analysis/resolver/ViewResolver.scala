@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.ArrayDeque
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -97,22 +97,27 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
    */
   private def withViewResolutionContext(unresolvedView: View)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
-    val viewResolutionContext = if (viewResolutionContextStack.isEmpty()) {
-      ViewResolutionContext(
-        nestedViewDepth = 1,
-        maxNestedViewDepth = conf.maxNestedViewDepth
-      )
-    } else {
-      val prevContext = viewResolutionContextStack.peek()
-      prevContext.copy(nestedViewDepth = prevContext.nestedViewDepth + 1)
-    }
-    viewResolutionContext.validate(unresolvedView)
+    AnalysisContext.withAnalysisContext(unresolvedView.desc) {
+      val prevContext = if (viewResolutionContextStack.isEmpty()) {
+        ViewResolutionContext(
+          nestedViewDepth = 0,
+          maxNestedViewDepth = conf.maxNestedViewDepth
+        )
+      } else {
+        viewResolutionContextStack.peek()
+      }
 
-    viewResolutionContextStack.push(viewResolutionContext)
-    try {
-      (body, viewResolutionContext)
-    } finally {
-      viewResolutionContextStack.pop()
+      val viewResolutionContext = prevContext.copy(
+        nestedViewDepth = prevContext.nestedViewDepth + 1
+      )
+      viewResolutionContext.validate(unresolvedView)
+
+      viewResolutionContextStack.push(viewResolutionContext)
+      try {
+        (body, viewResolutionContext)
+      } finally {
+        viewResolutionContextStack.pop()
+      }
     }
   }
 

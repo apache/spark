@@ -508,7 +508,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           |join abc c on a.key=c.key""".stripMargin).queryExecution.sparkPlan
 
       assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 3)
-      assert(sparkPlan.collect { case e: RDDScanExec => e }.size === 0)
+      assert(sparkPlan.collectFirst { case e: RDDScanExec => e }.isEmpty)
     }
   }
 
@@ -923,7 +923,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         val cache = spark.range(10).cache()
         val df = cache.filter($"id" > 0)
-        val columnarToRow = df.queryExecution.executedPlan.collect {
+        val columnarToRow = df.queryExecution.executedPlan.collectFirst {
           case c: ColumnarToRowExec => c
         }
         assert(columnarToRow.isEmpty)

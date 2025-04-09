@@ -108,6 +108,7 @@ DROP	false
 ELSE	false
 ELSEIF	false
 END	false
+ENFORCED	false
 ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
@@ -177,6 +178,7 @@ ITEMS	false
 ITERATE	false
 JOIN	false
 JSON	false
+KEY	false
 KEYS	false
 LANGUAGE	false
 LAST	false
@@ -220,6 +222,7 @@ NANOSECONDS	false
 NATURAL	false
 NO	false
 NONE	false
+NORELY	false
 NOT	false
 NULL	false
 NULLS	false
@@ -264,6 +267,7 @@ RECURSIVE	false
 REDUCE	false
 REFERENCES	false
 REFRESH	false
+RELY	false
 RENAME	false
 REPAIR	false
 REPEAT	false

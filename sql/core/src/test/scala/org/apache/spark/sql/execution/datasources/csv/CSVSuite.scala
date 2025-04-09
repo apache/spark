@@ -3556,6 +3556,23 @@ abstract class CSVSuite
           """{"field 1":"missing"}""")
       }
 
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val options = Map("header" -> "true", "singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(options)
+            .schema("v variant, _corrupt_record string")
+            .csv(path.getCanonicalPath)
+            .selectExpr("cast(v as string)", "_corrupt_record"),
+          // When `header` is true, inconsistent lengths between the header and content line is
+          // treated as a corrupt record.
+          Seq(
+            Row("""{"field 1":100,"field2":1.1}""", null),
+            Row("""{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03+00:00"}""", null),
+            Row("""{"field 1":null,"field2":true}""", null),
+            Row("""{"field 1":"1e9","field2":"hello"}""", "1e9,hello,extra"),
+            Row("""{"field 1":"missing"}""", "missing")))
+      }
+
       checkError(
         exception = intercept[SparkException] {
           val options = Map("singleVariantColumn" -> "v", "header" -> "true", "mode" -> "failfast")

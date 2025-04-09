@@ -137,7 +137,23 @@ class RocksDB(
   private val nativeStats = rocksDbOptions.statistics()
 
   private val workingDir = createTempDir("workingDir")
-  private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
+
+  protected def createFileManager(
+      dfsRootDir: String,
+      localTempDir: File,
+      hadoopConf: Configuration,
+      codecName: String,
+      loggingId: String): RocksDBFileManager = {
+    new RocksDBFileManager(
+      dfsRootDir,
+      localTempDir,
+      hadoopConf,
+      codecName,
+      loggingId = loggingId
+    )
+  }
+
+  private val fileManager = createFileManager(dfsRootDir, createTempDir("fileManager"),
     hadoopConf, conf.compressionCodec, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
@@ -1123,6 +1139,10 @@ class RocksDB(
 
       val (dfsFileSuffix, immutableFileMapping) = rocksDBFileMapping.createSnapshotFileMapping(
         fileManager, checkpointDir, version)
+      logInfo(log"RocksDB file mapping after creating snapshot file mapping for version " +
+        log"${MDC(LogKeys.VERSION_NUM, version)}:\n" +
+        log"${MDC(LogKeys.ROCKS_DB_FILE_MAPPING, rocksDBFileMapping)}")
+
       val newSnapshot = Some(RocksDBSnapshot(
         checkpointDir,
         version,
@@ -1477,8 +1497,7 @@ class RocksDB(
       // This is relative aggressive because that even if the uploading succeeds,
       // it is not necessarily the one written to the commit log. But we can always load lineage
       // from commit log so it is fine.
-      lineageManager.resetLineage(lineageManager.getLineageForCurrVersion()
-        .filter(i => i.version >= snapshot.version))
+      lineageManager.truncateFromVersion(snapshot.version)
       logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: " +
         log"Upload snapshot of version ${MDC(LogKeys.VERSION_NUM, snapshot.version)}, " +
         log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
@@ -1606,6 +1625,16 @@ class RocksDBFileMapping {
   val snapshotsPendingUpload: Set[RocksDBVersionSnapshotInfo] = ConcurrentHashMap.newKeySet()
 
   /**
+   * Clear everything stored in the file mapping.
+   */
+  def clear(): Unit = {
+    localFileMappings.clear()
+    snapshotsPendingUpload.clear()
+  }
+
+  override def toString: String = localFileMappings.toString()
+
+  /**
    * Get the mapped DFS file for the given local file for a DFS load operation.
    * If the currently mapped DFS file was mapped in the same or newer version as the version we
    * want to load (or was generated in a version which has not been uploaded to DFS yet),
@@ -1621,14 +1650,21 @@ class RocksDBFileMapping {
       fileManager: RocksDBFileManager,
       localFileName: String,
       versionToLoad: Long): Option[RocksDBImmutableFile] = {
-    getDfsFileWithVersionCheck(fileManager, localFileName, _ >= versionToLoad)
+    getDfsFileWithIncompatibilityCheck(
+      fileManager,
+      localFileName,
+      // We can't reuse the current local file since it was added in the same or newer version
+      // as the version we want to load
+      (fileVersion, _) => fileVersion >= versionToLoad
+    )
   }
 
   /**
    * Get the mapped DFS file for the given local file for a DFS save (i.e. checkpoint) operation.
    * If the currently mapped DFS file was mapped in the same or newer version as the version we
-   * want to save (or was generated in a version which has not been uploaded to DFS yet),
-   * the mapped DFS file is ignored. In this scenario, the local mapping to this DFS file
+   * want to save (or was generated in a version which has not been uploaded to DFS yet)
+   * or the mapped dfs file isn't the same size as the local file,
+   * then the mapped DFS file is ignored. In this scenario, the local mapping to this DFS file
    * will be cleared, and function will return None.
    *
    * @note If the file was added in current version (i.e. versionToSave - 1), we can reuse it.
@@ -1639,19 +1675,26 @@ class RocksDBFileMapping {
    */
   private def getDfsFileForSave(
       fileManager: RocksDBFileManager,
-      localFileName: String,
+      localFile: File,
       versionToSave: Long): Option[RocksDBImmutableFile] = {
-    getDfsFileWithVersionCheck(fileManager, localFileName, _ >= versionToSave)
+    getDfsFileWithIncompatibilityCheck(
+      fileManager,
+      localFile.getName,
+      (dfsFileVersion, dfsFile) =>
+        // The DFS file is not the same as the file we want to save, either if
+        // the DFS file was added in the same or higher version, or the file size is different
+        dfsFileVersion >= versionToSave || dfsFile.sizeBytes != localFile.length()
+    )
   }
 
-  private def getDfsFileWithVersionCheck(
+  private def getDfsFileWithIncompatibilityCheck(
       fileManager: RocksDBFileManager,
       localFileName: String,
-      isIncompatibleVersion: Long => Boolean): Option[RocksDBImmutableFile] = {
+      isIncompatible: (Long, RocksDBImmutableFile) => Boolean): Option[RocksDBImmutableFile] = {
     localFileMappings.get(localFileName).map { case (dfsFileMappedVersion, dfsFile) =>
       val dfsFileSuffix = fileManager.dfsFileSuffix(dfsFile)
       val versionSnapshotInfo = RocksDBVersionSnapshotInfo(dfsFileMappedVersion, dfsFileSuffix)
-      if (isIncompatibleVersion(dfsFileMappedVersion) ||
+      if (isIncompatible(dfsFileMappedVersion, dfsFile) ||
         snapshotsPendingUpload.contains(versionSnapshotInfo)) {
         // the mapped dfs file cannot be used, delete from mapping
         remove(localFileName)
@@ -1693,7 +1736,7 @@ class RocksDBFileMapping {
     val dfsFilesSuffix = UUID.randomUUID().toString
     val snapshotFileMapping = localImmutableFiles.map { f =>
       val localFileName = f.getName
-      val existingDfsFile = getDfsFileForSave(fileManager, localFileName, version)
+      val existingDfsFile = getDfsFileForSave(fileManager, f, version)
       val dfsFile = existingDfsFile.getOrElse {
         val newDfsFileName = fileManager.newDFSFileName(localFileName, dfsFilesSuffix)
         val newDfsFile = RocksDBImmutableFile(localFileName, newDfsFileName, sizeBytes = f.length())
@@ -2008,27 +2051,33 @@ case class AcquiredThreadInfo(
 private[sql] class RocksDBLineageManager {
   @volatile private var lineage: Array[LineageItem] = Array.empty
 
-  override def toString: String = lineage.map {
-    case LineageItem(version, uuid) => s"$version: $uuid"
-  }.mkString(" ")
+  override def toString: String = synchronized {
+    lineage.map {
+      case LineageItem(version, uuid) => s"$version: $uuid"
+    }.mkString(" ")
+  }
 
-  def appendLineageItem(item: LineageItem): Unit = {
+  def appendLineageItem(item: LineageItem): Unit = synchronized {
     lineage = lineage :+ item
   }
 
-  def resetLineage(newLineage: Array[LineageItem]): Unit = {
+  def truncateFromVersion(versionToKeep: Long): Unit = synchronized {
+    resetLineage(getLineageForCurrVersion().filter(i => i.version >= versionToKeep))
+  }
+
+  def resetLineage(newLineage: Array[LineageItem]): Unit = synchronized {
     lineage = newLineage
   }
 
-  def getLineageForCurrVersion(): Array[LineageItem] = {
+  def getLineageForCurrVersion(): Array[LineageItem] = synchronized {
     lineage.clone()
   }
 
-  def contains(item: LineageItem): Boolean = {
+  def contains(item: LineageItem): Boolean = synchronized {
     lineage.contains(item)
   }
 
-  def clear(): Unit = {
+  def clear(): Unit = synchronized {
     lineage = Array.empty
   }
 }

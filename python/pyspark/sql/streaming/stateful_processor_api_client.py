@@ -467,6 +467,26 @@ class StatefulProcessorApiClient:
     def _read_arrow_state(self) -> Any:
         return self.serializer.load_stream(self.sockfile)
 
+    def _send_list_state(self, schema: StructType, state: List[Tuple]) -> None:
+        for value in state:
+            bytes = self._serialize_to_bytes(schema, value)
+            length = len(bytes)
+            write_int(length, self.sockfile)
+            self.sockfile.write(bytes)
+
+        write_int(-1, self.sockfile)
+        self.sockfile.flush()
+
+    def _read_list_state(self) -> List[Any]:
+        data_array = []
+        while True:
+            length = read_int(self.sockfile)
+            if length < 0:
+                break
+            bytes = self.sockfile.read(length)
+            data_array.append(self._deserialize_from_bytes(bytes))
+        return data_array
+
     # Parse a string schema into a StructType schema. This method will perform an API call to
     # JVM side to parse the schema string.
     def _parse_string_schema(self, schema: str) -> StructType:

@@ -475,7 +475,7 @@ class TransformWithStateInPandasStateServer(
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case ListStateCall.MethodCase.LISTSTATEPUT =>
-        val rows = deserializer.readArrowBatches(inputStream)
+        val rows = deserializer.readListElements(inputStream, listStateInfo)
         listStateInfo.listState.put(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.LISTSTATEGET =>
@@ -487,12 +487,10 @@ class TransformWithStateInPandasStateServer(
         }
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"List state $stateName doesn't contain any value.")
-          return
         } else {
           sendResponse(0)
+          sendIteratorForListState(iteratorOption.get)
         }
-        sendIteratorAsArrowBatches(iteratorOption.get, listStateInfo.schema,
-          arrowStreamWriterForTest) { data => listStateInfo.serializer(data)}
       case ListStateCall.MethodCase.APPENDVALUE =>
         val byteArray = message.getAppendValue.getValue.toByteArray
         val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema,
@@ -500,7 +498,7 @@ class TransformWithStateInPandasStateServer(
         listStateInfo.listState.appendValue(newRow)
         sendResponse(0)
       case ListStateCall.MethodCase.APPENDLIST =>
-        val rows = deserializer.readArrowBatches(inputStream)
+        val rows = deserializer.readListElements(inputStream, listStateInfo)
         listStateInfo.listState.appendList(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.CLEAR =>
@@ -509,6 +507,28 @@ class TransformWithStateInPandasStateServer(
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
+  }
+
+  private def sendIteratorForListState(iter: Iterator[Row]): Unit = {
+    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
+    // when there are multiple state variables, user tries to access a different state variable
+    // while the current state variable is not exhausted yet.
+    var rowCount = 0
+    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+      val data = iter.next()
+
+      // Serialize the value row as a byte array
+      val valueBytes = PythonSQLUtils.toPyRow(data)
+      val lenBytes = valueBytes.length
+
+      outputStream.writeInt(lenBytes)
+      outputStream.write(valueBytes)
+
+      rowCount += 1
+    }
+    outputStream.writeInt(-1)
+    outputStream.flush()
   }
 
   private[sql] def handleMapStateRequest(message: MapStateCall): Unit = {
