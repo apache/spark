@@ -1622,7 +1622,7 @@ SELECT * FROM outermost ORDER BY 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
   "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
