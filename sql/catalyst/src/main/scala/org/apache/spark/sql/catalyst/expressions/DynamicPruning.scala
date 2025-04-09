@@ -67,11 +67,11 @@ case class DynamicPruningSubquery(
     copy()
   }
 
-  override def withNewUnresolvedOuterAttrs(
-    unresolvedOuterAttrs: Seq[Expression]
+  override def withNewNestedOuterAttrs(
+    nestedOuterAttrs: Seq[Expression]
   ): DynamicPruningSubquery = {
-    // DynamicPruningSubquery should not have unresolved outer attrs
-    assert(unresolvedOuterAttrs.isEmpty)
+    // DynamicPruningSubquery should not have nested outer attrs
+    assert(nestedOuterAttrs.isEmpty)
     copy()
   }
 
