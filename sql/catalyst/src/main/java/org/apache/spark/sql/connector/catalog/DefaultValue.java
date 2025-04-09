@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * convert the given expression to its internal representation. If the expression cannot be
  * converted, and a SQL string is provided, Spark will fall back to parsing the SQL string.
  *
- * @since 4.1.0
+ * @since 4.0.0
  */
 @Evolving
 public class DefaultValue {
