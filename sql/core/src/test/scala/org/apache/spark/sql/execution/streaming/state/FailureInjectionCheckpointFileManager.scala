@@ -119,7 +119,7 @@ class FailureInjectionState {
   // File names matching this regex will cause the copyFromLocalFile to fail
   @volatile
   var failPreCopyFromLocalFileNameRegex: Seq[String] = Seq.empty
-  // File names matching this regex will cause the createAtomic to fail and put the streams in
+  // File names matching this regex will cause the close() to fail and put the streams in
   // `delayedStreams`
   @volatile
   var createAtomicDelayCloseRegex: Seq[String] = Seq.empty
