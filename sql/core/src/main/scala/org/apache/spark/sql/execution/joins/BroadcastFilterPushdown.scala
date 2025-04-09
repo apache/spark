@@ -22,21 +22,27 @@ import java.util.Objects
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, Expression, Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, Expression, Literal, PlanExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.execution.{SparkPlan, WrapsBroadcastVarPushDownSupporter}
+import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SparkPlan, WrapsBroadcastVarPushDownSupporter}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.types.DataType
 
-object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
+class BroadcastFilterPushdown(isSubquery: Boolean = false) extends Rule[SparkPlan]
+  with PredicateHelper {
+
   override def apply(plan: SparkPlan): SparkPlan = {
     val shouldAttemptBroadcastVarPushdown = plan.conf.pushBroadcastedJoinKeysASFilterToScan &&
-      !plan.isInstanceOf[V2TableWriteExec]
+      !plan.isInstanceOf[V2TableWriteExec] && (!isSubquery ||
+      this.conf.pushBroadcastedJoinKeysASFilterToScanOnSubqueries)
     if (shouldAttemptBroadcastVarPushdown) {
       val (newPlan, removedDpps) = useTopDownPush(plan)
       if (!removedDpps.isEmpty) {
@@ -65,118 +71,140 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
       new util.IdentityHashMap[SparkPlan, (Set[SparkPlan], Set[SparkPlan])]()
     val joinsToLegsProcessedMap =
       new util.IdentityHashMap[SparkPlan, (Boolean, Boolean)]()
-    val legFrequencyMap = mutable.HashMap.empty[SparkPlan, Int]
+  //  val legFrequencyMap = mutable.HashMap.empty[SparkPlan, Int]
     val legsCollected = mutable.HashSet.empty[SparkPlan]
-    val nodesToTraverse = mutable.ListBuffer[(SparkPlan, Boolean)](plan -> false)
-    while (nodesToTraverse.nonEmpty) {
-      val nodeToAnalyze = nodesToTraverse.remove(0)
-      nodeToAnalyze match {
-        case (BroadcastHashJoinExtractorForBCPush(bhj), false) =>
-          if (joinsToLegsProcessedMap.containsKey(bhj)) {
-            val (leftLegProcessed, rightLegProcessed) = joinsToLegsProcessedMap.get(bhj)
-            if (rightLegProcessed) {
-              val leg = bhj.right.canonicalized
-              legFrequencyMap.updateWith(leg)({
-                case None => Some(1)
+    val legFrequencyMap = mutable.HashMap.empty[SparkPlan, Int]
+    val subqueryLeafRelationsCollected = mutable.HashSet.empty[TableIdentifier]
 
-                case Some(old) => Some(old + 1)
-              } )
-              legsCollected += leg
-              val rightLegs = legsCollected.toSet
-              val (leftLegs, _) = joinsToLegsMap.get(bhj)
-              legsCollected ++= leftLegs
-              joinsToLegsMap.put(bhj, (leftLegs, rightLegs))
-              joinsToLegsProcessedMap.remove(bhj)
-            } else if (leftLegProcessed) {
-              val leg = bhj.left.canonicalized
-              legFrequencyMap.updateWith(leg)({
-                case None => Some(1)
+    // TODO: Asif: Handle Scalar Subquery!!!
+    def startProcessingFromRoot(node: SparkPlan): Unit = {
+      val nodesToTraverse = mutable.ListBuffer[(SparkPlan, Boolean)](node -> false)
+      while (nodesToTraverse.nonEmpty) {
+        val nodeToAnalyze = nodesToTraverse.remove(0)
+        nodeToAnalyze match {
+          case (BroadcastHashJoinExtractorForBCPush(bhj), false) =>
+            processBinaryExecNode(bhj, true, nodesToTraverse)
 
-                case Some(old) => Some(old + 1)
-              })
-              legsCollected += leg
-              val leftLegs = legsCollected.toSet
-              joinsToLegsMap.put(bhj, (leftLegs, Set.empty))
-              legsCollected.clear()
-              joinsToLegsProcessedMap.put(bhj, true -> true)
-              nodesToTraverse.prepend(bhj -> false)
-              nodesToTraverse.prepend(bhj.right -> false)
+          case (anyOtherJoin: BaseJoinExec, false) =>
+            processBinaryExecNode(anyOtherJoin, false, nodesToTraverse)
+
+          case (anyOtherNode: BaseAggregateExec, false) =>
+            nodesToTraverse.prepend(anyOtherNode -> true)
+            nodesToTraverse.prepend(anyOtherNode.child -> false)
+
+          case (anyOtherNode: BaseAggregateExec, true) =>
+            val leg = anyOtherNode.child.canonicalized
+            legFrequencyMap.updateWith(leg)({
+              case None => Some(1)
+
+              case Some(old) => Some(old + 1)
+            })
+            legsCollected += leg
+
+          case (anyOtherNode, _) =>
+            anyOtherNode match {
+              case f: FilterExec if f.containsPattern(TreePattern.SCALAR_SUBQUERY) =>
+               val subqs = f.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(
+                 _.collect {
+                 case e: PlanExpression[_] => e.plan.asInstanceOf[LogicalPlan]
+               })
+               val temp = subqs.flatMap(_.collectLeaves().flatMap {
+                 case LogicalRelationWithTable(_, ct) => ct.map(_.identifier)
+
+                 case _ => None
+               })
+               subqueryLeafRelationsCollected ++= temp
+
+              case _ =>
             }
-          } else {
-            joinsToLegsProcessedMap.put(bhj, true -> false)
-            nodesToTraverse.prepend(bhj -> false)
-            nodesToTraverse.prepend(bhj.left -> false)
-          }
-
-        case (anyOtherJoin: BaseJoinExec, false) =>
-
-          if (joinsToLegsProcessedMap.containsKey(anyOtherJoin)) {
-            val (leftLegProcessed, rightLegProcessed) = joinsToLegsProcessedMap.get(anyOtherJoin)
-            if (rightLegProcessed) {
-              val leg = anyOtherJoin.right.canonicalized
-              legFrequencyMap.updateWith(leg)({
-                case None => Some(1)
-
-                case Some(old) => Some(old + 1)
-              })
-
-              val (leftLegs, _) = joinsToLegsMap.get(anyOtherJoin)
-              legsCollected ++= leftLegs
-              joinsToLegsMap.remove(anyOtherJoin)
-              joinsToLegsProcessedMap.remove(anyOtherJoin)
-            } else if (leftLegProcessed) {
-              val leg = anyOtherJoin.left.canonicalized
-              legFrequencyMap.updateWith(leg)({
-                case None => Some(1)
-
-                case Some(old) => Some(old + 1)
-              })
-
-              legsCollected += leg
-              val leftLegs = legsCollected.toSet
-              joinsToLegsMap.put(anyOtherJoin, (leftLegs, Set.empty))
-              legsCollected.clear()
-              joinsToLegsProcessedMap.put(anyOtherJoin, true -> true)
-              nodesToTraverse.prepend(anyOtherJoin -> false)
-              nodesToTraverse.prepend(anyOtherJoin.right -> false)
+            val children = anyOtherNode.children
+            if (children.nonEmpty) {
+              nodesToTraverse.prependAll(children.map(_ -> false))
             }
-          } else {
-            joinsToLegsProcessedMap.put(anyOtherJoin, true -> false)
-            nodesToTraverse.prepend(anyOtherJoin -> false)
-            nodesToTraverse.prepend(anyOtherJoin.left -> false)
-          }
+        }
+      }
+    }
 
-        case (anyOtherNode: BaseAggregateExec, false) =>
-          nodesToTraverse.prepend(anyOtherNode -> true)
-          nodesToTraverse.prepend(anyOtherNode.child -> false)
-
-        case (anyOtherNode: BaseAggregateExec, true) =>
-          val leg = anyOtherNode.child.canonicalized
+    def processBinaryExecNode(
+        node: BinaryExecNode,
+        cacheFinalProcessedNode: Boolean,
+        nodesListToTraverse: mutable.ListBuffer[(SparkPlan, Boolean)]): Unit = {
+      if (joinsToLegsProcessedMap.containsKey(node)) {
+        val (leftLegProcessed, rightLegProcessed) = joinsToLegsProcessedMap.get(node)
+        if (rightLegProcessed) {
+          val leg = node.right.canonicalized
           legFrequencyMap.updateWith(leg)({
             case None => Some(1)
 
             case Some(old) => Some(old + 1)
           })
           legsCollected += leg
-
-        case (anyOtherNode, _) =>
-          val children = anyOtherNode.children
-          if (children.nonEmpty) {
-            nodesToTraverse.prependAll(children.map(_ -> false))
+          val rightLegs = legsCollected.toSet
+          val (leftLegs, _) = joinsToLegsMap.get(node)
+          legsCollected ++= leftLegs
+          joinsToLegsProcessedMap.remove(node)
+          if (cacheFinalProcessedNode) {
+            joinsToLegsMap.put(node, (leftLegs, rightLegs))
+          } else {
+            joinsToLegsMap.remove(node)
           }
+        } else if (leftLegProcessed) {
+          val leg = node.left.canonicalized
+          legFrequencyMap.updateWith(leg)({
+            case None => Some(1)
+
+            case Some(old) => Some(old + 1)
+          })
+          legsCollected += leg
+          val leftLegs = legsCollected.toSet
+          joinsToLegsMap.put(node, (leftLegs, Set.empty))
+          legsCollected.clear()
+          joinsToLegsProcessedMap.put(node, true -> true)
+          nodesListToTraverse.prepend(node -> false)
+          nodesListToTraverse.prepend(node.right -> false)
+        }
+      } else {
+        joinsToLegsProcessedMap.put(node, true -> false)
+        nodesListToTraverse.prepend(node -> false)
+        nodesListToTraverse.prepend(node.left -> false)
       }
     }
+
+    startProcessingFromRoot(plan)
+
     assert(joinsToLegsProcessedMap.isEmpty)
     import scala.jdk.CollectionConverters._
     joinsToLegsMap.asScala.foreach {
       case (sp, (left, right)) =>
         val bhj = sp.asInstanceOf[BroadcastHashJoinExec]
         bhj.buildSide match {
-          case BuildRight => if (left.exists(p => legFrequencyMap(p) > 1)) {
+          case BuildRight =>
+            val leaves = bhj.left.collectLeaves().flatMap({
+              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
+
+              case _ => None
+            })
+            if (left.exists(p => legFrequencyMap(p) > 1) ||
+            bhj.left.collectLeaves().flatMap({
+              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
+
+              case _ => None
+            }).exists(subqueryLeafRelationsCollected.contains)) {
             bhjBlockingBCVarPush.put(bhj, bhj)
           }
 
-          case BuildLeft => if (right.exists(p => legFrequencyMap(p) > 1)) {
+          case BuildLeft =>
+            val leaves = bhj.right.collectLeaves().flatMap({
+              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
+
+              case _ => None
+            })
+            if (right.exists(p => legFrequencyMap(p) > 1) ||
+            bhj.right.collectLeaves().flatMap({
+              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
+
+              case _ => None
+            }).exists(subqueryLeafRelationsCollected.contains)) {
             bhjBlockingBCVarPush.put(bhj, bhj)
           }
         }

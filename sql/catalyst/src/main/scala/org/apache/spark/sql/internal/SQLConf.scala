@@ -1122,6 +1122,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN_ON_SUBQUERIES =
+    buildConf("spark.sql.execution.broadcastHashJoin.pushKeysAsFilterToScanOnSubqueries")
+      .internal()
+      .doc("Pushes the join keys from build side of broascasted relation as In clause," +
+        " to the scan of stream side")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PREFER_REUSE_EXCHANGE_OVER_BROADCAST_VAR_PUSHDOWN =
     buildConf("spark.sql.execution.broadcastHashJoin.preferReuseExchangeOverBroadcastVarPushdown")
       .internal()
@@ -6674,6 +6683,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pushBroadcastedJoinKeysASFilterToScan: Boolean =
     getConf(PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN)
+
+  def pushBroadcastedJoinKeysASFilterToScanOnSubqueries: Boolean =
+    getConf(PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN_ON_SUBQUERIES)
 
   def preferReuseExchangeOverBroadcastVarPushdown: Boolean =
     getConf(PREFER_REUSE_EXCHANGE_OVER_BROADCAST_VAR_PUSHDOWN)
