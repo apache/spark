@@ -332,6 +332,8 @@ class RocksDBFileManager(
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
       localDir.mkdirs()
+      // Since we cleared the local dir, we should also clear the local file mapping
+      rocksDBFileMapping.clear()
       RocksDBCheckpointMetadata(Seq.empty, 0)
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
@@ -350,6 +352,10 @@ class RocksDBFileManager(
     }
     logFilesInDir(localDir, log"Loaded checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
+    logInfo(log"RocksDB file mapping after loading checkpoint version " +
+      log"${MDC(LogKeys.VERSION_NUM, version)} from DFS:\n" +
+      log"${MDC(LogKeys.ROCKS_DB_FILE_MAPPING, rocksDBFileMapping)}")
+
     metadata
   }
 
