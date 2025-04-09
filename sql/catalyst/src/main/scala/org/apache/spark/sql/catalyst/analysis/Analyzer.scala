@@ -2407,10 +2407,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           val res = resolveSubQuery(e, outer)(Exists(_, _, Seq.empty, exprId))
           val nestedOuterReferences = getNestedOuterReferences(res, plan)
           res.withNewNestedOuterAttrs(nestedOuterReferences)
-        case InSubquery(values, l @ ListQuery(_, _, _, exprId, _, _, _))
+        case InSubquery(values, l)
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
-            ListQuery(plan, exprs, Seq.empty, i.query.exprId, plan.output.length)
+            ListQuery(plan, exprs, Seq.empty, l.exprId, plan.output.length)
           }).asInstanceOf[ListQuery]
           val nestedOuterReferences = getNestedOuterReferences(expr, plan)
           val newExpr = expr.withNewNestedOuterAttrs(nestedOuterReferences)
