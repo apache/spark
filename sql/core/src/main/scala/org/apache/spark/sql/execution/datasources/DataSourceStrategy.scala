@@ -259,7 +259,6 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     var updatedOptions: Boolean = false
 
-    // Invalidate the cache if the table is already cached but options have changed.
     val cachedPlan = catalog.getCachedTable(qualifiedTableName)
     if (cachedPlan != null) {
       cachedPlan match {
@@ -272,7 +271,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       }
     }
 
-    lazy val newPlan: LogicalPlan = {
+    val newPlan: LogicalPlan = {
       val dataSource = DataSource(
         sparkSession,
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
@@ -290,7 +289,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     if (updatedOptions) {
       newPlan
     } else {
-      catalog.getCachedPlan(qualifiedTableName, () => {newPlan})
+      catalog.getCachedPlan(qualifiedTableName, () => newPlan)
     }
   }
 
