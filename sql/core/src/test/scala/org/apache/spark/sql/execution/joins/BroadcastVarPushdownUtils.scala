@@ -226,8 +226,7 @@ trait BroadcastVarPushdownUtils extends SQLTestUtils {
         bhjData.buildKeys,
         bhjData.streamPlan,
         bhjData.buildPlan,
-        emptyBatchScanToBuildLegMap,
-        emptyBuildLegsBlockingPushFromAncestors))
+        emptyBatchScanToBuildLegMap))
     assertResult(expected.size)(result.size)
     val mutableExpected = scala.collection.mutable.ListBuffer.apply(expected: _*)
     result.foreach(x => {

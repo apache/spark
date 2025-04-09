@@ -42,8 +42,7 @@ object BroadcastHashJoinUtil {
       buildJoinKeys: Seq[Expression],
       streamPlan: SparkPlan,
       buildPlan: SparkPlan,
-      batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _],
-      buildLegsBlockingPushFromAncestors: java.util.IdentityHashMap[SparkPlan, _])
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _])
       : Seq[BroadcastVarPushDownData] = {
     if (conf.pushBroadcastedJoinKeysASFilterToScan &&
       !BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(buildPlan.canonicalized).sameElements(
@@ -57,7 +56,6 @@ object BroadcastHashJoinUtil {
         buildJoinKeys,
         streamPlan,
         buildPlan,
-        buildLegsBlockingPushFromAncestors,
         batchScansSelectedForBCPush)
     } else {
       Seq.empty
@@ -211,7 +209,6 @@ object BroadcastHashJoinUtil {
       buildJoinKeys: Seq[Expression],
       streamPlan: SparkPlan,
       buildPlan: SparkPlan,
-      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _],
       batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _])
       : Seq[BroadcastVarPushDownData] = {
     val streamKeysStart = streamJoinKeys.zipWithIndex.filter { case (streamJk, _) =>
@@ -222,7 +219,6 @@ object BroadcastHashJoinUtil {
       val batchScansOfInterest = identifyBatchScanOfInterest(
         streamKeyStart,
         streamPlan,
-        buildLegsBlockingPush,
         batchScansSelectedForBCPush)
       val filteredBatchScansOfInterest =
         batchScansOfInterest.flatMap { case (currentStreamKey, runtimeFilteringBatchScan) =>
@@ -322,7 +318,6 @@ object BroadcastHashJoinUtil {
   private def identifyBatchScanOfInterest(
       streamKeyStart: Attribute,
       streamPlan: SparkPlan,
-      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _],
       batchScansSelectedForBCPush: java.util.IdentityHashMap[WrapsBroadcastVarPushDownSupporter, _])
       : Seq[(Attribute, WrapsBroadcastVarPushDownSupporter)] = {
     var currentStreamKey = streamKeyStart
@@ -331,7 +326,6 @@ object BroadcastHashJoinUtil {
     var keepGoing = true
     while (keepGoing) {
       currentStreamPlan match {
-        case plan if buildLegsBlockingPush.containsKey(plan) => keepGoing = false
 
         case _: WindowExec => keepGoing = false
 
@@ -398,7 +392,6 @@ object BroadcastHashJoinUtil {
             identifyBatchScanOfInterest(
               child.output(indexOfStreamCol),
               child,
-              buildLegsBlockingPush,
               batchScansSelectedForBCPush)
           }).flatten
           keepGoing = false

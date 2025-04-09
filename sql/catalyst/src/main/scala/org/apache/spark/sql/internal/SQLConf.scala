@@ -1130,7 +1130,7 @@ object SQLConf {
         " false ")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")

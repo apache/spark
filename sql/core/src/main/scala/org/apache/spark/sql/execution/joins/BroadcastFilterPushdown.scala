@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{SparkPlan, WrapsBroadcastVarPushDownSupporter}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.types.DataType
 
@@ -56,45 +57,140 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
     }
   }
 
-  private def buildLegsBlockingAncestorsPushForReusePreference(
-      plan: SparkPlan): util.IdentityHashMap[SparkPlan, SparkPlan] = {
-    val buildLegBlockingPushFromAncestors = new util.IdentityHashMap[SparkPlan, SparkPlan]()
-    val canonicalizedBuildLegToOriginal = mutable.Map[SparkPlan, SparkPlan]()
-    val nodesToTraverse = mutable.ListBuffer[SparkPlan](plan)
+  private def bhjBlockingPushForReusePreference(
+      plan: SparkPlan): util.IdentityHashMap[BroadcastHashJoinExec, BroadcastHashJoinExec] = {
+    val bhjBlockingBCVarPush =
+      new util.IdentityHashMap[BroadcastHashJoinExec, BroadcastHashJoinExec]()
+    val joinsToLegsMap =
+      new util.IdentityHashMap[SparkPlan, (Set[SparkPlan], Set[SparkPlan])]()
+    val joinsToLegsProcessedMap =
+      new util.IdentityHashMap[SparkPlan, (Boolean, Boolean)]()
+    val legFrequencyMap = mutable.HashMap.empty[SparkPlan, Int]
+    val legsCollected = mutable.HashSet.empty[SparkPlan]
+    val nodesToTraverse = mutable.ListBuffer[(SparkPlan, Boolean)](plan -> false)
     while (nodesToTraverse.nonEmpty) {
       val nodeToAnalyze = nodesToTraverse.remove(0)
       nodeToAnalyze match {
-        case BroadcastHashJoinExtractorForBCPush(bhj) =>
-          val (buildLegCanonicalized, buildLeg) = bhj.buildSide match {
-            case BuildRight => (bhj.right.canonicalized, bhj.right)
+        case (BroadcastHashJoinExtractorForBCPush(bhj), false) =>
+          if (joinsToLegsProcessedMap.containsKey(bhj)) {
+            val (leftLegProcessed, rightLegProcessed) = joinsToLegsProcessedMap.get(bhj)
+            if (rightLegProcessed) {
+              val leg = bhj.right.canonicalized
+              legFrequencyMap.updateWith(leg)({
+                case None => Some(1)
 
-            case _ => (bhj.left.canonicalized, bhj.left)
-          }
-          val cached =
-            canonicalizedBuildLegToOriginal.getOrElseUpdate(buildLegCanonicalized, buildLeg)
-          if (cached.ne(buildLeg)) {
-            buildLegBlockingPushFromAncestors.put(cached, cached)
-            buildLegBlockingPushFromAncestors.put(buildLeg, buildLeg)
-          }
-          nodesToTraverse.prependAll(Seq(bhj.left, bhj.right))
+                case Some(old) => Some(old + 1)
+              } )
+              legsCollected += leg
+              val rightLegs = legsCollected.toSet
+              val (leftLegs, _) = joinsToLegsMap.get(bhj)
+              legsCollected ++= leftLegs
+              joinsToLegsMap.put(bhj, (leftLegs, rightLegs))
+              joinsToLegsProcessedMap.remove(bhj)
+            } else if (leftLegProcessed) {
+              val leg = bhj.left.canonicalized
+              legFrequencyMap.updateWith(leg)({
+                case None => Some(1)
 
-        case _ =>
-          val children = nodeToAnalyze.children
+                case Some(old) => Some(old + 1)
+              })
+              legsCollected += leg
+              val leftLegs = legsCollected.toSet
+              joinsToLegsMap.put(bhj, (leftLegs, Set.empty))
+              legsCollected.clear()
+              joinsToLegsProcessedMap.put(bhj, true -> true)
+              nodesToTraverse.prepend(bhj -> false)
+              nodesToTraverse.prepend(bhj.right -> false)
+            }
+          } else {
+            joinsToLegsProcessedMap.put(bhj, true -> false)
+            nodesToTraverse.prepend(bhj -> false)
+            nodesToTraverse.prepend(bhj.left -> false)
+          }
+
+        case (anyOtherJoin: BaseJoinExec, false) =>
+
+          if (joinsToLegsProcessedMap.containsKey(anyOtherJoin)) {
+            val (leftLegProcessed, rightLegProcessed) = joinsToLegsProcessedMap.get(anyOtherJoin)
+            if (rightLegProcessed) {
+              val leg = anyOtherJoin.right.canonicalized
+              legFrequencyMap.updateWith(leg)({
+                case None => Some(1)
+
+                case Some(old) => Some(old + 1)
+              })
+
+              val (leftLegs, _) = joinsToLegsMap.get(anyOtherJoin)
+              legsCollected ++= leftLegs
+              joinsToLegsMap.remove(anyOtherJoin)
+              joinsToLegsProcessedMap.remove(anyOtherJoin)
+            } else if (leftLegProcessed) {
+              val leg = anyOtherJoin.left.canonicalized
+              legFrequencyMap.updateWith(leg)({
+                case None => Some(1)
+
+                case Some(old) => Some(old + 1)
+              })
+
+              legsCollected += leg
+              val leftLegs = legsCollected.toSet
+              joinsToLegsMap.put(anyOtherJoin, (leftLegs, Set.empty))
+              legsCollected.clear()
+              joinsToLegsProcessedMap.put(anyOtherJoin, true -> true)
+              nodesToTraverse.prepend(anyOtherJoin -> false)
+              nodesToTraverse.prepend(anyOtherJoin.right -> false)
+            }
+          } else {
+            joinsToLegsProcessedMap.put(anyOtherJoin, true -> false)
+            nodesToTraverse.prepend(anyOtherJoin -> false)
+            nodesToTraverse.prepend(anyOtherJoin.left -> false)
+          }
+
+        case (anyOtherNode: BaseAggregateExec, false) =>
+          nodesToTraverse.prepend(anyOtherNode -> true)
+          nodesToTraverse.prepend(anyOtherNode.child -> false)
+
+        case (anyOtherNode: BaseAggregateExec, true) =>
+          val leg = anyOtherNode.child.canonicalized
+          legFrequencyMap.updateWith(leg)({
+            case None => Some(1)
+
+            case Some(old) => Some(old + 1)
+          })
+          legsCollected += leg
+
+        case (anyOtherNode, _) =>
+          val children = anyOtherNode.children
           if (children.nonEmpty) {
-            nodesToTraverse.prependAll(children)
+            nodesToTraverse.prependAll(children.map(_ -> false))
           }
       }
     }
-    buildLegBlockingPushFromAncestors
+    assert(joinsToLegsProcessedMap.isEmpty)
+    import scala.jdk.CollectionConverters._
+    joinsToLegsMap.asScala.foreach {
+      case (sp, (left, right)) =>
+        val bhj = sp.asInstanceOf[BroadcastHashJoinExec]
+        bhj.buildSide match {
+          case BuildRight => if (left.exists(p => legFrequencyMap(p) > 1)) {
+            bhjBlockingBCVarPush.put(bhj, bhj)
+          }
+
+          case BuildLeft => if (right.exists(p => legFrequencyMap(p) > 1)) {
+            bhjBlockingBCVarPush.put(bhj, bhj)
+          }
+        }
+    }
+    bhjBlockingBCVarPush
   }
 
   private def useTopDownPush(plan: SparkPlan)
       : (SparkPlan, java.util.IdentityHashMap[LogicalPlan, Seq[DynamicPruning]]) = {
-    val buildLegsBlockingPushFromAncestors =
+    val bhjBlockingPush =
       if (conf.preferReuseExchangeOverBroadcastVarPushdown) {
-        buildLegsBlockingAncestorsPushForReusePreference(plan)
+        bhjBlockingPushForReusePreference(plan)
       } else {
-        new util.IdentityHashMap[SparkPlan, SparkPlan]()
+        new util.IdentityHashMap[BroadcastHashJoinExec, BroadcastHashJoinExec]()
       }
     val batchScanToJoinLegMapping =
       new util.IdentityHashMap[
@@ -111,7 +207,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
     val batchScanToStreamingCol = new util.IdentityHashMap[
       WrapsBroadcastVarPushDownSupporter, Seq[Int]]()
     val transformedPlanPart1 = plan transformDown {
-      case BroadcastHashJoinExtractorForBCPush(bhj) =>
+      case BroadcastHashJoinExtractorForBCPush(bhj) if !bhjBlockingPush.containsKey(bhj) =>
         val (
           buildPlan,
           streamedPlan,
@@ -145,8 +241,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           buildKeys,
           streamedPlan,
           buildPlan,
-          batchScanToJoinLegMapping,
-          buildLegsBlockingPushFromAncestors)
+          batchScanToJoinLegMapping)
         val groupingOnBasisOfBatchScanExec = temp.groupBy(_.targetBatchScanExec)
         val logicalNodeOpt = buildPlan.logicalLink
         if (logicalNodeOpt.isDefined) {
