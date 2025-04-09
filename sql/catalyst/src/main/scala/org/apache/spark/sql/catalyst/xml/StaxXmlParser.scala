@@ -1022,7 +1022,6 @@ object StaxXmlParser {
       builder: VariantBuilder,
       start: Int,
       fieldToVariants: collection.mutable.TreeMap[String, java.util.ArrayList[Variant]]): Unit = {
-    // Otherwise, build the element as an object with all the fields in fieldToVariants
     val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
 
     fieldToVariants
@@ -1066,8 +1065,7 @@ object StaxXmlParser {
           builder.appendVariant(fieldValue)
       }
 
-    // Finish writing the root element as an object if it has more than one child element
-    // or attribute
+    // Finish writing the variant object
     builder.finishWritingObject(start, rootFieldEntries)
   }
 
