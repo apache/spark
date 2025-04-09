@@ -769,6 +769,39 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
   }
 
+  test("SPARK-50892: parameterized identifier in outer query referencing a recursive CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH RECURSIVE t1(n) AS (
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM t1 WHERE n < 5)
+         |SELECT * FROM IDENTIFIER($p)""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+  }
+
+  test("SPARK-50892: parameterized identifier inside a recursive CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH RECURSIVE t1(n) AS (
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM IDENTIFIER($p) WHERE n < 5)
+         |SELECT * FROM t1""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")),
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+  }
+
+
   test("SPARK-50403: parameterized execute immediate") {
     checkAnswer(spark.sql("execute immediate 'select ?' using ?", Array(1)), Row(1))
     checkAnswer(spark.sql("execute immediate 'select ?, ?' using ?, 2", Array(1)), Row(1, 2))

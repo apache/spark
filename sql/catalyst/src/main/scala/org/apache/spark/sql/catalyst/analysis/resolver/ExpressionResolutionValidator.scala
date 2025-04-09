@@ -22,10 +22,15 @@ import org.apache.spark.sql.catalyst.expressions.{
   ArraysZip,
   AttributeReference,
   BinaryExpression,
+  Exists,
   Expression,
+  InSubquery,
+  ListQuery,
   Literal,
   NamedExpression,
+  OuterReference,
   Predicate,
+  ScalarSubquery,
   TimeZoneAwareExpression
 }
 import org.apache.spark.sql.types.BooleanType
@@ -36,6 +41,12 @@ import org.apache.spark.sql.types.BooleanType
  * logical plan. You can find more info in the [[ResolutionValidator]] scaladoc.
  */
 class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
+  private val attributeScopeStack = resolutionValidator.getAttributeScopeStack
+
+  /**
+   * The flag to indicate if the validation process traverses the outer reference subtree.
+   */
+  private var inOuterReferenceSubtree = false
 
   /**
    * Validate resolved expression tree. The principle is the same as
@@ -51,6 +62,14 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
         validateBinaryExpression(binaryExpression)
       case literal: Literal =>
         validateLiteral(literal)
+      case scalarSubquery: ScalarSubquery =>
+        validateScalarSubquery(scalarSubquery)
+      case inSubquery: InSubquery =>
+        validateInSubquery(inSubquery)
+      case listQuery: ListQuery =>
+        validateListQuery(listQuery)
+      case exists: Exists =>
+        validateExists(exists)
       case predicate: Predicate =>
         validatePredicate(predicate)
       case arraysZip: ArraysZip =>
@@ -68,6 +87,8 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
         validateAttributeReference(attributeReference)
       case alias: Alias =>
         validateAlias(alias)
+      case outerReference: OuterReference =>
+        validateOuterReference(outerReference)
     }
   }
 
@@ -82,14 +103,22 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
 
   private def validateAttributeReference(attributeReference: AttributeReference): Unit = {
     assert(
-      resolutionValidator.attributeScopeStack.top.contains(attributeReference),
-      s"Attribute $attributeReference is missing from attribute scope: " +
-      s"${resolutionValidator.attributeScopeStack.top}"
+      attributeScopeStack.contains(attributeReference, isOuterReference = inOuterReferenceSubtree),
+      s"Attribute $attributeReference is missing from attribute scope stack: $attributeScopeStack"
     )
   }
 
   private def validateAlias(alias: Alias): Unit = {
     validate(alias.child)
+  }
+
+  private def validateOuterReference(outerReference: OuterReference): Unit = {
+    inOuterReferenceSubtree = true
+    try {
+      validate(outerReference.e)
+    } finally {
+      inOuterReferenceSubtree = false
+    }
   }
 
   private def validateBinaryExpression(binaryExpression: BinaryExpression): Unit = {
@@ -105,6 +134,49 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
   }
 
   private def validateLiteral(literal: Literal): Unit = {}
+
+  private def validateScalarSubquery(scalarSubquery: ScalarSubquery): Unit = {
+    attributeScopeStack.withNewScope(isSubqueryRoot = true) {
+      resolutionValidator.validate(scalarSubquery.plan)
+    }
+
+    for (outerAttribute <- scalarSubquery.outerAttrs) {
+      validate(outerAttribute)
+    }
+
+    assert(
+      scalarSubquery.plan.output.size == 1,
+      s"Scalar subquery returns more than one column: ${scalarSubquery.plan.output}"
+    )
+  }
+
+  private def validateInSubquery(inSubquery: InSubquery): Unit = {
+    for (value <- inSubquery.values) {
+      validate(value)
+    }
+
+    validate(inSubquery.query)
+  }
+
+  private def validateListQuery(listQuery: ListQuery): Unit = {
+    attributeScopeStack.withNewScope(isSubqueryRoot = true) {
+      resolutionValidator.validate(listQuery.plan)
+    }
+
+    for (outerAttribute <- listQuery.outerAttrs) {
+      validate(outerAttribute)
+    }
+  }
+
+  private def validateExists(exists: Exists): Unit = {
+    attributeScopeStack.withNewScope(isSubqueryRoot = true) {
+      resolutionValidator.validate(exists.plan)
+    }
+
+    for (outerAttribute <- exists.outerAttrs) {
+      validate(outerAttribute)
+    }
+  }
 
   private def validateArraysZip(arraysZip: ArraysZip): Unit = {
     arraysZip.children.foreach(validate)

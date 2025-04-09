@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import time
 import unittest
 from unittest.mock import patch
 
@@ -23,7 +24,7 @@ from py4j.protocol import Py4JJavaError
 from pyspark import keyword_only
 from pyspark.util import _parse_memory
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import PySparkTestCase, eventually
+from pyspark.testing.utils import PySparkTestCase, eventually, timeout
 from pyspark.find_spark_home import _find_spark_home
 
 
@@ -86,6 +87,28 @@ class UtilTests(PySparkTestCase):
             self.assertEqual(origin, _find_spark_home())
         finally:
             os.environ["SPARK_HOME"] = origin
+
+    def test_timeout_decorator(self):
+        @timeout(1)
+        def timeout_func():
+            time.sleep(10)
+
+        with self.assertRaises(TimeoutError) as e:
+            timeout_func()
+        self.assertTrue("Function timeout_func timed out after 1 seconds" in str(e.exception))
+
+    def test_timeout_function(self):
+        def timeout_func():
+            time.sleep(10)
+
+        with self.assertRaises(TimeoutError) as e:
+            timeout(1)(timeout_func)()
+        self.assertTrue("Function timeout_func timed out after 1 seconds" in str(e.exception))
+
+    def test_timeout_lambda(self):
+        with self.assertRaises(TimeoutError) as e:
+            timeout(1)(lambda: time.sleep(10))()
+        self.assertTrue("Function <lambda> timed out after 1 seconds" in str(e.exception))
 
     @eventually(timeout=180, catch_assertions=True)
     def test_eventually_decorator(self):

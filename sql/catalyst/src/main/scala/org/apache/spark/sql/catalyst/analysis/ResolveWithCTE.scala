@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
@@ -105,6 +105,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               // and we exclude those rows from the current iteration result.
               case alias @ SubqueryAlias(_,
                   Distinct(Union(Seq(anchor, recursion), false, false))) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -126,6 +129,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   colNames,
                   Distinct(Union(Seq(anchor, recursion), false, false))
                 )) =>
+                cteDef.failAnalysis(
+                  errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
+                  messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
@@ -212,6 +218,9 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       cteId: Long,
       allowRecursiveRef: Boolean = true): Unit = plan match {
     case Join(left, right, Inner, _, _) =>
+      checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
+      checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
+    case Join(left, right, Cross, _, _) =>
       checkIfSelfReferenceIsPlacedCorrectly(left, cteId, allowRecursiveRef)
       checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef)
     case Join(left, right, LeftOuter, _, _) =>

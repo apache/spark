@@ -139,6 +139,7 @@ private[spark] object LogKeys {
   case object CLUSTER_LABEL extends LogKey
   case object CLUSTER_LEVEL extends LogKey
   case object CLUSTER_WEIGHT extends LogKey
+  case object CODE extends LogKey
   case object CODEC_LEVEL extends LogKey
   case object CODEC_NAME extends LogKey
   case object CODEGEN_STAGE_ID extends LogKey
@@ -704,6 +705,7 @@ private[spark] object LogKeys {
   case object RIGHT_EXPR extends LogKey
   case object RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES extends LogKey
   case object RMSE extends LogKey
+  case object ROCKS_DB_FILE_MAPPING extends LogKey
   case object ROCKS_DB_LOG_LEVEL extends LogKey
   case object ROCKS_DB_LOG_MESSAGE extends LogKey
   case object RPC_ADDRESS extends LogKey

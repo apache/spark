@@ -85,21 +85,13 @@
 
                     <li class="nav-item dropdown">
                         <a href="#" class="nav-link dropdown-toggle" id="navbarAPIDocs" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">API Docs</a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarAPIDocs">
-                            <li><a class="dropdown-item" href="api/python/index.html">Python</a></li>
-                            <li>
-                                <a class="dropdown-item" href="#">Scala &raquo; </a>
-                                <ul class="dropdown-menu dropdown-submenu">
-                                    <li>
-                                        <a class="dropdown-item" href="api/scala/org/apache/spark/index.html">Classic</a>
-                                        <a class="dropdown-item" href="api/connect/scala/org/apache/spark/index.html">Connect</a>
-                                    </li>
-                                </ul>
-                            </li>
-                            <li><a class="dropdown-item" href="api/java/index.html">Java</a></li>
-                            <li><a class="dropdown-item" href="api/R/index.html">R</a></li>
-                            <li><a class="dropdown-item" href="api/sql/index.html">SQL, Built-in Functions</a></li>
-                        </ul>
+                        <div class="dropdown-menu" aria-labelledby="navbarAPIDocs">
+                            <a class="dropdown-item" href="{{ rel_path_to_root }}api/python/index.html">Python</a>
+                            <a class="dropdown-item" href="{{ rel_path_to_root }}api/scala/org/apache/spark/index.html">Scala</a>
+                            <a class="dropdown-item" href="{{ rel_path_to_root }}api/java/index.html">Java</a>
+                            <a class="dropdown-item" href="{{ rel_path_to_root }}api/R/index.html">R</a>
+                            <a class="dropdown-item" href="{{ rel_path_to_root }}api/sql/index.html">SQL, Built-in Functions</a>
+                        </div>
                     </li>
 
                     <li class="nav-item dropdown">

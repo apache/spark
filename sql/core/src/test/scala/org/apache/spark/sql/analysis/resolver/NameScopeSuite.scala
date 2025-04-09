@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   GetArrayStructFields,
   GetMapValue,
   GetStructField,
-  Literal
+  Literal,
+  OuterReference
 }
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types.{
@@ -231,7 +232,9 @@ class NameScopeSuite extends PlanTest {
   }
 
   test("Multipart attribute names") {
-    val nameScope = new NameScope(Seq(col6IntegerWithQualifier))
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq(col6IntegerWithQualifier)))
 
     for (multipartIdentifier <- Seq(
         Seq("catalog", "database", "table", "col6"),
@@ -239,7 +242,7 @@ class NameScopeSuite extends PlanTest {
         Seq("table", "col6")
       )) {
       assert(
-        nameScope.resolveMultipartName(multipartIdentifier) == NameTarget(
+        stack.resolveMultipartName(multipartIdentifier) == NameTarget(
           candidates = Seq(col6IntegerWithQualifier),
           output = Seq(col6IntegerWithQualifier)
         )
@@ -252,7 +255,7 @@ class NameScopeSuite extends PlanTest {
         Seq("table.col6")
       )) {
       assert(
-        nameScope.resolveMultipartName(multipartIdentifier) == NameTarget(
+        stack.resolveMultipartName(multipartIdentifier) == NameTarget(
           candidates = Seq.empty,
           output = Seq(col6IntegerWithQualifier)
         )
@@ -261,18 +264,22 @@ class NameScopeSuite extends PlanTest {
   }
 
   test("Nested fields") {
-    var nameScope = new NameScope(
-      Seq(
-        col8Struct,
-        col9NestedStruct,
-        col10Map,
-        col11MapWithStruct,
-        col12Array,
-        col13ArrayWithStruct
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(
+        Seq(
+          col8Struct,
+          col9NestedStruct,
+          col10Map,
+          col11MapWithStruct,
+          col12Array,
+          col13ArrayWithStruct
+        )
       )
     )
 
-    var matchedStructs = nameScope.resolveMultipartName(Seq("col8", "field"))
+    var matchedStructs = stack.resolveMultipartName(Seq("col8", "field"))
     assert(
       matchedStructs == NameTarget(
         candidates = Seq(
@@ -290,7 +297,7 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
-    matchedStructs = nameScope.resolveMultipartName(Seq("col9", "field", "subfield"))
+    matchedStructs = stack.resolveMultipartName(Seq("col9", "field", "subfield"))
     assert(
       matchedStructs == NameTarget(
         candidates = Seq(
@@ -316,7 +323,7 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
-    var matchedMaps = nameScope.resolveMultipartName(Seq("col10", "key"))
+    var matchedMaps = stack.resolveMultipartName(Seq("col10", "key"))
     assert(
       matchedMaps == NameTarget(
         candidates = Seq(GetMapValue(col10Map, Literal("key"))),
@@ -332,7 +339,7 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
-    matchedMaps = nameScope.resolveMultipartName(Seq("col11", "key"))
+    matchedMaps = stack.resolveMultipartName(Seq("col11", "key"))
     assert(
       matchedMaps == NameTarget(
         candidates = Seq(GetMapValue(col11MapWithStruct, Literal("key"))),
@@ -348,7 +355,7 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
-    var matchedArrays = nameScope.resolveMultipartName(Seq("col12", "element"))
+    var matchedArrays = stack.resolveMultipartName(Seq("col12", "element"))
     assert(
       matchedArrays == NameTarget(
         candidates = Seq(GetArrayItem(col12Array, Literal("element"))),
@@ -364,7 +371,7 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
-    matchedArrays = nameScope.resolveMultipartName(Seq("col13", "field"))
+    matchedArrays = stack.resolveMultipartName(Seq("col13", "field"))
     assert(
       matchedArrays == NameTarget(
         candidates = Seq(
@@ -388,8 +395,9 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
-    nameScope = new NameScope(nameScope.output :+ col8Struct)
-    matchedStructs = nameScope.resolveMultipartName(Seq("col8", "field"))
+    stack.overwriteCurrent(output = Some(stack.current.output :+ col8Struct))
+
+    matchedStructs = stack.resolveMultipartName(Seq("col8", "field"))
     assert(
       matchedStructs == NameTarget(
         candidates = Seq(
@@ -413,6 +421,310 @@ class NameScopeSuite extends PlanTest {
     )
   }
 
+  test("Direct outer references") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer, col9NestedStruct, col10Map)))
+
+    stack.withNewScope(isSubqueryRoot = true) {
+      stack.overwriteCurrent(output = Some(Seq(col1IntegerOther, col3Boolean)))
+
+      assert(
+        stack.resolveMultipartName(Seq("col0")) == NameTarget(
+          candidates = Seq.empty,
+          output = Seq(col1IntegerOther, col3Boolean)
+        )
+      )
+      assert(
+        stack.resolveMultipartName(Seq("col1")) == NameTarget(
+          candidates = Seq(col1IntegerOther),
+          output = Seq(col1IntegerOther, col3Boolean)
+        )
+      )
+      assert(
+        stack.resolveMultipartName(Seq("col2")) == NameTarget(
+          candidates = Seq(OuterReference(col2Integer)),
+          output = Seq(col1Integer, col2Integer, col9NestedStruct, col10Map),
+          isOuterReference = true
+        )
+      )
+      assert(
+        stack.resolveMultipartName(Seq("col3")) == NameTarget(
+          candidates = Seq(col3Boolean),
+          output = Seq(col1IntegerOther, col3Boolean)
+        )
+      )
+      assert(
+        stack.resolveMultipartName(Seq("col9", "field", "subfield")) == NameTarget(
+          candidates = Seq(
+            GetStructField(
+              GetStructField(
+                OuterReference(col9NestedStruct),
+                0,
+                Some("field")
+              ),
+              0,
+              Some("subfield")
+            )
+          ),
+          aliasName = Some("subfield"),
+          output = Seq(col1Integer, col2Integer, col9NestedStruct, col10Map),
+          isOuterReference = true
+        )
+      )
+
+      assert(
+        stack.resolveMultipartName(Seq("col10", "key")) == NameTarget(
+          candidates = Seq(GetMapValue(OuterReference(col10Map), Literal("key"))),
+          aliasName = Some("key"),
+          output = Seq(col1Integer, col2Integer, col9NestedStruct, col10Map),
+          isOuterReference = true
+        )
+      )
+    }
+  }
+
+  test("Outer references through layers of scopes") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
+
+    stack.withNewScope(isSubqueryRoot = true) {
+      stack.withNewScope() {
+        stack.withNewScope() {
+          stack.withNewScope() {
+            assert(
+              stack.resolveMultipartName(Seq("col1")) == NameTarget(
+                candidates = Seq(OuterReference(col1Integer)),
+                output = Seq(col1Integer, col2Integer),
+                isOuterReference = true
+              )
+            )
+            assert(
+              stack.resolveMultipartName(Seq("col2")) == NameTarget(
+                candidates = Seq(OuterReference(col2Integer)),
+                output = Seq(col1Integer, col2Integer),
+                isOuterReference = true
+              )
+            )
+          }
+
+          stack.overwriteCurrent(output = Some(Seq(col1IntegerOther, col3Boolean)))
+
+          stack.withNewScope() {
+            assert(
+              stack.resolveMultipartName(Seq("col1")) == NameTarget(
+                candidates = Seq(OuterReference(col1Integer)),
+                output = Seq(col1Integer, col2Integer),
+                isOuterReference = true
+              )
+            )
+            assert(
+              stack.resolveMultipartName(Seq("col2")) == NameTarget(
+                candidates = Seq(OuterReference(col2Integer)),
+                output = Seq(col1Integer, col2Integer),
+                isOuterReference = true
+              )
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("Nested correlation") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
+
+    stack.withNewScope(isSubqueryRoot = true) {
+      stack.overwriteCurrent(output = Some(Seq(col1IntegerOther)))
+
+      stack.withNewScope(isSubqueryRoot = true) {
+        stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
+
+        assert(
+          stack.resolveMultipartName(Seq("col1")) == NameTarget(
+            candidates = Seq(OuterReference(col1IntegerOther)),
+            output = Seq(col1IntegerOther),
+            isOuterReference = true
+          )
+        )
+        assert(
+          stack.resolveMultipartName(Seq("col2")) == NameTarget(
+            candidates = Seq.empty,
+            output = Seq(col3Boolean)
+          )
+        )
+        assert(
+          stack.resolveMultipartName(Seq("col3")) == NameTarget(
+            candidates = Seq(col3Boolean),
+            output = Seq(col3Boolean)
+          )
+        )
+      }
+    }
+  }
+
+  test("Resolve attribute from hidden output") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer, col2Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col2Integer, col3Boolean))
+    )
+
+    assert(
+      stack.resolveMultipartName(Seq("col3"), canResolveNameByHiddenOutput = false) == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col1Integer, col2Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col3"), canResolveNameByHiddenOutput = true) == NameTarget(
+        candidates = Seq(col3Boolean),
+        output = Seq(col1Integer, col2Integer)
+      )
+    )
+  }
+
+  test("Hidden output gets properly propagated in a stack") {
+    val stack = new NameScopeStack
+
+    stack.withNewScope() {
+
+      stack.overwriteCurrent(output = Some(Seq(col1Integer)), hiddenOutput = Some(Seq(col1Integer)))
+
+      stack.withNewScope(isSubqueryRoot = true) {
+
+        stack.withNewScope() {
+          stack.withNewScope() {
+            stack.overwriteCurrent(
+              output = Some(Seq(col1Integer, col2Integer)),
+              hiddenOutput = Some(Seq(col1Integer, col2Integer, col3Boolean))
+            )
+          }
+        }
+
+        assert(
+          stack.resolveMultipartName(Seq("col3")) == NameTarget(
+            candidates = Seq.empty,
+            output = Seq.empty
+          )
+        )
+        assert(
+          stack
+            .resolveMultipartName(Seq("col3"), canResolveNameByHiddenOutput = true) == NameTarget(
+            candidates = Seq(col3Boolean),
+            output = Seq.empty
+          )
+        )
+
+        stack.overwriteCurrent(output = Some(Seq(col1Integer)))
+        assert(
+          stack
+            .resolveMultipartName(Seq("col3"), canResolveNameByHiddenOutput = true) == NameTarget(
+            candidates = Seq(col3Boolean),
+            output = Seq(col1Integer)
+          )
+        )
+      }
+
+      assert(stack.current.hiddenOutput == Seq(col1Integer))
+      assert(
+        stack
+          .resolveMultipartName(Seq("col3"), canResolveNameByHiddenOutput = true) == NameTarget(
+          candidates = Seq.empty,
+          output = Seq(col1Integer)
+        )
+      )
+    }
+  }
+
+  test("Empty stack") {
+    val stack = new NameScopeStack
+
+    assert(stack.current.output.isEmpty)
+  }
+
+  test("Overwrite current with empty sequence") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq.empty))
+    assert(stack.current.output == Seq.empty)
+  }
+
+  test("Overwrite top of the stack containing single scope") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
+    assert(stack.current.output == Seq(col1Integer, col2Integer))
+
+    stack.overwriteCurrent(output = Some(Seq(col3Boolean, col4String)))
+    assert(stack.current.output == Seq(col3Boolean, col4String))
+
+    stack.overwriteCurrent(output = Some(Seq(col2Integer)))
+    assert(stack.current.output == Seq(col2Integer))
+  }
+
+  test("Overwrite top of the stack containing several scopes") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
+
+    val output = stack.withNewScope() {
+      assert(stack.current.output.isEmpty)
+
+      stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
+      assert(stack.current.output == Seq(col1Integer, col2Integer))
+
+      stack.overwriteCurrent(output = Some(Seq(col3Boolean, col4String)))
+      assert(stack.current.output == Seq(col3Boolean, col4String))
+
+      stack.overwriteCurrent(output = Some(Seq(col2Integer)))
+      assert(stack.current.output == Seq(col2Integer))
+
+      stack.current.output
+    }
+
+    assert(output == Seq(col2Integer))
+  }
+
+  test("Scope stacking") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer)))
+
+    val output = stack.withNewScope() {
+      stack.overwriteCurrent(output = Some(Seq(col2Integer)))
+
+      val output = stack.withNewScope() {
+        stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
+
+        val output = stack.withNewScope() {
+          stack.overwriteCurrent(output = Some(Seq(col4String)))
+
+          assert(stack.current.output == Seq(col4String))
+
+          stack.current.output
+        }
+
+        assert(output == Seq(col4String))
+        assert(stack.current.output == Seq(col3Boolean))
+
+        stack.current.output
+      }
+
+      assert(output == Seq(col3Boolean))
+      assert(stack.current.output == Seq(col2Integer))
+
+      stack.current.output
+    }
+
+    assert(output == Seq(col2Integer))
+    assert(stack.current.output == Seq(col1Integer))
+  }
+
   /**
    * Check both [[resolveMultipartName]] and [[findAttributesByName]] for a single part name.
    *
@@ -432,96 +744,5 @@ class NameScopeSuite extends PlanTest {
       )
     )
     assert(nameScope.findAttributesByName(name) == candidates)
-  }
-}
-
-class NameScopeStackSuite extends PlanTest {
-  private val col1Integer = AttributeReference(name = "col1", dataType = IntegerType)()
-  private val col2String = AttributeReference(name = "col2", dataType = StringType)()
-  private val col3Integer = AttributeReference(name = "col3", dataType = IntegerType)()
-  private val col4String = AttributeReference(name = "col4", dataType = StringType)()
-
-  test("Empty stack") {
-    val stack = new NameScopeStack
-
-    assert(stack.top.output.isEmpty)
-  }
-
-  test("Overwrite top with empty sequence") {
-    val stack = new NameScopeStack
-
-    stack.overwriteTop(Seq.empty)
-    assert(stack.top.output == Seq.empty)
-  }
-
-  test("Overwrite top of the stack containing single scope") {
-    val stack = new NameScopeStack
-
-    stack.overwriteTop(Seq(col1Integer, col2String))
-    assert(stack.top.output == Seq(col1Integer, col2String))
-
-    stack.overwriteTop(Seq(col3Integer, col4String))
-    assert(stack.top.output == Seq(col3Integer, col4String))
-
-    stack.overwriteTop(Seq(col2String))
-    assert(stack.top.output == Seq(col2String))
-  }
-
-  test("Overwrite top of the stack containing several scopes") {
-    val stack = new NameScopeStack
-
-    stack.overwriteTop(Seq(col3Integer))
-
-    val output = stack.withNewScope {
-      assert(stack.top.output.isEmpty)
-
-      stack.overwriteTop(Seq(col1Integer, col2String))
-      assert(stack.top.output == Seq(col1Integer, col2String))
-
-      stack.overwriteTop(Seq(col3Integer, col4String))
-      assert(stack.top.output == Seq(col3Integer, col4String))
-
-      stack.overwriteTop(Seq(col2String))
-      assert(stack.top.output == Seq(col2String))
-
-      stack.top.output
-    }
-
-    assert(output == Seq(col2String))
-  }
-
-  test("Scope stacking") {
-    val stack = new NameScopeStack
-
-    stack.overwriteTop(Seq(col1Integer))
-
-    val output = stack.withNewScope {
-      stack.overwriteTop(Seq(col2String))
-
-      val output = stack.withNewScope {
-        stack.overwriteTop(Seq(col3Integer))
-
-        val output = stack.withNewScope {
-          stack.overwriteTop(Seq(col4String))
-
-          assert(stack.top.output == Seq(col4String))
-
-          stack.top.output
-        }
-
-        assert(output == Seq(col4String))
-        assert(stack.top.output == Seq(col3Integer))
-
-        stack.top.output
-      }
-
-      assert(output == Seq(col3Integer))
-      assert(stack.top.output == Seq(col2String))
-
-      stack.top.output
-    }
-
-    assert(output == Seq(col2String))
-    assert(stack.top.output == Seq(col1Integer))
   }
 }

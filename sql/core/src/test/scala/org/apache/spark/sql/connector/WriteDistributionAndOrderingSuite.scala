@@ -977,7 +977,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     )
     val distribution = Distributions.ordered(ordering)
 
-    catalog.createTable(ident, columns, Array.empty, emptyProps, distribution, ordering, None, None)
+    catalog.createTable(ident, columns, Array.empty, emptyProps,
+      distribution, ordering, None, None)
 
     withTempDir { checkpointDir =>
       val inputData = ContinuousMemoryStream[(Long, String, Date)]
@@ -1218,7 +1219,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     // scalastyle:on argcount
 
     catalog.createTable(ident, columns, Array.empty, emptyProps, tableDistribution,
-      tableOrdering, tableNumPartitions, tablePartitionSize, distributionStrictlyRequired)
+      tableOrdering, tableNumPartitions, tablePartitionSize,
+      distributionStrictlyRequired)
 
     val df = if (!dataSkewed) {
       spark.createDataFrame(Seq(

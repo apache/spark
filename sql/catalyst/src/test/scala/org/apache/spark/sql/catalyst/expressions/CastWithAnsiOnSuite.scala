@@ -23,13 +23,14 @@ import java.time.DateTimeException
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
  * Test suite for data type casting expression [[Cast]] with ANSI mode enabled.
@@ -180,6 +181,57 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         )
       )
     }
+  }
+
+  test("ANSI mode: disallow variant cast to non-nullable types") {
+    // Array
+    val variantVal = new VariantVal(Array[Byte](12, 3), Array[Byte](1, 0, 0))
+    val sourceArrayType = ArrayType(VariantType, containsNull = false)
+    val targetArrayType = ArrayType(StringType, containsNull = false)
+    val variantArray = Literal.create(Seq(variantVal), sourceArrayType)
+    assert(cast(variantArray, targetArrayType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceArrayType),
+        "targetType" -> toSQLType(targetArrayType)
+      )
+    ))
+    // make sure containsNull = true works
+    val targetArrayType2 = ArrayType(StringType, containsNull = true)
+    assert(cast(variantArray, targetArrayType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
+
+    // Struct
+    val sourceStructType = StructType(Array(StructField("v", VariantType, nullable = false)))
+    val targetStructType = StructType(Array(StructField("v", StringType, nullable = false)))
+    val variantStruct = Literal.create(Row(variantVal), sourceStructType)
+    assert(cast(variantStruct, targetStructType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceStructType),
+        "targetType" -> toSQLType(targetStructType)
+      )
+    ))
+    // make sure nullable = true works
+    val targetStructType2 = StructType(Array(StructField("v", StringType, nullable = true)))
+    assert(cast(variantStruct, targetStructType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
+
+    // Map
+    val sourceMapType = MapType(StringType, VariantType, valueContainsNull = false)
+    val targetMapType = MapType(StringType, StringType, valueContainsNull = false)
+    val variantMap = Literal.create(Map("k" -> variantVal), sourceMapType)
+    assert(cast(variantMap, targetMapType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceMapType),
+        "targetType" -> toSQLType(targetMapType)
+      )
+    ))
+    // make sure valueContainsNull = true works
+    val targetMapType2 = MapType(StringType, StringType, valueContainsNull = true)
+    assert(cast(variantMap, targetMapType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
   }
 
   test("ANSI mode: disallow type conversions between Datatime types and Boolean types") {
