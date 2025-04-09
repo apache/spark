@@ -3899,7 +3899,7 @@ class AstBuilder extends DataTypeAstBuilder
       }
       col.defaultValue.foreach { default =>
         metadataBuilder.putString(
-          StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY, default.originalSQL)
+          StructType.SQL_FUNCTION_DEFAULT_METADATA_KEY, default.originalSQL)
       }
       StructField(col.name, col.dataType, col.nullable, metadataBuilder.build())
     }
