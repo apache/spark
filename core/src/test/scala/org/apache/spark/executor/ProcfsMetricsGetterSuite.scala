@@ -86,7 +86,7 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
       val child = process.toHandle.pid()
       eventually(timeout(10.seconds), interval(100.milliseconds)) {
         val pids = p.computeProcessTree()
-        assert(pids.size === 3)
+        assert(pids.size === 4)
         assert(pids.contains(currentPid))
         assert(pids.contains(child))
       }
