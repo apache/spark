@@ -365,6 +365,11 @@ object SecondExpressionBuilder extends ExpressionBuilder {
 
     _FUNC_ - Returns the current time at the start of query evaluation.
   """,
+  arguments = """
+    Arguments:
+      * precision - An optional integer literal in the range [${TimeType.MIN_PRECISION}..${TimeType.MICROS_PRECISION}], indicating how many
+                    fractional digits of seconds to include. If omitted, the default is ${TimeType.MICROS_PRECISION}.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_();
