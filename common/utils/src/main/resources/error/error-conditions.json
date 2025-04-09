@@ -4853,19 +4853,6 @@
     ],
     "sqlState" : "XXKST"
   },
-  "STATE_STORE_LOCK_VIOLATION" : {
-    "message" : [
-      "An lock model violation occurred in the state store."
-    ],
-    "subClass" : {
-      "OPERATION_OUT_OF_ORDER" : {
-        "message" : [
-          "A state store state machine operation is out of order. errorMsg=<errorMsg>"
-        ]
-      }
-    },
-    "sqlState" : "XXKST"
-  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
