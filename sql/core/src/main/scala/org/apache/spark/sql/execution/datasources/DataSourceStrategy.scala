@@ -257,40 +257,30 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
-    // If the plan is cached, additionally check if options have changed.
-    var updatedOptions: Boolean = false
-
-    val cachedPlan = catalog.getCachedTable(qualifiedTableName)
-    if (cachedPlan != null) {
-      cachedPlan match {
-        case LogicalRelationWithTable(
-        HadoopFsRelation(_, _, _, _, _, options), _) =>
-          val prevOptions = new CaseInsensitiveStringMap(options.asJava)
-          val newOptions = new CaseInsensitiveStringMap(dsOptions.asJava)
-          updatedOptions = prevOptions != newOptions
-        case _ =>
-      }
-    }
-
-    val newPlan: LogicalPlan = {
-      val dataSource = DataSource(
-        sparkSession,
-        // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
-        // inferred at runtime. We should still support it.
-        userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-        partitionColumns = table.partitionColumnNames,
-        bucketSpec = table.bucketSpec,
-        className = table.provider.get,
-        options = dsOptions,
-        catalogTable = Some(table)
-      )
+    lazy val newPlan = {
+      val dataSource =
+        DataSource(
+          sparkSession,
+          className = table.provider.get,
+          userSpecifiedSchema = Some(table.schema),
+          partitionColumns = table.partitionColumnNames,
+          bucketSpec = table.bucketSpec,
+          options = dsOptions,
+          catalogTable = Some(table))
       LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
     }
-
-    if (updatedOptions) {
-      newPlan
-    } else {
-      catalog.getCachedPlan(qualifiedTableName, () => newPlan)
+    lazy val cachedPlan = catalog.getCachedPlan(qualifiedTableName, () => newPlan)
+    cachedPlan match {
+      case LogicalRelationWithTable(
+      HadoopFsRelation(_, _, _, _, _, options), _) =>
+        val prevOptions = new CaseInsensitiveStringMap(options.asJava)
+        val newOptions = new CaseInsensitiveStringMap(dsOptions.asJava)
+        if (prevOptions != newOptions) {
+          newPlan
+        } else {
+          cachedPlan
+        }
+      case _ => newPlan
     }
   }
 
