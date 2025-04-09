@@ -770,7 +770,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param hours the hour, from 0 to 23
    * @param minutes the minute, from 0 to 59
    * @param secsAndMicros the second, from 0 to 59.999999
-   * @return Time time represented as microseconds since the start of the day
+   * @return A time value represented as microseconds since the start of the day
    */
   def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     assert(secsAndMicros.scale == 6,
