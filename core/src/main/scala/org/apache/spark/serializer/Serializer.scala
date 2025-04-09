@@ -169,7 +169,7 @@ abstract class DeserializationStream extends Closeable {
       } catch {
         case eof: EOFException =>
           finished = true
-          null
+          throw eof
       }
     }
 
