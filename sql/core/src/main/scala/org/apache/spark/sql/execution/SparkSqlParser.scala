@@ -689,26 +689,18 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
       }
 
-      val containsGeneratedColumn: Option[Boolean] = Option(ctx.parameters).map { params =>
-        params.colDefinition().asScala.exists { colDefinition =>
-          colDefinition.colDefinitionOption().asScala.exists { option =>
-            Option(option.generationExpression()).isDefined
-          }
+      // Reject invalid options
+      for {
+        parameters <- Option(ctx.parameters)
+        colDefinition <- parameters.colDefinition().asScala
+        option <- colDefinition.colDefinitionOption().asScala
+      } {
+        if (option.generationExpression() != null) {
+          throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
         }
-      }
-      if (containsGeneratedColumn.contains(true)) {
-        throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
-      }
-
-      val containsConstraints: Option[Boolean] = Option(ctx.parameters).map { params =>
-        params.colDefinition().asScala.exists { colDefinition =>
-          colDefinition.colDefinitionOption().asScala.exists { option =>
-            Option(option.columnConstraintDefinition()).isDefined
-          }
+        if (option.columnConstraintDefinition() != null) {
+          throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
         }
-      }
-      if (containsConstraints.contains(true)) {
-        throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
       }
 
       val inputParamText = Option(ctx.parameters).map(source)

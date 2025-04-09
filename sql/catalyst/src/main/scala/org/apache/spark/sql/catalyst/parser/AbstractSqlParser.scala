@@ -104,7 +104,10 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
   }
 
   override def parseRoutineParam(sqlText: String): StructType = parse(sqlText) { parser =>
-    astBuilder.visitSingleRoutineParamList(parser.singleRoutineParamList())
+    val ctx = parser.singleRoutineParamList()
+    withErrorHandling(ctx, Some(sqlText)) {
+      astBuilder.visitSingleRoutineParamList(ctx)
+    }
   }
 
   def withErrorHandling[T](ctx: ParserRuleContext, sqlText: Option[String])(toResult: => T): T = {

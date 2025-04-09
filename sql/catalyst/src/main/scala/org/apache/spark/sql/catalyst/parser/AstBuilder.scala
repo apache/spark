@@ -3885,27 +3885,23 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitSingleRoutineParamList(
       ctx: SingleRoutineParamListContext): StructType = withOrigin(ctx) {
     val (cols, constraints) = visitColDefinitionList(ctx.colDefinitionList())
+    // Constraints and generated columns should have been rejected by the parser.
     assert(constraints.isEmpty)
     for (col <- cols) {
       assert(col.generationExpression.isEmpty)
       assert(col.identityColumnSpec.isEmpty)
     }
-    val schema = StructType(cols.map(_.toV1Column))
-    // Add the parameter default metadata and remove the column default metadata.
-    val fields = for (field <- schema) yield {
-      // Generated columns should have been rejected by the parser.
-      assert(!field.metadata.contains(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
-      field.getCurrentDefaultValue() match {
-        case Some(default) =>
-          val metadata = new MetadataBuilder()
-            .withMetadata(field.metadata)
-            .remove(ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-            .remove(ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-            .putString(StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY, default)
-            .build()
-          field.copy(metadata = metadata)
-        case None => field
+    // Build fields from the columns, converting comments and default values
+    val fields = for (col <- cols) yield {
+      val metadataBuilder = new MetadataBuilder().withMetadata(col.metadata)
+      col.comment.foreach { c =>
+        metadataBuilder.putString("comment", c)
       }
+      col.defaultValue.foreach { default =>
+        metadataBuilder.putString(
+          StructField.SQL_FUNCTION_DEFAULT_METADATA_KEY, default.originalSQL)
+      }
+      StructField(col.name, col.dataType, col.nullable, metadataBuilder.build())
     }
     StructType(fields.toArray)
   }
