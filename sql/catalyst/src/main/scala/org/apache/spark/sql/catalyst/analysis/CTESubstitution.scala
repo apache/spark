@@ -369,7 +369,11 @@ object CTESubstitution extends Rule[LogicalPlan] {
         .find(r => conf.resolver(r._1, table))
         .map {
           case (_, d) =>
-            if (alwaysInline) {
+            val hasSelfReference = d.exists {
+              case CTERelationRef(d.id, _, _, _, _, true, _) => true
+              case _ => false
+            }
+            if (alwaysInline && !hasSelfReference) {
               d.child
             } else {
               // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
