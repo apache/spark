@@ -31,3 +31,35 @@ select make_time(1, 18, 9999999999.999999);
 select make_time(1, 18, -999999999.999999);
 -- Full seconds overflows to a valid seconds integer when converted from long to int
 select make_time(1, 18, 4294967297.999999);
+
+select secondoftime_with_fraction(to_time('23-59-59.987654', 'HH-mm-ss.SSSSSS'));
+select second(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select minute(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select hour(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+
+select extract(HOUR from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(H from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(HOURS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(HR from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(HRS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+
+select extract(MINUTE from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(M from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(MIN from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(MINS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(MINUTES from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+
+select extract(SECOND from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(S from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(SEC from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(SECONDS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+select extract(SECS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'));
+
+-- test with precisions
+select extract(SECOND FROM cast('09:08:01.987654' as time(0)));
+select extract(SECOND FROM cast('09:08:01.987654' as time(1)));
+select extract(SECOND FROM cast('09:08:01.987654' as time(2)));
+select extract(SECOND FROM cast('09:08:01.987654' as time(3)));
+select extract(SECOND FROM cast('09:08:01.987654' as time(4)));
+select extract(SECOND FROM cast('09:08:01.987654' as time(5)));
+select extract(SECOND FROM cast('09:08:01.987654' as time(6)));

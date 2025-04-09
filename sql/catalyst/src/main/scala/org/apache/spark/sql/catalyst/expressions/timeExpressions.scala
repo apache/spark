@@ -130,15 +130,16 @@ case class ToTimeParser(fmt: Option[String]) {
 
 object TimePart {
 
-  def parseExtractField(
-      extractField: String,
-      source: Expression): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => HoursOfTime(source)
-    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => MinutesOfTime(source)
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
-    case _ =>
-      throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(extractField, source)
-  }
+  def parseExtractField(extractField: String, source: Expression): Expression =
+    extractField.toUpperCase(Locale.ROOT) match {
+      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => HoursOfTime(source)
+      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => MinutesOfTime(source)
+      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondsOfTimeWithFraction(source)
+      case _ =>
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
+          extractField,
+          source)
+    }
 }
 
 /**
@@ -308,6 +309,49 @@ object HourExpressionBuilder extends ExpressionBuilder {
           Hour(child)
       }
     }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(time_expr) - Returns the second component with fraction of the given time.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME'23:59:59.999999');
+       59.999999
+  """,
+  since = "4.1.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class SecondsOfTimeWithFraction(child: Expression)
+    extends RuntimeReplaceable
+    with ExpectsInputTypes {
+
+  override def replacement: Expression = {
+
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      DecimalType(8, 6),
+      "getSecondsOfTimeWithFraction",
+      Seq(child, Literal(precision)),
+      Seq(child.dataType, IntegerType))
+  }
+  private val precision: Int = child.dataType match {
+    case t: TimeType => t.precision
+    case _ => TimeType.MAX_PRECISION
+  }
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimeType(precision))
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override def prettyName: String = "secondoftime_with_fraction"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(child = newChildren.head)
   }
 }
 

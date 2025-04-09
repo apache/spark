@@ -289,6 +289,7 @@
 | org.apache.spark.sql.catalyst.expressions.SchemaOfXml | schema_of_xml | SELECT schema_of_xml('<p><a>1</a></p>') | struct<schema_of_xml(<p><a>1</a></p>):string> |
 | org.apache.spark.sql.catalyst.expressions.Sec | sec | SELECT sec(0) | struct<SEC(0):double> |
 | org.apache.spark.sql.catalyst.expressions.SecondExpressionBuilder | second | SELECT second('2018-02-14 12:58:59') | struct<second(2018-02-14 12:58:59):int> |
+| org.apache.spark.sql.catalyst.expressions.SecondsOfTimeWithFraction | secondoftime_with_fraction | SELECT secondoftime_with_fraction(TIME'23:59:59.999999') | struct<secondoftime_with_fraction(TIME '23:59:59.999999'):decimal(8,6)> |
 | org.apache.spark.sql.catalyst.expressions.SecondsToTimestamp | timestamp_seconds | SELECT timestamp_seconds(1230219000) | struct<timestamp_seconds(1230219000):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.Sentences | sentences | SELECT sentences('Hi there! Good morning.') | struct<sentences(Hi there! Good morning., , ):array<array<string>>> |
 | org.apache.spark.sql.catalyst.expressions.Sequence | sequence | SELECT sequence(1, 5) | struct<sequence(1, 5):array<int>> |
