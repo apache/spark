@@ -520,6 +520,10 @@ class SubqueryTestsMixin:
                             ),
                             "select struct(c as a, d as b) from rr",
                         ),
+                        (
+                            self.spark.table("rr").select(sf.struct(sf.col("c"), sf.col("d"))),
+                            "select struct(c, d) from rr",
+                        ),
                     ]:
                         sql_query = f"""select a, b from ll where {values} in ({query})"""
                         with self.subTest(sql_query=sql_query):

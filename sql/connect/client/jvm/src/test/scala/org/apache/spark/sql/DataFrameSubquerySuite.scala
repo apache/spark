@@ -354,10 +354,11 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
           (spark.table("rr").select($"scd"), "select scd from rr"),
           (
             spark.table("rr").select(struct($"c".as("a"), $"d".as("b"))),
-            "select struct(c as a, d as b) from rr"))) {
+            "select struct(c as a, d as b) from rr"),
+          (spark.table("rr").select(struct($"c", $"d")), "select struct(c, d) from rr"))) {
         checkAnswer(
           spark.table("ll").where(col.isin(df)).select($"a", $"b"),
-          spark.sql(s"select a, b from ll where $values in ($query)"))
+          sql(s"select a, b from ll where $values in ($query)"))
       }
     }
   }
