@@ -49,7 +49,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantBuilder.FieldEntry
-import org.apache.spark.types.variant.VariantUtil.MAX_DECIMAL16_PRECISION
+import org.apache.spark.types.variant.VariantUtil
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class StaxXmlParser(
@@ -949,7 +949,15 @@ object StaxXmlParser {
 
     // Map to store the variant values of all child fields
     // Each field could have multiple entries, which means it's an array
-    val fieldToVariants = collection.mutable.TreeMap.empty[String, java.util.ArrayList[Variant]]
+    // The map is sorted by field name, and the ordering is based on the case sensitivity
+    val caseSensitivityOrdering: Ordering[String] = if (SQLConf.get.caseSensitiveAnalysis) {
+      (x: String, y: String) => x.compareTo(y)
+    } else {
+      (x: String, y: String) => x.compareToIgnoreCase(y)
+    }
+    val fieldToVariants = collection.mutable.TreeMap.empty[String, java.util.ArrayList[Variant]](
+      caseSensitivityOrdering
+    )
 
     // Handle attributes first
     StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options).foreach {
@@ -989,7 +997,7 @@ object StaxXmlParser {
               // If the element only has value tag field, parse the element as a variant primitive
               rootBuilder.appendVariant(fieldToVariants(options.valueTag).get(0))
             } else {
-              writeVariantObject(rootBuilder, start, fieldToVariants)
+              writeVariantObject(rootBuilder, fieldToVariants)
             }
           }
           shouldStop = true
@@ -1010,63 +1018,75 @@ object StaxXmlParser {
 
   /**
    * Write a variant object to the variant builder.
-   * This method handles the case sensitivity of field names when building the variant object. When
-   * case sensitivity is disabled, a random field name will be used for all fields with the same
-   * lowercase name.
    *
    * @param builder The variant builder to write to
-   * @param start The start position of the variant object in the builder
    * @param fieldToVariants A map of field names to their corresponding variant values of the object
    */
   private def writeVariantObject(
       builder: VariantBuilder,
-      start: Int,
       fieldToVariants: collection.mutable.TreeMap[String, java.util.ArrayList[Variant]]): Unit = {
-    val rootFieldEntries = new java.util.ArrayList[FieldEntry]()
+    val start = builder.getWritePos
+    val objectFieldEntries = new java.util.ArrayList[FieldEntry]()
 
-    fieldToVariants
-      // Group the fields by their keys and take case sensitivity into account
-      .groupBy {
-        case (k, _) if SQLConf.get.caseSensitiveAnalysis => k
-        case (k, _) => k.toLowerCase(Locale.ROOT)
-      }
-      .foreach {
-        case (_, fieldToVariantsGroup) =>
-          // Pick the first field key as the field name
-          val field = fieldToVariantsGroup.head._1
-
-          // Add the field key to the variant metadata
-          val fieldId = builder.addKey(field)
-          rootFieldEntries.add(
-            new FieldEntry(field, fieldId, builder.getWritePos - start)
-          )
-
-          // Aggregate all variant values for the field
-          val variants = fieldToVariantsGroup.values.flatMap(_.asScala)
-
-          val fieldValue = if (variants.size > 1) {
-            // If the field has more than one entry, it's an array field. Build a Variant
-            // array as the field value
-            val arrayBuilder = new VariantBuilder(false)
-            val start = arrayBuilder.getWritePos
-            val offsets = new util.ArrayList[Integer]()
-            variants.foreach { v =>
-              offsets.add(arrayBuilder.getWritePos - start)
-              arrayBuilder.appendVariant(v)
-            }
-            arrayBuilder.finishWritingArray(start, offsets)
-            arrayBuilder.result()
+    val (lastFieldKey, lastFieldValue) =
+      fieldToVariants.tail.foldLeft(fieldToVariants.head._1, fieldToVariants.head._2) {
+        case ((key, variantVals), (k, v)) =>
+          if (!SQLConf.get.caseSensitiveAnalysis && k.equalsIgnoreCase(key)) {
+            variantVals.addAll(v)
+            (key, variantVals)
           } else {
-            // Otherwise, just use the first variant as the field value
-            variants.head
+            writeVariantObjectField(key, variantVals, builder, start, objectFieldEntries)
+            (k, v)
           }
-
-          // Append the field value to the variant builder
-          builder.appendVariant(fieldValue)
       }
+
+    writeVariantObjectField(lastFieldKey, lastFieldValue, builder, start, objectFieldEntries)
 
     // Finish writing the variant object
-    builder.finishWritingObject(start, rootFieldEntries)
+    builder.finishWritingObject(start, objectFieldEntries)
+  }
+
+  /**
+   * Write a single field to a variant object
+   *
+   * @param fieldName the name of the object field
+   * @param fieldVariants the variant value of the field. A field could have multiple variant value,
+   *                      which means it's an array field
+   * @param builder the variant builder
+   * @param objectStart the start position of the variant object in the builder
+   * @param objectFieldEntries a list tracking all fields of the variant object
+   */
+  private def writeVariantObjectField(
+      fieldName: String,
+      fieldVariants: java.util.ArrayList[Variant],
+      builder: VariantBuilder,
+      objectStart: Int,
+      objectFieldEntries: java.util.ArrayList[FieldEntry]): Unit = {
+    val start = builder.getWritePos
+    val fieldId = builder.addKey(fieldName)
+    objectFieldEntries.add(
+      new FieldEntry(fieldName, fieldId, builder.getWritePos - objectStart)
+    )
+
+    val fieldValue = if (fieldVariants.size() > 1) {
+      // If the field has more than one entry, it's an array field. Build a Variant
+      // array as the field value
+      val arrayBuilder = new VariantBuilder(false)
+      val arrayStart = arrayBuilder.getWritePos
+      val offsets = new util.ArrayList[Integer]()
+      fieldVariants.asScala.foreach { v =>
+        offsets.add(arrayBuilder.getWritePos - arrayStart)
+        arrayBuilder.appendVariant(v)
+      }
+      arrayBuilder.finishWritingArray(arrayStart, offsets)
+      arrayBuilder.result()
+    } else {
+      // Otherwise, just use the first variant as the field value
+      fieldVariants.get(0)
+    }
+
+    // Append the field value to the variant builder
+    builder.appendVariant(fieldValue)
   }
 
   /**
@@ -1119,7 +1139,8 @@ object StaxXmlParser {
         if (d.scale() < 0) {
           d = d.setScale(0)
         }
-        if (d.scale <= MAX_DECIMAL16_PRECISION && d.precision <= MAX_DECIMAL16_PRECISION) {
+        if (d.scale <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+            d.precision <= VariantUtil.MAX_DECIMAL16_PRECISION) {
           builder.appendDecimal(d)
           return
         }

@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.time.ZoneOffset
+import org.apache.spark.SparkException
 
+import java.time.ZoneOffset
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
@@ -162,8 +163,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("Parser: null and empty XML elements are parsed as variant null") {
     // XML elements with null and empty values
     testParser(
-      xml = "<ROW><name></name><amount>93</amount></ROW>",
-      expectedJsonStr = """{"amount":93,"name":null}"""
+      xml = """<ROW><name></name><amount>93</amount><space> </space><newline>
+                      </newline></ROW>""",
+      expectedJsonStr = """{"amount":93,"name":null,"newline":null,"space":null}"""
     )
     testParser(
       xml = "<ROW><name>Sam</name><amount>n/a</amount></ROW>",
@@ -195,6 +197,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |   <name><!-- before value --> Sam <!-- after value --></name>
               |   <!-- comment -->
               |   <amount>93</amount>
+              |   <!-- <a>1</a> -->
               |</ROW>
               |""".stripMargin,
       expectedJsonStr = """{"amount":93,"name":"Sam"}"""
@@ -308,7 +311,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       testParser(
         xml = xmlString,
-        expectedJsonStr = """{"A":[{"_VALUE":3,"b":4},{"_VALUE":1,"b":2}]}"""
+        expectedJsonStr = """{"a":[{"_VALUE":1,"b":2},{"_VALUE":3,"b":4}]}"""
       )
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -422,8 +425,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // TODO: This should be allowed once we support variant ingestion with malformed record handling
-  test("DSL: read XML files using both singleVariantColumn and schema should fail") {
+  test("DSL: failure cases for reading XML files using singleVariantColumn") {
+    // The test has both schema and singleVariantColumn specified. So it has an analysis error:
+    // INVALID_SINGLE_VARIANT_COLUMN
     checkError(
       exception = intercept[AnalysisException] {
         createDSLDataFrame(
