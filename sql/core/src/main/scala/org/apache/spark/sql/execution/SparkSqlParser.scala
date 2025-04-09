@@ -696,9 +696,19 @@ class SparkSqlAstBuilder extends AstBuilder {
           }
         }
       }
-
       if (containsGeneratedColumn.contains(true)) {
         throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+      }
+
+      val containsConstraints: Option[Boolean] = Option(ctx.parameters).map { params =>
+        params.colDefinition().asScala.exists { colDefinition =>
+          colDefinition.colDefinitionOption().asScala.exists { option =>
+            Option(option.columnConstraintDefinition()).isDefined
+          }
+        }
+      }
+      if (containsConstraints.contains(true)) {
+        throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
       }
 
       val inputParamText = Option(ctx.parameters).map(source)

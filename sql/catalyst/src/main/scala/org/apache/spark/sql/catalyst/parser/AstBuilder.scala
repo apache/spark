@@ -3884,8 +3884,14 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitSingleRoutineParamList(
       ctx: SingleRoutineParamListContext): StructType = withOrigin(ctx) {
+    val (cols, constraints) = visitColDefinitionList(ctx.colDefinitionList())
+    assert(constraints.isEmpty)
+    for (col <- cols) {
+      assert(col.generationExpression.isEmpty)
+      assert(col.identityColumnSpec.isEmpty)
+    }
+    val schema = StructType(cols.map(_.toV1Column))
     // Add the parameter default metadata and remove the column default metadata.
-    val schema = createSchema(ctx.colDefinitionList())
     val fields = for (field <- schema) yield {
       // Generated columns should have been rejected by the parser.
       assert(!field.metadata.contains(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
