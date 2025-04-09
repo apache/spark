@@ -19,13 +19,15 @@ from typing import Any, TYPE_CHECKING
 
 from pyspark.ml import functions as PyMLFunctions
 from pyspark.sql.column import Column
-from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, lit
+
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
+    from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, lit
+
     return _invoke_function("vector_to_array", _to_col(col), lit(dtype))
 
 
@@ -33,6 +35,8 @@ vector_to_array.__doc__ = PyMLFunctions.vector_to_array.__doc__
 
 
 def array_to_vector(col: Column) -> Column:
+    from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col
+
     return _invoke_function("array_to_vector", _to_col(col))
 
 
