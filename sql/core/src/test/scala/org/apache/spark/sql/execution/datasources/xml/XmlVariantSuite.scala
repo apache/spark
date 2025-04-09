@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import org.apache.spark.SparkException
-
 import java.time.ZoneOffset
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
@@ -425,9 +425,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  test("DSL: failure cases for reading XML files using singleVariantColumn") {
-    // The test has both schema and singleVariantColumn specified. So it has an analysis error:
-    // INVALID_SINGLE_VARIANT_COLUMN
+  test("DSL: provided schema in singleVariantColumn mode") {
+    // Specified schema in singleVariantColumn mode can't contain columns other than the variant
+    // column and the corrupted record column
     checkError(
       exception = intercept[AnalysisException] {
         createDSLDataFrame(
@@ -437,7 +437,73 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         )
       },
       condition = "INVALID_SINGLE_VARIANT_COLUMN",
-      parameters = Map.empty
+      parameters = Map(
+        "schema" -> """"STRUCT<year: VARIANT, make: STRING, model: STRING, comment: STRING>""""
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        createDSLDataFrame(
+          fileName = "cars.xml",
+          singleVariantColumn = Some("var"),
+          schemaDDL = Some("_corrupt_record string")
+        )
+      },
+      condition = "INVALID_SINGLE_VARIANT_COLUMN",
+      parameters = Map(
+        "schema" -> """"STRUCT<_corrupt_record: STRING>""""
+      )
+    )
+
+    // Valid schema in singleVariantColumn mode
+    createDSLDataFrame(
+      fileName = "cars.xml",
+      singleVariantColumn = Some("var"),
+      schemaDDL = Some("var variant")
+    )
+    createDSLDataFrame(
+      fileName = "cars.xml",
+      singleVariantColumn = Some("var"),
+      schemaDDL = Some("var variant, _corrupt_record string")
+    )
+  }
+
+  test("DSL: handle malformed record in singleVariantColumn mode") {
+    // FAILFAST mode
+    checkError(
+      exception = intercept[SparkException] {
+        createDSLDataFrame(
+          fileName = "cars-malformed.xml",
+          singleVariantColumn = Some("var"),
+          extraOptions = Map("mode" -> "FAILFAST")
+        ).collect()
+      }.getCause.asInstanceOf[SparkException],
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "[null]",
+        "failFastMode" -> "FAILFAST")
+    )
+
+    // PERMISSIVE mode
+    val df = createDSLDataFrame(
+      fileName = "cars-malformed.xml",
+      singleVariantColumn = Some("var"),
+      extraOptions = Map("mode" -> "PERMISSIVE")
+    )
+    checkAnswer(
+      df.select(variant_get(col("var"), "$.year", "int")),
+      Seq(Row(2015), Row(null), Row(null))
+    )
+
+    // DROPMALFORMED mode
+    val df2 = createDSLDataFrame(
+      fileName = "cars-malformed.xml",
+      singleVariantColumn = Some("var"),
+      extraOptions = Map("mode" -> "DROPMALFORMED")
+    )
+    checkAnswer(
+      df2.select(variant_get(col("var"), "$.year", "int")),
+      Seq(Row(2015))
     )
   }
 

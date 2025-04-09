@@ -21,7 +21,7 @@ import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
-import javax.xml.stream.{XMLEventReader, XMLStreamConstants, XMLStreamException}
+import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
@@ -920,9 +920,7 @@ object StaxXmlParser {
    */
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
-    val rootEvent =
-      StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
-    val rootAttributes = rootEvent.asStartElement.getAttributes.asScala.toArray
+    val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
     val variant = convertVariant(parser, rootAttributes, options)
     val v = new VariantVal(variant.getValue, variant.getMetadata)
     parser.close()
