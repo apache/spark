@@ -489,7 +489,7 @@ WITH RECURSIVE
 SELECT * FROM t;
 
 -- rCTE referencing other rCTE
-    WITH RECURSIVE t1(a, b) AS (
+WITH RECURSIVE t1(a, b) AS (
     SELECT 1, 1
     UNION ALL
     SELECT a + b, a FROM t1 WHERE a < 20
