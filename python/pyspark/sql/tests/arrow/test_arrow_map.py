@@ -194,13 +194,24 @@ class MapInArrowTestsMixin(object):
         with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
             df.mapInArrow(func, "a int, b int").collect()
 
-    def test_different_nullability(self):
+    def test_nullability_widen(self):
         def func(iterator):
             for _ in iterator:
                 yield pa.RecordBatch.from_arrays([[1]], ["a"])
 
         df = self.spark.range(1)
-        self.assertEqual(df.mapInArrow(func, "a long not null").collect(), [(1,)])
+        with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
+            df.mapInArrow(func, "a int not null").collect()
+
+    def test_nullability_narrow(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pa.RecordBatch.from_arrays(
+                    [[1]], pa.schema([pa.field("a", pa.int32(), nullable=False)])
+                )
+
+        df = self.spark.range(1)
+        df.mapInArrow(func, "a int").collect()
 
 
 class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):
