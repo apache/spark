@@ -607,7 +607,7 @@ class DataSourceReader(ABC):
         >>> def pruneColumns(self, requiredSchema):
         ...     self.required = requiredSchema.fieldNames()
         ...     required = set(requiredSchema.fieldNames())
-        ...     schema = StructType([f for f in self.schema.fields if f in required])
+        ...     schema = StructType([f for f in self.schema.fields if f.name in required])
         ...     return schema
 
         Implement pushFilters to support nested column pruning:
