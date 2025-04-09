@@ -226,4 +226,33 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => SecondsOfTime(child).replacement, TimeType())
   }
+
+  test("Second with fraction from  TIME type") {
+    val time = "13:11:15.987654321"
+    assert(
+      SecondsOfTimeWithFraction(
+        Cast(Literal(time), TimeType(TimeType.MICROS_PRECISION))).resolved)
+    assert(
+      SecondsOfTimeWithFraction(
+        Cast(Literal.create(time), TimeType(TimeType.MIN_PRECISION + 3))).resolved)
+    Seq(
+      0 -> 15.0,
+      1 -> 15.9,
+      2 -> 15.98,
+      3 -> 15.987,
+      4 -> 15.9876,
+      5 -> 15.98765,
+      6 -> 15.987654).foreach { case (precision, expected) =>
+      checkEvaluation(
+        SecondsOfTimeWithFraction(Literal(localTime(13, 11, 15, 987654), TimeType(precision))),
+        BigDecimal(expected))
+    }
+    // Verify NULL handling
+    checkEvaluation(
+      SecondsOfTimeWithFraction(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
+      null)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => SecondsOfTimeWithFraction(child).replacement,
+      TimeType())
+  }
 }
