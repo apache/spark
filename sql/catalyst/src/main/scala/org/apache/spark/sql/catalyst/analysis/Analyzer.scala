@@ -25,16 +25,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  AnalyzerBridgeState,
-  HybridAnalyzer,
-  Resolver => OperatorResolver,
-  ResolverExtension,
-  ResolverGuard
-}
+import org.apache.spark.sql.catalyst.analysis.resolver.{AnalyzerBridgeState, HybridAnalyzer, Resolver => OperatorResolver, ResolverExtension, ResolverGuard}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -156,7 +150,7 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    outerPlan: Option[LogicalPlan] = None,
+    outerPlans: Option[Seq[LogicalPlan]] = None,
     isExecuteImmediate: Boolean = false,
 
     /**
@@ -232,9 +226,9 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
+  def withOuterPlans[A](outerPlans: Seq[LogicalPlan])(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(outerPlan = Some(outerPlan))
+    val context = originContext.copy(outerPlans = Some(outerPlans))
     set(context)
     try f finally { set(originContext) }
   }
@@ -1762,17 +1756,30 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           s.expand(plan, resolver)
         } catch {
           case e: AnalysisException =>
-            AnalysisContext.get.outerPlan.map {
-              // Only Project, Aggregate, CollectMetrics can host star expressions.
-              case u @ (_: Project | _: Aggregate | _: CollectMetrics) =>
-                Try(s.expand(u.children.head, resolver)) match {
-                  case Success(expanded) => expanded.map(wrapOuterReference)
-                  case Failure(_) => throw e
-                }
-              // Do not use the outer plan to resolve the star expression
-              // since the star usage is invalid.
-              case _ => throw e
-            }.getOrElse { throw e }
+            val outerPlans =
+              if (AnalysisContext.get.outerPlans.isDefined) {
+                AnalysisContext.get.outerPlans.get
+              } else {
+                Seq.empty[LogicalPlan]
+              }
+            val success = outerPlans.flatMap { plan =>
+              plan match {
+                // Only Project, Aggregate, CollectMetrics can host star expressions.
+                case u @ (_: Project | _: Aggregate | _: CollectMetrics) =>
+                  Try(s.expand(u.children.head, resolver)) match {
+                    case Success(expanded) => expanded.map(wrapOuterReference)
+                    case Failure(_) => Seq[NamedExpression]()
+                  }
+                // Do not use the outer plan to resolve the star expression
+                // since the star usage is invalid.
+                case _ => Seq[NamedExpression]()
+              }
+            }
+            if (success.nonEmpty) {
+              return success
+            } else {
+              throw e
+            }
         }
       }
     }
@@ -2283,6 +2290,27 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] {
+
+    /**
+     * Returns the nested outer attributes referenced in the subquery expressions
+     *  in current plan and the children of the current plan.
+     */
+    private def getOuterAttrsNeedToBePropagated(plan: LogicalPlan): Seq[Expression] = {
+      plan.expressions.flatMap {
+        case subExpr: SubqueryExpression => subExpr.getNestedOuterAttrs
+        case in: InSubquery => in.query.getNestedOuterAttrs
+        case expr if expr.containsPattern(PLAN_EXPRESSION) =>
+          expr.collect {
+            case subExpr: SubqueryExpression => subExpr.getNestedOuterAttrs
+          }.flatten
+        case _ => Seq.empty
+      } ++ plan.children.flatMap{
+        case p if p.containsPattern(PLAN_EXPRESSION) =>
+          getOuterAttrsNeedToBePropagated(p)
+        case _ => Seq.empty
+      }
+    }
+
     /**
      * Resolves the subquery plan that is referenced in a subquery expression, by invoking the
      * entire analyzer recursively. We set outer plan in `AnalysisContext`, so that the analyzer
@@ -2294,18 +2322,51 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
-        executeSameContext(e.plan)
+      val outerPlanContext = AnalysisContext.get.outerPlans
+      val newSubqueryPlan = if (outerPlanContext.isDefined) {
+        // The previous outerPlanContext contains resolved nested outer plans
+        // and unresolved direct outer plan. Append the current outer plan into
+        // new outerPlanContext as current outer is guaranteed to be resolved.
+        val updatedOuterPlan = outerPlanContext.get ++ Seq(outer)
+        AnalysisContext.withOuterPlans(updatedOuterPlan) {
+          executeSameContext(e.plan)
+        }
+      } else {
+        AnalysisContext.withOuterPlans(Seq(outer)) {
+          executeSameContext(e.plan)
+        }
       }
 
       // If the subquery plan is fully resolved, pull the outer references and record
       // them as children of SubqueryExpression.
       if (newSubqueryPlan.resolved) {
         // Record the outer references as children of subquery expression.
-        f(newSubqueryPlan, SubExprUtils.getOuterReferences(newSubqueryPlan))
+        f(newSubqueryPlan, SubExprUtils.getOuterReferences(newSubqueryPlan) ++
+          getOuterAttrsNeedToBePropagated(newSubqueryPlan))
       } else {
         e.withNewPlan(newSubqueryPlan)
       }
+    }
+
+    /**
+     * Returns the outer references that are not resolved in the current plan {{p}}.
+     * These outer references are nested outer references which can be resolved
+     * in nested outer plans.
+     * If these references cannot be resolved in the whole query plan, an analysis
+     * exception will be thrown in checkAnalysis or ColumnResolutionHelper$resolve.
+     */
+    private def getNestedOuterReferences(
+        s: SubqueryExpression, p: LogicalPlan
+    ): Seq[Expression] = {
+      val outerReferencesInSubquery = s.getOuterAttrs
+
+      // return outer references cannot be resolved in current plan
+      outerReferencesInSubquery.filter(
+        _ match {
+          case a: AttributeReference => !p.inputSet.contains(a)
+          case _ => false
+        }
+      )
     }
 
     /**
@@ -2319,18 +2380,56 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
+        // There are four kinds of outer references here:
+        // 1. Outer references which are newly introduced in the subquery `res`
+        //  which can be resolved in current `plan`.
+        //  It is extracted by `SubExprUtils.getOuterReferences(res.plan)` and
+        //  stored among res.outerAttrs
+        // 2. Outer references which are newly introduced in the subquery `res`
+        //  which cannot be resolved in current `plan`
+        //  It is extracted by `SubExprUtils.getOuterReferences(res.plan)` with
+        //  `getNestedOuterReferences(res, plan)` filter and stored in
+        //  res.nestedOuterAttrs
+        // 3. Outer references which are introduced by nested subquery within `res.plan`
+        //  which can be resolved in current `plan`
+        //  It is extracted by `getOuterAttrsNeedToBePropagated(res.plan)`, filtered
+        //  by `plan.inputSet.contains(_)`, need to be stored in res.outerAttrs
+        // 4. Outer references which are introduced by nested subquery within `res.plan`
+        //  which cannot be resolved in current `plan`
+        //  It is extracted by `getOuterAttrsNeedToBePropagated(res.plan)`, filtered
+        //  by `!plan.inputSet.contains(_)`, need to be stored in
+        //  res.outerAttrs and res.nestedOuterAttrs
         case s @ ScalarSubquery(sub, _, _, exprId, _, _, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(ScalarSubquery(_, _, Seq.empty, exprId))
+          val res = resolveSubQuery(s, outer)(ScalarSubquery(_, _, Seq.empty, exprId))
+          val nestedOuterReferences = getNestedOuterReferences(res, plan)
+          res.withNewNestedOuterAttrs(nestedOuterReferences)
         case e @ Exists(sub, _, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(e, outer)(Exists(_, _, Seq.empty, exprId))
+          val res = resolveSubQuery(e, outer)(Exists(_, _, Seq.empty, exprId))
+          val nestedOuterReferences = getNestedOuterReferences(res, plan)
+          res.withNewNestedOuterAttrs(nestedOuterReferences)
         case InSubquery(values, l @ ListQuery(_, _, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
-            ListQuery(plan, exprs, Seq.empty, exprId, plan.output.length)
-          })
-          InSubquery(values, expr.asInstanceOf[ListQuery])
+            ListQuery(plan, exprs, Seq.empty, i.query.exprId, plan.output.length)
+          }).asInstanceOf[ListQuery]
+          val nestedOuterReferences = getNestedOuterReferences(expr, plan)
+          val newExpr = expr.withNewNestedOuterAttrs(nestedOuterReferences)
+          InSubquery(values, newExpr)
         case s @ LateralSubquery(sub, _, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(LateralSubquery(_, _, Seq.empty, exprId))
+          val res = resolveSubQuery(s, outer)(LateralSubquery(_, _, Seq.empty, exprId))
+          val nestedOuterReferences = getNestedOuterReferences(res, plan)
+          if (nestedOuterReferences.nonEmpty) {
+            // Outer references within lateral subquery can only refer to attributes
+            // in the containing plan of lateral subquery. Nested outer references
+            // are not allowed.
+            throw new SparkIllegalArgumentException(
+              errorClass = "FIELD_NOT_FOUND",
+              messageParameters = Map(
+                "fieldName" -> toSQLId(nestedOuterReferences.head.prettyName),
+                "fields" -> plan.inputSet.map(f => toSQLId(f.name)).mkString(", "))
+            )
+          }
+          res
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))

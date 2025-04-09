@@ -4062,6 +4062,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SUPPORT_NESTED_CORRELATED_SUBQUERIES =
+    buildConf("spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled")
+      .internal()
+      .doc("If enabled, support nested correlated subqueries")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PULL_OUT_NESTED_DATA_OUTER_REF_EXPRESSIONS_ENABLED =
     buildConf("spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled")
       .internal()
