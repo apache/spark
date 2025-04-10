@@ -92,6 +92,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
               val batch = processor.produceBatch()
               deserializeColumnarBatch(batch, schema)
             } else {
+              processor.close()
               reader.close(false)
               allocator.close()
               // Reach end of stream. Call `read()` again to read control data.
@@ -141,6 +142,7 @@ trait ArrowOutputProcessor {
   protected def getRoot: VectorSchemaRoot
   protected def getVectors(root: VectorSchemaRoot): Array[ColumnVector]
   def produceBatch(): ColumnarBatch
+  def close(): Unit
 }
 
 class ArrowOutputProcessorImpl(reader: ArrowStreamReader, pythonMetrics: Map[String, SQLMetric])
@@ -174,6 +176,10 @@ class ArrowOutputProcessorImpl(reader: ArrowStreamReader, pythonMetrics: Map[Str
     batch.setNumRows(batchRoot.getRowCount)
     batch
   }
+  override def close(): Unit = {
+    vectors.foreach(_.close())
+    root.close()
+  }
 }
 
 class SliceArrowOutputProcessorImpl(
@@ -183,6 +189,27 @@ class SliceArrowOutputProcessorImpl(
   extends ArrowOutputProcessorImpl(reader, pythonMetrics) {
 
   private var currentRowIdx = -1
+  private var prevRoot: VectorSchemaRoot = null
+  private var prevVectors: Array[ColumnVector] = _
+
+  override def produceBatch(): ColumnarBatch = {
+    val batchRoot = getRoot
+
+    if (batchRoot != prevRoot) {
+      if (prevRoot != null) {
+        prevVectors.foreach(_.close())
+        prevRoot.close()
+      }
+      prevRoot = batchRoot
+    }
+
+    val vectors = getVectors(batchRoot)
+    prevVectors = vectors
+
+    val batch = new ColumnarBatch(vectors)
+    batch.setNumRows(batchRoot.getRowCount)
+    batch
+  }
 
   override def loadBatch(): Boolean = {
     if (rowCount > 0 && currentRowIdx < rowCount) {
@@ -211,5 +238,12 @@ class SliceArrowOutputProcessorImpl(
     root.getFieldVectors.asScala.map { vector =>
       new ArrowColumnVector(vector)
     }.toArray[ColumnVector]
+  }
+
+  override def close(): Unit = {
+    if (prevRoot != null) {
+      prevVectors.foreach(_.close())
+      prevRoot.close()
+    }
   }
 }
