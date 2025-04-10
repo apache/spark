@@ -62,7 +62,8 @@ public enum TableCatalogCapability {
   SUPPORT_COLUMN_DEFAULT_VALUE,
 
   /**
-   * Signals that the TableCatalog supports defining table constraints in CREATE/REPLACE/ALTER TABLE.
+   * Signals that the TableCatalog supports defining table constraints in
+   * CREATE/REPLACE/ALTER TABLE.
    * <p>
    * Without this capability, any CREATE/REPLACE/ALTER TABLE statement with table constraints
    * defined in the table schema will throw an exception during analysis.
