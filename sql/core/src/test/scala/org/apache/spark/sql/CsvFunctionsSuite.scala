@@ -789,7 +789,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
             from_csv(
               $"value",
               StructType.fromDDL("v variant"),
-              Map("header" -> header, "singleVariantColumn" -> "true")
+              Map("header" -> header, "singleVariantColumn" -> "v")
             ).cast("string")),
           Seq(
             Row("""{{"_c0":100,"_c1":1.1}}"""),
@@ -797,6 +797,19 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
             Row("""{{"_c0":null,"_c1":true}}"""),
             Row("""{{"_c0":"1e9","_c1":"hello","_c2":"extra"}}"""),
             Row("""{{"_c0":"missing"}}""")))
+        checkAnswer(
+          df.select(
+            from_csv(
+              $"value",
+              StructType.fromDDL("v variant, _corrupt_record string"),
+              Map("header" -> header, "singleVariantColumn" -> "v")
+            ).cast("string")),
+          Seq(
+            Row("""{{"_c0":100,"_c1":1.1}, null}"""),
+            Row("""{{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}, null}"""),
+            Row("""{{"_c0":null,"_c1":true}, null}"""),
+            Row("""{{"_c0":"1e9","_c1":"hello","_c2":"extra"}, null}"""),
+            Row("""{{"_c0":"missing"}, null}""")))
       }
     }
     checkError(
@@ -807,7 +820,20 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
           StructType.fromDDL("a variant, b variant"),
           Map("singleVariantColumn" -> "true"))).collect()
       },
-      condition = "INVALID_SINGLE_VARIANT_COLUMN")
+      condition = "INVALID_SINGLE_VARIANT_COLUMN",
+      parameters = Map("schema" -> "\"STRUCT<a: VARIANT, b: VARIANT>\""))
+
+    // In singleVariantColumn mode, from_csv normally treats all inputs as valid. The only exception
+    // case is the input exceeds the variant size limit (16MiB).
+    val largeInput = "a" * (16 * 1024 * 1024)
+    checkAnswer(
+      Seq(largeInput).toDF("value").select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("v variant, _corrupt_record string"),
+          Map("singleVariantColumn" -> "v")
+        ).cast("string")),
+      Seq(Row(s"""{null, $largeInput}""")))
   }
 
   test("SPARK-47497: the input of to_csv must be StructType") {

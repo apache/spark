@@ -35,7 +35,6 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.ml.connect.base import Estimator, Model, Transformer
 from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
-from pyspark.ml.connect.summarizer import summarize_dataframe
 
 
 class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
@@ -81,6 +80,8 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
         self._set(**kwargs)
 
     def _fit(self, dataset: Union["pd.DataFrame", "DataFrame"]) -> "MaxAbsScalerModel":
+        from pyspark.ml.connect.summarizer import summarize_dataframe
+
         input_col = self.getInputCol()
 
         stat_res = summarize_dataframe(dataset, input_col, ["min", "max", "count"])
@@ -197,6 +198,8 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
         self._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "StandardScalerModel":
+        from pyspark.ml.connect.summarizer import summarize_dataframe
+
         input_col = self.getInputCol()
 
         stat_result = summarize_dataframe(dataset, input_col, ["mean", "std", "count"])

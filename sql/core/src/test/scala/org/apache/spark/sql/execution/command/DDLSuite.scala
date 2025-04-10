@@ -1376,6 +1376,35 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
+  test("SPARK-51747: Data source cached plan should respect options") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
+      spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+      spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
+
+      // check initial contents of table
+      checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
+
+      // no option
+      checkAnswer(
+        spark.sql("SELECT * FROM t"),
+        Row("a;b", "c") :: Row("hello; world", "test") :: Nil
+      )
+
+      // respect delimiter option
+      checkAnswer(
+        spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
+        Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+      )
+
+      // respect lineSep option
+      checkAnswer(
+        spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
+        Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
+      )
+    }
+  }
+
   test("SPARK-18009 calling toLocalIterator on commands") {
     import scala.jdk.CollectionConverters._
     val df = sql("show databases")
