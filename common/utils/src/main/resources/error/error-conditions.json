@@ -813,8 +813,8 @@
   },
   "CONSTRAINT_ALREADY_EXISTS" : {
     "message" : [
-      "Constraint '<constraintName>' already exists. Please delete the old constraint first.",
-      "Old constraint:",
+      "Constraint '<constraintName>' already exists. Please delete the existing constraint first.",
+      "Existing constraint:",
       "<oldConstraint>"
     ],
     "sqlState" : "42710"
