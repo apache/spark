@@ -2383,43 +2383,49 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), Some(10L))
   }
 
-  test("transformWithState - using watermark but time mode as None should not perform late " +
-    "record filtering") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
-    ) {
-      val inputData = MemoryStream[(String, Int)]
-      val result =
-        inputData.toDS()
-          .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
-          .withWatermark("eventTime", "10 seconds")
-          .as[(String, Long)]
-          .groupByKey(_._1)
-          .transformWithState(
-            new MinEventTimeStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
+  Seq(TimeMode.None(), TimeMode.ProcessingTime()).foreach { timeMode =>
+    test("transformWithState - using watermark but time mode as None should not perform " +
+      s"late record filtering with timeMode=$timeMode") {
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
+      ) {
+        val inputData = MemoryStream[(String, Int)]
+        val result =
+          inputData.toDS()
+            .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+            .withWatermark("eventTime", "10 seconds")
+            .as[(String, Long)]
+            .groupByKey(_._1)
+            .transformWithState(
+              new MinEventTimeStatefulProcessor(),
+              timeMode,
+              OutputMode.Update())
 
-      testStream(result, OutputMode.Update())(
-        StartStream(),
+        testStream(result, OutputMode.Update())(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = new StreamManualClock),
 
-        AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
-        // Min event time = 15. Watermark = 15 - 10 = 5.
-        CheckNewAnswer(("a", 11)), // Output = min event time of a
+          AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+          AdvanceManualClock(1 * 1000),
+          // Min event time = 15. Watermark = 15 - 10 = 5.
+          CheckNewAnswer(("a", 11)), // Output = min event time of a
 
-        AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
-        CheckNewAnswer(("a", 4)), // Data should not get filtered and output will be 4
+          AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", 4)), // Data should not get filtered and output will be 4
 
-        AddData(inputData, ("a", 1)), // Add data older than watermark for "a"
-        CheckNewAnswer(("a", 1)), // Data should not get filtered and output will be 1
+          AddData(inputData, ("a", 1)), // Add data older than watermark for "a"
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", 1)), // Data should not get filtered and output will be 1
 
-        AddData(inputData, ("a", 85)), // Add data newer than watermark for "a"
-        CheckNewAnswer(("a", 1)), // Min event time should still be 1
-        StopStream
-      )
+          AddData(inputData, ("a", 85)), // Add data newer than watermark for "a"
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", 1)), // Min event time should still be 1
+          StopStream
+        )
+      }
     }
   }
 }
