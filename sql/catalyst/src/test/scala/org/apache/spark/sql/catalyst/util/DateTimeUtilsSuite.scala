@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -1165,5 +1166,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "sourceType" -> "\"STRING\"",
           "targetType" -> "\"TIME(6)\""))
     }
+  }
+  
+  test("timeToMicros") {
+    val microSecsTime = timeToMicros(13, 2, Decimal(BigDecimal(23.5), 16, 6))
+    assert(microSecsTime === localTime(13, 2, 23, (0.5 * MICROS_PER_SECOND).toInt))
   }
 }
