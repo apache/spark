@@ -1299,3 +1299,4 @@ jobs:
     with:
       java: 21
       os: ubuntu-24.04-arm
+      architecture: arm64
