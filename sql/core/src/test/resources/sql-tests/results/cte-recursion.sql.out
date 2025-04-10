@@ -1178,3 +1178,23 @@ struct<id:int,xid:int>
 3	212
 3	221
 3	222
+
+
+-- !query
+WITH RECURSIVE t1(a, b) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT a + b, a FROM t1 WHERE a < 20
+),
+t2(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t2, t1 WHERE n + 1 = a
+)
+SELECT * FROM t2
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3

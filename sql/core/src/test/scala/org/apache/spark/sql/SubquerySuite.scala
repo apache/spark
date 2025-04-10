@@ -2836,5 +2836,14 @@ class SubquerySuite extends QueryTest
       sql("SELECT foo IN (SELECT struct(1 a)) FROM (SELECT struct(1 b) foo)"),
       Row(true)
     )
+
+    checkAnswer(
+      sql("""
+            |SELECT foo IN (SELECT struct(c, d) FROM r)
+            |FROM (SELECT struct(a, b) foo FROM l)
+            |""".stripMargin),
+      Row(false) :: Row(false) :: Row(false) :: Row(false) :: Row(false)
+        :: Row(true) :: Row(true) :: Row(true) :: Nil
+    )
   }
 }
