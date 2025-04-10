@@ -142,6 +142,8 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                           visible from EXECUTE IMMEDIATE.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
+ * @param collation The default collation to which non-collated string types should be cast in
+ *                  ResolveDDLCommandStringTypes.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
