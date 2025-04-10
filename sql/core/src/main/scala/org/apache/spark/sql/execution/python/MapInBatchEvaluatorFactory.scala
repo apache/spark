@@ -79,8 +79,8 @@ class MapInBatchEvaluatorFactory(
 
       columnarBatchIter.flatMap { batch =>
         if (SQLConf.get.pysparkArrowValidateSchema) {
-          // Ensure the schema matches the expected schema, but allowing nullable fields to become
-          // non-nullable.
+          // Ensure the schema matches the expected schema, but allowing nullable fields in the
+          // output schema to become non-nullable in the actual schema.
           val actualSchema = batch.column(0).dataType()
           val isCompatible =
             DataType.equalsIgnoreCompatibleNullability(from = actualSchema, to = outputSchema)
