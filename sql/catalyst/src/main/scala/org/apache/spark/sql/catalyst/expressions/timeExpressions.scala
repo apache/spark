@@ -318,6 +318,9 @@ case class MakeTime(
     with ImplicitCastInputTypes
     with ExpectsInputTypes {
 
+  // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
+  // it to the fractional part of `sec`. If `sec` is an IntegerType, it can be cast into decimal
+  // safely because we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
   override def children: Seq[Expression] = Seq(hours, minutes, secsAndMicros)
   override def prettyName: String = "make_time"
