@@ -788,15 +788,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
     
     try {
       val unscaledSecFrac = secsAndMicros.toUnscaledLong
+      // This check is needed to throw a better error message. Without it Math.floorDiv would
+      // round down to the next negative value and it wouldn't match what is in the decimal value.
       if (unscaledSecFrac < 0) {
         throwInvalidSecs(secsAndMicros.toLong)
       }
       
       val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
       // This check is needed for the case where the full seconds is outside of the int range.
-      // This will overflow when full seconds are converted from long to int. This could
-      // product an int in the valid seconds range and return a wrong value. For overflow values
-      // outside of the valid seconds range it would result in a misleading error message.
+      // This will overflow when full seconds is converted from long to int. This could
+      // produce an int in the valid seconds range and return a wrong value. For overflow values
+      // outside of the valid seconds range, it would result in a misleading error message.
       if (fullSecs > Int.MaxValue) {
         throwInvalidSecs(fullSecs)
       }
