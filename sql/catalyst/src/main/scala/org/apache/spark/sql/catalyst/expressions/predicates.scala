@@ -1010,6 +1010,11 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   // finitely enumerable. The allowable types are checked below by checkInputDataTypes.
   override def inputType: AbstractDataType = AnyDataType
 
+  // For value comparison, the struct field name and nullability does not matter.
+  protected override def sameType(left: DataType, right: DataType): Boolean = {
+    DataType.equalsStructurally(left, right, ignoreNullability = true)
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
   override lazy val canonicalized: Expression = {

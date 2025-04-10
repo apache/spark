@@ -103,6 +103,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       listStateMap, iteratorMap, mapStateMap, keyValueIteratorMap, expiryTimerIter, listTimerMap)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(getIntegerRow(1)))
+    when(transformWithStateInPandasDeserializer.readListElements(any, any))
+      .thenReturn(Seq(getIntegerRow(1)))
   }
 
   test("set handle state") {
@@ -260,8 +262,10 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       .setListStateGet(ListStateGet.newBuilder().setIteratorId(iteratorId).build()).build()
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
-    verify(arrowStreamWriter).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // 1 for row, 1 for end of the data, 1 for proto response
+    verify(outputStream, times(3)).writeInt(any)
+    // 1 for sending an actual row, 1 for sending proto message
+    verify(outputStream, times(2)).write(any[Array[Byte]])
   }
 
   test("list state get - iterator in map with multiple batches") {
@@ -278,15 +282,20 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     // First call should send 2 records.
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
-    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // maxRecordsPerBatch times for rows, 1 for end of the data, 1 for proto response
+    verify(outputStream, times(maxRecordsPerBatch + 2)).writeInt(any)
+    // maxRecordsPerBatch times for rows, 1 for sending proto message
+    verify(outputStream, times(maxRecordsPerBatch + 1)).write(any[Array[Byte]])
     // Second call should send the remaining 2 records.
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
-    // Since Mockito's verify counts the total number of calls, the expected number of writeRow call
-    // should be 2 * maxRecordsPerBatch.
-    verify(arrowStreamWriter, times(2 * maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter, times(2)).finalizeCurrentArrowBatch()
+    // Since Mockito's verify counts the total number of calls, the expected number of writeInt
+    // and write should be accumulated from the prior count; the number of calls are the same
+    // with prior one.
+    // maxRecordsPerBatch times for rows, 1 for end of the data, 1 for proto response
+    verify(outputStream, times(maxRecordsPerBatch * 2 + 4)).writeInt(any)
+    // maxRecordsPerBatch times for rows, 1 for sending proto message
+    verify(outputStream, times(maxRecordsPerBatch * 2 + 2)).write(any[Array[Byte]])
   }
 
   test("list state get - iterator not in map") {
@@ -302,17 +311,20 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     when(listState.get()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3)))
     stateServer.handleListStateRequest(message)
     verify(listState).get()
+
     // Verify that only maxRecordsPerBatch (2) rows are written to the output stream while still
     // having 1 row left in the iterator.
-    verify(arrowStreamWriter, times(maxRecordsPerBatch)).writeRow(any)
-    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+    // maxRecordsPerBatch (2) for rows, 1 for end of the data, 1 for proto response
+    verify(outputStream, times(maxRecordsPerBatch + 2)).writeInt(any)
+    // 2 for rows, 1 for proto message
+    verify(outputStream, times(maxRecordsPerBatch + 1)).write(any[Array[Byte]])
   }
 
   test("list state put") {
     val message = ListStateCall.newBuilder().setStateName(stateName)
       .setListStatePut(ListStatePut.newBuilder().build()).build()
     stateServer.handleListStateRequest(message)
-    verify(transformWithStateInPandasDeserializer).readArrowBatches(any)
+    verify(transformWithStateInPandasDeserializer).readListElements(any, any)
     verify(listState).put(any)
   }
 
@@ -328,7 +340,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val message = ListStateCall.newBuilder().setStateName(stateName)
       .setAppendList(AppendList.newBuilder().build()).build()
     stateServer.handleListStateRequest(message)
-    verify(transformWithStateInPandasDeserializer).readArrowBatches(any)
+    verify(transformWithStateInPandasDeserializer).readListElements(any, any)
     verify(listState).appendList(any)
   }
 

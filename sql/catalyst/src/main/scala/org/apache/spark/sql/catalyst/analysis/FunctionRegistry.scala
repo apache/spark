@@ -648,7 +648,7 @@ object FunctionRegistry {
     expression[NextDay]("next_day"),
     expression[Now]("now"),
     expression[Quarter]("quarter"),
-    expression[Second]("second"),
+    expressionBuilder("second", SecondExpressionBuilder),
     expression[ParseToTimestamp]("to_timestamp"),
     expression[ParseToDate]("to_date"),
     expression[ToTime]("to_time"),

@@ -53,8 +53,11 @@ if have_pandas:
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    cast(
+        str,
+        pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+    ),
 )
 class TransformWithStateInPandasTestsMixin:
     @classmethod
@@ -1046,10 +1049,10 @@ class TransformWithStateInPandasTestsMixin:
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
                 state_var_list = operator_properties_json_obj["stateVariables"]
-                assert len(state_var_list) == 3
+                assert len(state_var_list) == 4
                 for state_var in state_var_list:
-                    if state_var["stateName"] in ["listState1", "listState2"]:
-                        state_var["stateVariableType"] == "ListState"
+                    if state_var["stateName"] in ["listState1", "listState2", "listStateTimestamp"]:
+                        assert state_var["stateVariableType"] == "ListState"
                     else:
                         assert state_var["stateName"] == "$procTimers_keyToTimestamp"
                         assert state_var["stateVariableType"] == "TimerState"
@@ -1099,7 +1102,7 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_in_pandas_basic(
             ListStateProcessor(),
             check_results,
-            True,
+            False,
             "processingTime",
             checkpoint_path=checkpoint_path,
             initial_state=None,

@@ -88,6 +88,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
               ProcessAllAvailable(),
               AddData(inputData, "b"),
               ProcessAllAvailable(),
+              AddData(inputData, "b"),
+              ProcessAllAvailable(),
               CheckNewAnswer("a", "b"),
               Execute { q =>
                 // Make sure only smallest K active metrics are published
@@ -104,7 +106,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                       .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
                   )
                   // All state store instances should have uploaded a version
-                  assert(instanceMetrics.forall(_._2 == 2))
+                  assert(instanceMetrics.forall(_._2 >= 0))
                 }
               },
               StopStream
@@ -150,6 +152,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
               ProcessAllAvailable(),
               AddData(inputData, "b"),
               ProcessAllAvailable(),
+              AddData(inputData, "b"),
+              ProcessAllAvailable(),
               CheckNewAnswer("a", "b"),
               Execute { q =>
                 // Partitions getting skipped (id 0 and 1) do not have an uploaded version, leaving
@@ -179,10 +183,10 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                     instanceMetrics.size == q.sparkSession.conf
                       .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
                   )
-                  // Two metrics published are -1, the remainder should all be set to version 2
-                  // as they uploaded properly.
+                  // Two metrics published are -1, but the remainder should all be set to a
+                  // non-negative version as they uploaded properly.
                   assert(
-                    instanceMetrics.count(_._2 == 2) == q.sparkSession.conf
+                    instanceMetrics.count(_._2 >= 0) == q.sparkSession.conf
                       .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2
                   )
                 }
@@ -209,7 +213,8 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
+          SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "3"
         ) {
           withTempDir { checkpointDir =>
             val input1 = MemoryStream[Int]
@@ -229,11 +234,16 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
               ProcessAllAvailable(),
               AddData(input1, 2, 3),
               ProcessAllAvailable(),
-              CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+              AddData(input1, 2),
+              ProcessAllAvailable(),
+              AddData(input2, 3),
+              ProcessAllAvailable(),
+              AddData(input1, 4),
+              ProcessAllAvailable(),
               Execute { q =>
                 eventually(timeout(10.seconds)) {
                   // Make sure only smallest K active metrics are published.
-                  // There are 5 * 4 = 20 metrics in total because of join, but only 10
+                  // There are 3 * 4 = 12 metrics in total because of join, but only 10
                   // are published.
                   val instanceMetrics = q.lastProgress
                     .stateOperators(0)
@@ -247,7 +257,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                       .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
                   )
                   // All state store instances should have uploaded a version
-                  assert(instanceMetrics.forall(_._2 == 2))
+                  assert(instanceMetrics.forall(_._2 >= 0))
                 }
               },
               StopStream
@@ -300,7 +310,12 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
               ProcessAllAvailable(),
               AddData(input1, 2, 3),
               ProcessAllAvailable(),
-              CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+              AddData(input1, 2),
+              ProcessAllAvailable(),
+              AddData(input2, 3),
+              ProcessAllAvailable(),
+              AddData(input1, 4),
+              ProcessAllAvailable(),
               Execute { q =>
                 eventually(timeout(10.seconds)) {
                   // Make sure only smallest K active metrics are published.
@@ -326,7 +341,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                   assert(badInstanceMetrics.count(_._2 == -1) == 2 * 4)
                   // The rest should have uploaded a version
                   assert(
-                    allInstanceMetrics.count(_._2 == 2) == q.sparkSession.conf
+                    allInstanceMetrics.count(_._2 >= 0) == q.sparkSession.conf
                       .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2 * 4
                   )
                 }

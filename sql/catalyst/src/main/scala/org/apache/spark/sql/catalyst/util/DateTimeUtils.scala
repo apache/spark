@@ -136,6 +136,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the second value of a given TIME (TimeType) value.
+   */
+  def getSecondsOfTime(micros: Long): Int = {
+    microsToLocalTime(micros).getSecond
+  }
+  /**
    * Returns the seconds part and its fractional part with microseconds.
    */
   def getSecondsWithFraction(micros: Long, zoneId: ZoneId): Decimal = {
