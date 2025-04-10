@@ -504,8 +504,9 @@ class TransformWithStateInPandasTestsMixin:
             ProcTimeStatefulProcessor(), check_results
         )
 
-    def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results,
-        time_mode = "eventtime"):
+    def _test_transform_with_state_in_pandas_event_time(
+        self, stateful_processor, check_results, time_mode="eventtime"
+    ):
         import pyspark.sql.functions as f
 
         input_path = tempfile.mkdtemp()
@@ -551,7 +552,7 @@ class TransformWithStateInPandasTestsMixin:
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
-                timeMode=time_mode
+                timeMode=time_mode,
             )
             .writeStream.queryName(query_name)
             .foreachBatch(check_results)
@@ -1568,6 +1569,7 @@ class EventTimeStatefulProcessor(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
 
 # A stateful processor that output the min event time it has seen.
 class MinEventTimeStatefulProcessor(StatefulProcessor):
