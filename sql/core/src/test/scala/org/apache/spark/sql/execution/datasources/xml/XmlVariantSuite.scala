@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.xml
 import java.io.CharArrayWriter
 import java.time.ZoneOffset
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
@@ -69,6 +70,11 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       xml = "<ROW><amount>5.0</amount></ROW>",
       expectedJsonStr = """{"amount":5}"""
     )
+    // This is parsed as String, because it is too large for Decimal
+    testParser(
+      xml = "<ROW><amount>1e40</amount></ROW>",
+      expectedJsonStr = """{"amount":"1e40"}"""
+    )
 
     // Date -> String
     testParser(
@@ -94,15 +100,18 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       xml = "<ROW><note>  hello world  </note></ROW>",
       expectedJsonStr = """{"note":"hello world"}"""
     )
-    // Scientic numbers -> String
-    testParser(
-      xml = "<ROW><amount>4.9E-324</amount></ROW>",
-      expectedJsonStr = """{"amount":"4.9E-324"}"""
-    )
   }
 
   test("Parser: parse XML attributes as variants") {
     // XML elements with only attributes
+    testParser(
+      xml = "<ROW id=\"2\"></ROW>",
+      expectedJsonStr = """{"_id":2}"""
+    )
+    testParser(
+      xml = "<ROW><a><b attr=\"1\"></b></a></ROW>",
+      expectedJsonStr = """{"a":{"b":{"_attr":1}}}"""
+    )
     testParser(
       xml = "<ROW id=\"2\" name=\"Sam\" amount=\"93\"></ROW>",
       expectedJsonStr = """{"_amount":93,"_id":2,"_name":"Sam"}"""
@@ -158,8 +167,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("Parser: null and empty XML elements are parsed as variant null") {
     // XML elements with null and empty values
     testParser(
-      xml = "<ROW><name></name><amount>93</amount></ROW>",
-      expectedJsonStr = """{"amount":93,"name":null}"""
+      xml = """<ROW><name></name><amount>93</amount><space> </space><newline>
+                      </newline></ROW>""",
+      expectedJsonStr = """{"amount":93,"name":null,"newline":null,"space":null}"""
     )
     testParser(
       xml = "<ROW><name>Sam</name><amount>n/a</amount></ROW>",
@@ -191,6 +201,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
               |   <name><!-- before value --> Sam <!-- after value --></name>
               |   <!-- comment -->
               |   <amount>93</amount>
+              |   <!-- <a>1</a> -->
               |</ROW>
               |""".stripMargin,
       expectedJsonStr = """{"amount":93,"name":"Sam"}"""
@@ -372,9 +383,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // ============================
-  // ====== DSL read tests ======
-  // ============================
+  // =======================
+  // ====== DSL tests ======
+  // =======================
 
   private def createDSLDataFrame(
       fileName: String,
@@ -405,17 +416,22 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
 
   test("DSL: read XML files with defined schema") {
     val df = createDSLDataFrame(
-      fileName = "cars.xml",
-      schemaDDL = Some("year variant, make string, model string, comment string")
+      fileName = "books-complicated.xml",
+      schemaDDL = Some(
+        "_id string, author string, title string, genre variant, price double, " +
+        "publish_dates variant"
+      ),
+      extraOptions = Map("rowTag" -> "book")
     )
     checkAnswer(
-      df.select(variant_get(col("year"), "$", "int")),
-      Seq(Row(2012), Row(1997), Row(2015))
+      df.select(variant_get(col("genre"), "$.name", "string")),
+      Seq(Row("Computer"), Row("Fantasy"), Row("Fantasy"))
     )
   }
 
-  // TODO: This should be allowed once we support variant ingestion with malformed record handling
-  test("DSL: read XML files using both singleVariantColumn and schema should fail") {
+  test("DSL: provided schema in singleVariantColumn mode") {
+    // Specified schema in singleVariantColumn mode can't contain columns other than the variant
+    // column and the corrupted record column
     checkError(
       exception = intercept[AnalysisException] {
         createDSLDataFrame(
@@ -425,7 +441,71 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         )
       },
       condition = "INVALID_SINGLE_VARIANT_COLUMN",
-      parameters = Map.empty
+      parameters = Map(
+        "schema" -> """"STRUCT<year: VARIANT, make: STRING, model: STRING, comment: STRING>""""
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        createDSLDataFrame(
+          fileName = "cars.xml",
+          singleVariantColumn = Some("var"),
+          schemaDDL = Some("_corrupt_record string")
+        )
+      },
+      condition = "INVALID_SINGLE_VARIANT_COLUMN",
+      parameters = Map(
+        "schema" -> """"STRUCT<_corrupt_record: STRING>""""
+      )
+    )
+
+    // Valid schema in singleVariantColumn mode
+    createDSLDataFrame(
+      fileName = "cars.xml",
+      singleVariantColumn = Some("var"),
+      schemaDDL = Some("var variant")
+    )
+    createDSLDataFrame(
+      fileName = "cars.xml",
+      singleVariantColumn = Some("var"),
+      schemaDDL = Some("var variant, _corrupt_record string")
+    )
+  }
+
+  test("DSL: handle malformed record in singleVariantColumn mode") {
+    // FAILFAST mode
+    checkError(
+      exception = intercept[SparkException] {
+        createDSLDataFrame(
+          fileName = "cars-malformed.xml",
+          singleVariantColumn = Some("var"),
+          extraOptions = Map("mode" -> "FAILFAST")
+        ).collect()
+      }.getCause.asInstanceOf[SparkException],
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
+
+    // PERMISSIVE mode
+    val df = createDSLDataFrame(
+      fileName = "cars-malformed.xml",
+      singleVariantColumn = Some("var"),
+      extraOptions = Map("mode" -> "PERMISSIVE")
+    )
+    checkAnswer(
+      df.select(variant_get(col("var"), "$.year", "int")),
+      Seq(Row(2015), Row(null), Row(null))
+    )
+
+    // DROPMALFORMED mode
+    val df2 = createDSLDataFrame(
+      fileName = "cars-malformed.xml",
+      singleVariantColumn = Some("var"),
+      extraOptions = Map("mode" -> "DROPMALFORMED")
+    )
+    checkAnswer(
+      df2.select(variant_get(col("var"), "$.year", "int")),
+      Seq(Row(2015))
     )
   }
 
@@ -449,9 +529,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // ============================
-  // ====== from_xml tests ======
-  // ============================
+  // =======================
+  // ====== SQL tests ======
+  // =======================
 
   test("SQL: read an entire XML record as variant using from_xml SQL expression") {
     val xmlStr =
@@ -477,21 +557,32 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("SQL: read partial XML record as variant using from_xml with a defined schema") {
     val xmlStr =
       """
-        |<ROW>
-        |    <year>2012<!--A comment within tags--></year>
-        |    <make>Tesla</make>
-        |    <model>S</model>
-        |    <comment>No comment</comment>
-        |</ROW>
-        |""".stripMargin
+        |<book>
+        |   <author>Gambardella</author>
+        |   <title>Hello</title>
+        |   <genre>
+        |     <genreid>1</genreid>
+        |     <name>Computer</name>
+        |   </genre>
+        |   <price>44.95</price>
+        |   <publish_dates>
+        |     <publish_date>
+        |       <day>1</day>
+        |       <month>10</month>
+        |       <year>2000</year>
+        |     </publish_date>
+        |   </publish_dates>
+        | </book>
+        | """.stripMargin.replaceAll("\\s+", "")
     // Read specific elements in the XML record as variant
-    val schemaDDL = "year variant, make string, model string, comment string"
+    val schemaDDL =
+      "author string, title string, genre variant, price double, publish_dates variant"
     // Verify we can extract fields from the variant type
     checkAnswer(
       spark
-        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as car""".stripMargin)
-        .select(variant_get(col("car.year"), "$", "int")),
-      Seq(Row(2012))
+        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as book""".stripMargin)
+        .select(variant_get(col("book.publish_dates"), "$.publish_date.year", "int")),
+      Seq(Row(2000))
     )
   }
 

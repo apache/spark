@@ -1,0 +1,8 @@
+repl/src/test/resources/IntSumUdf.class
+sql/core/src/test/resources/artifact-tests/Hello.class
+sql/core/src/test/resources/artifact-tests/IntSumUdf.class
+sql/core/src/test/resources/artifact-tests/smallClassFile.class
+sql/connect/common/src/test/resources/artifact-tests/Hello.class
+sql/core/src/test/resources/artifact-tests/HelloWithPackage.class
+sql/connect/common/src/test/resources/artifact-tests/smallClassFile.class
+sql/connect/common/src/test/resources/artifact-tests/smallClassFileDup.class

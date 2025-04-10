@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
@@ -707,5 +707,9 @@ class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
+  }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
   }
 }

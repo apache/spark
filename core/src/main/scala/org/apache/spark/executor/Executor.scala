@@ -186,7 +186,8 @@ private[spark] class Executor(
     val currentJars = new HashMap[String, Long]
     val currentArchives = new HashMap[String, Long]
     val urlClassLoader =
-      createClassLoader(currentJars, isStubbingEnabledForState(jobArtifactState.uuid))
+      createClassLoader(currentJars, isStubbingEnabledForState(jobArtifactState.uuid),
+        isDefaultState(jobArtifactState.uuid))
     val replClassLoader = addReplClassLoaderIfNeeded(
       urlClassLoader, jobArtifactState.replClassDirUri, jobArtifactState.uuid)
     new IsolatedSessionState(
@@ -544,7 +545,8 @@ private[spark] class Executor(
         t.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
           // SPARK-32898: it's possible that a task is killed when taskStartTimeNs has the initial
           // value(=0) still. In this case, the executorRunTime should be considered as 0.
-          if (taskStartTimeNs > 0) System.nanoTime() - taskStartTimeNs else 0))
+          if (taskStartTimeNs > 0) (System.nanoTime() - taskStartTimeNs) * taskDescription.cpus
+          else 0))
         t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
       })
 
@@ -701,7 +703,8 @@ private[spark] class Executor(
           (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
         // We need to subtract Task.run()'s deserialization time to avoid double-counting
         task.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
-          (taskFinishNs - taskStartTimeNs) - task.executorDeserializeTimeNs))
+          (taskFinishNs - taskStartTimeNs) * taskDescription.cpus
+            - task.executorDeserializeTimeNs))
         task.metrics.setExecutorCpuTime(
           (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
@@ -1072,7 +1075,8 @@ private[spark] class Executor(
    */
   private def createClassLoader(
       currentJars: HashMap[String, Long],
-      useStub: Boolean): MutableURLClassLoader = {
+      useStub: Boolean,
+      isDefaultSession: Boolean): MutableURLClassLoader = {
     // Bootstrap the list of jars with the user class path.
     val now = System.currentTimeMillis()
     userClassPath.foreach { url =>
@@ -1084,10 +1088,12 @@ private[spark] class Executor(
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
-    createClassLoader(urls, useStub)
+    createClassLoader(urls, useStub, isDefaultSession)
   }
 
-  private def createClassLoader(urls: Array[URL], useStub: Boolean): MutableURLClassLoader = {
+  private def createClassLoader(urls: Array[URL],
+                                useStub: Boolean,
+                                isDefaultSession: Boolean): MutableURLClassLoader = {
     logInfo(
       log"Starting executor with user classpath" +
         log" (userClassPathFirst =" +
@@ -1096,33 +1102,45 @@ private[spark] class Executor(
     )
 
     if (useStub) {
-      createClassLoaderWithStub(urls, conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES))
+      createClassLoaderWithStub(urls, conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES), isDefaultSession)
     } else {
-      createClassLoader(urls)
+      createClassLoader(urls, isDefaultSession)
     }
   }
 
-  private def createClassLoader(urls: Array[URL]): MutableURLClassLoader = {
+  private def createClassLoader(urls: Array[URL],
+                                isDefaultSession: Boolean): MutableURLClassLoader = {
+    // SPARK-51537: The isolated session must *inherit* the classloader from the default session,
+    // which has already included the global JARs specified via --jars. For Spark plugins, we
+    // cannot simply add the plugin JARs to the classpath of the isolated session, as this may
+    // cause the plugin to be reloaded, leading to potential conflicts or unexpected behavior.
+    val loader = if (isDefaultSession) systemLoader else defaultSessionState.replClassLoader
     if (userClassPathFirst) {
-      new ChildFirstURLClassLoader(urls, systemLoader)
+      new ChildFirstURLClassLoader(urls, loader)
     } else {
-      new MutableURLClassLoader(urls, systemLoader)
+      new MutableURLClassLoader(urls, loader)
     }
   }
 
   private def createClassLoaderWithStub(
       urls: Array[URL],
-      binaryName: Seq[String]): MutableURLClassLoader = {
+      binaryName: Seq[String],
+      isDefaultSession: Boolean): MutableURLClassLoader = {
+    // SPARK-51537: The isolated session must *inherit* the classloader from the default session,
+    // which has already included the global JARs specified via --jars. For Spark plugins, we
+    // cannot simply add the plugin JARs to the classpath of the isolated session, as this may
+    // cause the plugin to be reloaded, leading to potential conflicts or unexpected behavior.
+    val loader = if (isDefaultSession) systemLoader else defaultSessionState.replClassLoader
     if (userClassPathFirst) {
       // user -> (sys -> stub)
       val stubClassLoader =
-        StubClassLoader(systemLoader, binaryName)
+        StubClassLoader(loader, binaryName)
       new ChildFirstURLClassLoader(urls, stubClassLoader)
     } else {
       // sys -> user -> stub
       val stubClassLoader =
         StubClassLoader(null, binaryName)
-      new ChildFirstURLClassLoader(urls, stubClassLoader, systemLoader)
+      new ChildFirstURLClassLoader(urls, stubClassLoader, loader)
     }
   }
 
@@ -1229,7 +1247,8 @@ private[spark] class Executor(
       }
       if (renewClassLoader) {
         // Recreate the class loader to ensure all classes are updated.
-        state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs, useStub = true)
+        state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs,
+          useStub = true, isDefaultState(state.sessionUUID))
         state.replClassLoader =
           addReplClassLoaderIfNeeded(state.urlClassLoader, state.replClassDirUri, state.sessionUUID)
       }

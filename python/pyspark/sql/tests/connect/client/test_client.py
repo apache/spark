@@ -415,6 +415,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
                     pass
 
             self.assertTrue("RESPONSE_ALREADY_RECEIVED" in e.exception.getMessage())
+            self.assertTrue(error_code in e.exception.getMessage())
 
             def checks():
                 self.assertEqual(1, stub.execute_calls)

@@ -140,6 +140,6 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         paths = finalPaths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = finalOptions.originalMap).resolveRelation())
+        options = finalOptions.originalMap).resolveRelation(readOnly = true))
   }
 }

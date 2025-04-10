@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Period, ZoneId, ZoneOffset}
+import java.time.{Duration, LocalTime, Period, ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
@@ -752,6 +752,13 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkResult(Literal.create(-0D, DoubleType), Literal.create(0D, DoubleType))
     checkResult(Literal.create(-0F, FloatType), Literal.create(0F, FloatType))
+  }
+
+  test("Support TimeType") {
+    val time = Literal.create(LocalTime.of(23, 50, 59, 123456000), TimeType())
+    checkEvaluation(Murmur3Hash(Seq(time), 10), 258472763)
+    checkEvaluation(XxHash64(Seq(time), 10), -9197489935839400467L)
+    checkEvaluation(HiveHash(Seq(time)), -40222445)
   }
 
   private def testHash(inputSchema: StructType): Unit = {

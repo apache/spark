@@ -285,10 +285,10 @@ object QueryTest extends Assertions {
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
-    val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted = df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
     if (checkToRDD) {
       SQLExecution.withSQLConfPropagated(df.sparkSession) {
-        df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+        df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
       }
     }
 
@@ -347,6 +347,8 @@ object QueryTest extends Assertions {
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
+      // SPARK-51349: "null" and null had the same precedence in sorting
+      case "null" => "__null_string__"
       case o => o
     })
   }
@@ -457,7 +459,9 @@ object QueryTest extends Assertions {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         capturedQueryExecutions = capturedQueryExecutions :+ qe
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
+      }
     }
 
     spark.sparkContext.listenerBus.waitUntilEmpty(15000)
@@ -478,5 +482,11 @@ class QueryTestSuite extends QueryTest with test.SharedSparkSession {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
+  }
+
+  test("SPARK-51349: null string and true null are distinguished") {
+    checkAnswer(sql("select case when id == 0 then struct('null') else struct(null) end s " +
+      "from range(2)"),
+      Seq(Row(Row(null)), Row(Row("null"))))
   }
 }

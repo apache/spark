@@ -91,9 +91,14 @@ object DataSourceUtils extends PredicateHelper {
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */
-  def verifySchema(format: FileFormat, schema: StructType): Unit = {
+  def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
     schema.foreach { field =>
-      if (!format.supportDataType(field.dataType)) {
+      val supported = if (readOnly) {
+        format.supportReadDataType(field.dataType)
+      } else {
+        format.supportDataType(field.dataType)
+      }
+      if (!supported) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }

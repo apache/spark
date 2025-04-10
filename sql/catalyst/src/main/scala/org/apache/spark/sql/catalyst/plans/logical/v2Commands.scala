@@ -23,14 +23,15 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils,
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, UnaryExpression, Unevaluable, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils, ReplaceDataProjections, RowDeltaUtils, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -654,24 +655,6 @@ case class SetNamespaceLocation(
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): SetNamespaceLocation =
     copy(namespace = newChild)
-}
-
-/**
- * The logical plan of the SHOW NAMESPACES command.
- */
-case class ShowNamespaces(
-    namespace: LogicalPlan,
-    pattern: Option[String],
-    override val output: Seq[Attribute] = ShowNamespaces.getOutputAttrs) extends UnaryCommand {
-  override def child: LogicalPlan = namespace
-  override protected def withNewChildInternal(newChild: LogicalPlan): ShowNamespaces =
-    copy(namespace = newChild)
-}
-
-object ShowNamespaces {
-  def getOutputAttrs: Seq[Attribute] = {
-    Seq(AttributeReference("namespace", StringType, nullable = false)())
-  }
 }
 
 /**
@@ -1520,7 +1503,9 @@ case class UnresolvedTableSpec(
     comment: Option[String],
     collation: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean) extends UnaryExpression with Unevaluable with TableSpecBase {
+    external: Boolean,
+    constraints: Seq[TableConstraint])
+  extends UnaryExpression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3113")
@@ -1566,9 +1551,11 @@ case class TableSpec(
     comment: Option[String],
     collation: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean) extends TableSpecBase {
+    external: Boolean,
+    constraints: Seq[Constraint] = Seq.empty) extends TableSpecBase {
   def withNewLocation(newLocation: Option[String]): TableSpec = {
-    TableSpec(properties, provider, options, newLocation, comment, collation, serde, external)
+    TableSpec(properties, provider, options, newLocation,
+      comment, collation, serde, external, constraints)
   }
 }
 

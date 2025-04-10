@@ -23,11 +23,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.{SparkContext, SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, ForeachWriter}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
@@ -183,6 +184,9 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] =
     innerProvider.supportedCustomMetrics
+
+  override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] =
+    innerProvider.supportedInstanceMetrics
 }
 
 class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
@@ -832,6 +836,61 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 
+  /**
+   * This test verifies when there are failures when executing the query.
+   * When restarts happens, the job should still be recovered to the last committed batch.
+   */
+  testWithCheckpointInfoTracked(s"checkpointFormatVersion2 query failure and restart") {
+    withTempDir { checkpointDir =>
+
+      var forceTaskFailure = false
+      val failUDF = udf((value: Int) => {
+        if (forceTaskFailure) {
+          // This will fail all close() call to trigger query failures in execution phase.
+          throw new RuntimeException("Ingest task failure")
+        }
+        value
+      })
+
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData
+          .toDF()
+          .select(failUDF($"value").as("value"))
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        Execute { _ =>
+          forceTaskFailure = true
+        },
+        AddData(inputData, 3, 2),
+        ExpectFailure[SparkException] { ex =>
+          ex.getCause.getMessage.contains("FAILED_EXECUTE_UDF")
+        }
+      )
+
+      forceTaskFailure = false
+
+      // Test recovery
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3, 2, 1),
+        CheckLastBatch((3, 3), (2, 2), (1, 1)),
+        // By default we run in new tuple mode.
+        AddData(inputData, 4, 4, 4, 4),
+        CheckLastBatch((4, 4)),
+        AddData(inputData, 5, 5),
+        CheckLastBatch((5, 2)),
+        StopStream
+      )
+    }
+  }
+
   testWithCheckpointInfoTracked(s"checkpointFormatVersion2 validate ID") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
@@ -1107,6 +1166,34 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
+    }
+  }
+
+  test("checkpointFormatVersion2 racing commits don't return incorrect checkpointInfo") {
+    val sqlConf = new SQLConf()
+    sqlConf.setConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+
+    withTempDir { checkpointDir =>
+      val provider = new CkptIdCollectingStateStoreProviderWrapper()
+      provider.init(
+        StateStoreId(checkpointDir.toString, 0, 0),
+        StateStoreTestsHelper.keySchema,
+        StateStoreTestsHelper.valueSchema,
+        PrefixKeyScanStateEncoderSpec(StateStoreTestsHelper.keySchema, 1),
+        useColumnFamilies = false,
+        new StateStoreConf(sqlConf),
+        new Configuration
+      )
+
+      val store1 = provider.getStore(0)
+      val store1NewVersion = store1.commit()
+      val store2 = provider.getStore(1)
+      val store2NewVersion = store2.commit()
+      val store1CheckpointInfo = store1.getStateStoreCheckpointInfo()
+      val store2CheckpointInfo = store2.getStateStoreCheckpointInfo()
+
+      assert(store1CheckpointInfo.batchVersion == store1NewVersion)
+      assert(store2CheckpointInfo.batchVersion == store2NewVersion)
     }
   }
 }
