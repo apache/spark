@@ -136,6 +136,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       dir.mkdirs()
       // assert(dir.mkdirs())
       FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
+      FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
       logDebug(s"APPROVED: $file $fileOriginalPlan")
     }
   }
