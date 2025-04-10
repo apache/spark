@@ -1197,9 +1197,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         "Invalid value for MinuteOfHour (valid values 0 - 59): -1"))
 
     // Invalid second cases
+    val baseErrorMsg = "Invalid value for SecondOfMinute (valid values 0 - 59): "
     Seq(
-      (60.0d, "Invalid value for SecondOfMinute (valid values 0 - 59): 60")
-      // TODO need to improve handling for other cases
+      (60.0, baseErrorMsg + "60"),
+      // TODO figure out why the nums in error are wrong
+      (-999999999.999999, baseErrorMsg + "-1000000000"),
+      (9999999999.999999, baseErrorMsg + "1410065407")
     ).foreach { case (invalidSecond, errorMsg) =>
       checkError(
         exception = intercept[SparkDateTimeException] {
