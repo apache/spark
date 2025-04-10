@@ -229,7 +229,7 @@ class SliceArrowOutputProcessorImpl(
       root
     }
 
-    currentRowIdx = currentRowIdx + root.getRowCount
+    currentRowIdx = currentRowIdx + rootSlice.getRowCount
 
     rootSlice
   }
