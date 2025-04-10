@@ -782,6 +782,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
     try {
       val unscaledSecFrac = secsAndMicros.toUnscaledLong
       if (unscaledSecFrac < 0) {
+        // Make this error message consistent with what is thrown by LocalTime.of when the provide
+        // seconds are invalid
         throw new DateTimeException(
           s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
       }
@@ -792,7 +794,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
       // product an int in the valid seconds range and return a wrong value. For overflow values
       // outside of the valid seconds range it would result in a misleading error message.
       if (fullSecs > Int.MaxValue || fullSecs < Int.MinValue) {
-        // Make this error message consistent with what is thrown by LocalTime.of
+        // Make this error message consistent with what is thrown by LocalTime.of when the provide
+        // seconds are invalid
         throw new DateTimeException(
           s"Invalid value for SecondOfMinute (valid values 0 - 59): $fullSecs")
       }
