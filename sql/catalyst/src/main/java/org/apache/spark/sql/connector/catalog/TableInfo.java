@@ -63,9 +63,9 @@ public class TableInfo {
 
   public static class Builder {
     private Column[] columns;
-    private Map<String, String> properties;
-    private Transform[] partitions;
-    private Constraint[] constraints;
+    private Map<String, String> properties = Maps.newHashMap();
+    private Transform[] partitions = new Transform[0];
+    private Constraint[] constraints = new Constraint[0];
 
     public Builder withColumns(Column[] columns) {
       this.columns = columns;
@@ -90,15 +90,6 @@ public class TableInfo {
 
     public TableInfo build() {
       checkNotNull(columns, "columns should not be null");
-      if (properties == null) {
-        properties = Maps.newHashMap();
-      }
-      if (partitions == null) {
-        partitions = new Transform[0];
-      }
-      if (constraints == null) {
-        constraints = new Constraint[0];
-      }
       return new TableInfo(this);
     }
   }
