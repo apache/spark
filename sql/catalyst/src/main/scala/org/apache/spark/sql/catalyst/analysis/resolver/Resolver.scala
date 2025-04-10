@@ -151,7 +151,7 @@ class Resolver(
   def recreateRelationMetadataProvider(analyzerBridgeState: Option[AnalyzerBridgeState]) : Unit =
     relationMetadataProvider = analyzerBridgeState match {
       case Some(analyzerBridgeState) =>
-        BridgedRelationMetadataProvider(
+        new BridgedRelationMetadataProvider(
           catalogManager,
           relationResolution,
           analyzerBridgeState,
