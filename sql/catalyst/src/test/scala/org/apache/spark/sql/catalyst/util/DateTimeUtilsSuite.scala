@@ -1167,7 +1167,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "targetType" -> "\"TIME(6)\""))
     }
   }
-  
+
   test("timeToMicros") {
     val hour = 13
     val min = 2
@@ -1202,7 +1202,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       9999999999.999999,
       -999999999.999999,
       // Full seconds overflows to a valid seconds integer when converted from long to int
-      4294967297.999999,
+      4294967297.999999
     ).foreach { invalidSecond =>
       checkError(
         exception = intercept[SparkDateTimeException] {
