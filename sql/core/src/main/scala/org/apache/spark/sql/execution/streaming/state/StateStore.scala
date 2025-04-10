@@ -595,6 +595,11 @@ trait StateStoreProvider {
 
 object StateStoreProvider extends Logging {
 
+  /**
+   * The state store coordinator reference used to report events such as snapshot uploads from
+   * the state store providers.
+   * For all other messages, refer to the coordinator reference in the [[StateStore]] object.
+   */
   @GuardedBy("this")
   private var stateStoreCoordinatorRef: StateStoreCoordinatorRef = _
 
@@ -674,6 +679,8 @@ object StateStoreProvider extends Logging {
   /**
    * Create the state store coordinator reference which will be reused across state store providers
    * in the executor.
+   * This coordinator reference should only be used to report events from store providers regarding
+   * snapshot uploads to avoid lock contention with other coordinator RPC messages.
    */
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
