@@ -367,8 +367,8 @@ object SecondExpressionBuilder extends ExpressionBuilder {
   """,
   arguments = """
     Arguments:
-      * precision - An optional integer literal in the range [${TimeType.MIN_PRECISION}..${TimeType.MICROS_PRECISION}], indicating how many
-                    fractional digits of seconds to include. If omitted, the default is ${TimeType.MICROS_PRECISION}.
+      * precision - An optional integer literal in the range [0..6], indicating how many
+                    fractional digits of seconds to include. If omitted, the default is 6.
   """,
   examples = """
     Examples:
