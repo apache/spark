@@ -383,9 +383,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // =======================
-  // ====== DSL tests ======
-  // =======================
+  // ==============================
+  // ====== DSL reader tests ======
+  // ==============================
 
   private def createDSLDataFrame(
       fileName: String,
@@ -529,9 +529,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // =======================
-  // ====== SQL tests ======
-  // =======================
+  // ============================
+  // ====== from_xml tests ======
+  // ============================
 
   test("SQL: read an entire XML record as variant using from_xml SQL expression") {
     val xmlStr =
@@ -707,8 +707,8 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("Generator: serialize Variant array fields to XML") {
     val xmlString =
       """<ROW>
-        |    <array>1</array>
         |    <array>2</array>
+        |    <array>1</array>
         |    <array>3</array>
         |</ROW>""".stripMargin
     testGenerator(
@@ -736,7 +736,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("Generator: serialize Variant object with attribute fields to XML") {
     val xmlString =
       """<ROW>
-        |    <struct _attr1="1" _attr2="2">
+        |    <struct attr1="1" attr2="2">
         |        <field1>3</field1>
         |        <field2>4</field2>
         |    </struct>
@@ -832,6 +832,10 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       checkAnswer(df1, df2)
     }
   }
+
+  // =============================
+  // ====== to_xml tests =========
+  // =============================
 
   test("SQL: to_xml with a single variant column") {
     val xmlStr =

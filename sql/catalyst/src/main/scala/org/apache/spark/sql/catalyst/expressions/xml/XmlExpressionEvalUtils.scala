@@ -202,7 +202,6 @@ case class StructsToXmlEvaluator(
           gen.write(v.asInstanceOf[VariantVal])
           getAndReset()
     }
-
   }
 
   final def evaluate(value: Any): Any = {

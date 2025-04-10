@@ -18,7 +18,6 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.Writer
 import java.sql.Timestamp
-import java.time.LocalDate
 import java.util.Base64
 import javax.xml.stream.XMLOutputFactory
 
@@ -31,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.VariantUtil._
+import org.apache.spark.types.variant.VariantUtil
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class StaxXmlGenerator(
@@ -268,10 +267,10 @@ class StaxXmlGenerator(
    * @param pos The position in the Variant data array where the field value starts
    */
   private def writeVariant(name: String, v: VariantVal, pos: Int): Unit = {
-    getType(v.getValue, pos) match {
-      case Type.OBJECT =>
-        writeVariantObjet(name, v, pos)
-      case Type.ARRAY =>
+    VariantUtil.getType(v.getValue, pos) match {
+      case VariantUtil.Type.OBJECT =>
+        writeVariantObject(name, v, pos)
+      case VariantUtil.Type.ARRAY =>
         writeVariantArray(name, v, pos)
       case _ =>
         writeVariantPrimitive(name, v, pos)
@@ -286,20 +285,20 @@ class StaxXmlGenerator(
    * @param v The original Variant entity
    * @param pos The position in the Variant data array where the object value starts
    */
-  private def writeVariantObjet(name: String, v: VariantVal, pos: Int): Unit = {
+  private def writeVariantObject(name: String, v: VariantVal, pos: Int): Unit = {
     gen.writeStartElement(name)
-    handleObject(
+    VariantUtil.handleObject(
       v.getValue,
       pos,
       (size, idSize, offsetSize, idStart, offsetStart, dataStart) => {
         // Traverse the fields of the object and get their names and positions in the original
         // Variant
         val elementInfo = (0 until size).map { i =>
-          val id = readUnsigned(v.getValue, idStart + idSize * i, idSize)
+          val id = VariantUtil.readUnsigned(v.getValue, idStart + idSize * i, idSize)
           val offset =
-            readUnsigned(v.getValue, offsetStart + offsetSize * i, offsetSize)
+            VariantUtil.readUnsigned(v.getValue, offsetStart + offsetSize * i, offsetSize)
           val elementPos = dataStart + offset
-          val elementName = getMetadataKey(v.getMetadata, id)
+          val elementName = VariantUtil.getMetadataKey(v.getMetadata, id)
           (elementName, elementPos)
         }
 
@@ -332,17 +331,17 @@ class StaxXmlGenerator(
    * @param pos The position in the Variant data array where the array value starts
    */
   private def writeVariantArray(name: String, v: VariantVal, pos: Int): Unit = {
-    handleArray(
+    VariantUtil.handleArray(
       v.getValue,
       pos,
       (size, offsetSize, offsetStart, dataStart) => {
         // Traverse each item of the array and write each of them as an XML element
         (0 until size).foreach { i =>
           val offset =
-            readUnsigned(v.getValue, offsetStart + offsetSize * i, offsetSize)
+            VariantUtil.readUnsigned(v.getValue, offsetStart + offsetSize * i, offsetSize)
           val elementPos = dataStart + offset
           // Check if the array element is also of type ARRAY
-          if (getType(v.getValue, elementPos) == Type.ARRAY) {
+          if (VariantUtil.getType(v.getValue, elementPos) == VariantUtil.Type.ARRAY) {
             // For the case round trip in reading and writing XML files, [[ArrayType]] cannot have
             // [[ArrayType]] as element type. It always wraps the element with [[StructType]]. So,
             // this case only can happen when we convert a normal [[DataFrame]] to XML file.
@@ -365,52 +364,55 @@ class StaxXmlGenerator(
    * @param pos The position in the Variant data array where the field value starts
    */
   private def writeVariantPrimitive(name: String, v: VariantVal, pos: Int): Unit = {
-    val primitiveVal = getType(v.getValue, pos) match {
-      case Type.NULL => Option(options.nullValue).orNull
-      case Type.BOOLEAN =>
-        getBoolean(v.getValue, pos)
-      case Type.LONG =>
-        getLong(v.getValue, pos)
-      case Type.STRING =>
-        getString(v.getValue, pos)
-      case Type.DOUBLE =>
-        getDouble(v.getValue, pos)
-      case Type.DECIMAL =>
-        getDecimal(v.getValue, pos)
-      case Type.DATE =>
-        dateFormatter.format(LocalDate.ofEpochDay(getLong(v.getValue, pos)))
-      case Type.TIMESTAMP =>
-        timestampFormatter.format(getLong(v.getValue, pos))
-      case Type.TIMESTAMP_NTZ =>
+    val primitiveVal = VariantUtil.getType(v.getValue, pos) match {
+      case VariantUtil.Type.NULL => Option(options.nullValue).orNull
+      case VariantUtil.Type.BOOLEAN =>
+        VariantUtil.getBoolean(v.getValue, pos)
+      case VariantUtil.Type.LONG =>
+        VariantUtil.getLong(v.getValue, pos)
+      case VariantUtil.Type.STRING =>
+        VariantUtil.getString(v.getValue, pos)
+      case VariantUtil.Type.DOUBLE =>
+        VariantUtil.getDouble(v.getValue, pos)
+      case VariantUtil.Type.DECIMAL =>
+        VariantUtil.getDecimal(v.getValue, pos)
+      case VariantUtil.Type.DATE =>
+        dateFormatter.format(VariantUtil.getLong(v.getValue, pos).toInt)
+      case VariantUtil.Type.TIMESTAMP =>
+        timestampFormatter.format(VariantUtil.getLong(v.getValue, pos))
+      case VariantUtil.Type.TIMESTAMP_NTZ =>
         timestampNTZFormatter.format(
-          DateTimeUtils.microsToLocalDateTime(getLong(v.getValue, pos))
+          DateTimeUtils.microsToLocalDateTime(VariantUtil.getLong(v.getValue, pos))
         )
-      case Type.FLOAT => getFloat(v.getValue, pos)
-      case Type.BINARY => Base64.getEncoder.encodeToString(getBinary(v.getValue, pos))
-      case Type.UUID => getUuid(v.getValue, pos)
+      case VariantUtil.Type.FLOAT => VariantUtil.getFloat(v.getValue, pos)
+      case VariantUtil.Type.BINARY =>
+        Base64.getEncoder.encodeToString(VariantUtil.getBinary(v.getValue, pos))
+      case VariantUtil.Type.UUID => VariantUtil.getUuid(v.getValue, pos)
       case _ =>
         throw new SparkIllegalArgumentException("invalid variant primitive type for XML")
     }
+
+    val value = if (primitiveVal == null) options.nullValue else primitiveVal.toString
 
     // Handle attributes first
     val isAttribute = name.startsWith(options.attributePrefix) && name != options.valueTag
     if (isAttribute && primitiveVal != null) {
       gen.writeAttribute(
         name.substring(options.attributePrefix.length),
-        primitiveVal.toString
+        value
       )
       return
     }
 
     // Handle value tags
     if (name == options.valueTag && primitiveVal != null) {
-      gen.writeCharacters(primitiveVal.toString)
+      gen.writeCharacters(value)
       return
     }
 
     // Handle child elements
     gen.writeStartElement(name)
-    if (primitiveVal != null) gen.writeCharacters(primitiveVal.toString)
+    if (primitiveVal != null) gen.writeCharacters(value)
     gen.writeEndElement()
   }
 }
