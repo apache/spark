@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, IntegerType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, IntegerType, ObjectType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -158,6 +159,186 @@ object TryToTimeExpressionBuilder extends ExpressionBuilder {
       TryEval(ToTime(expressions.head, expressions.drop(1).lastOption))
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
+    }
+  }
+}
+
+/**
+ * Converts or extracts time from various input types.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Extracts the time part from or converts the given expression to a time.
+    The expression can be a string, timestamp, or numeric value.
+  """,
+  arguments = """
+    Arguments:
+      * expr - An expression that can be one of:
+          - A string representing a time
+          - A timestamp value
+          - A numeric value representing total seconds
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_(timestamp'2020-04-30 12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_(123);
+       00:02:03
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class Time(expr: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def child: Expression = expr
+
+  override def dataType: DataType = TimeType()
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def prettyName: String = "time"
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val castExpr = Cast(child, TimeType())
+    castExpr.genCode(ctx)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    Cast(child, TimeType()).eval(null)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression):
+  Expression = copy(expr = newChild)
+
+}
+
+/**
+ * Similar to Time but returns NULL instead of raising an error on invalid input.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Extracts the time part from or converts the given expression to a time.
+    If the conversion fails, it returns NULL. The expression can be a string, timestamp,
+    or numeric value.
+  """,
+  arguments = """
+    Arguments:
+      * expr - An expression that can be one of:
+          - A string representing a time
+          - A timestamp value
+          - A numeric value representing total seconds
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_('invalid');
+       NULL
+      > SELECT _FUNC_(timestamp'2020-04-30 12:25:13.45');
+       12:25:13.45
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+case class TryTime(expr: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def child: Expression = expr
+
+  override def dataType: DataType = TimeType()
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def prettyName: String = "time"
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val castExpr = Cast(child, TimeType())
+    castExpr.genCode(ctx)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    Cast(child, TimeType()).eval(null)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression):
+  Expression = copy(expr = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Parses the `expr` expression to a time. If the parsing fails, it returns NULL.
+    The expression can be a string, timestamp, or numeric value.
+  """,
+  arguments = """
+    Arguments:
+      * expr - An expression that can be one of:
+          - A string representing a time
+          - A timestamp value
+          - A numeric value representing total seconds
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_('invalid time');
+       NULL
+      > SELECT _FUNC_(timestamp'2020-04-30 12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_(123);
+       00:02:03
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+object TimeExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      Time(expressions.head)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Parses the `expr` expression to a time. If the parsing fails, it returns NULL.
+    The expression can be a string, timestamp, or numeric value.
+  """,
+  arguments = """
+    Arguments:
+      * expr - An expression that can be one of:
+          - A string representing a time
+          - A timestamp value
+          - A numeric value representing total seconds
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_('invalid time');
+       NULL
+      > SELECT _FUNC_(timestamp'2020-04-30 12:25:13.45');
+       12:25:13.45
+      > SELECT _FUNC_(123);
+       00:02:03
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+object TryTimeExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      TryTime(expressions.head)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
     }
   }
 }

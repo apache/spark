@@ -53,6 +53,27 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map("input" -> "'100:50'", "format" -> "'mm:HH'"))
   }
 
+  test("Time Function") {
+    // Test with null inputs
+    checkEvaluation(new Time(Literal(null, StringType)), null)
+
+    // Test with string inputs
+    checkEvaluation(new Time(Literal("00:00:00")), localTime())
+    checkEvaluation(new Time(Literal("23:59:59.999999")), localTime(23, 59, 59, 999999))
+    checkEvaluation(new Time(Literal("12:30:45.123")), localTime(12, 30, 45, 123000))
+    checkEvaluation(new Time(NonFoldableLiteral(" 12:00:00.909 ")), localTime(12, 0, 0, 909000))
+
+    // Test with numeric inputs (seconds)
+    checkEvaluation(new Time(Literal(0)), localTime(0, 0, 0, 0))
+    checkEvaluation(new Time(Literal(123)), localTime(0, 2, 3, 0))
+    checkEvaluation(new Time(Literal(3661.5)), localTime(1, 1, 1, 500000))
+
+    // Test with very large values
+    checkEvaluation(
+      new Time(Literal(86399.999999)),
+      localTime(23, 59, 59, 999999))
+  }
+
   test("HourExpressionBuilder") {
     // Empty expressions list
     checkError(
