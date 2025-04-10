@@ -179,14 +179,10 @@ class BroadcastFilterPushdown(isSubquery: Boolean = false) extends Rule[SparkPla
         val bhj = sp.asInstanceOf[BroadcastHashJoinExec]
         bhj.buildSide match {
           case BuildRight =>
-            val leaves = bhj.left.collectLeaves().flatMap({
-              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
 
-              case _ => None
-            })
             if (left.exists(p => legFrequencyMap(p) > 1) ||
             bhj.left.collectLeaves().flatMap({
-              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
+              case w: WrapsBroadcastVarPushDownSupporter => w.getTableIdentifier()
 
               case _ => None
             }).exists(subqueryLeafRelationsCollected.contains)) {
@@ -194,14 +190,9 @@ class BroadcastFilterPushdown(isSubquery: Boolean = false) extends Rule[SparkPla
           }
 
           case BuildLeft =>
-            val leaves = bhj.right.collectLeaves().flatMap({
-              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
-
-              case _ => None
-            })
             if (right.exists(p => legFrequencyMap(p) > 1) ||
             bhj.right.collectLeaves().flatMap({
-              case w: WrapsBroadcastVarPushDownSupporter => Some(w.getTableIdentifier())
+              case w: WrapsBroadcastVarPushDownSupporter => w.getTableIdentifier()
 
               case _ => None
             }).exists(subqueryLeafRelationsCollected.contains)) {

@@ -93,7 +93,8 @@ abstract class BaseBroadcastVarPushDownTests extends QueryTest with BroadcastVar
           x.getBroadcastVarPushDownSupportingInstance.get.hasPushedBroadCastFilter())
       .map(bs =>
         batchScansWithoutBCVar
-          .find(x => x.getTableIdentifier().table == bs.getTableIdentifier().table &&
+          .find(x =>
+            x.getTableIdentifier().map(_.table).get == bs.getTableIdentifier().map(_.table).get &&
             x.getSchema() == bs.getSchema())
           .map(bs -> _)
           .get)

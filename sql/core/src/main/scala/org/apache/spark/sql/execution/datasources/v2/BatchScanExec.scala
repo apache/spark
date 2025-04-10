@@ -379,7 +379,7 @@ case class BatchScanExec(
   def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]):
   WrapsBroadcastVarPushDownSupporter = this.copy(proxyForPushedBroadcastVar = proxy)
 
-  def getTableIdentifier(): TableIdentifier = TableIdentifier(table.name())
+  def getTableIdentifier(): Option[TableIdentifier] = Some(TableIdentifier(table.name()))
 
   def getSchema(): StructType = this.schema
 }

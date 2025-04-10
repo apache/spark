@@ -692,8 +692,7 @@ case class FileSourceScanExec(
     // TODO:Asif: reset when broadcast var pushdown on partition column is supported
   }
 
-  def getTableIdentifier(): TableIdentifier =
-    tableIdentifier.getOrElse(throw new RuntimeException("table name not found"))
+  def getTableIdentifier(): Option[TableIdentifier] = tableIdentifier
 
   def getSchema(): StructType = this.relation.schema
 
