@@ -324,7 +324,7 @@ case class MakeTime(
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
-    TimeType(TimeType.MAX_PRECISION),
+    TimeType(TimeType.MICROS_PRECISION),
     "timeToMicros",
     children,
     inputTypes
