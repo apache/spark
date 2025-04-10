@@ -41,7 +41,7 @@ on:
         required: false
         type: string
         default: ubuntu-latest
-      architecture:
+      arch:
         description: The target architecture (x86, x64, arm64) of the Python or PyPy interpreter.
         required: false
         type: string
@@ -177,7 +177,7 @@ jobs:
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         with:
           python-version: '3.11'
-          architecture: ${{ inputs.architecture }}
+          architecture: ${{ inputs.arch }}
       - name: Install Python packages (Python 3.11)
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
