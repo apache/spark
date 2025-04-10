@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.analysis.resolver.{AnalyzerBridgeState, BridgedRelationId, BridgedRelationMetadataProvider, MetadataResolver, RelationId, Resolver}
+import org.apache.spark.sql.catalyst.analysis.resolver.{AnalyzerBridgeState, BridgedRelationId, BridgedRelationMetadataProvider, MetadataResolver, RelationId, Resolver, ViewResolver}
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -233,13 +233,15 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
       analyzerBridgeState: Option[AnalyzerBridgeState]): Unit = {
     val unresolvedPlan = spark.sql(sqlText).queryExecution.logical
 
+    val resolver = new Resolver(spark.sessionState.catalogManager)
+
     val metadataResolver = analyzerBridgeState match {
       case Some(analyzerBridgeState) =>
-        BridgedRelationMetadataProvider(
+        new BridgedRelationMetadataProvider(
           spark.sessionState.catalogManager,
           Resolver.createRelationResolution(spark.sessionState.catalogManager),
           analyzerBridgeState,
-          None
+          new ViewResolver(resolver = resolver, catalogManager = spark.sessionState.catalogManager)
         )
       case None =>
         new MetadataResolver(

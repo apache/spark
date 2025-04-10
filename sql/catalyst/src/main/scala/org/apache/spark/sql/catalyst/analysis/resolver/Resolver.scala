@@ -155,14 +155,10 @@ class Resolver(
           catalogManager,
           relationResolution,
           analyzerBridgeState,
-          viewResolver.getCatalogAndNamespace
+          viewResolver
         )
       case None =>
-        relationMetadataProvider match {
-          case bridgedProvider: BridgedRelationMetadataProvider =>
-            bridgedProvider.copy(catalogAndNamespaceContext = viewResolver.getCatalogAndNamespace)
-          case other => other
-        }
+        relationMetadataProvider
     }
 
   /**

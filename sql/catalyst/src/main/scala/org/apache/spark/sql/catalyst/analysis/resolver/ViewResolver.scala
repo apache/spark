@@ -150,7 +150,7 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
 case class ViewResolutionContext(
     nestedViewDepth: Int,
     maxNestedViewDepth: Int,
-    catalogAndNamespace: Seq[String] = Seq()) {
+    catalogAndNamespace: Seq[String] = Seq.empty) {
   def validate(unresolvedView: View): Unit = {
     if (nestedViewDepth > maxNestedViewDepth) {
       throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(

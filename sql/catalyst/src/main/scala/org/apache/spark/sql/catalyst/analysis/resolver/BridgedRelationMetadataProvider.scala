@@ -29,11 +29,11 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
  * fixed-point [[Analyzer]] run. We strictly rely on the [[AnalyzerBridgeState]] to avoid any
  * blocking calls here.
  */
-case class BridgedRelationMetadataProvider(
+class BridgedRelationMetadataProvider(
     override val catalogManager: CatalogManager,
     override val relationResolution: RelationResolution,
     analyzerBridgeState: AnalyzerBridgeState,
-    private val catalogAndNamespaceContext: Option[Seq[String]]
+    viewResolver: ViewResolver
 ) extends RelationMetadataProvider {
   override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
 
@@ -51,7 +51,7 @@ case class BridgedRelationMetadataProvider(
   private def updateRelationsWithResolvedMetadata(): Unit = {
     analyzerBridgeState.relationsWithResolvedMetadata.forEach(
       (bridgeRelationId, relationWithResolvedMetadata) => {
-        if (catalogAndNamespaceContext.getOrElse(Seq.empty)
+        if (viewResolver.getCatalogAndNamespace.getOrElse(Seq.empty)
           == bridgeRelationId.catalogAndNamespace) {
           relationsWithResolvedMetadata.put(
             relationIdFromUnresolvedRelation(bridgeRelationId.unresolvedRelation),
