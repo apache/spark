@@ -188,7 +188,10 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
 
   override def doCanonicalize(): SparkPlan = _canonicalized
 
-  def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec
+  def newReuseInstance(
+      newStageId: Int,
+      newOutput: Seq[Attribute],
+      hasStreamSidePushdownDependent: Boolean): ExchangeQueryStageExec
 }
 
 /**
@@ -216,7 +219,9 @@ case class ShuffleQueryStageExec(
   override protected def doMaterialize(): Future[Any] = shuffle.submitShuffleJob()
 
   override def newReuseInstance(
-      newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+      newStageId: Int,
+      newOutput: Seq[Attribute],
+      hasStreamSidePushdownDependent: Boolean): ExchangeQueryStageExec = {
     val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle),
@@ -265,13 +270,15 @@ case class BroadcastQueryStageExec(
   override protected def doMaterialize(): Future[Any] = broadcast.submitBroadcastJob()
 
   override def newReuseInstance(
-      newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+      newStageId: Int,
+      newOutput: Seq[Attribute],
+      hasStreamSidePushdownDependent: Boolean): ExchangeQueryStageExec = {
     val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast),
       _canonicalized,
       Option(this.id),
-      hasStreamSidePushdownDependent = this.hasStreamSidePushdownDependent)
+      hasStreamSidePushdownDependent = hasStreamSidePushdownDependent)
     reuse._resultOption = this._resultOption
     reuse._error = this._error
     reuse

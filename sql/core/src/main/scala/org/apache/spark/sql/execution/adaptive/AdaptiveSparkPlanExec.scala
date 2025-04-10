@@ -896,7 +896,7 @@ case class AdaptiveSparkPlanExec(
       // First have a quick check in the `stageCache` without having to traverse down the node.
       context.stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
-          val stage = reuseQueryStage(existingStage, e)
+          val stage = reuseQueryStage(existingStage, e, hasStreamSidePushdownDependent)
           val isMaterialized = stage.isMaterialized
           CreateStageResult(
             newPlan = stage,
@@ -926,7 +926,7 @@ case class AdaptiveSparkPlanExec(
               val queryStage = context.stageCache.getOrElseUpdate(
                 newStage.plan.canonicalized, newStage)
               if (queryStage.ne(newStage)) {
-                newStage = reuseQueryStage(queryStage, e)
+                newStage = reuseQueryStage(queryStage, e, hasStreamSidePushdownDependent)
               }
             }
             val isMaterialized = newStage.isMaterialized
@@ -1164,8 +1164,10 @@ case class AdaptiveSparkPlanExec(
 
   private def reuseQueryStage(
       existing: ExchangeQueryStageExec,
-      exchange: Exchange): ExchangeQueryStageExec = {
-    val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
+      exchange: Exchange,
+      hasStreamSidePushdownDependent: Boolean): ExchangeQueryStageExec = {
+    val queryStage = existing.newReuseInstance(currentStageId, exchange.output,
+      hasStreamSidePushdownDependent)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)
     queryStage
