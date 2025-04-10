@@ -2413,10 +2413,10 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
         CheckNewAnswer(("a", 4)), // Data should not get filtered and output will be 4
 
-        AddData(inputData, ("a", 1)), // Add data newer than watermark for "a"
+        AddData(inputData, ("a", 1)), // Add data older than watermark for "a"
         CheckNewAnswer(("a", 1)), // Data should not get filtered and output will be 1
 
-        AddData(inputData, ("a", 85)), // Add data older than watermark for "a"
+        AddData(inputData, ("a", 85)), // Add data newer than watermark for "a"
         CheckNewAnswer(("a", 1)) // Min event time should still be 1
       )
     }
