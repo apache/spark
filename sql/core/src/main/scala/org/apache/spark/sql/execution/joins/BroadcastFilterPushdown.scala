@@ -42,7 +42,7 @@ class BroadcastFilterPushdown(isSubquery: Boolean = false) extends Rule[SparkPla
   override def apply(plan: SparkPlan): SparkPlan = {
     val shouldAttemptBroadcastVarPushdown = plan.conf.pushBroadcastedJoinKeysASFilterToScan &&
       !plan.isInstanceOf[V2TableWriteExec] && (!isSubquery ||
-      this.conf.pushBroadcastedJoinKeysASFilterToScanOnSubqueries)
+      this.conf.useBroadcastAsFilterOnSubqueries)
     if (shouldAttemptBroadcastVarPushdown) {
       val (newPlan, removedDpps) = useTopDownPush(plan)
       if (!removedDpps.isEmpty) {
