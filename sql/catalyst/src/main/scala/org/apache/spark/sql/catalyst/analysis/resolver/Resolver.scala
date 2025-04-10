@@ -120,7 +120,10 @@ class Resolver(
    * This method is a top-level analysis entry point:
    * 1. Substitute IDENTIFIERs and CTEs in the `unresolvedPlan` using
    *    [[IdentifierAndCteSubstitutor]];
-   * 2. Resolve the metadata for the plan using [[MetadataResolver]];
+   * 2. Resolve the metadata for the plan using [[MetadataResolver]]. When
+   *    [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is enabled, we need to
+   *    re-instantiate the [[RelationMetadataProvider]] as [[View]] resolution context might have
+   *    changed in the meantime;
    * 3. Resolve the plan using [[resolve]].
    *
    * This method is called for the top-level query and each unresolved [[View]].
@@ -134,16 +137,7 @@ class Resolver(
 
     planLogger.logPlanResolutionEvent(planAfterSubstitution, "Metadata lookup")
 
-    relationMetadataProvider = analyzerBridgeState match {
-      case Some(analyzerBridgeState) =>
-        new BridgedRelationMetadataProvider(
-          catalogManager,
-          relationResolution,
-          analyzerBridgeState
-        )
-      case None =>
-        relationMetadataProvider
-    }
+    recreateRelationMetadataProvider(analyzerBridgeState)
 
     planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
 
@@ -153,6 +147,23 @@ class Resolver(
 
     resolve(planAfterSubstitution)
   }
+
+  def recreateRelationMetadataProvider(analyzerBridgeState: Option[AnalyzerBridgeState]) : Unit =
+    relationMetadataProvider = analyzerBridgeState match {
+      case Some(analyzerBridgeState) =>
+        BridgedRelationMetadataProvider(
+          catalogManager,
+          relationResolution,
+          analyzerBridgeState,
+          viewResolver.getCatalogAndNamespace
+        )
+      case None =>
+        relationMetadataProvider match {
+          case bridgedProvider: BridgedRelationMetadataProvider =>
+            bridgedProvider.copy(catalogAndNamespaceContext = viewResolver.getCatalogAndNamespace)
+          case other => other
+        }
+    }
 
   /**
    * This method takes an unresolved [[LogicalPlan]] and chooses the right `resolve*` method using

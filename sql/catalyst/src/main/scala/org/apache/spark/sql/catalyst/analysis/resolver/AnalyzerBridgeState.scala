@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * [[Resolver]]. It is used  in dual-run mode (when
  * [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is true).
  *
- * @param relationsWithResolvedMetadata A map from [[UnresolvedRelation]] to the relations with
+ * @param relationsWithResolvedMetadata A map from [[BridgedRelationId]] to the relations with
  *   resolved metadata. It allows us to reuse the relation metadata and avoid duplicate
  *   catalog/table lookups.
  * @param catalogRelationsWithResolvedMetadata A map from [[UnresolvedCatalogRelation]] to the
@@ -43,6 +42,6 @@ case class AnalyzerBridgeState(
 )
 
 object AnalyzerBridgeState {
-  type RelationsWithResolvedMetadata = HashMap[UnresolvedRelation, LogicalPlan]
+  type RelationsWithResolvedMetadata = HashMap[BridgedRelationId, LogicalPlan]
   type CatalogRelationsWithResolvedMetadata = HashMap[UnresolvedCatalogRelation, LogicalPlan]
 }
