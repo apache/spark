@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -39,7 +40,14 @@ case class AnalyzerBridgeState(
       new AnalyzerBridgeState.RelationsWithResolvedMetadata,
     catalogRelationsWithResolvedMetadata: AnalyzerBridgeState.CatalogRelationsWithResolvedMetadata =
       new AnalyzerBridgeState.CatalogRelationsWithResolvedMetadata
-)
+) {
+  def addUnresolvedRelation(unresolvedRelation: UnresolvedRelation, relation: LogicalPlan): Unit = {
+    relationsWithResolvedMetadata.put(
+        BridgedRelationId(unresolvedRelation, AnalysisContext.get.catalogAndNamespace),
+        relation
+      )
+  }
+}
 
 object AnalyzerBridgeState {
   type RelationsWithResolvedMetadata = HashMap[BridgedRelationId, LogicalPlan]

@@ -35,6 +35,13 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
   private val sourceUnresolvedRelationStack = new ArrayDeque[UnresolvedRelation]
   private val viewResolutionContextStack = new ArrayDeque[ViewResolutionContext]
 
+  def getCatalogAndNamespace: Option[Seq[String]] =
+    if (viewResolutionContextStack.isEmpty) {
+      None
+    } else {
+      Some(viewResolutionContextStack.peek().catalogAndNamespace)
+    }
+
   /**
    * This method preserves the resolved [[UnresolvedRelation]] for the further view resolution
    * process.
@@ -90,14 +97,6 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
     unresolvedView.copy(child = resolvedChild)
   }
 
-  def getCatalogAndNamespace: Option[Seq[String]] =
-    if (viewResolutionContextStack.isEmpty) {
-      None
-    }
-    else {
-      Some(viewResolutionContextStack.peek().catalogAndNamespace)
-    }
-
   /**
    * Execute `body` with a fresh [[ViewResolutionContext]] specifically constructed for
    * `unresolvedView` resolution. The context is popped back to the previous one after the
@@ -109,7 +108,8 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
       val prevContext = if (viewResolutionContextStack.isEmpty()) {
         ViewResolutionContext(
           nestedViewDepth = 0,
-          maxNestedViewDepth = conf.maxNestedViewDepth
+          maxNestedViewDepth = conf.maxNestedViewDepth,
+          catalogAndNamespace = unresolvedView.desc.viewCatalogAndNamespace
         )
       } else {
         viewResolutionContextStack.peek()
@@ -145,12 +145,12 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
  * @param nestedViewDepth Current nested view depth. Cannot exceed the `maxNestedViewDepth`.
  * @param maxNestedViewDepth Maximum allowed nested view depth. Configured in the upper context
  *   based on [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
- * @param catalogAndNamespace Catalog and camespace under which the [[View]] was created
+ * @param catalogAndNamespace Catalog and camespace under which the [[View]] was created.
  */
 case class ViewResolutionContext(
     nestedViewDepth: Int,
     maxNestedViewDepth: Int,
-    catalogAndNamespace: Seq[String] = Seq.empty) {
+    catalogAndNamespace: Seq[String]) {
   def validate(unresolvedView: View): Unit = {
     if (nestedViewDepth > maxNestedViewDepth) {
       throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(

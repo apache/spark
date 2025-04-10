@@ -40,7 +40,9 @@ class BridgedRelationMetadataProvider(
   /**
    * We update relations on each [[resolve]] call, because relation IDs might have changed.
    * This can happen for the nested views, since catalog name may differ, and expanded table name
-   * will differ for the same [[UnresolvedRelation]].
+   * will differ for the same [[UnresolvedRelation]]. In order to overcome this issue, we use
+   * [[viewResolver]]'s context to peek into the most recent context and to only resolve the
+   * relations which were created under this same context.
    *
    * See [[ViewResolver.resolve]] for more info on how SQL configs are propagated to nested views).
    */
