@@ -174,35 +174,33 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("creating values of TimeType via make_time") {
     // basic case
     checkEvaluation(
-      MakeTime(Literal(13), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      MakeTime(Literal(13), Literal(2), Literal(Decimal(23.5, 16, 6))),
       LocalTime.of(13, 2, 23, 500000000))
 
     // null cases
     checkEvaluation(
-      MakeTime(Literal.create(null, IntegerType), Literal(18),
-        Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      MakeTime(Literal.create(null, IntegerType), Literal(18), Literal(Decimal(23.5, 16, 6))),
       null)
     checkEvaluation(
-      MakeTime(Literal(13), Literal.create(null, IntegerType),
-        Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      MakeTime(Literal(13), Literal.create(null, IntegerType), Literal(Decimal(23.5, 16, 6))),
       null)
-    checkEvaluation(MakeTime(Literal(13), Literal(18),
-      Literal.create(null, DecimalType(16, 6))), null)
+    checkEvaluation(MakeTime(Literal(13), Literal(18), Literal.create(null, DecimalType(16, 6))),
+      null)
 
     // Invalid cases
     val errorCode = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION"
     checkErrorInExpression[SparkDateTimeException](
-      MakeTime(Literal(25), Literal(2), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      MakeTime(Literal(25), Literal(2), Literal(Decimal(23.5, 16, 6))),
       errorCode,
       Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): 25")
     )
     checkErrorInExpression[SparkDateTimeException](
-      MakeTime(Literal(23), Literal(-1), Literal(Decimal(BigDecimal(23.5), 16, 6))),
+      MakeTime(Literal(23), Literal(-1), Literal(Decimal(23.5, 16, 6))),
       errorCode,
       Map("rangeMessage" -> "Invalid value for MinuteOfHour (valid values 0 - 59): -1")
     )
     checkErrorInExpression[SparkDateTimeException](
-      MakeTime(Literal(23), Literal(12), Literal(Decimal(BigDecimal(100.5), 16, 6))),
+      MakeTime(Literal(23), Literal(12), Literal(Decimal(100.5, 16, 6))),
       errorCode,
       Map("rangeMessage" -> "Invalid value for SecondOfMinute (valid values 0 - 59): 100")
     )

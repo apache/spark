@@ -1173,7 +1173,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val min = 2
     val sec = 23
     val micros = 1234
-    val secAndMicros = Decimal(BigDecimal(sec + (micros / MICROS_PER_SECOND.toFloat)), 16, 6)
+    val secAndMicros = Decimal(sec + (micros / MICROS_PER_SECOND.toFloat), 16, 6)
     
     // Valid case
     val microSecsTime = timeToMicros(hour, min, secAndMicros)
@@ -1198,12 +1198,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
     // Invalid second cases
     Seq(
-      (60.0, "Invalid value for SecondOfMinute (valid values 0 - 59): 60")
+      (60.0d, "Invalid value for SecondOfMinute (valid values 0 - 59): 60")
       // TODO need to improve handling for other cases
     ).foreach { case (invalidSecond, errorMsg) =>
       checkError(
         exception = intercept[SparkDateTimeException] {
-          timeToMicros(hour, min, Decimal(BigDecimal(invalidSecond), 16, 6))
+          timeToMicros(hour, min, Decimal(invalidSecond, 16, 6))
         },
         condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
         parameters = Map("rangeMessage" -> errorMsg))
