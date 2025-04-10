@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import pyspark.sql.connect.proto as pb2
 import json
 from typing import Dict, List, Optional, TYPE_CHECKING
 
@@ -43,6 +42,7 @@ from pyspark.errors.exceptions.base import (
 )
 
 if TYPE_CHECKING:
+    import pyspark.sql.connect.proto as pb2
     from google.rpc.error_details_pb2 import ErrorInfo
 
 
@@ -55,7 +55,7 @@ class SparkConnectException(PySparkException):
 def convert_exception(
     info: "ErrorInfo",
     truncated_message: str,
-    resp: Optional[pb2.FetchErrorDetailsResponse],
+    resp: Optional["pb2.FetchErrorDetailsResponse"],
     display_server_stacktrace: bool = False,
 ) -> SparkConnectException:
     converted = _convert_exception(info, truncated_message, resp, display_server_stacktrace)
@@ -65,9 +65,11 @@ def convert_exception(
 def _convert_exception(
     info: "ErrorInfo",
     truncated_message: str,
-    resp: Optional[pb2.FetchErrorDetailsResponse],
+    resp: Optional["pb2.FetchErrorDetailsResponse"],
     display_server_stacktrace: bool = False,
 ) -> SparkConnectException:
+    import pyspark.sql.connect.proto as pb2
+
     raw_classes = info.metadata.get("classes")
     classes: List[str] = json.loads(raw_classes) if raw_classes else []
     sql_state = info.metadata.get("sqlState")
@@ -139,13 +141,13 @@ def _convert_exception(
     )
 
 
-def _extract_jvm_stacktrace(resp: pb2.FetchErrorDetailsResponse) -> str:
+def _extract_jvm_stacktrace(resp: "pb2.FetchErrorDetailsResponse") -> str:
     if len(resp.errors[resp.root_error_idx].stack_trace) == 0:
         return ""
 
     lines: List[str] = []
 
-    def format_stacktrace(error: pb2.FetchErrorDetailsResponse.Error) -> None:
+    def format_stacktrace(error: "pb2.FetchErrorDetailsResponse.Error") -> None:
         message = f"{error.error_type_hierarchy[0]}: {error.message}"
         if len(lines) == 0:
             lines.append(error.error_type_hierarchy[0])
@@ -404,7 +406,7 @@ THIRD_PARTY_EXCEPTION_CLASS_MAPPING = {
 
 
 class SQLQueryContext(BaseQueryContext):
-    def __init__(self, q: pb2.FetchErrorDetailsResponse.QueryContext):
+    def __init__(self, q: "pb2.FetchErrorDetailsResponse.QueryContext"):
         self._q = q
 
     def contextType(self) -> QueryContextType:
@@ -441,7 +443,7 @@ class SQLQueryContext(BaseQueryContext):
 
 
 class DataFrameQueryContext(BaseQueryContext):
-    def __init__(self, q: pb2.FetchErrorDetailsResponse.QueryContext):
+    def __init__(self, q: "pb2.FetchErrorDetailsResponse.QueryContext"):
         self._q = q
 
     def contextType(self) -> QueryContextType:

@@ -1256,3 +1256,47 @@ WithCTE
 +- Project [id#x, xid#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [id#x, xid#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1(a, b) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT a + b, a FROM t1 WHERE a < 20
+),
+t2(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t2, t1 WHERE n + 1 = a
+)
+SELECT * FROM t2
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS a#x, 1#x AS b#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x, 1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(a#x + b#x) AS (a + b)#x, a#x]
+:              +- Filter (a#x < 20)
+:                 +- SubqueryAlias t1
+:                    +- Project [1#x AS a#x, 1#x AS b#x]
+:                       +- UnionLoopRef xxxx, [1#x, 1#x], false
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t2
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- Filter ((n#x + 1) = a#x)
+:                 +- Join Inner
+:                    :- SubqueryAlias t2
+:                    :  +- Project [1#x AS n#x]
+:                    :     +- UnionLoopRef xxxx, [1#x], false
+:                    +- SubqueryAlias t1
+:                       +- CTERelationRef xxxx, true, [a#x, b#x], false, false
++- Project [n#x]
+   +- SubqueryAlias t2
+      +- CTERelationRef xxxx, true, [n#x], false, false

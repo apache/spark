@@ -486,4 +486,17 @@ WITH RECURSIVE
         UNION ALL
         SELECT t.id + 1, xid * 10 + x.id FROM t CROSS JOIN x WHERE t.id < 3
     )
-SELECT * FROM t
+SELECT * FROM t;
+
+-- rCTE referencing other rCTE
+WITH RECURSIVE t1(a, b) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT a + b, a FROM t1 WHERE a < 20
+),
+t2(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t2, t1 WHERE n + 1 = a
+)
+SELECT * FROM t2;
