@@ -781,9 +781,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     try {
       val unscaledSecFrac = secsAndMicros.toUnscaledLong
-      val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
-      val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
+      if (unscaledSecFrac < 0) {
+        throw new DateTimeException(
+          s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
+      }
       
+      val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
       // This check is needed for the case where the full seconds is outside of the int range.
       // This will overflow when full seconds are converted from long to int. This could
       // product an int in the valid seconds range and return a wrong value. For overflow values
@@ -794,6 +797,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
           s"Invalid value for SecondOfMinute (valid values 0 - 59): $fullSecs")
       }
       
+      val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
       val lt = LocalTime.of(hours, minutes, fullSecs.toInt, nanos.toInt)
       localTimeToMicros(lt)
     } catch {
