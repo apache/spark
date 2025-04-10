@@ -168,4 +168,62 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => MinutesOfTime(child).replacement, TimeType())
   }
+
+  test("SecondExpressionBuilder") {
+    // Empty expressions list
+    checkError(
+      exception = intercept[AnalysisException] {
+        SecondExpressionBuilder.build("second", Seq.empty)
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`second`",
+        "expectedNum" -> "> 0",
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
+
+    // test TIME-typed child should build SecondsOfTime
+    val timeExpr = Literal(localTime(12, 58, 59), TimeType())
+    val builtExprForTime = SecondExpressionBuilder.build("second", Seq(timeExpr))
+    assert(builtExprForTime.isInstanceOf[SecondsOfTime])
+    assert(builtExprForTime.asInstanceOf[SecondsOfTime].child eq timeExpr)
+
+    // test non TIME-typed child should build second
+    val tsExpr = Literal("2007-09-03 10:45:23")
+    val builtExprForTs = SecondExpressionBuilder.build("second", Seq(tsExpr))
+    assert(builtExprForTs.isInstanceOf[Second])
+    assert(builtExprForTs.asInstanceOf[Second].child eq tsExpr)
+  }
+
+  test("Second with TIME type") {
+    // A few test times in microseconds since midnight:
+    //   time in microseconds -> expected second
+    val testTimes = Seq(
+      localTime() -> 0,
+      localTime(1) -> 0,
+      localTime(0, 59) -> 0,
+      localTime(14, 30) -> 0,
+      localTime(12, 58, 59) -> 59,
+      localTime(23, 0, 1) -> 1,
+      localTime(23, 59, 59, 999999) -> 59
+    )
+
+    // Create a literal with TimeType() for each test microsecond value
+    // evaluate SecondsOfTime(...), and check that the result matches the expected second.
+    testTimes.foreach { case (micros, expectedSecond) =>
+      checkEvaluation(
+        SecondsOfTime(Literal(micros, TimeType())),
+        expectedSecond)
+    }
+
+    // Verify NULL handling
+    checkEvaluation(
+      SecondsOfTime(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
+      null
+    )
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => SecondsOfTime(child).replacement, TimeType())
+  }
 }
