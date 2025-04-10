@@ -783,6 +783,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val unscaledSecFrac = secsAndMicros.toUnscaledLong
       val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
       val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
+      
+      // This check is needed for the case where the full seconds is outside of the int range.
+      // This will overflow when full seconds are converted from long to int. This could
+      // product an int in the valid seconds range and return a wrong value. For overflow values
+      // outside of the valid seconds range it would result in a misleading error message.
+      if (fullSecs > Int.MaxValue || fullSecs < Int.MinValue) {
+        // Make this error message consistent with what is thrown by LocalTime.of
+        throw new DateTimeException(
+          s"Invalid value for SecondOfMinute (valid values 0 - 59): $fullSecs")
+      }
+      
       val lt = LocalTime.of(hours, minutes, fullSecs.toInt, nanos.toInt)
       localTimeToMicros(lt)
     } catch {

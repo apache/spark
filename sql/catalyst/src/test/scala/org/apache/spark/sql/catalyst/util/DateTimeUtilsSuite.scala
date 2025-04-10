@@ -1174,7 +1174,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val sec = 23
     val micros = 1234
     val secAndMicros = Decimal(sec + (micros / MICROS_PER_SECOND.toFloat), 16, 6)
-    
+
     // Valid case
     val microSecsTime = timeToMicros(hour, min, secAndMicros)
     assert(microSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
@@ -1200,9 +1200,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val baseErrorMsg = "Invalid value for SecondOfMinute (valid values 0 - 59): "
     Seq(
       (60.0, baseErrorMsg + "60"),
-      // TODO figure out why the nums in error are wrong
+      (9999999999.999999, baseErrorMsg + "9999999999"),
       (-999999999.999999, baseErrorMsg + "-1000000000"),
-      (9999999999.999999, baseErrorMsg + "1410065407")
+      // Full seconds overflows to a valid seconds integer when converted from long to int
+      (4294967297.999999, baseErrorMsg + "4294967297")
     ).foreach { case (invalidSecond, errorMsg) =>
       checkError(
         exception = intercept[SparkDateTimeException] {
