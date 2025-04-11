@@ -26,7 +26,7 @@ import org.apache.avro.AvroTypeException
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
@@ -1397,7 +1397,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       // verify that ordering for non-null columns on the right in still maintained
-      val result1: Seq[Int] = store.iterator(cfName).map { kv =>
+      val result1: Seq[Int] = store1.iterator(cfName).map { kv =>
         val keyRow = kv.key
         keyRow.getInt(1)
       }.toSeq
@@ -1911,6 +1911,281 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  /**
+   * Tests for validating the state machine behavior of RocksDBStateStore
+   * which enforces correct operation order.
+   */
+  testWithColumnFamiliesAndEncodingTypes(
+    "state machine validates operation order",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      // Basic operations should work in UPDATING state
+      put(store, "a", 0, 1)
+      assert(get(store, "a", 0) === Some(1))
+
+      // Commit should change the state to COMMITTED
+      store.commit()
+
+      // Operations after COMMITTED should fail
+      val e1 = intercept[SparkRuntimeException] {
+        put(store, "b", 0, 2)
+      }
+      checkError(
+        e1,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Cannot update after committed"
+        ),
+        matchPVals = true
+      )
+
+      val e2 = intercept[SparkRuntimeException] {
+        remove(store, _._1 == "a")
+      }
+      checkError(
+        e2,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Cannot update after committed"
+        ),
+        matchPVals = true
+      )
+
+      // Loading new version should reset state to UPDATING
+      val store2 = provider.getStore(1)
+      put(store2, "b", 0, 2)
+      assert(get(store2, "b", 0) === Some(2))
+
+      // Abort should change state to ABORTED
+      store2.abort()
+
+      // Operations after ABORTED should fail
+      val e3 = intercept[SparkRuntimeException] {
+        put(store2, "c", 0, 3)
+      }
+      checkError(
+        e3,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Cannot update after aborted"
+        ),
+        matchPVals = true
+      )
+
+      // Cannot commit after abort
+      val e4 = intercept[SparkRuntimeException] {
+        store2.commit()
+      }
+      checkError(
+        e4,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Expected possible states List(UPDATING) but found ABORTED"
+        )
+      )
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "metrics operations validate state",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      // In UPDATING state, operations should work but metrics methods should fail
+      put(store, "a", 0, 1)
+
+      val e1 = intercept[SparkRuntimeException] {
+        store.getStateStoreCheckpointInfo()
+      }
+      checkError(
+        e1,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Cannot get metrics in UPDATING state"
+        ),
+        matchPVals = true
+      )
+
+      // After commit, metrics should be available
+      store.commit()
+      store.metrics  // Should not throw
+      store.getStateStoreCheckpointInfo() // Should not throw
+
+      // New store should be in UPDATING state
+      val store2 = provider.getStore(1)
+
+      val e2 = intercept[SparkRuntimeException] {
+        store2.metrics
+      }
+      checkError(
+        e2,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Cannot get metrics in UPDATING state"
+        ),
+        matchPVals = true
+      )
+
+      // After abort, metrics should be available
+      store2.abort()
+      store2.metrics  // Should not throw
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "iterator validates state",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      // Put some data and commit
+      put(store, "a", 0, 1)
+      put(store, "b", 0, 2)
+      store.commit()
+
+      // Get a new store and add more data
+      val store2 = provider.getStore(1)
+      put(store2, "c", 0, 3)
+
+      // Iterator should work in UPDATING state
+      assert(store2.iterator().map(pair => keyRowToData(pair.key)._1).toSet === Set("a", "b", "c"))
+
+      // Abort the store
+      store2.abort()
+
+      // Iterator should fail in ABORTED state
+      val e = intercept[SparkRuntimeException] {
+        store2.iterator()
+      }
+      checkError(
+        e,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Cannot update after aborted"
+        ),
+        matchPVals = true
+      )
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "cannot commit twice",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      // Put some data and commit
+      put(store, "a", 0, 1)
+      store.commit()
+
+      // Second commit should fail
+      val e = intercept[SparkRuntimeException] {
+        store.commit()
+      }
+      checkError(
+        e,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Expected possible states List(UPDATING) but found COMMITTED"
+        )
+      )
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "cannot abort after commit",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      // Put some data and commit
+      put(store, "a", 0, 1)
+      store.commit()
+
+      // Abort after commit should fail
+      val e = intercept[SparkRuntimeException] {
+        store.abort()
+      }
+      checkError(
+        e,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map(
+          "errorMsg" -> "Expected possible states List(UPDATING, ABORTED) but found COMMITTED"
+        )
+      )
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "operations on column families validate state",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    if (colFamiliesEnabled) {
+      tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+        val store = provider.getStore(0)
+        val cfName = "testColumnFamily"
+
+        // Create column family
+        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))
+
+        // Operations should work in UPDATING state
+        put(store, "a", 0, 1, cfName)
+        assert(get(store, "a", 0, cfName) === Some(1))
+
+        // Commit
+        store.commit()
+
+        // Operations after commit should fail
+        val e1 = intercept[SparkRuntimeException] {
+          put(store, "b", 0, 2, cfName)
+        }
+        checkError(
+          e1,
+          condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+          parameters = Map(
+            "errorMsg" -> "Cannot update after committed"
+          ),
+          matchPVals = true
+        )
+
+        // New store should be in UPDATING state
+        val store2 = provider.getStore(1)
+
+        // Operations should work
+        put(store2, "b", 0, 2, cfName)
+        assert(get(store2, "b", 0, cfName) === Some(2))
+
+        // Removing column family requires UPDATING state
+        store2.removeColFamilyIfExists(cfName)
+
+        // Abort
+        store2.abort()
+
+        // Operations after abort should fail
+        val e2 = intercept[SparkRuntimeException] {
+          store2.createColFamilyIfAbsent("newCf", keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema))
+        }
+        checkError(
+          e2,
+          condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+          parameters = Map(
+            "errorMsg" -> "Cannot update after aborted"
+          ),
+          matchPVals = true
+        )
+      }
+    }
+  }
+
   testWithColumnFamiliesAndEncodingTypes(s"numInternalKeys metrics",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     tryWithProviderResource(
@@ -1943,9 +2218,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPair = store
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPair.isDefined && metricPair.get._2 === 4)
-        assert(rowPairsToDataSet(store.iterator(cfName)) ===
+        assert(rowPairsToDataSet(provider.getStore(1).iterator(cfName)) ===
           Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(store.iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(provider.getStore(1).iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("m", 0) -> 2, ("n", 0) -> 3, ("b", 0) -> 4))
 
         // Reload the store and remove some keys
@@ -1963,9 +2238,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPairUpdated = reloadedStore
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPairUpdated.isDefined && metricPairUpdated.get._2 === 3)
-        assert(rowPairsToDataSet(reloadedStore.iterator(cfName)) ===
+        assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator(cfName)) ===
           Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(reloadedStore.iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("n", 0) -> 3, ("b", 0) -> 4))
       }
     }
