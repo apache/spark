@@ -125,11 +125,24 @@ object ValidateSubqueryExpression
       case _ =>
     }
 
+    def checkNestedOuterReferences(expr: SubqueryExpression): Unit = {
+      if ((!SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) &&
+        expr.getNestedOuterAttrs.nonEmpty) {
+        expr.failAnalysis(
+          errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+          messageParameters = Map("objectName" -> toSQLId(
+            expr.getNestedOuterAttrs.head.prettyName)))
+      }
+    }
+
+    // Check if there are nested correlated subqueries in the plan.
+    checkNestedOuterReferences(expr)
+
     // Check if there is outer attribute that cannot be found from the plan.
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,

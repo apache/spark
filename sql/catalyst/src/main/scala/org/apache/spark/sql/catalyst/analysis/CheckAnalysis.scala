@@ -228,6 +228,30 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
   }
 
+  def checkNoNestedOuterReferencesInMainQuery(plan: LogicalPlan): Unit = {
+    plan.expressions.foreach {
+      case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty =>
+        subExpr.failAnalysis(
+          errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+          messageParameters = Map("objectName" -> toSQLId(
+            subExpr.getNestedOuterAttrs.head.prettyName)))
+      case expr if expr.containsPattern(PLAN_EXPRESSION) =>
+        expr.collect {
+          case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty =>
+            subExpr.failAnalysis(
+              errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+              messageParameters = Map("objectName" -> toSQLId(
+                subExpr.getNestedOuterAttrs.head.prettyName)))
+        }
+      case _ =>
+    }
+    plan.children.foreach {
+      case p: LogicalPlan if p.containsPattern(PLAN_EXPRESSION) =>
+        checkNoNestedOuterReferencesInMainQuery(p)
+      case _ =>
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -241,6 +265,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
     preemptedError.clear()
     try {
+      checkNoNestedOuterReferencesInMainQuery(inlinedPlan)
       checkAnalysis0(inlinedPlan)
       preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
