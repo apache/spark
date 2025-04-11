@@ -183,7 +183,8 @@ abstract class OffsetWindowFunctionFrameBase(
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     resetStates(rows)
     if (absOffset > rows.length) {
-      fillDefaultValue(EmptyRow)
+//      fillDefaultValue(EmptyRow)
+      // handle in write() func
     } else {
       if (ignoreNulls) {
         prepareForIgnoreNulls()
@@ -309,7 +310,8 @@ class FrameLessOffsetWindowFunctionFrame(
 
   override def write(index: Int, current: InternalRow): Unit = {
     if (absOffset > input.length) {
-      // Already use default values in prepare.
+      // Use default values since the offset row does not exist.
+      fillDefaultValue(current)
     } else {
       doWrite(current)
     }
