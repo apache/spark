@@ -20,23 +20,20 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
 import org.apache.spark.sql.catalyst.expressions.ForeignKeyConstraint
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AddConstraint, CreateTable, ReplaceTable, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.AddConstraint
 
 class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
-  test("Create table with unnamed foreign key - table level") {
+  test("Create table with foreign key - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING," +
       " FOREIGN KEY (a) REFERENCES parent(id)) USING parquet"
-    val plan = parsePlan(sql)
-    plan match {
-      case c: CreateTable =>
-        val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
-        assert(tableSpec.constraints.size == 1)
-        assert(tableSpec.constraints.head.isInstanceOf[ForeignKeyConstraint])
-        assert(tableSpec.constraints.head.name.matches("t_parent_fk_[0-9a-f]{7}"))
-
-      case other =>
-        fail(s"Expected CreateTable, but got: $other")
-    }
+    val constraint = ForeignKeyConstraint(
+      tableName = "t",
+      childColumns = Seq("a"),
+      parentTableId = Seq("parent"),
+      parentColumns = Seq("id")
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints)
   }
 
   test("Create table with named foreign key - table level") {
@@ -46,25 +43,23 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
-      name = "fk1"
+      name = "fk1",
+      tableName = "t"
     )
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
 
-  test("Create table with unnamed foreign key - column level") {
+  test("Create table with foreign key - column level") {
     val sql = "CREATE TABLE t (a INT REFERENCES parent(id), b STRING) USING parquet"
-    val plan = parsePlan(sql)
-    plan match {
-      case c: CreateTable =>
-        val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
-        assert(tableSpec.constraints.size == 1)
-        assert(tableSpec.constraints.head.isInstanceOf[ForeignKeyConstraint])
-        assert(tableSpec.constraints.head.name.matches("t_parent_fk_[0-9a-f]{7}"))
-
-      case other =>
-        fail(s"Expected CreateTable, but got: $other")
-    }
+    val constraint = ForeignKeyConstraint(
+      tableName = "t",
+      childColumns = Seq("a"),
+      parentTableId = Seq("parent"),
+      parentColumns = Seq("id")
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints)
   }
 
   test("Create table with named foreign key - column level") {
@@ -73,103 +68,35 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
-      name = "fk1"
+      name = "fk1",
+      tableName = "t"
     )
     val constraints = Seq(constraint)
     verifyConstraints(sql, constraints)
   }
 
-  test("Replace table with foreign key - table level") {
-    val sql = "REPLACE TABLE t (a INT, b STRING," +
-      " FOREIGN KEY (a) REFERENCES parent(id)) USING parquet"
-    val plan = parsePlan(sql)
-    plan match {
-      case c: ReplaceTable =>
-        val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
-        assert(tableSpec.constraints.size == 1)
-        assert(tableSpec.constraints.head.isInstanceOf[ForeignKeyConstraint])
-        assert(tableSpec.constraints.head.name.matches("t_parent_fk_[0-9a-f]{7}"))
-
-      case other =>
-        fail(s"Expected ReplaceTable, but got: $other")
-    }
-  }
-
-  test("Replace table with named foreign key - table level") {
-    val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT fk1 FOREIGN KEY (a)" +
-      " REFERENCES parent(id)) USING parquet"
-    val constraint = ForeignKeyConstraint(
-      childColumns = Seq("a"),
-      parentTableId = Seq("parent"),
-      parentColumns = Seq("id"),
-      name = "fk1"
-    )
-    val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints, isCreateTable = false)
-  }
-
-  test("Replace table with foreign key - column level") {
-    val sql = "REPLACE TABLE t (a INT REFERENCES parent(id), b STRING) USING parquet"
-    val plan = parsePlan(sql)
-    plan match {
-      case c: ReplaceTable =>
-        val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
-        assert(tableSpec.constraints.size == 1)
-        assert(tableSpec.constraints.head.isInstanceOf[ForeignKeyConstraint])
-        assert(tableSpec.constraints.head.name.matches("t_parent_fk_[0-9a-f]{7}"))
-
-      case other =>
-        fail(s"Expected ReplaceTable, but got: $other")
-    }
-  }
-
-  test("Replace table with named foreign key - column level") {
-    val sql = "REPLACE TABLE t (a INT CONSTRAINT fk1 REFERENCES parent(id), b STRING) USING parquet"
-    val constraint = ForeignKeyConstraint(
-      childColumns = Seq("a"),
-      parentTableId = Seq("parent"),
-      parentColumns = Seq("id"),
-      name = "fk1"
-    )
-    val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints, isCreateTable = false)
-  }
-
   test("Add foreign key constraint") {
-    val sql =
-      """
-        |ALTER TABLE orders ADD CONSTRAINT fk1 FOREIGN KEY (customer_id)
-        |REFERENCES customers (id)
-        |""".stripMargin
-    val parsed = parsePlan(sql)
-    val expected = AddConstraint(
-      UnresolvedTable(
-        Seq("orders"),
-        "ALTER TABLE ... ADD CONSTRAINT"),
-      ForeignKeyConstraint(
-        name = "fk1",
-        childColumns = Seq("customer_id"),
-        parentTableId = Seq("customers"),
-        parentColumns = Seq("id")
-      ))
-    comparePlans(parsed, expected)
-  }
-
-  test("Add foreign key constraint - unnamed") {
-    val sql =
-      """
-        |ALTER TABLE orders ADD FOREIGN KEY (customer_id)
-        |REFERENCES customers (id)
-        |""".stripMargin
-    val parsed = parsePlan(sql)
-    parsed match {
-      case AddConstraint(table, constraint: ForeignKeyConstraint) =>
-        assert(constraint.name.matches("orders_customers_fk_[0-9a-f]{7}"))
-        assert(constraint.childColumns == Seq("customer_id"))
-        assert(constraint.parentTableId == Seq("customers"))
-        assert(constraint.parentColumns == Seq("id"))
-      case other =>
-        fail(s"Expected AddConstraint, but got: $other")
+    Seq(
+      ("", null),
+      ("CONSTRAINT fk1", "fk1")).foreach { case (constraintName, expectedName) =>
+      val sql =
+        s"""
+           |ALTER TABLE orders ADD $constraintName FOREIGN KEY (customer_id)
+           |REFERENCES customers (id)
+           |""".stripMargin
+      val parsed = parsePlan(sql)
+      val expected = AddConstraint(
+        UnresolvedTable(
+          Seq("orders"),
+          "ALTER TABLE ... ADD CONSTRAINT"),
+        ForeignKeyConstraint(
+          name = expectedName,
+          tableName = "orders",
+          childColumns = Seq("customer_id"),
+          parentTableId = Seq("customers"),
+          parentColumns = Seq("id")
+        ))
+      comparePlans(parsed, expected)
     }
   }
 
@@ -211,6 +138,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
           "ALTER TABLE ... ADD CONSTRAINT"),
         ForeignKeyConstraint(
           name = "fk1",
+          tableName = "orders",
           childColumns = Seq("customer_id"),
           parentTableId = Seq("customers"),
           parentColumns = Seq("id"),
