@@ -224,21 +224,31 @@ object CTESubstitution extends Rule[LogicalPlan] {
             errorClass = "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
             messageParameters = Map.empty)
         }
-        val resolvedCTERelations =
+
+        val tempCteDefs = ArrayBuffer.empty[CTERelationDef]
+        val resolvedCTERelations = if (recursiveCTERelationAncestor.isDefined) {
+          resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, tempCteDefs,
+            recursiveCTERelationAncestor, allowRecursion) ++ outerCTEDefs
+        } else {
           resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs,
             recursiveCTERelationAncestor, allowRecursion) ++ outerCTEDefs
+        }
         val substituted = substituteCTE(
           traverseAndSubstituteCTE(child, forceInline, resolvedCTERelations, cteDefs,
             recursiveCTERelationAncestor)._1,
           // If we are resolving CTEs in a recursive CTE, we need to inline it in case the
           // CTE contains the self reference.
-          forceInline || recursiveCTERelationAncestor.isDefined,
+          forceInline,
           resolvedCTERelations,
           None)
         if (firstSubstituted.isEmpty) {
           firstSubstituted = Some(substituted)
         }
-        substituted
+        if (recursiveCTERelationAncestor.isDefined) {
+          withCTEDefs(substituted, tempCteDefs.toSeq)
+        } else {
+          substituted
+        }
 
       case other =>
         other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
@@ -375,12 +385,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         .find(r => conf.resolver(r._1, table))
         .map {
           case (_, d) =>
-            // We don't ever want to inline rCTEs.
-            val hasSelfReference = d.exists {
-              case CTERelationRef(d.id, _, _, _, _, true, _) => true
-              case _ => false
-            }
-            if (alwaysInline && !hasSelfReference) {
+            if (alwaysInline) {
               d.child
             } else {
               // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
