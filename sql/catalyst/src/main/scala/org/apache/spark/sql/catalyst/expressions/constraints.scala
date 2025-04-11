@@ -28,6 +28,9 @@ trait TableConstraint {
   /** Returns the name of the constraint */
   def name: String
 
+  /** Returns the name of the table containing this constraint */
+  def tableName: String
+
   /** Returns the characteristics of the constraint (e.g., ENFORCED, RELY) */
   def characteristic: ConstraintCharacteristic
 
@@ -37,6 +40,14 @@ trait TableConstraint {
    * @return New TableConstraint instance
    */
   def withName(name: String): TableConstraint
+
+  /**
+   * Creates a new constraint with the given table name
+   *
+   * @param tableName Name of the table containing this constraint
+   * @return New TableConstraint instance
+   */
+  def withTableName(tableName: String): TableConstraint
 
   /** Creates a new constraint with the given characteristic
    *
@@ -49,23 +60,25 @@ trait TableConstraint {
   // Generate a constraint name based on the table name if the name is not specified
   protected def generateConstraintName(tableName: String): String
 
-  /** Generates a constraint name if one is not provided
+
+  /**
+   * Gets the constraint name. If no name is specified (null or empty),
+   * generates a name based on the table name using generateConstraintName.
    *
-   * @param tableName Name of the table containing this constraint
-   * @return TableConstraint with a generated name if original name was null/empty
+   * @return The constraint name (either user-specified or generated)
    */
-  def generateConstraintNameIfNeeded(tableName: String): TableConstraint = {
+  final def getConstraintName: String = {
     if (name == null || name.isEmpty) {
-      this.withName(name = generateConstraintName(tableName))
+      generateConstraintName(tableName)
     } else {
-      this
+      name
     }
   }
 
   // This method generates a random identifier that has a similar format to Git commit hashes,
   // which provide a good balance between uniqueness and readability when used as constraint
   // identifiers.
-  protected def randomSuffix: String = {
+  final protected def randomSuffix: String = {
     UUID.randomUUID().toString.replace("-", "").take(7)
   }
 }
@@ -80,6 +93,7 @@ case class CheckConstraint(
     child: Expression,
     condition: String,
     override val name: String = null,
+    override val tableName: String = null,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends UnaryExpression
   with Unevaluable
@@ -98,6 +112,8 @@ case class CheckConstraint(
 
   override def withName(name: String): TableConstraint = copy(name = name)
 
+  override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
+
   override def withCharacteristic(
       c: ConstraintCharacteristic,
       ctx: ParserRuleContext): TableConstraint =
@@ -107,11 +123,14 @@ case class CheckConstraint(
 case class PrimaryKeyConstraint(
     columns: Seq[String],
     override val name: String = null,
+    override val tableName: String = null,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
   override protected def generateConstraintName(tableName: String): String = s"${tableName}_pk"
 
   override def withName(name: String): TableConstraint = copy(name = name)
+
+  override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
   override def withCharacteristic(
     c: ConstraintCharacteristic,
@@ -132,6 +151,7 @@ case class PrimaryKeyConstraint(
 case class UniqueConstraint(
     columns: Seq[String],
     override val name: String = null,
+    override val tableName: String = null,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
     extends TableConstraint {
 
@@ -140,6 +160,8 @@ case class UniqueConstraint(
   }
 
   override def withName(name: String): TableConstraint = copy(name = name)
+
+  override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
   override def withCharacteristic(
     c: ConstraintCharacteristic,
@@ -162,6 +184,7 @@ case class ForeignKeyConstraint(
     parentTableId: Seq[String] = Seq.empty,
     parentColumns: Seq[String] = Seq.empty,
     override val name: String = null,
+    override val tableName: String = null,
     override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
 
@@ -169,6 +192,8 @@ case class ForeignKeyConstraint(
     s"${tableName}_${parentTableId.last}_fk_$randomSuffix"
 
   override def withName(name: String): TableConstraint = copy(name = name)
+
+  override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
   override def withCharacteristic(
     c: ConstraintCharacteristic,

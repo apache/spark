@@ -4874,7 +4874,7 @@ class AstBuilder extends DataTypeAstBuilder
     val asSelectPlan = Option(ctx.query).map(plan).toSeq
     withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
       val namedConstraints =
-        constraints.map(c => c.generateConstraintNameIfNeeded(identifiers.last))
+        constraints.map(c => c.withTableName(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
         collation, serdeInfo, external, namedConstraints)
       val identifier = withOrigin(identifierContext) {
@@ -4953,7 +4953,7 @@ class AstBuilder extends DataTypeAstBuilder
     val asSelectPlan = Option(ctx.query).map(plan).toSeq
     withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
       val namedConstraints =
-        constraints.map(c => c.generateConstraintNameIfNeeded(identifiers.last))
+        constraints.map(c => c.withTableName(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
         collation, serdeInfo, external = false, namedConstraints)
       val identifier = withOrigin(identifierContext) {
@@ -5465,7 +5465,7 @@ class AstBuilder extends DataTypeAstBuilder
       val tableConstraint = visitTableConstraintDefinition(ctx.tableConstraintDefinition())
       withIdentClause(ctx.identifierReference, identifiers => {
         val table = UnresolvedTable(identifiers, "ALTER TABLE ... ADD CONSTRAINT")
-        val namedConstraint = tableConstraint.generateConstraintNameIfNeeded(identifiers.last)
+        val namedConstraint = tableConstraint.withTableName(identifiers.last)
         AddConstraint(table, namedConstraint)
       })
     }
