@@ -312,7 +312,7 @@ private[sql] object CatalogV2Util {
     changes.foldLeft(constraints) { (constraints, change) =>
       change match {
         case add: AddConstraint =>
-          val newConstraint = add.getConstraint
+          val newConstraint = add.constraint
           val existingConstraint = findExistingConstraint(newConstraint.name)
           if (existingConstraint.isDefined) {
             throw new AnalysisException(
@@ -324,14 +324,14 @@ private[sql] object CatalogV2Util {
           constraints :+ newConstraint
 
         case drop: DropConstraint =>
-          val existingConstraint = findExistingConstraint(drop.getName)
+          val existingConstraint = findExistingConstraint(drop.name)
           if (existingConstraint.isEmpty && !drop.isIfExists) {
             throw new AnalysisException(
               errorClass = "CONSTRAINT_DOES_NOT_EXIST",
               messageParameters =
-                Map("constraintName" -> drop.getName, "tableName" -> table.name()))
+                Map("constraintName" -> drop.name, "tableName" -> table.name()))
           }
-          constraints.filterNot(_.name == drop.getName)
+          constraints.filterNot(_.name == drop.name)
 
         case _ =>
           // ignore non-constraint changes

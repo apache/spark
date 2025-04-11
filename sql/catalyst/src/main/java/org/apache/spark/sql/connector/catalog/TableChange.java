@@ -299,20 +299,17 @@ public interface TableChange {
   }
 
   /**
-   * Create a TableChange for adding a new Table Constraint
+   * Create a TableChange for adding a new table constraint
    */
-  static TableChange addConstraint(Constraint constraint, Boolean validate) {
+  static TableChange addConstraint(Constraint constraint, boolean validate) {
     return new AddConstraint(constraint, validate);
   }
 
   /**
-   * Create a TableChange for dropping a Table Constraint
+   * Create a TableChange for dropping a table constraint
    */
-  static TableChange dropConstraint(String name, Boolean ifExists, Boolean cascade) {
-    DropConstraint.Mode mode = DropConstraint.Mode.RESTRICT;
-    if (cascade) {
-      mode = DropConstraint.Mode.CASCADE;
-    }
+  static TableChange dropConstraint(String name, boolean ifExists, boolean cascade) {
+    DropConstraint.Mode mode = cascade ? DropConstraint.Mode.CASCADE : DropConstraint.Mode.RESTRICT;
     return new DropConstraint(name, ifExists, mode);
   }
 
@@ -810,19 +807,19 @@ public interface TableChange {
   /** A TableChange to alter table and add a constraint. */
   final class AddConstraint implements TableChange {
     private final Constraint constraint;
-    private final boolean validate;
+    private final String validatedTableVersion;
 
     private AddConstraint(Constraint constraint, boolean validate) {
       this.constraint = constraint;
-      this.validate = validate;
+      this.validatedTableVersion = null;
     }
 
-    public Constraint getConstraint() {
+    public Constraint constraint() {
       return constraint;
     }
 
-    public boolean isValidate() {
-      return validate;
+    public String validatedTableVersion() {
+      return validatedTableVersion;
     }
 
     @Override
@@ -830,12 +827,13 @@ public interface TableChange {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       AddConstraint that = (AddConstraint) o;
-      return constraint.equals(that.constraint) && validate == that.validate;
+      return constraint.equals(that.constraint) &&
+              Objects.equals(validatedTableVersion, that.validatedTableVersion);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(constraint, validate);
+      return Objects.hash(constraint, validatedTableVersion);
     }
   }
 
@@ -859,7 +857,7 @@ public interface TableChange {
       this.mode = mode;
     }
 
-    public String getName() {
+    public String name() {
       return name;
     }
 
