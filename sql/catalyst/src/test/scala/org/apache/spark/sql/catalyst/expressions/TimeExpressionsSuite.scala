@@ -73,6 +73,18 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(builtExprForTime.isInstanceOf[HoursOfTime])
     assert(builtExprForTime.asInstanceOf[HoursOfTime].child eq timeExpr)
 
+    assert(builtExprForTime.checkInputDataTypes().isSuccess)
+
+    // test TIME-typed child should build HoursOfTime for all allowed custom precision values
+    (TimeType.MIN_PRECISION to TimeType.MICROS_PRECISION).foreach { precision =>
+      val timeExpr = Literal(localTime(12, 58, 59), TimeType(precision))
+      val builtExpr = HourExpressionBuilder.build("hour", Seq(timeExpr))
+
+      assert(builtExpr.isInstanceOf[HoursOfTime])
+      assert(builtExpr.asInstanceOf[HoursOfTime].child eq timeExpr)
+      assert(builtExpr.checkInputDataTypes().isSuccess)
+    }
+
     // test non TIME-typed child should build hour
     val tsExpr = Literal("2007-09-03 10:45:23")
     val builtExprForTs = HourExpressionBuilder.build("hour", Seq(tsExpr))
