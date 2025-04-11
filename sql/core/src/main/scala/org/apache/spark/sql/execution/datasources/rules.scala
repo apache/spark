@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.resolver.BridgedRelationId
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -81,8 +82,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           // We put the resolved relation into the [[AnalyzerBridgeState]] for
           // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
           // relation metadata twice.
-          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
-            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, resolvedRelation)
+          AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+            bridgeState.addUnresolvedRelation(unresolvedRelation, resolvedRelation)
           }
         case _ =>
       })
