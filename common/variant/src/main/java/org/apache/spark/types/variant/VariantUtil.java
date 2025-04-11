@@ -216,7 +216,7 @@ public class VariantUtil {
 
   // Read a little-endian unsigned int value from `bytes[pos, pos + numBytes)`. The value must fit
   // into a non-negative int (`[0, Integer.MAX_VALUE]`).
-  static int readUnsigned(byte[] bytes, int pos, int numBytes) {
+  public static int readUnsigned(byte[] bytes, int pos, int numBytes) {
     checkIndex(pos, bytes.length);
     checkIndex(pos + numBytes - 1, bytes.length);
     int result = 0;
