@@ -278,6 +278,16 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT MAX(col1), 3 as abc FROM VALUES(1),(2),(3),(4) GROUP BY col1 % abc
+-- !query schema
+struct<max(col1):int,abc:int>
+-- !query output
+2	3
+3	3
+4	3
+
+
+-- !query
 set spark.sql.groupByAliases=false
 -- !query schema
 struct<key:string,value:string>

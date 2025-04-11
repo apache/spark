@@ -332,6 +332,13 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT MAX(col1), 3 as abc FROM VALUES(1),(2),(3),(4) GROUP BY col1 % abc
+-- !query analysis
+Aggregate [(col1#x % 3)], [max(col1#x) AS max(col1)#x, 3 AS abc#x]
++- LocalRelation [col1#x]
+
+
+-- !query
 set spark.sql.groupByAliases=false
 -- !query analysis
 SetCommand (spark.sql.groupByAliases,Some(false))
