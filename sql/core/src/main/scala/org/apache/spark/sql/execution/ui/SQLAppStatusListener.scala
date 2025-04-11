@@ -235,7 +235,7 @@ class SQLAppStatusListener(
         }
       }.getOrElse(
         // Built-in SQLMetric
-        MetricUtils.stringValue(m.metricType, _, _)
+        MetricUtils.stringValue(m.metricType, m.initValue, _, _)
       )
       (m.accumulatorId, metricAggMethod)
     }.toMap
