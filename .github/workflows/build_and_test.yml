@@ -1296,5 +1296,3 @@ jobs:
     permissions:
       packages: write
     uses: ./.github/workflows/python_hosted_runner_test.yml
-    with:
-      os: ubuntu-24.04-arm
