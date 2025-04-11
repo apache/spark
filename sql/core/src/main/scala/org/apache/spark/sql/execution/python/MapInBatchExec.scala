@@ -56,6 +56,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       output,
       chainedFunc,
       child.schema,
+      pythonUDF.dataType,
       conf.arrowMaxRecordsPerBatch,
       pythonEvalType,
       conf.sessionLocalTimeZone,
