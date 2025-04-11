@@ -21,7 +21,6 @@ import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, Outpu
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
 import java.nio.file.Files
 import java.util.zip.Checksum
-
 import org.apache.spark.SparkException
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
@@ -31,6 +30,8 @@ import org.apache.spark.serializer.{SerializationStream, SerializerInstance, Ser
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.PairsWriter
+
+import java.util.concurrent.TimeUnit
 
 /**
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
@@ -246,7 +247,8 @@ private[spark] class DiskBlockObjectWriter(
         // Force outstanding writes to disk and track how long it takes
         val start = System.nanoTime()
         fos.getFD.sync()
-        writeMetrics.incWriteTime(System.nanoTime() - start)
+        val writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime - start)
+        writeMetrics.incWriteTime(writeTime)
       }
 
       val pos = channel.position()

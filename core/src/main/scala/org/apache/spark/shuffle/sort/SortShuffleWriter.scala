@@ -18,12 +18,14 @@
 package org.apache.spark.shuffle.sort
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.util.collection.ExternalSorter
+
+import java.util.concurrent.TimeUnit
 
 private[spark] class SortShuffleWriter[K, V, C](
     handle: BaseShuffleHandle[K, V, C],
@@ -89,7 +91,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (sorter != null) {
         val startTime = System.nanoTime()
         sorter.stop()
-        writeMetrics.incWriteTime(System.nanoTime - startTime)
+        val writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime - startTime)
+        writeMetrics.incWriteTime(writeTime)
         sorter = null
       }
     }

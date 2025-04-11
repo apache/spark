@@ -19,6 +19,7 @@ package org.apache.spark.storage;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.spark.annotation.Private;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
@@ -43,34 +44,39 @@ public final class TimeTrackingOutputStream extends OutputStream {
   public void write(int b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incWriteTime(System.nanoTime() - startTime);
+    long writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(writeTime);
   }
 
   @Override
   public void write(byte[] b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incWriteTime(System.nanoTime() - startTime);
+    long writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(writeTime);
   }
 
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b, off, len);
-    writeMetrics.incWriteTime(System.nanoTime() - startTime);
+    long writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(writeTime);
   }
 
   @Override
   public void flush() throws IOException {
     final long startTime = System.nanoTime();
     outputStream.flush();
-    writeMetrics.incWriteTime(System.nanoTime() - startTime);
+    long writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(writeTime);
   }
 
   @Override
   public void close() throws IOException {
     final long startTime = System.nanoTime();
     outputStream.close();
-    writeMetrics.incWriteTime(System.nanoTime() - startTime);
+    long writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(writeTime);
   }
 }
