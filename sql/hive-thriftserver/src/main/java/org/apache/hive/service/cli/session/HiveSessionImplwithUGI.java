@@ -23,8 +23,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.shims.Utils;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
@@ -96,6 +98,14 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
     }
   }
 
+  private static Token<TokenIdentifier> createToken(String tokenStr, String tokenService)
+      throws IOException {
+    Token<TokenIdentifier> delegationToken = new Token<>();
+    delegationToken.decodeFromUrlString(tokenStr);
+    delegationToken.setService(new Text(tokenService));
+    return delegationToken;
+  }
+
   /**
    * Enable delegation token for the session
    * save the token string and set the token.signature in hive conf. The metastore client uses
@@ -108,7 +118,8 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
     if (delegationTokenStr != null) {
       getHiveConf().set("hive.metastore.token.signature", HS2TOKEN);
       try {
-        Utils.setTokenStr(sessionUgi, delegationTokenStr, HS2TOKEN);
+        Token<TokenIdentifier> delegationToken = createToken(delegationTokenStr, HS2TOKEN);
+        sessionUgi.addToken(delegationToken);
       } catch (IOException e) {
         throw new HiveSQLException("Couldn't setup delegation token in the ugi", e);
       }
