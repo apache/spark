@@ -5260,6 +5260,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS =
+    buildConf("spark.sql.legacy.readDataSourceIgnoreOptions")
+      .internal()
+      .doc("When set to true, reading from file data source caches the first query plan and " +
+        "ignores subsequent changes in query options, e.g. delimiters.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
       "in addition to the write-side padding. This config is true by default to better enforce " +

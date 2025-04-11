@@ -1402,6 +1402,14 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
         Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
       )
+
+      // when legacy conf enabled, new options ignored and the previous cached option returned.
+      withSQLConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS.key -> "true") {
+        checkAnswer(
+          spark.sql("SELECT * FROM t WITH ('delimiter' = 'a')"),
+          Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
+        )
+      }
     }
   }
 
