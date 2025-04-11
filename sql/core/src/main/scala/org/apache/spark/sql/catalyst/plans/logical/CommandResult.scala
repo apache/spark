@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.SparkPlan
 case class CommandResult(
     output: Seq[Attribute],
     @transient commandLogicalPlan: LogicalPlan,
+    @transient commandOptimizedLogicalPlan: LogicalPlan,
     @transient commandPhysicalPlan: SparkPlan,
     @transient rows: Seq[InternalRow]) extends LeafNode {
   override def innerChildren: Seq[QueryPlan[_]] = Seq(commandLogicalPlan)
