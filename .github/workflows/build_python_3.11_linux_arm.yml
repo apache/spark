@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python 3.11, MacOS)"
+name: "Build / Python-only (master, Python 3.11, ARM)"
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 22 * * *'
   workflow_dispatch:
 
 jobs:
@@ -31,3 +31,5 @@ jobs:
     name: Run
     uses: ./.github/workflows/python_arm_test.yml
     if: github.repository == 'apache/spark'
+    with:
+      os: ubuntu-24.04-arm

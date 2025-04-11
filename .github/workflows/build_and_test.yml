@@ -1290,3 +1290,11 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  arm-python-test:
+    name: "Run PySpark Test on ARM"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/python_arm_test.yml
+    with:
+      os: ubuntu-24.04-arm
