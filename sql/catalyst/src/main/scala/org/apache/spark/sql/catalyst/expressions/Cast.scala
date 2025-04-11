@@ -33,7 +33,11 @@ import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalInte
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{
+  dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt,
+  dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte,
+  yearMonthIntervalToInt, yearMonthIntervalToShort
+}
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -740,6 +744,28 @@ case class Cast(
       } else {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToTime(s).orNull)
       }
+
+    case TimestampType =>
+      buildCast[Long](_, ts => {
+        // Convert timestamp to LocalDateTime
+        val localDateTime = DateTimeUtils.toJavaTimestamp(ts).toLocalDateTime()
+        // Extract time component and convert to microseconds
+        val nanos = localDateTime.getNano()
+        val seconds = localDateTime.getHour() * 3600 +
+          localDateTime.getMinute() * 60 +
+          localDateTime.getSecond()
+        // Return microseconds since midnight
+        seconds * MICROS_PER_SECOND + nanos / 1000
+      })
+
+    case _: IntegralType =>
+      buildCast[Number](_, n => n.longValue() * MICROS_PER_SECOND)
+
+    case _: FractionalType =>
+      buildCast[Number](_, n => {
+        // Convert floating-point seconds to microseconds
+        (n.doubleValue() * MICROS_PER_SECOND).toLong
+      })
   }
 
   // IntervalConverter
@@ -1374,6 +1400,26 @@ case class Cast(
               }
             """
           }
+
+      case TimestampType =>
+        (c, evPrim, evNull) =>
+          code"""
+          java.time.LocalDateTime localDateTime = $dateTimeUtilsCls
+            .toJavaTimestamp($c).toLocalDateTime();
+          int nanos = localDateTime.getNano();
+          long seconds = localDateTime.getHour() * 3600L +
+            localDateTime.getMinute() * 60L +
+            localDateTime.getSecond();
+          $evPrim = seconds * $MICROS_PER_SECOND + nanos / 1000;
+        """
+
+      case _: IntegralType =>
+        (c, evPrim, evNull) =>
+          code"""$evPrim = $c * $MICROS_PER_SECOND;"""
+
+      case _: FractionalType =>
+        (c, evPrim, evNull) =>
+          code"""$evPrim = (long)($c * $MICROS_PER_SECOND);"""
 
       case _ =>
         (_, _, evNull) => code"$evNull = true;"
