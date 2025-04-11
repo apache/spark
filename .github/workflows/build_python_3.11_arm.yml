@@ -29,7 +29,7 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/python_arm_test.yml
+    uses: ./.github/workflows/python_hosted_runner_test.yml
     if: github.repository == 'apache/spark'
     with:
       os: ubuntu-24.04-arm

@@ -45,6 +45,11 @@ on:
         required: false
         type: string
         default: macos-15
+      arch:
+        description: The target architecture (x86, x64, arm64) of the Python or PyPy interpreter.
+        required: false
+        type: string
+        default: arm64
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -134,6 +139,11 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
+      - name: Install Python ${{matrix.python}}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python}}
+          architecture: ${{ inputs.arch }}
       - name: Install Python packages (Python ${{matrix.python}})
         run: |
           python${{matrix.python}} -m pip install --ignore-installed 'blinker>=1.6.2'
