@@ -83,17 +83,24 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                   cteDef.copy(child = alias.copy(child = loop))
                 }
 
-              // Simple case of duplicating (UNION ALL) clause, with CTEs inside.
+              // Simple case of duplicating (UNION ALL) clause.
               case alias @ SubqueryAlias(_, withCTE @ WithCTE(
-                Union(Seq(anchor, recursion), false, false), _)) =>
+                Union(Seq(anchor, recursion), false, false), innerCteDefs)) =>
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, None))
+                  }
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
                     rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None))
-                  cteDef.copy(child = alias.copy(child = withCTE.copy(plan = loop)))
+                  cteDef.copy(child = alias.copy(child = withCTE.copy(
+                    plan = loop, cteDefs = newInnerCteDefs)))
                 }
 
               // The case of CTE name followed by a parenthesized list of column name(s), eg.
@@ -118,17 +125,23 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               case alias @ SubqueryAlias(_,
                    columnAlias @ UnresolvedSubqueryColumnAliases(
                    colNames,
-                   withCTE @ WithCTE(Union(Seq(anchor, recursion), false, false), _)
+                   withCTE @ WithCTE(Union(Seq(anchor, recursion), false, false), innerCteDefs)
                 )) =>
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, Some(colNames)))
+                  }
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
                     rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)))
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(
-                    child = withCTE.copy(plan = loop))))
+                    child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))
                 }
 
               // If the recursion is described with a UNION (deduplicating) clause then the
@@ -156,13 +169,19 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
 
               // UNION case with CTEs inside.
               case alias @ SubqueryAlias(_, withCTE @ WithCTE(
-                   Distinct(Union(Seq(anchor, recursion), false, false)), _)) =>
+                   Distinct(Union(Seq(anchor, recursion), false, false)), innerCteDefs)) =>
                 cteDef.failAnalysis(
                   errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
                   messageParameters = Map.empty)
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, None))
+                  }
                   val loop = UnionLoop(
                     cteDef.id,
                     Distinct(anchor),
@@ -172,7 +191,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       isAll = false
                     )
                   )
-                  cteDef.copy(child = alias.copy(child = withCTE.copy(plan = loop)))
+                  cteDef.copy(child = alias.copy(child = withCTE.copy(
+                    plan = loop, cteDefs = newInnerCteDefs)))
                 }
 
               // The case of CTE name followed by a parenthesized list of column name(s).
@@ -203,7 +223,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               case alias @ SubqueryAlias(_,
                    columnAlias@UnresolvedSubqueryColumnAliases(
                    colNames,
-                   withCTE @ WithCTE(Distinct(Union(Seq(anchor, recursion), false, false)), _)
+                   WithCTE(Distinct(Union(Seq(anchor, recursion), false, false)), innerCteDefs)
                 )) =>
                 cteDef.failAnalysis(
                   errorClass = "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
@@ -211,6 +231,12 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  // We need to check whether any of the inner CTEs has a self reference and replace
+                  // it if needed
+                  val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
+                    innerCteDef.copy(child = rewriteRecursiveCTERefs(
+                      innerCteDef.child, anchor, cteDef.id, Some(colNames)))
+                  }
                   val loop = UnionLoop(
                     cteDef.id,
                     Distinct(anchor),
@@ -220,8 +246,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                       isAll = false
                     )
                   )
-                  cteDef.copy(child = alias.copy(child =
-                    columnAlias.copy(child = withCTE.copy(plan = loop))))
+                  cteDef.copy(child = alias.copy(child = columnAlias.copy(
+                    child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))
                 }
 
               case other =>

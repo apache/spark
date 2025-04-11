@@ -1406,3 +1406,65 @@ WithCTE
 +- Project [outerlevel1#x, innerlevel1#x]
    +- SubqueryAlias r2
       +- CTERelationRef xxxx, true, [outerlevel1#x, innerlevel1#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- WithCTE
+:           :- CTERelationDef xxxx, false
+:           :  +- SubqueryAlias t2
+:           :     +- Project [n#x AS n#x]
+:           :        +- Project [n#x]
+:           :           +- SubqueryAlias t1
+:           :              +- Project [1#x AS n#x]
+:           :                 +- UnionLoopRef xxxx, [1#x], false
+:           +- UnionLoop xxxx
+:              :- Project [1 AS 1#x]
+:              :  +- OneRowRelation
+:              +- Project [(n#x + 1) AS (n + 1)#x]
+:                 +- Filter (n#x < 5)
+:                    +- SubqueryAlias t2
+:                       +- CTERelationRef xxxx, true, [n#x], false, false
++- Project [n#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- WithCTE
+:        :- CTERelationDef xxxx, false
+:        :  +- SubqueryAlias t2
+:        :     +- Project [n#x AS n#x]
+:        :        +- Project [n#x]
+:        :           +- SubqueryAlias t1
+:        :              +- UnionLoopRef xxxx, [n#x], false
+:        +- UnionLoop xxxx
+:           :- Project [1 AS n#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- Filter (n#x < 5)
+:                 +- SubqueryAlias t2
+:                    +- CTERelationRef xxxx, true, [n#x], false, false
++- Project [n#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x], false, false

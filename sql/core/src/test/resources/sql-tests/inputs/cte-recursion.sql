@@ -527,3 +527,21 @@ WITH RECURSIVE r2(outerlevel1, innerlevel1) AS (
     SELECT outerlevel1 + 1, innerlevel1 FROM r2 WHERE outerlevel1 < 3
 )
 SELECT * FROM r2;
+
+-- An inner cte that is defined for both the anchor and recursion but called only in the recursion
+-- with subquery alias
+WITH RECURSIVE t1(n) AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1;
+
+-- An inner cte that is defined for both the anchor and recursion but called only in the recursion
+-- without query alias
+WITH RECURSIVE t1 AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1;
