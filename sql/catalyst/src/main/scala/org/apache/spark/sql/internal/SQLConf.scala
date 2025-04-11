@@ -3551,6 +3551,19 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH =
+    buildConf("spark.sql.execution.arrow.maxRecordsPerOutputBatch")
+      .doc("When using Apache Arrow, limit the maximum number of records that can be output " +
+        "in a single ArrowRecordBatch to the downstream operator. If set to zero or negative " +
+        "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
+        "the number of records is limited when sending it to the downstream operator. This is " +
+        "used to avoid large batches being sent to the downstream operator including " +
+        "the columnar-based operator implemented by third-party libraries.")
+      .version("4.1.0")
+      .internal()
+      .intConf
+      .createWithDefault(-1)
+
   val ARROW_EXECUTION_MAX_BYTES_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxBytesPerBatch")
       .internal()
@@ -6552,6 +6565,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
+
+  def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
