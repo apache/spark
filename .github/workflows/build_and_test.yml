@@ -1295,6 +1295,6 @@ jobs:
     name: "Run PySpark Test on ARM"
     permissions:
       packages: write
-    uses: ./.github/workflows/python_arm_test.yml
+    uses: ./.github/workflows/python_hosted_runner_test.yml
     with:
       os: ubuntu-24.04-arm
