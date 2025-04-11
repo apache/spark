@@ -689,6 +689,20 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
       }
 
+      // Reject invalid options
+      for {
+        parameters <- Option(ctx.parameters)
+        colDefinition <- parameters.colDefinition().asScala
+        option <- colDefinition.colDefinitionOption().asScala
+      } {
+        if (option.generationExpression() != null) {
+          throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+        }
+        if (option.columnConstraintDefinition() != null) {
+          throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+        }
+      }
+
       val inputParamText = Option(ctx.parameters).map(source)
       val returnTypeText: String =
         if (ctx.RETURNS != null &&
