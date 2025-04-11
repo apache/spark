@@ -385,7 +385,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         .find(r => conf.resolver(r._1, table))
         .map {
           case (_, d) =>
-            if (alwaysInline) {
+            if (alwaysInline && !d.hasSelfReferenceAsCTERef) {
               d.child
             } else {
               // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
