@@ -49,6 +49,10 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
 
   override def shortName(): String = "image"
 
+  override def hashCode(): Int = getClass.getCanonicalName.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[ImageFileFormat]
+
   override protected def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,

@@ -81,6 +81,10 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = BINARY_FILE
 
+  override def hashCode(): Int = getClass.getCanonicalName.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[BinaryFileFormat]
+
   override protected def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
