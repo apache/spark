@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import grpc
 import json
+from grpc import StatusCode
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 from pyspark.errors.exceptions.base import (
@@ -57,8 +59,11 @@ def convert_exception(
     truncated_message: str,
     resp: Optional["pb2.FetchErrorDetailsResponse"],
     display_server_stacktrace: bool = False,
+    grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
 ) -> SparkConnectException:
-    converted = _convert_exception(info, truncated_message, resp, display_server_stacktrace)
+    converted = _convert_exception(
+        info, truncated_message, resp, display_server_stacktrace, grpc_status_code
+    )
     return recover_python_exception(converted)
 
 
@@ -67,6 +72,7 @@ def _convert_exception(
     truncated_message: str,
     resp: Optional["pb2.FetchErrorDetailsResponse"],
     display_server_stacktrace: bool = False,
+    grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
 ) -> SparkConnectException:
     import pyspark.sql.connect.proto as pb2
 
@@ -102,8 +108,9 @@ def _convert_exception(
 
     if "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
-            "\n  An exception was thrown from the Python worker. "
-            "Please see the stack trace below.\n%s" % message
+            message="\n  An exception was thrown from the Python worker. "
+            "Please see the stack trace below.\n%s" % message,
+            grpc_status_code=grpc_status_code,
         )
 
     # Return exception based on class mapping
@@ -126,6 +133,7 @@ def _convert_exception(
                 server_stacktrace=stacktrace,
                 display_server_stacktrace=display_server_stacktrace,
                 contexts=contexts,
+                grpc_status_code=grpc_status_code,
             )
 
     # Return UnknownException if there is no matched exception class
@@ -138,6 +146,7 @@ def _convert_exception(
         server_stacktrace=stacktrace,
         display_server_stacktrace=display_server_stacktrace,
         contexts=contexts,
+        grpc_status_code=grpc_status_code,
     )
 
 
@@ -183,6 +192,7 @@ class SparkConnectGrpcException(SparkConnectException):
         server_stacktrace: Optional[str] = None,
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
+        grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
     ) -> None:
         if contexts is None:
             contexts = []
@@ -210,6 +220,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
         self._contexts: List[BaseQueryContext] = contexts
+        self._grpc_status_code = grpc_status_code
         self._log_exception()
 
     def getSqlState(self) -> Optional[str]:
@@ -226,6 +237,9 @@ class SparkConnectGrpcException(SparkConnectException):
         if self._display_stacktrace:
             desc += "\n\nJVM stacktrace:\n%s" % self._stacktrace
         return desc
+
+    def getGrpcStatusCode(self) -> grpc.StatusCode:
+        return self._grpc_status_code
 
     def __str__(self) -> str:
         return self.getMessage()
@@ -248,6 +262,7 @@ class UnknownException(SparkConnectGrpcException, BaseUnknownException):
         server_stacktrace: Optional[str] = None,
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
+        grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
     ) -> None:
         super().__init__(
             message=message,
@@ -258,6 +273,7 @@ class UnknownException(SparkConnectGrpcException, BaseUnknownException):
             server_stacktrace=server_stacktrace,
             display_server_stacktrace=display_server_stacktrace,
             contexts=contexts,
+            grpc_status_code=grpc_status_code,
         )
 
 
