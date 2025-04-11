@@ -63,6 +63,9 @@ public class JavaDatasetSuite implements Serializable {
     spark = new TestSparkSession();
     jsc = new JavaSparkContext(spark.sparkContext());
     spark.loadTestData();
+
+    // Initialize state store coordinator endpoint
+    spark.streams().stateStoreCoordinator();
   }
 
   @AfterEach
