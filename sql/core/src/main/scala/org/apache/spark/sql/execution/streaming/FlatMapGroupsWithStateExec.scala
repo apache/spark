@@ -318,8 +318,8 @@ trait FlatMapGroupsWithStateExecBase
       // Create a CoGroupedIterator that will group the two iterators together for every
       // key group.
       new CoGroupedIterator(
-          groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
-        case (keyRow, valueRowIter, initialStateRowIter) =>
+          Seq(groupedChildDataIter, groupedInitialStateIter), groupingAttributes).flatMap {
+        case (keyRow, Seq(valueRowIter, initialStateRowIter)) =>
           val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
           var foundInitialStateForKey = false
           initialStateRowIter.foreach { initialStateRow =>
@@ -552,7 +552,9 @@ object FlatMapGroupsWithStateExec {
         case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
         case _ => false
       }
-      val func = (keyRow: Any, values: Iterator[Any], states: Iterator[Any]) => {
+      val func = (keyRow: Any, iterators: Seq[Iterator[Any]]) => {
+        val values = iterators(0)
+        val states = iterators(1)
         if (skipEmittingInitialStateKeys && values.isEmpty) {
           Iterator.empty
         } else {
@@ -580,9 +582,14 @@ object FlatMapGroupsWithStateExec {
         }
       }
       CoGroupExec(
-        func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
-        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, Seq.empty, Seq.empty,
-        outputObjAttr, child, initialState)
+        func,
+        keyDeserializer,
+        Seq(valueDeserializer, initialStateDeserializer),
+        Seq(groupingAttributes, initialStateGroupAttrs),
+        Seq(dataAttributes, initialStateDataAttrs),
+        Seq(Seq.empty, Seq.empty),
+        outputObjAttr,
+        Seq(child, initialState))
     } else {
       MapGroupsExec(
         userFunc, keyDeserializer, valueDeserializer, groupingAttributes,

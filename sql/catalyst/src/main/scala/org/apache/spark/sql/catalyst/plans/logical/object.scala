@@ -749,35 +749,268 @@ case class FlatMapGroupsInRWithArrow(
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
-  def apply[K : Encoder, L : Encoder, R : Encoder, OUT : Encoder](
-      func: (K, Iterator[L], Iterator[R]) => IterableOnce[OUT],
-      leftGroup: Seq[Attribute],
-      rightGroup: Seq[Attribute],
-      leftAttr: Seq[Attribute],
-      rightAttr: Seq[Attribute],
-      leftOrder: Seq[SortOrder],
-      rightOrder: Seq[SortOrder],
-      left: LogicalPlan,
-      right: LogicalPlan): LogicalPlan = {
-    require(DataTypeUtils.fromAttributes(leftGroup) == DataTypeUtils.fromAttributes(rightGroup))
+  def apply[K: Encoder, V1: Encoder, V2: Encoder, R: Encoder](
+      func: (K, Iterator[V1], Iterator[V2]) => IterableOnce[R],
+      groups: Seq[Seq[Attribute]],
+      attributes: Seq[Seq[Attribute]],
+      orders: Seq[Seq[SortOrder]],
+      children: Seq[LogicalPlan]): LogicalPlan = {
+    require(groups.size == 2)
+    require(attributes.size == 2)
+    require(orders.size == 2)
+    require(children.size == 2)
+    require(groups.tail.forall(
+      DataTypeUtils.fromAttributes(groups.head) == DataTypeUtils.fromAttributes(_)))
 
     val cogrouped = CoGroup(
-      func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any]],
-      // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
-      // resolve the `keyDeserializer` based on either of them, here we pick the left one.
-      UnresolvedDeserializer(encoderFor[K].deserializer, leftGroup),
-      UnresolvedDeserializer(encoderFor[L].deserializer, leftAttr),
-      UnresolvedDeserializer(encoderFor[R].deserializer, rightAttr),
-      leftGroup,
-      rightGroup,
-      leftAttr,
-      rightAttr,
-      leftOrder,
-      rightOrder,
-      CatalystSerde.generateObjAttr[OUT],
-      left,
-      right)
-    CatalystSerde.serialize[OUT](cogrouped)
+      (k, vs) => func(
+        k.asInstanceOf[K],
+        vs(0).asInstanceOf[Iterator[V1]],
+        vs(1).asInstanceOf[Iterator[V2]]),
+      // The grouping expressions are guaranteed te be of same schema, so it's safe to resolve the
+      // `keyDeserializer` based on either of them, here we pick the head.
+      UnresolvedDeserializer(encoderFor[K].deserializer, groups.head),
+      Seq(
+        UnresolvedDeserializer(encoderFor[V1].deserializer, attributes(0)),
+        UnresolvedDeserializer(encoderFor[V2].deserializer, attributes(1))),
+      groups,
+      attributes,
+      orders,
+      CatalystSerde.generateObjAttr[R],
+      children)
+    CatalystSerde.serialize[R](cogrouped)
+  }
+
+  def apply[K: Encoder, V1: Encoder, V2: Encoder, V3: Encoder, R: Encoder](
+      func: (K, Iterator[V1], Iterator[V2], Iterator[V3]) => IterableOnce[R],
+      groups: Seq[Seq[Attribute]],
+      attributes: Seq[Seq[Attribute]],
+      orders: Seq[Seq[SortOrder]],
+      children: Seq[LogicalPlan]): LogicalPlan = {
+    require(groups.size == 3)
+    require(attributes.size == 3)
+    require(orders.size == 3)
+    require(children.size == 3)
+    require(groups.tail.forall(
+      DataTypeUtils.fromAttributes(groups.head) == DataTypeUtils.fromAttributes(_)))
+
+    val cogrouped = CoGroup(
+      (k, vs) => func(
+        k.asInstanceOf[K],
+        vs(0).asInstanceOf[Iterator[V1]],
+        vs(1).asInstanceOf[Iterator[V2]],
+        vs(2).asInstanceOf[Iterator[V3]]),
+      // The grouping expressions are guaranteed te be of same schema, so it's safe to resolve the
+      // `keyDeserializer` based on either of them, here we pick the head.
+      UnresolvedDeserializer(encoderFor[K].deserializer, groups.head),
+      Seq(
+        UnresolvedDeserializer(encoderFor[V1].deserializer, attributes(0)),
+        UnresolvedDeserializer(encoderFor[V2].deserializer, attributes(1)),
+        UnresolvedDeserializer(encoderFor[V3].deserializer, attributes(2))),
+      groups,
+      attributes,
+      orders,
+      CatalystSerde.generateObjAttr[R],
+      children)
+    CatalystSerde.serialize[R](cogrouped)
+  }
+
+  def apply[K: Encoder, V1: Encoder, V2: Encoder, V3: Encoder, V4: Encoder, R: Encoder](
+      func: (K, Iterator[V1], Iterator[V2], Iterator[V3], Iterator[V4]) => IterableOnce[R],
+      groups: Seq[Seq[Attribute]],
+      attributes: Seq[Seq[Attribute]],
+      orders: Seq[Seq[SortOrder]],
+      children: Seq[LogicalPlan]): LogicalPlan = {
+    require(groups.size == 4)
+    require(attributes.size == 4)
+    require(orders.size == 4)
+    require(children.size == 4)
+    require(groups.tail.forall(
+      DataTypeUtils.fromAttributes(groups.head) == DataTypeUtils.fromAttributes(_)))
+
+    val cogrouped = CoGroup(
+      (k, vs) => func(
+        k.asInstanceOf[K],
+        vs(0).asInstanceOf[Iterator[V1]],
+        vs(1).asInstanceOf[Iterator[V2]],
+        vs(2).asInstanceOf[Iterator[V3]],
+        vs(3).asInstanceOf[Iterator[V4]]),
+      // The grouping expressions are guaranteed te be of same schema, so it's safe to resolve the
+      // `keyDeserializer` based on either of them, here we pick the head.
+      UnresolvedDeserializer(encoderFor[K].deserializer, groups.head),
+      Seq(
+        UnresolvedDeserializer(encoderFor[V1].deserializer, attributes(0)),
+        UnresolvedDeserializer(encoderFor[V2].deserializer, attributes(1)),
+        UnresolvedDeserializer(encoderFor[V3].deserializer, attributes(2)),
+        UnresolvedDeserializer(encoderFor[V4].deserializer, attributes(3))),
+      groups,
+      attributes,
+      orders,
+      CatalystSerde.generateObjAttr[R],
+      children)
+    CatalystSerde.serialize[R](cogrouped)
+  }
+
+  def apply[
+    K: Encoder,
+    V1: Encoder,
+    V2: Encoder,
+    V3: Encoder,
+    V4: Encoder,
+    V5: Encoder,
+    R: Encoder](
+      func: (
+        K, Iterator[V1], Iterator[V2], Iterator[V3], Iterator[V4], Iterator[V5]) => IterableOnce[R],
+      groups: Seq[Seq[Attribute]],
+      attributes: Seq[Seq[Attribute]],
+      orders: Seq[Seq[SortOrder]],
+      children: Seq[LogicalPlan]): LogicalPlan = {
+    require(groups.size == 5)
+    require(attributes.size == 5)
+    require(orders.size == 5)
+    require(children.size == 5)
+    require(groups.tail.forall(
+      DataTypeUtils.fromAttributes(groups.head) == DataTypeUtils.fromAttributes(_)))
+
+    val cogrouped = CoGroup(
+      (k, vs) => func(
+        k.asInstanceOf[K],
+        vs(0).asInstanceOf[Iterator[V1]],
+        vs(1).asInstanceOf[Iterator[V2]],
+        vs(2).asInstanceOf[Iterator[V3]],
+        vs(3).asInstanceOf[Iterator[V4]],
+        vs(4).asInstanceOf[Iterator[V5]]),
+      // The grouping expressions are guaranteed te be of same schema, so it's safe to resolve the
+      // `keyDeserializer` based on either of them, here we pick the head.
+      UnresolvedDeserializer(encoderFor[K].deserializer, groups.head),
+      Seq(
+        UnresolvedDeserializer(encoderFor[V1].deserializer, attributes(0)),
+        UnresolvedDeserializer(encoderFor[V2].deserializer, attributes(1)),
+        UnresolvedDeserializer(encoderFor[V3].deserializer, attributes(2)),
+        UnresolvedDeserializer(encoderFor[V4].deserializer, attributes(3)),
+        UnresolvedDeserializer(encoderFor[V5].deserializer, attributes(4))),
+      groups,
+      attributes,
+      orders,
+      CatalystSerde.generateObjAttr[R],
+      children)
+    CatalystSerde.serialize[R](cogrouped)
+  }
+
+  def apply[
+    K: Encoder,
+    V1: Encoder,
+    V2: Encoder,
+    V3: Encoder,
+    V4: Encoder,
+    V5: Encoder,
+    V6: Encoder,
+    R: Encoder](
+      func: (
+        K,
+        Iterator[V1],
+        Iterator[V2],
+        Iterator[V3],
+        Iterator[V4],
+        Iterator[V5],
+        Iterator[V6]
+      ) => IterableOnce[R],
+      groups: Seq[Seq[Attribute]],
+      attributes: Seq[Seq[Attribute]],
+      orders: Seq[Seq[SortOrder]],
+      children: Seq[LogicalPlan]): LogicalPlan = {
+    require(groups.size == 6)
+    require(attributes.size == 6)
+    require(orders.size == 6)
+    require(children.size == 6)
+    require(groups.tail.forall(
+      DataTypeUtils.fromAttributes(groups.head) == DataTypeUtils.fromAttributes(_)))
+
+    val cogrouped = CoGroup(
+      (k, vs) => func(
+        k.asInstanceOf[K],
+        vs(0).asInstanceOf[Iterator[V1]],
+        vs(1).asInstanceOf[Iterator[V2]],
+        vs(2).asInstanceOf[Iterator[V3]],
+        vs(3).asInstanceOf[Iterator[V4]],
+        vs(4).asInstanceOf[Iterator[V5]],
+        vs(5).asInstanceOf[Iterator[V6]]),
+      // The grouping expressions are guaranteed te be of same schema, so it's safe to resolve the
+      // `keyDeserializer` based on either of them, here we pick the head.
+      UnresolvedDeserializer(encoderFor[K].deserializer, groups.head),
+      Seq(
+        UnresolvedDeserializer(encoderFor[V1].deserializer, attributes(0)),
+        UnresolvedDeserializer(encoderFor[V2].deserializer, attributes(1)),
+        UnresolvedDeserializer(encoderFor[V3].deserializer, attributes(2)),
+        UnresolvedDeserializer(encoderFor[V4].deserializer, attributes(3)),
+        UnresolvedDeserializer(encoderFor[V5].deserializer, attributes(4)),
+        UnresolvedDeserializer(encoderFor[V6].deserializer, attributes(5))),
+      groups,
+      attributes,
+      orders,
+      CatalystSerde.generateObjAttr[R],
+      children)
+    CatalystSerde.serialize[R](cogrouped)
+  }
+
+  def apply[
+    K: Encoder,
+    V1: Encoder,
+    V2: Encoder,
+    V3: Encoder,
+    V4: Encoder,
+    V5: Encoder,
+    V6: Encoder,
+    V7: Encoder,
+    R: Encoder](
+      func: (
+        K,
+        Iterator[V1],
+        Iterator[V2],
+        Iterator[V3],
+        Iterator[V4],
+        Iterator[V5],
+        Iterator[V6],
+        Iterator[V7]
+      ) => IterableOnce[R],
+      groups: Seq[Seq[Attribute]],
+      attributes: Seq[Seq[Attribute]],
+      orders: Seq[Seq[SortOrder]],
+      children: Seq[LogicalPlan]): LogicalPlan = {
+    require(groups.size == 7)
+    require(attributes.size == 7)
+    require(orders.size == 7)
+    require(children.size == 7)
+    require(groups.tail.forall(
+      DataTypeUtils.fromAttributes(groups.head) == DataTypeUtils.fromAttributes(_)))
+
+    val cogrouped = CoGroup(
+      (k, vs) => func(
+        k.asInstanceOf[K],
+        vs(0).asInstanceOf[Iterator[V1]],
+        vs(1).asInstanceOf[Iterator[V2]],
+        vs(2).asInstanceOf[Iterator[V3]],
+        vs(3).asInstanceOf[Iterator[V4]],
+        vs(4).asInstanceOf[Iterator[V5]],
+        vs(5).asInstanceOf[Iterator[V6]],
+        vs(6).asInstanceOf[Iterator[V7]]),
+      // The grouping expressions are guaranteed te be of same schema, so it's safe to resolve the
+      // `keyDeserializer` based on either of them, here we pick the head.
+      UnresolvedDeserializer(encoderFor[K].deserializer, groups.head),
+      Seq(
+        UnresolvedDeserializer(encoderFor[V1].deserializer, attributes(0)),
+        UnresolvedDeserializer(encoderFor[V2].deserializer, attributes(1)),
+        UnresolvedDeserializer(encoderFor[V3].deserializer, attributes(2)),
+        UnresolvedDeserializer(encoderFor[V4].deserializer, attributes(3)),
+        UnresolvedDeserializer(encoderFor[V5].deserializer, attributes(4)),
+        UnresolvedDeserializer(encoderFor[V6].deserializer, attributes(5)),
+        UnresolvedDeserializer(encoderFor[V7].deserializer, attributes(6))),
+      groups,
+      attributes,
+      orders,
+      CatalystSerde.generateObjAttr[R],
+      children)
+    CatalystSerde.serialize[R](cogrouped)
   }
 }
 
@@ -786,21 +1019,16 @@ object CoGroup {
  * right children.
  */
 case class CoGroup(
-    func: (Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any],
+    func: (Any, Seq[Iterator[Any]]) => IterableOnce[Any],
     keyDeserializer: Expression,
-    leftDeserializer: Expression,
-    rightDeserializer: Expression,
-    leftGroup: Seq[Attribute],
-    rightGroup: Seq[Attribute],
-    leftAttr: Seq[Attribute],
-    rightAttr: Seq[Attribute],
-    leftOrder: Seq[SortOrder],
-    rightOrder: Seq[SortOrder],
+    valueDeserializers: Seq[Expression],
+    groups: Seq[Seq[Attribute]],
+    attributes: Seq[Seq[Attribute]],
+    orders: Seq[Seq[SortOrder]],
     outputObjAttr: Attribute,
-    left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode with ObjectProducer {
-  override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
+    children: Seq[LogicalPlan]) extends NaryNode with ObjectProducer {
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): CoGroup =
+    copy(children = newChildren)
 }
 
 // TODO (SPARK-44225): Move this into analyzer
