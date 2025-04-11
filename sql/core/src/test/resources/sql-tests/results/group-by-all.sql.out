@@ -288,3 +288,88 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "non_exist"
   } ]
 }
+
+
+-- !query
+SELECT * FROM data GROUP BY ALL
+-- !query schema
+struct<country:string,city:string,name:string,id:int,power:decimal(3,1)>
+-- !query output
+China	Hangzhou	Wenchen	4	14.0
+China	Shanghai	Shanghaiese	5	15.0
+Korea	Seoul	Hyukjin	6	16.0
+UK	London	Sean	7	17.0
+USA	Berkeley	Xiao	3	13.0
+USA	San Francisco	Matei	2	12.0
+USA	San Francisco	Reynold	1	11.0
+
+
+-- !query
+SELECT 4 AS a, 5 AS b, 6 AS c, * FROM data GROUP BY ALL
+-- !query schema
+struct<a:int,b:int,c:int,country:string,city:string,name:string,id:int,power:decimal(3,1)>
+-- !query output
+4	5	6	China	Hangzhou	Wenchen	4	14.0
+4	5	6	China	Shanghai	Shanghaiese	5	15.0
+4	5	6	Korea	Seoul	Hyukjin	6	16.0
+4	5	6	UK	London	Sean	7	17.0
+4	5	6	USA	Berkeley	Xiao	3	13.0
+4	5	6	USA	San Francisco	Matei	2	12.0
+4	5	6	USA	San Francisco	Reynold	1	11.0
+
+
+-- !query
+SELECT *, 4 AS a, 5 AS b, 6 AS c FROM data GROUP BY ALL
+-- !query schema
+struct<country:string,city:string,name:string,id:int,power:decimal(3,1),a:int,b:int,c:int>
+-- !query output
+China	Hangzhou	Wenchen	4	14.0	4	5	6
+China	Shanghai	Shanghaiese	5	15.0	4	5	6
+Korea	Seoul	Hyukjin	6	16.0	4	5	6
+UK	London	Sean	7	17.0	4	5	6
+USA	Berkeley	Xiao	3	13.0	4	5	6
+USA	San Francisco	Matei	2	12.0	4	5	6
+USA	San Francisco	Reynold	1	11.0	4	5	6
+
+
+-- !query
+SELECT 4 AS a, 5 AS b, *, 6 AS c FROM data GROUP BY ALL
+-- !query schema
+struct<a:int,b:int,country:string,city:string,name:string,id:int,power:decimal(3,1),c:int>
+-- !query output
+4	5	China	Hangzhou	Wenchen	4	14.0	6
+4	5	China	Shanghai	Shanghaiese	5	15.0	6
+4	5	Korea	Seoul	Hyukjin	6	16.0	6
+4	5	UK	London	Sean	7	17.0	6
+4	5	USA	Berkeley	Xiao	3	13.0	6
+4	5	USA	San Francisco	Matei	2	12.0	6
+4	5	USA	San Francisco	Reynold	1	11.0	6
+
+
+-- !query
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  ALL
+-- !query schema
+struct<subq1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT (
+  SELECT country FROM data LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  ALL
+-- !query schema
+struct<subq1:string>
+-- !query output
+USA
