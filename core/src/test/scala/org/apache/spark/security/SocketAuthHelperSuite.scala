@@ -18,14 +18,17 @@ package org.apache.spark.security
 
 import java.io.Closeable
 import java.net._
+import java.nio.channels.SocketChannel
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.util.Utils
 
 class SocketAuthHelperSuite extends SparkFunSuite {
 
   private val conf = new SparkConf()
+  conf.set(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key, false.toString)
   private val authHelper = new SocketAuthHelper(conf)
 
   test("successful auth") {
@@ -66,8 +69,9 @@ class SocketAuthHelperSuite extends SparkFunSuite {
     setDaemon(true)
     start()
 
-    def createClient(): Socket = {
-      new Socket(InetAddress.getLoopbackAddress(), ss.getLocalPort())
+    def createClient(): SocketChannel = {
+      SocketChannel.open(new InetSocketAddress(
+        InetAddress.getLoopbackAddress(), ss.getLocalPort))
     }
 
     override def run(): Unit = {

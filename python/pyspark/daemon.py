@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import uuid
 import numbers
 import os
 import signal
@@ -93,8 +93,20 @@ def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
+    is_unix_domain_sock = os.environ.get("PYTHON_UNIX_DOMAIN_ENABLED", "false").lower() == "true"
+    socket_path = None
+
     # Create a listening socket on the loopback interface
-    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+    if is_unix_domain_sock:
+        assert "PYTHON_WORKER_FACTORY_SOCK_DIR" in os.environ
+        socket_path = os.path.join(
+            os.environ["PYTHON_WORKER_FACTORY_SOCK_DIR"], f".{uuid.uuid4()}.sock"
+        )
+        listen_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listen_sock.bind(socket_path)
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_port = socket_path
+    elif os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
         listen_sock = socket.socket(AF_INET6, SOCK_STREAM)
         listen_sock.bind(("::1", 0, 0, 0))
         listen_sock.listen(max(1024, SOMAXCONN))
@@ -108,10 +120,15 @@ def manager():
     # re-open stdin/stdout in 'wb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), "rb", 4)
     stdout_bin = os.fdopen(sys.stdout.fileno(), "wb", 4)
-    write_int(listen_port, stdout_bin)
+    if is_unix_domain_sock:
+        write_with_length(listen_port.encode("utf-8"), stdout_bin)
+    else:
+        write_int(listen_port, stdout_bin)
     stdout_bin.flush()
 
     def shutdown(code):
+        if socket_path is not None and os.path.exists(socket_path):
+            os.remove(socket_path)
         signal.signal(SIGTERM, SIG_DFL)
         # Send SIGHUP to notify workers of shutdown
         os.kill(0, SIGHUP)
@@ -195,7 +212,10 @@ def manager():
                         write_int(os.getpid(), outfile)
                         outfile.flush()
                         outfile.close()
-                        authenticated = False
+                        authenticated = (
+                            os.environ.get("PYTHON_UNIX_DOMAIN_ENABLED", "false").lower() == "true"
+                            or False
+                        )
                         while True:
                             code = worker(sock, authenticated)
                             if code == 0:
