@@ -251,7 +251,8 @@ case class HoursOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType())
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
