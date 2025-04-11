@@ -1407,7 +1407,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withSQLConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS.key -> "true") {
         checkAnswer(
           spark.sql("SELECT * FROM t WITH ('delimiter' = 'a')"),
-          Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
+          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
         )
       }
     }
