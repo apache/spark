@@ -436,6 +436,13 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
       sql("select a from l l1 where a in (select a from l where a < 3 group by a)"))
   }
 
+  test("IN (NULL)") {
+    checkAnswer(spark.table("l").where($"a".isin(null)), sql("SELECT * FROM l WHERE a IN (NULL)"))
+    checkAnswer(
+      spark.table("l").where(!$"a".isin(null)),
+      sql("SELECT * FROM l WHERE a NOT IN (NULL)"))
+  }
+
   private def table1() = {
     sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2)")
     spark.table("t1")

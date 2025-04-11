@@ -658,6 +658,12 @@ class SubqueryTestsMixin:
                     ),
                 )
 
+            with self.subTest("IN (NULL)"):
+                assertDataFrameEqual(
+                    self.spark.table("l").where(sf.col("a").isin(None)),
+                    self.spark.sql("""SELECT * FROM l WHERE a IN (NULL)"""),
+                )
+
     def test_scalar_subquery_with_missing_outer_reference(self):
         with self.tempView("l", "r"):
             self.df1.createOrReplaceTempView("l")
