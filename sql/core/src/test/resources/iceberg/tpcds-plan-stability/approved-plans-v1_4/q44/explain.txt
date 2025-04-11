@@ -1,0 +1,202 @@
+== Physical Plan ==
+TakeOrderedAndProject (30)
++- * Project (29)
+   +- * BroadcastHashJoin Inner BuildRight (28)
+      :- * Project (26)
+      :  +- * BroadcastHashJoin Inner BuildRight (25)
+      :     :- * Project (20)
+      :     :  +- * BroadcastHashJoin Inner BuildRight (19)
+      :     :     :- * Project (12)
+      :     :     :  +- * Filter (11)
+      :     :     :     +- Window (10)
+      :     :     :        +- * Sort (9)
+      :     :     :           +- Exchange (8)
+      :     :     :              +- * Filter (7)
+      :     :     :                 +- * HashAggregate (6)
+      :     :     :                    +- Exchange (5)
+      :     :     :                       +- * HashAggregate (4)
+      :     :     :                          +- * Project (3)
+      :     :     :                             +- * Filter (2)
+      :     :     :                                +- BatchScan spark_catalog.default.store_sales (1)
+      :     :     +- BroadcastExchange (18)
+      :     :        +- * Project (17)
+      :     :           +- * Filter (16)
+      :     :              +- Window (15)
+      :     :                 +- * Sort (14)
+      :     :                    +- ReusedExchange (13)
+      :     +- BroadcastExchange (24)
+      :        +- * Project (23)
+      :           +- * Filter (22)
+      :              +- BatchScan spark_catalog.default.item (21)
+      +- ReusedExchange (27)
+
+
+(1) BatchScan spark_catalog.default.store_sales
+Output [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_store_sk IS NOT NULL, ss_store_sk = 4], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 1]
+Input [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+Condition : (isnotnull(ss_store_sk#2) AND (ss_store_sk#2 = 4))
+
+(3) Project [codegen id : 1]
+Output [2]: [ss_item_sk#1, ss_net_profit#3]
+Input [3]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3]
+
+(4) HashAggregate [codegen id : 1]
+Input [2]: [ss_item_sk#1, ss_net_profit#3]
+Keys [1]: [ss_item_sk#1]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [2]: [sum#4, count#5]
+Results [3]: [ss_item_sk#1, sum#6, count#7]
+
+(5) Exchange
+Input [3]: [ss_item_sk#1, sum#6, count#7]
+Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(6) HashAggregate [codegen id : 2]
+Input [3]: [ss_item_sk#1, sum#6, count#7]
+Keys [1]: [ss_item_sk#1]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#3))#8]
+Results [2]: [ss_item_sk#1 AS item_sk#9, cast((avg(UnscaledValue(ss_net_profit#3))#8 / 100.0) as decimal(11,6)) AS rank_col#10]
+
+(7) Filter [codegen id : 2]
+Input [2]: [item_sk#9, rank_col#10]
+Condition : (isnotnull(rank_col#10) AND (cast(rank_col#10 as decimal(13,7)) > CheckOverflow((0.900000 * promote_precision(Subquery scalar-subquery#11, [id=#12])), DecimalType(13,7))))
+
+(8) Exchange
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
+
+(9) Sort [codegen id : 3]
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank_col#10 ASC NULLS FIRST], false, 0
+
+(10) Window
+Input [2]: [item_sk#9, rank_col#10]
+Arguments: [rank(rank_col#10) windowspecdefinition(rank_col#10 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#13], [rank_col#10 ASC NULLS FIRST]
+
+(11) Filter [codegen id : 10]
+Input [3]: [item_sk#9, rank_col#10, rnk#13]
+Condition : ((rnk#13 < 11) AND isnotnull(item_sk#9))
+
+(12) Project [codegen id : 10]
+Output [2]: [item_sk#9, rnk#13]
+Input [3]: [item_sk#9, rank_col#10, rnk#13]
+
+(13) ReusedExchange [Reuses operator id: 8]
+Output [2]: [item_sk#14, rank_col#15]
+
+(14) Sort [codegen id : 6]
+Input [2]: [item_sk#14, rank_col#15]
+Arguments: [rank_col#15 DESC NULLS LAST], false, 0
+
+(15) Window
+Input [2]: [item_sk#14, rank_col#15]
+Arguments: [rank(rank_col#15) windowspecdefinition(rank_col#15 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#16], [rank_col#15 DESC NULLS LAST]
+
+(16) Filter [codegen id : 7]
+Input [3]: [item_sk#14, rank_col#15, rnk#16]
+Condition : ((rnk#16 < 11) AND isnotnull(item_sk#14))
+
+(17) Project [codegen id : 7]
+Output [2]: [item_sk#14, rnk#16]
+Input [3]: [item_sk#14, rank_col#15, rnk#16]
+
+(18) BroadcastExchange
+Input [2]: [item_sk#14, rnk#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false), [plan_id=3]
+
+(19) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [rnk#13]
+Right keys [1]: [rnk#16]
+Join condition: None
+
+(20) Project [codegen id : 10]
+Output [3]: [item_sk#9, rnk#13, item_sk#14]
+Input [4]: [item_sk#9, rnk#13, item_sk#14, rnk#16]
+
+(21) BatchScan spark_catalog.default.item
+Output [2]: [i_item_sk#17, i_product_name#18]
+spark_catalog.default.item [scan class = SparkBatchQueryScan] [filters=i_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(22) Filter [codegen id : 8]
+Input [2]: [i_item_sk#17, i_product_name#18]
+Condition : isnotnull(i_item_sk#17)
+
+(23) Project [codegen id : 8]
+Output [2]: [i_item_sk#17, i_product_name#18]
+Input [2]: [i_item_sk#17, i_product_name#18]
+
+(24) BroadcastExchange
+Input [2]: [i_item_sk#17, i_product_name#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(25) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [item_sk#9]
+Right keys [1]: [i_item_sk#17]
+Join condition: None
+
+(26) Project [codegen id : 10]
+Output [3]: [rnk#13, item_sk#14, i_product_name#18]
+Input [5]: [item_sk#9, rnk#13, item_sk#14, i_item_sk#17, i_product_name#18]
+
+(27) ReusedExchange [Reuses operator id: 24]
+Output [2]: [i_item_sk#19, i_product_name#20]
+
+(28) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [item_sk#14]
+Right keys [1]: [i_item_sk#19]
+Join condition: None
+
+(29) Project [codegen id : 10]
+Output [3]: [rnk#13, i_product_name#18 AS best_performing#21, i_product_name#20 AS worst_performing#22]
+Input [5]: [rnk#13, item_sk#14, i_product_name#18, i_item_sk#19, i_product_name#20]
+
+(30) TakeOrderedAndProject
+Input [3]: [rnk#13, best_performing#21, worst_performing#22]
+Arguments: 100, [rnk#13 ASC NULLS FIRST], [rnk#13, best_performing#21, worst_performing#22]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
+* HashAggregate (36)
++- Exchange (35)
+   +- * HashAggregate (34)
+      +- * Project (33)
+         +- * Filter (32)
+            +- BatchScan spark_catalog.default.store_sales (31)
+
+
+(31) BatchScan spark_catalog.default.store_sales
+Output [3]: [ss_addr_sk#23, ss_store_sk#24, ss_net_profit#25]
+spark_catalog.default.store_sales [scan class = SparkBatchQueryScan] [filters=ss_store_sk IS NOT NULL, ss_store_sk = 4, ss_addr_sk IS NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(32) Filter [codegen id : 1]
+Input [3]: [ss_addr_sk#23, ss_store_sk#24, ss_net_profit#25]
+Condition : ((isnotnull(ss_store_sk#24) AND (ss_store_sk#24 = 4)) AND isnull(ss_addr_sk#23))
+
+(33) Project [codegen id : 1]
+Output [2]: [ss_store_sk#24, ss_net_profit#25]
+Input [3]: [ss_addr_sk#23, ss_store_sk#24, ss_net_profit#25]
+
+(34) HashAggregate [codegen id : 1]
+Input [2]: [ss_store_sk#24, ss_net_profit#25]
+Keys [1]: [ss_store_sk#24]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_profit#25))]
+Aggregate Attributes [2]: [sum#26, count#27]
+Results [3]: [ss_store_sk#24, sum#28, count#29]
+
+(35) Exchange
+Input [3]: [ss_store_sk#24, sum#28, count#29]
+Arguments: hashpartitioning(ss_store_sk#24, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(36) HashAggregate [codegen id : 2]
+Input [3]: [ss_store_sk#24, sum#28, count#29]
+Keys [1]: [ss_store_sk#24]
+Functions [1]: [avg(UnscaledValue(ss_net_profit#25))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#25))#30]
+Results [1]: [cast((avg(UnscaledValue(ss_net_profit#25))#30 / 100.0) as decimal(11,6)) AS rank_col#31]
+
+

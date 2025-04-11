@@ -373,7 +373,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     val test: SparkSession => Unit = { spark: SparkSession =>
       withSQLConf("spark.sql.exchange.reuse" -> "true") {
         val df = spark.range(0, 6, 1).selectExpr("id AS key", "id AS value")
-
         // test case 1: a query stage has 3 child stages but they are the same stage.
         // Final Stage 1
         //   ShuffleQueryStage 0
@@ -383,7 +382,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
         QueryTest.checkAnswer(resultDf, (0 to 5).map(i => Row(i, i, i, i)))
         val finalPlan = stripAQEPlan(resultDf.queryExecution.executedPlan)
         assert(finalPlan.collect {
-          case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
+          case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _, _) => r
         }.length == 2)
         assert(
           finalPlan.collect {
@@ -431,7 +430,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
 
         val reusedStages = level1Stages.flatMap { stage =>
           stage.plan.collect {
-            case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
+            case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _, _) => r
           }
         }
         assert(reusedStages.length == 1)

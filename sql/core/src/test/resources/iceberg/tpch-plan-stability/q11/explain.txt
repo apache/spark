@@ -1,0 +1,188 @@
+== Physical Plan ==
+* Sort (21)
++- Exchange (20)
+   +- * Filter (19)
+      +- * HashAggregate (18)
+         +- Exchange (17)
+            +- * HashAggregate (16)
+               +- * Project (15)
+                  +- * BroadcastHashJoin Inner BuildRight (14)
+                     :- * Project (9)
+                     :  +- * BroadcastHashJoin Inner BuildRight (8)
+                     :     :- * Project (3)
+                     :     :  +- * Filter (2)
+                     :     :     +- BatchScan spark_catalog.default.partsupp (1)
+                     :     +- BroadcastExchange (7)
+                     :        +- * Project (6)
+                     :           +- * Filter (5)
+                     :              +- BatchScan spark_catalog.default.supplier (4)
+                     +- BroadcastExchange (13)
+                        +- * Project (12)
+                           +- * Filter (11)
+                              +- BatchScan spark_catalog.default.nation (10)
+
+
+(1) BatchScan spark_catalog.default.partsupp
+Output [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+spark_catalog.default.partsupp [scan class = SparkBatchQueryScan] [filters=ps_suppkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 3]
+Input [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+Condition : isnotnull(ps_suppkey#2)
+
+(3) Project [codegen id : 3]
+Output [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+Input [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+
+(4) BatchScan spark_catalog.default.supplier
+Output [2]: [s_suppkey#5, s_nationkey#6]
+spark_catalog.default.supplier [scan class = SparkBatchQueryScan] [filters=s_suppkey IS NOT NULL, s_nationkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [2]: [s_suppkey#5, s_nationkey#6]
+Condition : (isnotnull(s_suppkey#5) AND isnotnull(s_nationkey#6))
+
+(6) Project [codegen id : 1]
+Output [2]: [s_suppkey#5, s_nationkey#6]
+Input [2]: [s_suppkey#5, s_nationkey#6]
+
+(7) BroadcastExchange
+Input [2]: [s_suppkey#5, s_nationkey#6]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ps_suppkey#2]
+Right keys [1]: [s_suppkey#5]
+Join condition: None
+
+(9) Project [codegen id : 3]
+Output [4]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4, s_nationkey#6]
+Input [6]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4, s_suppkey#5, s_nationkey#6]
+
+(10) BatchScan spark_catalog.default.nation
+Output [2]: [n_nationkey#7, n_name#8]
+spark_catalog.default.nation [scan class = SparkBatchQueryScan] [filters=n_name IS NOT NULL, n_name = 'GERMANY', n_nationkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(11) Filter [codegen id : 2]
+Input [2]: [n_nationkey#7, n_name#8]
+Condition : ((isnotnull(n_name#8) AND (n_name#8 = GERMANY)) AND isnotnull(n_nationkey#7))
+
+(12) Project [codegen id : 2]
+Output [1]: [n_nationkey#7]
+Input [2]: [n_nationkey#7, n_name#8]
+
+(13) BroadcastExchange
+Input [1]: [n_nationkey#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
+
+(14) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [s_nationkey#6]
+Right keys [1]: [n_nationkey#7]
+Join condition: None
+
+(15) Project [codegen id : 3]
+Output [3]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4]
+Input [5]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4, s_nationkey#6, n_nationkey#7]
+
+(16) HashAggregate [codegen id : 3]
+Input [3]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4]
+Keys [1]: [ps_partkey#1]
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0)))]
+Aggregate Attributes [2]: [sum#9, isEmpty#10]
+Results [3]: [ps_partkey#1, sum#11, isEmpty#12]
+
+(17) Exchange
+Input [3]: [ps_partkey#1, sum#11, isEmpty#12]
+Arguments: hashpartitioning(ps_partkey#1, 1), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(18) HashAggregate [codegen id : 4]
+Input [3]: [ps_partkey#1, sum#11, isEmpty#12]
+Keys [1]: [ps_partkey#1]
+Functions [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0)))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0)))#13]
+Results [2]: [ps_partkey#1, sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0)))#13 AS value#14]
+
+(19) Filter [codegen id : 4]
+Input [2]: [ps_partkey#1, value#14]
+Condition : (isnotnull(value#14) AND (cast(value#14 as decimal(38,6)) > Subquery scalar-subquery#15, [id=#16]))
+
+(20) Exchange
+Input [2]: [ps_partkey#1, value#14]
+Arguments: rangepartitioning(value#14 DESC NULLS LAST, 1), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(21) Sort [codegen id : 5]
+Input [2]: [ps_partkey#1, value#14]
+Arguments: [value#14 DESC NULLS LAST], true, 0
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 19 Hosting Expression = Subquery scalar-subquery#15, [id=#16]
+* HashAggregate (33)
++- Exchange (32)
+   +- * HashAggregate (31)
+      +- * Project (30)
+         +- * BroadcastHashJoin Inner BuildRight (29)
+            :- * Project (27)
+            :  +- * BroadcastHashJoin Inner BuildRight (26)
+            :     :- * Project (24)
+            :     :  +- * Filter (23)
+            :     :     +- BatchScan spark_catalog.default.partsupp (22)
+            :     +- ReusedExchange (25)
+            +- ReusedExchange (28)
+
+
+(22) BatchScan spark_catalog.default.partsupp
+Output [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
+spark_catalog.default.partsupp [scan class = SparkBatchQueryScan] [filters=ps_suppkey IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(23) Filter [codegen id : 3]
+Input [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
+Condition : isnotnull(ps_suppkey#17)
+
+(24) Project [codegen id : 3]
+Output [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
+Input [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
+
+(25) ReusedExchange [Reuses operator id: 7]
+Output [2]: [s_suppkey#20, s_nationkey#21]
+
+(26) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ps_suppkey#17]
+Right keys [1]: [s_suppkey#20]
+Join condition: None
+
+(27) Project [codegen id : 3]
+Output [3]: [ps_availqty#18, ps_supplycost#19, s_nationkey#21]
+Input [5]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19, s_suppkey#20, s_nationkey#21]
+
+(28) ReusedExchange [Reuses operator id: 13]
+Output [1]: [n_nationkey#22]
+
+(29) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [s_nationkey#21]
+Right keys [1]: [n_nationkey#22]
+Join condition: None
+
+(30) Project [codegen id : 3]
+Output [2]: [ps_availqty#18, ps_supplycost#19]
+Input [4]: [ps_availqty#18, ps_supplycost#19, s_nationkey#21, n_nationkey#22]
+
+(31) HashAggregate [codegen id : 3]
+Input [2]: [ps_availqty#18, ps_supplycost#19]
+Keys: []
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(ps_supplycost#19) * promote_precision(cast(ps_availqty#18 as decimal(10,0)))), DecimalType(21,0)))]
+Aggregate Attributes [2]: [sum#23, isEmpty#24]
+Results [2]: [sum#25, isEmpty#26]
+
+(32) Exchange
+Input [2]: [sum#25, isEmpty#26]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
+
+(33) HashAggregate [codegen id : 4]
+Input [2]: [sum#25, isEmpty#26]
+Keys: []
+Functions [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#19) * promote_precision(cast(ps_availqty#18 as decimal(10,0)))), DecimalType(21,0)))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#19) * promote_precision(cast(ps_availqty#18 as decimal(10,0)))), DecimalType(21,0)))#27]
+Results [1]: [CheckOverflow((promote_precision(cast(sum(CheckOverflow((promote_precision(ps_supplycost#19) * promote_precision(cast(ps_availqty#18 as decimal(10,0)))), DecimalType(21,0)))#27 as decimal(38,10))) * 0.0001000000), DecimalType(38,6)) AS (sum((ps_supplycost * ps_availqty)) * 0.0001000000)#28]
+
+

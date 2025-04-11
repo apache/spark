@@ -17,26 +17,36 @@
 
 package org.apache.spark.sql.execution
 
+import java.util
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable
+
+import com.google.common.base.Objects
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.LogKeys.{COUNT, MAX_SPLIT_BYTES, OPEN_COST_IN_BYTES}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{execution, sources}
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.filter.{Predicate => ConnectorPredicate}
+import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsBroadcastVarPushdownFiltering}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
+import org.apache.spark.sql.execution.datasources.parquet.bcvar.ParquetFilterConverterUtils
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
+import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -603,9 +613,11 @@ trait FileSourceScanLike extends DataSourceScanExec {
  * @param tableIdentifier Identifier for the table in the metastore.
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * @param proxyForPushedBroadcastVar
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
+    @transient broadcastVarCollector: Option[BroadcastVarFilterCollector],
     @transient stream: Option[SparkDataStream],
     override val output: Seq[Attribute],
     override val requiredSchema: StructType,
@@ -614,8 +626,77 @@ case class FileSourceScanExec(
     override val optionalNumCoalescedBuckets: Option[Int],
     override val dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier],
-    override val disableBucketedScan: Boolean = false)
-  extends FileSourceScanLike {
+    override val disableBucketedScan: Boolean = false,
+    @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] =
+    None)
+  extends FileSourceScanLike with WrapsBroadcastVarPushDownSupporter {
+
+  override def hashCode(): Int = Objects.hashCode(this.relation,
+      this.stream, this.output, this.partitionFilters, this.optionalBucketSet,
+      this.optionalNumCoalescedBuckets, this.dataFilters, this.disableBucketedScan,
+    this.proxyForPushedBroadcastVar,
+    this.broadcastVarCollector.map(_.hashCodeIgnoreRuntimeFilters()).getOrElse(-1))
+
+
+  override def equals(other: Any): Boolean = other match {
+    case fs: FileSourceScanExec if fs ne this =>
+      val boolPart1 =
+      this.relation == fs.relation &&
+      this.stream == fs.stream &&
+      this.output == fs.output && this.requiredSchema == fs.requiredSchema &&
+      this.partitionFilters == fs.partitionFilters &&
+      this.optionalBucketSet == fs.optionalBucketSet &&
+      this.optionalNumCoalescedBuckets ==fs.optionalNumCoalescedBuckets &&
+      this.dataFilters == fs.dataFilters &&  this.tableIdentifier == fs.tableIdentifier &&
+      this.disableBucketedScan == fs.disableBucketedScan
+
+      val boolPart2 = this.proxyForPushedBroadcastVar == fs.proxyForPushedBroadcastVar &&
+      ((this.broadcastVarCollector, fs.broadcastVarCollector) match {
+         case (Some(x: BroadcastVarFilterCollector), Some(y: BroadcastVarFilterCollector)) =>
+           x.equalToIgnoreRuntimeFilters(y)
+
+         case (None, None) => true
+
+         case _ => false
+      })
+
+      if (this.log.isTraceEnabled) {
+        log.trace(s"FileSourceScanExec: comparing two FileSources nonBcProxyVarPart = $boolPart1" +
+          s"proxyBcVarPart = $boolPart2 ")
+      }
+
+      boolPart1 && boolPart2
+
+    case fs: FileSourceScanExec if fs eq this => true
+
+    case _ => false
+  }
+
+  @transient @volatile private var inputRDDCached: RDD[InternalRow] = _
+
+  def getBroadcastVarPushDownSupportingInstance: Option[SupportsBroadcastVarPushdownFiltering]
+  = this.broadcastVarCollector
+
+  def newInstance(
+      proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]],
+      runtimeFilters: Seq[Expression]): WrapsBroadcastVarPushDownSupporter =
+    this.copy(proxyForPushedBroadcastVar = proxy)
+
+  def newInstance(proxy: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]):
+    WrapsBroadcastVarPushDownSupporter = {
+    this.newInstance(proxy, Seq.empty)
+  }
+
+  def resetFilteredPartitionsAndInputRdd(): Unit = {
+    this.inputRDDCached = null
+    // since broadcast var will not be on partitioned columns, for now atleast, we do not
+    // need to reset dynamicallySelectedPartitions
+    // TODO:Asif: reset when broadcast var pushdown on partition column is supported
+  }
+
+  def getTableIdentifier(): Option[TableIdentifier] = tableIdentifier
+
+  def getSchema(): StructType = this.relation.schema
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
@@ -636,28 +717,49 @@ case class FileSourceScanExec(
     }
   }
 
-  lazy val inputRDD: RDD[InternalRow] = {
-    val options = relation.options +
-      (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = relation.sparkSession,
-        dataSchema = relation.dataSchema,
-        partitionSchema = relation.partitionSchema,
-        requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
-        options = options,
-        hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
-
-    val readRDD = if (bucketedScan) {
-      createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
-    } else {
-      createReadRDD(readFile, dynamicallySelectedPartitions)
+  def inputRDD: RDD[InternalRow] = {
+    var local = inputRDDCached
+    if (local eq null) {
+      local = this.initializeInputRDD()
     }
-    sendDriverMetrics()
-    readRDD
+    local
   }
 
+  private def initializeInputRDD(): RDD[InternalRow] = this.synchronized {
+    if (inputRDDCached eq null) {
+      this.inputRDDCached = {
+        val options = relation.options +
+          (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
+        val readFile: (PartitionedFile) => Iterator[InternalRow] =
+          relation.fileFormat.buildReaderWithPartitionValues(
+            sparkSession = relation.sparkSession,
+            dataSchema = relation.dataSchema,
+            partitionSchema = relation.partitionSchema,
+            requiredSchema = requiredSchema,
+            filters = pushedDownFilters ++
+              this.broadcastVarCollector.map(_.broadcastVarFilterExpressions).getOrElse(Set.empty)
+            ,
+            options = options,
+            hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(
+              relation.options))
+
+        val readRDD = if (bucketedScan) {
+          createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
+        } else {
+          createReadRDD(readFile, dynamicallySelectedPartitions)
+        }
+        sendDriverMetrics()
+        readRDD
+      }
+      this.inputRDDCached
+    } else {
+      this.inputRDDCached
+    }
+  }
+
+
+  override def containsNonBroadcastVarRuntimeFilters: Boolean = false
+  override def getNonBroadcastVarRuntimeFilters: Seq[Expression] = Seq.empty[Expression]
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     inputRDD :: Nil
   }
@@ -826,8 +928,21 @@ case class FileSourceScanExec(
   }
 
   override def doCanonicalize(): FileSourceScanExec = {
+    val nullSafeProxyVar = if (this.proxyForPushedBroadcastVar == null) {
+      None
+    } else {
+      this.proxyForPushedBroadcastVar
+    }
+
+    val nullSafebcCollector = if (this.broadcastVarCollector == null) {
+      None
+    } else {
+      this.broadcastVarCollector
+    }
+
     FileSourceScanExec(
       relation,
+      nullSafebcCollector,
       // remove stream on canonicalization; this is needed for reused shuffle to be effective in
       // self-join
       None,
@@ -839,8 +954,80 @@ case class FileSourceScanExec(
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
-      disableBucketedScan)
+      disableBucketedScan,
+      nullSafeProxyVar
+    )
   }
 
   override def getStream: Option[SparkDataStream] = stream
+}
+
+case class BroadcastVarFilterCollector(override val readSchema: StructType,
+  partitionAttribs: Array[NamedReference]) extends SupportsBroadcastVarPushdownFiltering {
+
+  val broadcastVarFilterExpressions: mutable.Set[Filter] = mutable.LinkedHashSet.empty
+
+  override def filter(predicates: Array[ConnectorPredicate]): Unit = {
+    broadcastVarFilterExpressions ++= ParquetFilterConverterUtils.convertToV1(predicates)
+  }
+
+  override def hasPushedBroadCastFilter(): Boolean = this.broadcastVarFilterExpressions.nonEmpty
+
+  override def allAttributes(): Array[NamedReference] = this.readSchema.map(sf =>
+    FieldReference(sf.name)).toArray
+
+  /**
+   * This method should be implemented by the DataSourceV2 Scan which should check for equality
+   * of Scan without taking into account pushed runtime filters (DPP)
+   *
+   * @param other scan to be compared to
+   * @return boolean if the scans are same.
+   */
+  override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering): Boolean =
+    (this eq other) || (other match {
+      case that: BroadcastVarFilterCollector =>
+        this.partitionAttribs.toSeq == that.partitionAttribs.toSeq &&
+          this.readSchema == that.readSchema
+
+      case _ => false
+    })
+
+  /**
+   * This method should be implemented by the DataSourceV2 Scan to return the hashCode excluding
+   * the runtime filters (DPP) pushed to scan.
+   *
+   * @return int
+   */
+  override def hashCodeIgnoreRuntimeFilters(): Int = Objects.hashCode(getClass.hashCode(),
+    this.partitionAttribs.toSeq, this.readSchema)
+
+  override def getPushedBroadcastFilters(): util.List[PushedBroadcastFilterData] = {
+    import scala.jdk.CollectionConverters._
+    this.broadcastVarFilterExpressions.map(filter => {
+      val inFilter = filter.asInstanceOf[sources.In]
+      new PushedBroadcastFilterData(inFilter.attribute,
+        inFilter.values.head.asInstanceOf[BroadcastedJoinKeysWrapper])
+    }).toList.asJava
+  }
+
+  override def getPushedBroadcastVarIds(): util.Set[java.lang.Long] =
+    this.getPushedBroadcastFilters().stream().map(bcData =>
+    java.lang.Long.valueOf(bcData.bcVar.getBroadcastVarId)).collect(
+      util.stream.Collectors.toSet[java.lang.Long])
+
+  override def getPushedBroadcastFiltersCount(): Int = this.broadcastVarFilterExpressions.size
+
+  override def partitionAttributes(): Array[NamedReference] = this.partitionAttribs
+
+  override def hashCode(): Int = Objects.hashCode(this.partitionAttribs.toSeq, this.readSchema,
+    this.broadcastVarFilterExpressions.toSeq)
+
+  override def equals(other: Any): Boolean = other match {
+    case bvc: BroadcastVarFilterCollector =>
+      this.partitionAttribs.toSeq == bvc.partitionAttribs.toSeq &&
+      this.readSchema == bvc.readSchema &&
+      this.broadcastVarFilterExpressions .toSeq == bvc.broadcastVarFilterExpressions.toSeq
+
+    case _ => false
+  }
 }
