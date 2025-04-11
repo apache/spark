@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.types.{StringType, TimeType}
+import org.apache.spark.sql.types.{IntegerType, StringType, TimeType}
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {
@@ -225,5 +227,50 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => SecondsOfTime(child).replacement, TimeType())
+  }
+
+  test("CurrentTime") {
+    // test valid precision
+    var expr = CurrentTime(Literal(3))
+    assert(expr.dataType == TimeType(3), "Should produce TIME(3) data type")
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test default constructor => TIME(6)
+    expr = CurrentTime()
+    assert(expr.precision == 6, "Default precision should be 6")
+    assert(expr.dataType == TimeType(6))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test no value => TIME()
+    expr = CurrentTime()
+    assert(expr.precision == 6, "Default precision should be 6")
+    assert(expr.dataType == TimeType(6))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test foldable value
+    expr = CurrentTime(Literal(1 + 1))
+    assert(expr.precision == 2, "Precision should be 2")
+    assert(expr.dataType == TimeType(2))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test out of range precision => checkInputDataTypes fails
+    expr = CurrentTime(Literal(2 + 8))
+    assert(expr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> toSQLId("precision"),
+          "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
+          "currentValue" -> toSQLValue(10, IntegerType)
+        )
+      )
+    )
+
+    // test non number value should fail since we skip analyzer here
+    expr = CurrentTime(Literal("2"))
+    val failure = intercept[ClassCastException] {
+      expr.precision
+    }
+    assert(failure.getMessage.contains("cannot be cast to class java.lang.Number"))
   }
 }
