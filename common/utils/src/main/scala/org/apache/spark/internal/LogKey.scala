@@ -511,6 +511,7 @@ private[spark] object LogKeys {
   case object NUM_ITERATIONS extends LogKey
   case object NUM_KAFKA_PULLS extends LogKey
   case object NUM_KAFKA_RECORDS_PULLED extends LogKey
+  case object NUM_LAGGING_STORES extends LogKey
   case object NUM_LEADING_SINGULAR_VALUES extends LogKey
   case object NUM_LEFT_PARTITION_VALUES extends LogKey
   case object NUM_LOADED_ENTRIES extends LogKey
@@ -751,6 +752,9 @@ private[spark] object LogKeys {
   case object SLEEP_TIME extends LogKey
   case object SLIDE_DURATION extends LogKey
   case object SMALLEST_CLUSTER_INDEX extends LogKey
+  case object SNAPSHOT_EVENT extends LogKey
+  case object SNAPSHOT_EVENT_TIME_DELTA extends LogKey
+  case object SNAPSHOT_EVENT_VERSION_DELTA extends LogKey
   case object SNAPSHOT_VERSION extends LogKey
   case object SOCKET_ADDRESS extends LogKey
   case object SOURCE extends LogKey

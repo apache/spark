@@ -2888,12 +2888,14 @@ class AstBuilder extends DataTypeAstBuilder
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
+        case SqlBaseParser.CURRENT_TIME =>
+          CurrentTime()
         case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
           CurrentUser()
       }
     } else {
       // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
-      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP`.
+      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`
       UnresolvedAttribute.quoted(ctx.name.getText)
     }
   }

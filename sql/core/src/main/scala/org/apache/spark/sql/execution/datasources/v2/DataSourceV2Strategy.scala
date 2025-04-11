@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
@@ -185,11 +185,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
         tableSpec: TableSpec, ifNotExists) =>
-      ResolveDefaultColumns.validateCatalogForDefaultValue(columns, catalog.asTableCatalog, ident)
+      val tableCatalog = catalog.asTableCatalog
+      ResolveDefaultColumns.validateCatalogForDefaultValue(columns, tableCatalog, ident)
+      ResolveTableConstraints.validateCatalogForTableConstraint(
+        tableSpec.constraints, tableCatalog, ident)
       val statementType = "CREATE TABLE"
       GeneratedColumn.validateGeneratedColumns(
-        c.tableSchema, catalog.asTableCatalog, ident, statementType)
-      IdentityColumn.validateIdentityColumn(c.tableSchema, catalog.asTableCatalog, ident)
+        c.tableSchema, tableCatalog, ident, statementType)
+      IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
 
       CreateTableExec(
         catalog.asTableCatalog,
@@ -215,11 +218,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case c @ ReplaceTable(
         ResolvedIdentifier(catalog, ident), columns, parts, tableSpec: TableSpec, orCreate) =>
-      ResolveDefaultColumns.validateCatalogForDefaultValue(columns, catalog.asTableCatalog, ident)
+      val tableCatalog = catalog.asTableCatalog
+      ResolveDefaultColumns.validateCatalogForDefaultValue(columns, tableCatalog, ident)
+      ResolveTableConstraints.validateCatalogForTableConstraint(
+        tableSpec.constraints, tableCatalog, ident)
       val statementType = "REPLACE TABLE"
       GeneratedColumn.validateGeneratedColumns(
-        c.tableSchema, catalog.asTableCatalog, ident, statementType)
-      IdentityColumn.validateIdentityColumn(c.tableSchema, catalog.asTableCatalog, ident)
+        c.tableSchema, tableCatalog, ident, statementType)
+      IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
 
       val v2Columns = columns.map(_.toV2Column(statementType)).toArray
       catalog match {
@@ -227,7 +233,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
-          ReplaceTableExec(catalog.asTableCatalog, ident, v2Columns, parts,
+          ReplaceTableExec(tableCatalog, ident, v2Columns, parts,
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
