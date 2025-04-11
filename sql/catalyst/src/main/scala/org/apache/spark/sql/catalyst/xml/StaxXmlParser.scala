@@ -21,7 +21,7 @@ import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
-import javax.xml.stream.{XMLEventReader, XMLStreamConstants, XMLStreamException}
+import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema

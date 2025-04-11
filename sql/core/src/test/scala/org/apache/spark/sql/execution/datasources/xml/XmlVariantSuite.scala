@@ -705,17 +705,29 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   }
 
   test("Generator: serialize Variant array fields to XML") {
-    val xmlString =
+    Seq(
+      """<ROW>
+        |    <array>1</array>
+        |    <array>2</array>
+        |    <array>3</array>
+        |</ROW>""".stripMargin,
       """<ROW>
         |    <array>2</array>
         |    <array>1</array>
         |    <array>3</array>
+        |</ROW>""".stripMargin,
+      """<ROW>
+        |    <array>3</array>
+        |    <array>2</array>
+        |    <array>1</array>
         |</ROW>""".stripMargin
-    testGenerator(
-      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
-      expectedXml = xmlString,
-      extraOptions = Map.empty
-    )
+    ).foreach { xmlString =>
+      testGenerator(
+        StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+        expectedXml = xmlString,
+        extraOptions = Map.empty
+      )
+    }
   }
 
   test("Generator: serialize Variant object to XML") {
@@ -774,8 +786,6 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       .option("singleVariantColumn", "var")
       .options(baseOptions)
       .load(getTestResourcePath(resDir + "cars.xml"))
-
-    df.show(false)
 
     withTempDir { dir =>
       // Write the single Variant column Dataframe to XML
