@@ -57,6 +57,10 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
 
   override def toString: String = "Hive"
 
+  override def hashCode(): Int = getClass.getCanonicalName.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[HiveFileFormat]
+
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],

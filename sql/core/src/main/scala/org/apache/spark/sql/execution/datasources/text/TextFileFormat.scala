@@ -43,6 +43,10 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def toString: String = "Text"
 
+  override def hashCode(): Int = getClass.getCanonicalName.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[TextFileFormat]
+
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
       throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)

@@ -726,6 +726,10 @@ class TestFileFormat extends TextBasedFileFormat {
 
   override def toString: String = "TestFileFormat"
 
+  override def hashCode(): Int = getClass.getCanonicalName.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[TestFileFormat]
+
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
    * does not support inference, or no valid files are given should return None.  In these cases

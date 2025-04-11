@@ -78,6 +78,10 @@ private[libsvm] class LibSVMFileFormat
 
   override def toString: String = "LibSVM"
 
+  override def hashCode(): Int = getClass.getCanonicalName.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[LibSVMFileFormat]
+
   private def verifySchema(dataSchema: StructType, forWriting: Boolean): Unit = {
     if (
       dataSchema.size != 2 ||

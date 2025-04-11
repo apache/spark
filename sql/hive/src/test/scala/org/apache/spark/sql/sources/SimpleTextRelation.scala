@@ -36,6 +36,10 @@ import org.apache.spark.util.Utils
 class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   override def shortName(): String = "test"
 
+  override def hashCode(): Int = getClass.getCanonicalName.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[SimpleTextSource]
+
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
