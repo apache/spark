@@ -212,8 +212,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
       forceInline: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
       cteDefs: ArrayBuffer[CTERelationDef],
-      recursiveCTERelationAncestor: Option[(String, CTERelationDef)]):
-        (LogicalPlan, Option[LogicalPlan]) = {
+      recursiveCTERelationAncestor: Option[(String, CTERelationDef)]
+  ): (LogicalPlan, Option[LogicalPlan]) = {
     var firstSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
