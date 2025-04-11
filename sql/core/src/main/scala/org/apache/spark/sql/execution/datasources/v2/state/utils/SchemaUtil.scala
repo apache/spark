@@ -53,7 +53,7 @@ object SchemaUtil {
       require(stateStoreColFamilySchemaOpt.isDefined)
       generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
         stateStoreColFamilySchemaOpt.get, sourceOptions)
-    } else if (sourceOptions.readChangeFeed) {
+    } else if (sourceOptions.readChangeLog) {
       new StructType()
         .add("batch_id", LongType)
         .add("change_type", StringType)
@@ -239,14 +239,14 @@ object SchemaUtil {
 
       stateVarType match {
         case ValueState =>
-          if (sourceOptions.readChangeFeed) {
+          if (sourceOptions.readChangeLog) {
             Seq("batch_id", "change_type", "key", "value", "partition_id")
           } else {
             Seq("key", "value", "partition_id")
           }
 
         case ListState =>
-          if (sourceOptions.readChangeFeed) {
+          if (sourceOptions.readChangeLog) {
             Seq("batch_id", "change_type", "key", "list_element", "partition_id")
           } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "list_element", "partition_id")
@@ -255,7 +255,7 @@ object SchemaUtil {
           }
 
         case MapState =>
-          if (sourceOptions.readChangeFeed) {
+          if (sourceOptions.readChangeLog) {
             Seq("batch_id", "change_type", "key", "user_map_key", "user_map_value", "partition_id")
           } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "user_map_key", "user_map_value", "partition_id")
@@ -270,7 +270,7 @@ object SchemaUtil {
           throw StateDataSourceErrors
             .internalError(s"Unsupported state variable type $stateVarType")
       }
-    } else if (sourceOptions.readChangeFeed) {
+    } else if (sourceOptions.readChangeLog) {
       Seq("batch_id", "change_type", "key", "value", "partition_id")
     } else {
       Seq("key", "value", "partition_id")
@@ -294,7 +294,7 @@ object SchemaUtil {
 
     stateVarType match {
       case ValueState =>
-        if (stateSourceOptions.readChangeFeed) {
+        if (stateSourceOptions.readChangeLog) {
           new StructType()
             .add("batch_id", LongType)
             .add("change_type", StringType)
@@ -309,7 +309,7 @@ object SchemaUtil {
         }
 
       case ListState =>
-        if (stateSourceOptions.readChangeFeed) {
+        if (stateSourceOptions.readChangeLog) {
           new StructType()
             .add("batch_id", LongType)
             .add("change_type", StringType)
@@ -337,7 +337,7 @@ object SchemaUtil {
           valueType = stateStoreColFamilySchema.valueSchema
         )
 
-        if (stateSourceOptions.readChangeFeed) {
+        if (stateSourceOptions.readChangeLog) {
           new StructType()
             .add("batch_id", LongType)
             .add("change_type", StringType)
