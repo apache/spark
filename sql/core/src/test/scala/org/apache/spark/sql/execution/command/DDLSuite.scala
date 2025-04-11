@@ -1406,7 +1406,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-51747: When legacy conf enabled data source read ignores option change") {
-    withSQLConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS.key -> "true") {
+    withSQLConf(SQLConf.READ_DATA_SOURCE_CACHE_IGNORE_OPTIONS.key -> "true") {
       withTable("t") {
         spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
         spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")

@@ -257,8 +257,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
-    val readDataSourceIgnoreOptions: Boolean =
-      SQLConf.get.getConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS)
+    val readDataSourceCacheIgnoreOptions: Boolean =
+      SQLConf.get.getConf(SQLConf.READ_DATA_SOURCE_CACHE_IGNORE_OPTIONS)
     catalog.getCachedTable(qualifiedTableName) match {
       case null =>
         val dataSource =
@@ -276,14 +276,14 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         catalog.cacheTable(qualifiedTableName, plan)
         plan
 
-      // If readDataSourceIgnoreOptions is false AND
+      // If readDataSourceCacheIgnoreOptions is false AND
       // the cached table relation's options differ from the new options:
       // 1. Create a new HadoopFsRelation with updated options
       // 2. Return a new LogicalRelation with the updated HadoopFsRelation
       // This ensures the relation reflects any changes in data source options.
       // Otherwise, leave the cached table relation as is
       case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
-        if !readDataSourceIgnoreOptions &&
+        if !readDataSourceCacheIgnoreOptions &&
           (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
           new CaseInsensitiveStringMap(dsOptions.asJava)) =>
         val newFsRelation = fsRelation.copy(options = dsOptions)(sparkSession)

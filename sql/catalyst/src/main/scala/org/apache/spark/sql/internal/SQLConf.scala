@@ -5260,8 +5260,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS =
-    buildConf("spark.sql.legacy.readDataSourceIgnoreOptions")
+  val READ_DATA_SOURCE_CACHE_IGNORE_OPTIONS =
+    buildConf("spark.sql.legacy.readDataSourceCacheIgnoreOptions")
       .internal()
       .doc("When set to true, reading from file data source caches the first query plan and " +
         "ignores subsequent changes in query options, e.g. delimiters.")
