@@ -28,6 +28,7 @@ import scala.util.hashing.byteswap64
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.apache.hadoop.fs.Path
+import org.json4s._
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 

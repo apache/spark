@@ -78,7 +78,7 @@ abstract class SubqueryExpression(
     outerAttrs: Seq[Expression],
     exprId: ExprId,
     joinCond: Seq[Expression],
-    hint: Option[HintInfo]) extends PlanExpression[LogicalPlan] {
+    val hint: Option[HintInfo]) extends PlanExpression[LogicalPlan] {
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
   override lazy val references: AttributeSet =
     AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
@@ -86,7 +86,6 @@ abstract class SubqueryExpression(
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
   def withNewOuterAttrs(outerAttrs: Seq[Expression]): SubqueryExpression
   def isCorrelated: Boolean = outerAttrs.nonEmpty
-  def hint: Option[HintInfo]
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
 }
 
@@ -397,7 +396,7 @@ case class ScalarSubquery(
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
-    hint: Option[HintInfo] = None,
+    override val hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
     needSingleJoin: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
@@ -476,7 +475,7 @@ case class LateralSubquery(
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
-    hint: Option[HintInfo] = None)
+    override val hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = plan.output.toStructType
   override def nullable: Boolean = true
@@ -522,7 +521,7 @@ case class ListQuery(
     // number of the columns of the original plan, to report the data type properly.
     numCols: Int = -1,
     joinCond: Seq[Expression] = Seq.empty,
-    hint: Option[HintInfo] = None)
+    override val hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   def childOutputs: Seq[Attribute] = plan.output.take(numCols)
   override def dataType: DataType = if (numCols > 1) {
@@ -593,7 +592,7 @@ case class Exists(
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
-    hint: Option[HintInfo] = None)
+    override val hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
   with Predicate
   with Unevaluable {

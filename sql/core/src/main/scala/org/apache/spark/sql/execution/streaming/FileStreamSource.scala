@@ -603,7 +603,7 @@ object FileStreamSource {
       // pathToCompare should have same depth as sourceGlobFilters.length
       var pathToCompare = baseArchivePathMinDepth
       var index = 0
-      do {
+      while ({
         // GlobFilter only matches against its name, not full path so it's safe to compare
         if (!sourceGlobFilters(index).accept(pathToCompare)) {
           matched = false
@@ -611,7 +611,8 @@ object FileStreamSource {
           pathToCompare = pathToCompare.getParent
           index += 1
         }
-      } while (matched && !pathToCompare.isRoot)
+        matched && !pathToCompare.isRoot
+      }) ()
 
       matched
     }

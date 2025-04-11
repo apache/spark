@@ -112,7 +112,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   private[streaming] override def name: String = s"Kafka 0.10 direct stream [$id]"
 
-  protected[streaming] override val checkpointData =
+  protected[streaming] override val checkpointData: DirectKafkaInputDStreamCheckpointData =
     new DirectKafkaInputDStreamCheckpointData
 
 

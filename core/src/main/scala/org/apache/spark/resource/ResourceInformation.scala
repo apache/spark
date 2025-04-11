@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.json4s.{DefaultFormats, Extraction, Formats, JValue}
 import org.json4s.jackson.JsonMethods._
+import org.json4s.jvalue2extractable
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving

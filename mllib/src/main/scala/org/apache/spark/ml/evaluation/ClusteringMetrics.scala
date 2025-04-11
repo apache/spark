@@ -390,7 +390,7 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
     SquaredEuclideanSilhouette.registerKryoClasses(dataset.sparkSession.sparkContext)
 
     val squaredNormUDF = udf {
-      features: Vector => math.pow(Vectors.norm(features, 2.0), 2.0)
+      (features: Vector) => math.pow(Vectors.norm(features, 2.0), 2.0)
     }
     val dfWithSquaredNorm = dataset.withColumn("squaredNorm", squaredNormUDF(col(featuresCol)))
 
@@ -592,7 +592,7 @@ private[evaluation] object CosineSilhouette extends Silhouette {
       featuresCol: String,
       weightCol: String): Double = {
     val normalizeFeatureUDF = udf {
-      features: Vector => {
+      (features: Vector) => {
         val norm = Vectors.norm(features, 2.0)
         BLAS.scal(1.0 / norm, features)
         features

@@ -529,7 +529,7 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
   }
 
   test("greatest/least cast") {
-    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+    for (operator <- Seq(Greatest(_), Least(_))) {
       ruleTest(AnsiTypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal(1)
@@ -1021,7 +1021,8 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
   test("SPARK-35937: GetDateFieldOperations") {
     val ts = Literal(Timestamp.valueOf("2021-01-01 01:30:00"))
     Seq(
-      DayOfYear, Year, YearOfWeek, Quarter, Month, DayOfMonth, DayOfWeek, WeekDay, WeekOfYear
+      DayOfYear(_), Year(_), YearOfWeek(_), Quarter(_), Month(_), DayOfMonth(_),
+      DayOfWeek(_), WeekDay(_), WeekOfYear(_)
     ).foreach { operation =>
       ruleTest(
         AnsiTypeCoercion.GetDateFieldOperations, operation(ts), operation(Cast(ts, DateType)))

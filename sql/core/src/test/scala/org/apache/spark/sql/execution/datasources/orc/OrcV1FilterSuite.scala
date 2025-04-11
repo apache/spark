@@ -53,7 +53,7 @@ class OrcV1FilterSuite extends OrcFilterSuite {
         LogicalRelationWithTable(orcRelation: HadoopFsRelation, _)) =>
         maybeRelation = Some(orcRelation)
         filters
-    }.flatten.reduceLeftOption(And)
+    }.flatten.reduceLeftOption(And(_, _))
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
     val (_, selectedFilters, _) =
@@ -99,7 +99,7 @@ class OrcV1FilterSuite extends OrcFilterSuite {
         LogicalRelationWithTable(orcRelation: HadoopFsRelation, _)) =>
         maybeRelation = Some(orcRelation)
         filters
-    }.flatten.reduceLeftOption(And)
+    }.flatten.reduceLeftOption(And(_, _))
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
     val (_, selectedFilters, _) =

@@ -1380,11 +1380,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               // an UnresolvedAttribute.
               EqualNullSafe(
                 UnresolvedAttribute.quoted(attr.name),
-                Cast(Literal(value), attr.dataType))
+                Cast(Literal(value), attr.dataType)
+              ): BinaryOperator
             case None =>
               throw QueryCompilationErrors.missingStaticPartitionColumn(name)
           }
-        }.reduce(And)
+        }.reduce(And(_, _))
       }
     }
   }
@@ -3514,7 +3515,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           val inputNullCheck = inputPrimitivesPair.collect {
             case (isPrimitive, input) if isPrimitive && input.nullable =>
               IsNull(input)
-          }.reduceLeftOption[Expression](Or)
+          }.reduceLeftOption(Or.apply)
 
           if (inputNullCheck.isDefined) {
             // Once we add an `If` check above the udf, it is safe to mark those checked inputs

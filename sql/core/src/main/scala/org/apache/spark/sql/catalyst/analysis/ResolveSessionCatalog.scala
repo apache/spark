@@ -698,9 +698,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   private def convertToStructField(col: QualifiedColType): StructField = {
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
-    col.default.map {
-      value: String => builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
-    }
+    col.default.map(value =>
+      builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+    )
     StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
 

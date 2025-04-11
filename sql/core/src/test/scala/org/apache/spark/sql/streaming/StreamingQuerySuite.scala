@@ -997,7 +997,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   test("Uuid in streaming query should not produce same uuids in each execution") {
     val uuids = mutable.ArrayBuffer[String]()
-    def collectUuid: Seq[Row] => Unit = { rows: Seq[Row] =>
+    def collectUuid: Seq[Row] => Unit = { (rows: Seq[Row]) =>
       rows.foreach(r => uuids += r.getString(0))
     }
 
@@ -1014,7 +1014,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   test("Rand/Randn in streaming query should not produce same results in each execution") {
     val rands = mutable.ArrayBuffer[Double]()
-    def collectRand: Seq[Row] => Unit = { rows: Seq[Row] =>
+    def collectRand: Seq[Row] => Unit = { (rows: Seq[Row]) =>
       rows.foreach { r =>
         rands += r.getDouble(0)
         rands += r.getDouble(1)
@@ -1034,7 +1034,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   test("Shuffle in streaming query should not produce same results in each execution") {
     val rands = mutable.ArrayBuffer[Seq[Int]]()
-    def collectShuffle: Seq[Row] => Unit = { rows: Seq[Row] =>
+    def collectShuffle: Seq[Row] => Unit = { (rows: Seq[Row]) =>
       rows.foreach { r =>
         rands += r.getSeq[Int](0)
       }

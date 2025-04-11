@@ -205,7 +205,7 @@ object ExternalCatalogUtils {
         nonPartitionPruningPredicates)
     }
 
-    Predicate.createInterpreted(predicates.reduce(And).transform {
+    Predicate.createInterpreted(predicates.reduce(And(_, _)).transform {
       case att: AttributeReference =>
         val index = partitionSchema.indexWhere(_.name == att.name)
         BoundReference(index, partitionSchema(index).dataType, nullable = true)

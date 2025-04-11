@@ -46,7 +46,7 @@ case class DynamicPruningSubquery(
     broadcastKeyIndices: Seq[Int],
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
-    hint: Option[HintInfo] = None)
+    override val hint: Option[HintInfo] = None)
   extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
   with DynamicPruning
   with Unevaluable

@@ -83,7 +83,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
         ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer,
         numSpillThreshold)
 
-    benchmark.addCase("ArrayBuffer") { _: Int =>
+    benchmark.addCase("ArrayBuffer") { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iterations) {
         val array = new ArrayBuffer[UnsafeRow](initialSize)
@@ -102,7 +102,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
       }
     }
 
-    benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
+    benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iterations) {
         val array = new ExternalAppendOnlyUnsafeRowArray(
@@ -133,7 +133,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     val benchmark = new Benchmark(s"Spilling with $numRows rows", iterations * numRows,
       output = output)
 
-    benchmark.addCase("UnsafeExternalSorter") { _: Int =>
+    benchmark.addCase("UnsafeExternalSorter") { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iterations) {
         val array = UnsafeExternalSorter.create(
@@ -167,7 +167,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
       }
     }
 
-    benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
+    benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iterations) {
         val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold, numSpillThreshold)

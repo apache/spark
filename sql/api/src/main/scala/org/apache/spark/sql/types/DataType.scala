@@ -46,8 +46,8 @@ import org.apache.spark.util.SparkClassUtils
  */
 
 @Stable
-@JsonSerialize(using = classOf[DataTypeJsonSerializer])
-@JsonDeserialize(using = classOf[DataTypeJsonDeserializer])
+@JsonSerialize(`using` = classOf[DataTypeJsonSerializer])
+@JsonDeserialize(`using` = classOf[DataTypeJsonDeserializer])
 abstract class DataType extends AbstractDataType {
 
   /**

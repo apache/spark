@@ -54,7 +54,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val decimalParser = if (options.locale == Locale.US) {
     // Special handling the default locale for backward compatibility
-    s: String => new java.math.BigDecimal(s)
+    (s: String) => new java.math.BigDecimal(s)
   } else {
     ExprUtils.getDecimalParser(options.locale)
   }

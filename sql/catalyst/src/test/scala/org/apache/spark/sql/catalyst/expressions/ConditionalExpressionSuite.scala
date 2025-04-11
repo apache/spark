@@ -67,7 +67,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     testIf(_.toString, StringType)
 
     DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(If, BooleanType, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(If(_, _, _), BooleanType, dt, dt)
     }
   }
 

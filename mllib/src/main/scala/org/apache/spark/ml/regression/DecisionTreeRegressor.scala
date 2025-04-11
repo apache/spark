@@ -18,7 +18,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s._
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
@@ -219,21 +219,21 @@ class DecisionTreeRegressionModel private[ml] (
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predictUDF = udf { (features: Vector) => predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
+      val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
       predictionColNames :+= $(varianceCol)
       predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
         .as($(varianceCol), outputSchema($(varianceCol)).metadata)
     }
 
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val leafUDF = udf { (features: Vector) => predictLeaf(features) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
         .as($(leafCol), outputSchema($(leafCol)).metadata)

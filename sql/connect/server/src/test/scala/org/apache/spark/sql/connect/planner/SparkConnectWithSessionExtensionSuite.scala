@@ -61,7 +61,7 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
     val spark = classic.SparkSession
       .builder()
       .master("local[1]")
-      .withExtensions(extension => extension.injectParser(MyParser))
+      .withExtensions(extension => extension.injectParser(MyParser(_, _)))
       .getOrCreate()
 
     val read = proto.Read.newBuilder().build()

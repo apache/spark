@@ -231,7 +231,7 @@ private[hive] class HiveClientImpl(
     val deadline = System.nanoTime + (retryLimit * retryDelayMillis * 1e6).toLong
     var numTries = 0
     var caughtException: Exception = null
-    do {
+    while ({
       numTries += 1
       try {
         return f
@@ -244,7 +244,8 @@ private[hive] class HiveClientImpl(
           clientLoader.cachedHive = null
           Thread.sleep(retryDelayMillis)
       }
-    } while (numTries <= retryLimit && System.nanoTime < deadline)
+      numTries <= retryLimit && System.nanoTime < deadline
+    }) ()
     if (System.nanoTime > deadline) {
       logWarning("Deadline exceeded")
     }

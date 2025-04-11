@@ -816,7 +816,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   test("REPL generated classes") {
     val encoder = ScalaReflection.encoderFor[MyTestClass]
     roundTripAndCheckIdentical(encoder) { () =>
-      Iterator.tabulate(10)(MyTestClass)
+      Iterator.tabulate(10)(MyTestClass(_))
     }
   }
 

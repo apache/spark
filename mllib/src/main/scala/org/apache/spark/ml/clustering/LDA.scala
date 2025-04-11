@@ -484,7 +484,7 @@ abstract class LDAModel private[ml] (
     val k = oldModel.k
     val gammaSeed = oldModel.seed
 
-    vector: Vector =>
+    (vector: Vector) =>
       if (vector.numNonzeros == 0) {
         Vectors.zeros(k)
       } else {

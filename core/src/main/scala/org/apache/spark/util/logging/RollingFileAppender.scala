@@ -126,11 +126,12 @@ private[spark] class RollingFileAppender(
         // the right pattern such that name collisions do not occur.
         var i = 0
         var altRolloverFile: File = null
-        do {
+        while ({
           altRolloverFile = new File(activeFile.getParent,
             s"${activeFile.getName}$rolloverSuffix--$i").getAbsoluteFile
           i += 1
-        } while (i < 10000 && rolloverFileExist(altRolloverFile))
+          i < 10000 && rolloverFileExist(altRolloverFile)
+        }) ()
 
         logWarning(log"Rollover file ${MDC(FILE_NAME, rolloverFile)} already exists, " +
           log"rolled over ${MDC(FILE_NAME2, activeFile)} " +

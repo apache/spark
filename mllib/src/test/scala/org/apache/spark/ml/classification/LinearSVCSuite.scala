@@ -152,7 +152,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
         expected: Set[(Int, Double)]): Unit = {
       model.setThreshold(threshold)
       testTransformerByGlobalCheckFunc[(Int, Vector)](df, model, "id", "prediction") {
-        rows: Seq[Row] =>
+        (rows: Seq[Row]) =>
           val results = rows.map(r => (r.getInt(0), r.getDouble(1))).toSet
           assert(results === expected, s"Failed for threshold = $threshold")
       }

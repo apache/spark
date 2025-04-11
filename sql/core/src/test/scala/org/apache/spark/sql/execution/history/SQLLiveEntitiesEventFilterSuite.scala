@@ -57,7 +57,7 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
     val jobEndEventForJob1 = SparkListenerJobEnd(1, 0, JobSucceeded)
     val stageSubmittedEventsForJob1 = SparkListenerStageSubmitted(stage1)
     val stageCompletedEventsForJob1 = SparkListenerStageCompleted(stage1)
-    val unpersistRDDEventsForJob1 = (1 to 2).map(SparkListenerUnpersistRDD)
+    val unpersistRDDEventsForJob1 = (1 to 2).map(SparkListenerUnpersistRDD(_))
 
     // job events for finished job should be considered as "don't know"
     assert(None === acceptFn(jobStartEventForJob1))

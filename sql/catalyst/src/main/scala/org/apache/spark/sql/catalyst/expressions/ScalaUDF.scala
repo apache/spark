@@ -131,10 +131,10 @@ case class ScalaUDF(
   private def catalystConverter: Any => Any = outputEncoder.map { enc =>
     val toRow = enc.createSerializer().asInstanceOf[Any => Any]
     if (enc.isSerializedAsStructForTopLevel) {
-      value: Any =>
+      (value: Any) =>
         if (value == null) null else toRow(value).asInstanceOf[InternalRow]
     } else {
-      value: Any =>
+      (value: Any) =>
         if (value == null) null else toRow(value).asInstanceOf[InternalRow].get(0, dataType)
     }
   }.getOrElse(createToCatalystConverter(dataType))
@@ -165,10 +165,10 @@ case class ScalaUDF(
       val unwrappedValueClass = enc.isSerializedAsStruct &&
         enc.schema.fields.length == 1 && enc.schema.fields.head.dataType == dataType
       val converter = if (enc.isSerializedAsStructForTopLevel && !unwrappedValueClass) {
-        row: Any => fromRow(row.asInstanceOf[InternalRow])
+        (row: Any) => fromRow(row.asInstanceOf[InternalRow])
       } else {
         val inputRow = new GenericInternalRow(1)
-        value: Any => inputRow.update(0, value); fromRow(inputRow)
+        (value: Any) => inputRow.update(0, value); fromRow(inputRow)
       }
       (converter, true)
     } else { // use CatalystTypeConverters

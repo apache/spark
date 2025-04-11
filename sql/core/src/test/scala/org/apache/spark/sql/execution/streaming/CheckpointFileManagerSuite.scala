@@ -151,7 +151,7 @@ abstract class CheckpointFileManagerTestsOnLocalFs
   extends CheckpointFileManagerTests with SQLHelper {
 
   protected def withTempHadoopPath(p: Path => Unit): Unit = {
-    withTempDir { f: File =>
+    withTempDir { (f: File) =>
       val basePath = new Path(f.getAbsolutePath)
       p(basePath)
     }

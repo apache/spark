@@ -2362,7 +2362,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       AddKafkaData(Set(topic), 30, 31, 32), // Add data when stream is stopped
       StartStream(),
       CheckAnswer(-21, -22, -11, -12, 2, 12, 20, 21, 22, 30, 31, 32), // Should get the added data
-      AssertOnQuery("Add partitions") { query: StreamExecution =>
+      AssertOnQuery("Add partitions") { (query: StreamExecution) =>
         if (addPartitions) setTopicPartitions(topic, 10, query)
         true
       },
@@ -2413,7 +2413,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       AddKafkaData(Set(topic), 30, 31, 32), // Add data when stream is stopped
       StartStream(),
       CheckAnswer(-21, -22, -11, -12, 2, 12, 23, 24, 30, 31, 32), // Should get the added data
-      AssertOnQuery("Add partitions") { query: StreamExecution =>
+      AssertOnQuery("Add partitions") { (query: StreamExecution) =>
         if (addPartitions) setTopicPartitions(topic, 10, query)
         true
       },
@@ -2581,7 +2581,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       CheckAnswer(2, 3, 4, 5, 6, 7), // Should get the added data
       AddKafkaData(Set(topic), 7, 8),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
-      AssertOnQuery("Add partitions") { query: StreamExecution =>
+      AssertOnQuery("Add partitions") { (query: StreamExecution) =>
         if (addPartitions) setTopicPartitions(topic, 10, query)
         true
       },
@@ -2622,7 +2622,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       AddKafkaData(Set(topic), 7, 8),
       StartStream(),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
-      AssertOnQuery("Add partitions") { query: StreamExecution =>
+      AssertOnQuery("Add partitions") { (query: StreamExecution) =>
         if (addPartitions) setTopicPartitions(topic, 10, query)
         true
       },

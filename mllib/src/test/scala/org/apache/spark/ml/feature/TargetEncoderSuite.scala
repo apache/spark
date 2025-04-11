@@ -279,8 +279,8 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
   test("TargetEncoder - wrong data type") {
 
     val wrong_schema = new StructType(
-      schema.map{
-        field: StructField => if (field.name != "input3") field
+      schema.map { (field: StructField) =>
+        if (field.name != "input3") field
         else StructField(field.name, StringType, field.nullable, field.metadata)
       }.toArray)
 

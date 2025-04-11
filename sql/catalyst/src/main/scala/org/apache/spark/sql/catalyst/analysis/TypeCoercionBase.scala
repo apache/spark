@@ -54,7 +54,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   class CombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
       val transforms = rules.map(_.transform)
-      Function.unlift { e: Expression =>
+      Function.unlift { (e: Expression) =>
         val result = transforms.foldLeft(e) {
           case (current, transform) => transform.applyOrElse(current, identity[Expression])
         }

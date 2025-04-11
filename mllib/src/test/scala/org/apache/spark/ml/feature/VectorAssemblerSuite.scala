@@ -158,7 +158,7 @@ class VectorAssemblerSuite
 
     val filteredDF = df.filter($"y".isNotNull)
 
-    val vectorUDF = udf { vector: Vector =>
+    val vectorUDF = udf { (vector: Vector) =>
       vector.numActives
     }
 

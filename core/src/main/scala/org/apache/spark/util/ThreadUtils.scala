@@ -23,6 +23,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.durationToPair
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder

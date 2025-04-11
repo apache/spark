@@ -147,9 +147,10 @@ class ContinuousExecution(
       }
     }
 
-    do {
+    while ({
       runContinuous(sparkSessionForStream)
-    } while (state.updateAndGet(stateUpdate) == ACTIVE)
+      state.updateAndGet(stateUpdate) == ACTIVE
+    }) ()
 
     stopSources()
   }

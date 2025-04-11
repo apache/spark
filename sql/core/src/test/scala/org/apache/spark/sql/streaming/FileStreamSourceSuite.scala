@@ -1671,7 +1671,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           CheckAnswer("keep1", "keep2"),
           AddTextFileData("keep3", src, tmp),
           CheckAnswer("keep1", "keep2", "keep3"),
-          AssertOnQuery("check getBatch") { execution: StreamExecution =>
+          AssertOnQuery("check getBatch") { (execution: StreamExecution) =>
             val _sources = PrivateMethod[Seq[Source]](Symbol("sources"))
             val fileSource = getSourcesFromStreamingQuery(execution).head
 
@@ -2004,14 +2004,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         testStream(filtered)(
           AddTextFileData("keep1", src, tmp, tmpFilePrefix = "keep1"),
           CheckAnswer("keep1"),
-          AssertOnQuery("input file removed") { _: StreamExecution =>
+          AssertOnQuery("input file removed") { _ =>
             // it doesn't rename any file yet
             assertFileIsNotRemoved(src, "keep1")
             true
           },
           AddTextFileData("keep2", src, tmp, tmpFilePrefix = "ke ep2 %"),
           CheckAnswer("keep1", "keep2"),
-          AssertOnQuery("input file removed") { _: StreamExecution =>
+          AssertOnQuery("input file removed") { _ =>
             // it renames input file for first batch, but not for second batch yet
             assertFileIsRemoved(src, "keep1")
             assertFileIsNotRemoved(src, "ke ep2 %")
@@ -2020,7 +2020,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           },
           AddTextFileData("keep3", src, tmp, tmpFilePrefix = "keep3"),
           CheckAnswer("keep1", "keep2", "keep3"),
-          AssertOnQuery("input file renamed") { _: StreamExecution =>
+          AssertOnQuery("input file renamed") { _ =>
             // it renames input file for second batch, but not third batch yet
             assertFileIsRemoved(src, "ke ep2 %")
             assertFileIsNotRemoved(src, "keep3")
@@ -2064,14 +2064,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         testStream(filtered)(
           AddTextFileData("keep1", dirForKeep1, tmp, tmpFilePrefix = "keep1"),
           CheckAnswer("keep1"),
-          AssertOnQuery("input file archived") { _: StreamExecution =>
+          AssertOnQuery("input file archived") { _ =>
             // it doesn't rename any file yet
             assertFileIsNotMoved(dirForKeep1, expectedMovedDir1, "keep1")
             true
           },
           AddTextFileData("keep2", dirForKeep2, tmp, tmpFilePrefix = "keep2 %"),
           CheckAnswer("keep1", "keep2"),
-          AssertOnQuery("input file archived") { _: StreamExecution =>
+          AssertOnQuery("input file archived") { _ =>
             // it renames input file for first batch, but not for second batch yet
             assertFileIsMoved(dirForKeep1, expectedMovedDir1, "keep1")
             assertFileIsNotMoved(dirForKeep2, expectedMovedDir2, "keep2 %")
@@ -2079,7 +2079,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           },
           AddTextFileData("keep3", dirForKeep3, tmp, tmpFilePrefix = "keep3"),
           CheckAnswer("keep1", "keep2", "keep3"),
-          AssertOnQuery("input file archived") { _: StreamExecution =>
+          AssertOnQuery("input file archived") { _ =>
             // it renames input file for second batch, but not third batch yet
             assertFileIsMoved(dirForKeep2, expectedMovedDir2, "keep2 %")
             assertFileIsNotMoved(dirForKeep3, expectedMovedDir3, "keep3")
@@ -2088,7 +2088,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           },
           AddTextFileData("keep4", dirForKeep3, tmp, tmpFilePrefix = "keep4"),
           CheckAnswer("keep1", "keep2", "keep3", "keep4"),
-          AssertOnQuery("input file archived") { _: StreamExecution =>
+          AssertOnQuery("input file archived") { _ =>
             // it renames input file for third batch, but not fourth batch yet
             assertFileIsMoved(dirForKeep3, expectedMovedDir3, "keep3")
             assertFileIsNotMoved(dirForKeep3, expectedMovedDir3, "keep4")

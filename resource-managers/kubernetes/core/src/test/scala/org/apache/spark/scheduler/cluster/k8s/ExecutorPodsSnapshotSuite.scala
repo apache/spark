@@ -38,14 +38,14 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
   test("States are interpreted correctly from pod metadata.") {
     ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
     val testCases = Seq(
-      testCase(pendingExecutor(0), PodPending),
-      testCase(runningExecutor(1), PodRunning),
-      testCase(succeededExecutor(2), PodSucceeded),
-      testCase(failedExecutorWithoutDeletion(3), PodFailed),
-      testCase(deletedExecutor(4), PodDeleted),
-      testCase(unknownExecutor(5), PodUnknown),
-      testCase(finishedExecutorWithRunningSidecar(6, 0), PodSucceeded),
-      testCase(finishedExecutorWithRunningSidecar(7, 1), PodFailed)
+      testCase(pendingExecutor(0), PodPending(_)),
+      testCase(runningExecutor(1), PodRunning(_)),
+      testCase(succeededExecutor(2), PodSucceeded(_)),
+      testCase(failedExecutorWithoutDeletion(3), PodFailed(_)),
+      testCase(deletedExecutor(4), PodDeleted(_)),
+      testCase(unknownExecutor(5), PodUnknown(_)),
+      testCase(finishedExecutorWithRunningSidecar(6, 0), PodSucceeded(_)),
+      testCase(finishedExecutorWithRunningSidecar(7, 1), PodFailed(_))
     )
     doTest(testCases)
   }
@@ -54,13 +54,13 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
     + " when configured to check all containers.") {
     ExecutorPodsSnapshot.setShouldCheckAllContainers(true)
     val testCases = Seq(
-      testCase(pendingExecutor(0), PodPending),
-      testCase(runningExecutor(1), PodRunning),
-      testCase(runningExecutorWithFailedContainer(2), PodFailed),
-      testCase(succeededExecutor(3), PodSucceeded),
-      testCase(failedExecutorWithoutDeletion(4), PodFailed),
-      testCase(deletedExecutor(5), PodDeleted),
-      testCase(unknownExecutor(6), PodUnknown)
+      testCase(pendingExecutor(0), PodPending(_)),
+      testCase(runningExecutor(1), PodRunning(_)),
+      testCase(runningExecutorWithFailedContainer(2), PodFailed(_)),
+      testCase(succeededExecutor(3), PodSucceeded(_)),
+      testCase(failedExecutorWithoutDeletion(4), PodFailed(_)),
+      testCase(deletedExecutor(5), PodDeleted(_)),
+      testCase(unknownExecutor(6), PodUnknown(_))
     )
     doTest(testCases)
   }

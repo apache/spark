@@ -93,13 +93,13 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
     checkPair(densePoints1Seq, sparsePoints1Seq)
     checkPair(densePoints2Seq, sparsePoints2Seq)
 
-    densePoints1 = densePoints1Seq.map(FeatureData).toDF()
-    sparsePoints1 = sparsePoints1Seq.map(FeatureData).toDF()
-    densePoints1TestInvalid = densePoints1SeqTestInvalid.map(FeatureData).toDF()
-    sparsePoints1TestInvalid = sparsePoints1SeqTestInvalid.map(FeatureData).toDF()
-    densePoints2 = densePoints2Seq.map(FeatureData).toDF()
-    sparsePoints2 = sparsePoints2Seq.map(FeatureData).toDF()
-    badPoints = badPointsSeq.map(FeatureData).toDF()
+    densePoints1 = densePoints1Seq.map(FeatureData(_)).toDF()
+    sparsePoints1 = sparsePoints1Seq.map(FeatureData(_)).toDF()
+    densePoints1TestInvalid = densePoints1SeqTestInvalid.map(FeatureData(_)).toDF()
+    sparsePoints1TestInvalid = sparsePoints1SeqTestInvalid.map(FeatureData(_)).toDF()
+    densePoints2 = densePoints2Seq.map(FeatureData(_)).toDF()
+    sparsePoints2 = sparsePoints2Seq.map(FeatureData(_)).toDF()
+    badPoints = badPointsSeq.map(FeatureData(_)).toDF()
   }
 
   private def getIndexer: VectorIndexer =
@@ -112,7 +112,7 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("Cannot fit an empty DataFrame") {
-    val rdd = Array.empty[Vector].map(FeatureData).toSeq.toDF()
+    val rdd = Array.empty[Vector].map(FeatureData.apply).toSeq.toDF()
     val vectorIndexer = getIndexer
     intercept[NoSuchElementException] {
       vectorIndexer.fit(rdd)
@@ -192,7 +192,7 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
           val featureAttrs = AttributeGroup.fromStructField(rows.head.schema("indexed"))
           assert(featureAttrs.name === "indexed")
           assert(featureAttrs.attributes.get.length === model.numFeatures)
-          categoricalFeatures.foreach { feature: Int =>
+          categoricalFeatures.foreach { (feature: Int) =>
             val origValueSet = collectedData.map(_(feature)).toSet
             val targetValueIndexSet = Range(0, origValueSet.size).toSet
             val catMap = categoryMaps(feature)
@@ -219,7 +219,7 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
           }
           // Check numerical feature metadata.
           Range(0, model.numFeatures).filter(feature => !categoricalFeatures.contains(feature))
-            .foreach { feature: Int =>
+            .foreach { (feature: Int) =>
             val featureAttr = featureAttrs(feature)
             featureAttr match {
               case attr: NumericAttribute =>

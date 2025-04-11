@@ -52,7 +52,7 @@ object HashBenchmark extends BenchmarkBase {
       ).toArray
 
       val benchmark = new Benchmark("Hash For " + name, iters * numRows.toLong, output = output)
-      benchmark.addCase("interpreted version") { _: Int =>
+      benchmark.addCase("interpreted version") { (_: Int) =>
         var sum = 0
         for (_ <- 0L until iters) {
           var i = 0
@@ -64,7 +64,7 @@ object HashBenchmark extends BenchmarkBase {
       }
 
       val getHashCode = UnsafeProjection.create(new Murmur3Hash(attrs) :: Nil, attrs)
-      benchmark.addCase("codegen version") { _: Int =>
+      benchmark.addCase("codegen version") { (_: Int) =>
         var sum = 0
         for (_ <- 0L until iters) {
           var i = 0
@@ -76,7 +76,7 @@ object HashBenchmark extends BenchmarkBase {
       }
 
       val getHashCode64b = UnsafeProjection.create(new XxHash64(attrs) :: Nil, attrs)
-      benchmark.addCase("codegen version 64-bit") { _: Int =>
+      benchmark.addCase("codegen version 64-bit") { (_: Int) =>
         var sum = 0
         for (_ <- 0L until iters) {
           var i = 0
@@ -88,7 +88,7 @@ object HashBenchmark extends BenchmarkBase {
       }
 
       val getHiveHashCode = UnsafeProjection.create(new HiveHash(attrs) :: Nil, attrs)
-      benchmark.addCase("codegen HiveHash version") { _: Int =>
+      benchmark.addCase("codegen HiveHash version") { (_: Int) =>
         var sum = 0
         for (_ <- 0L until iters) {
           var i = 0

@@ -40,7 +40,7 @@ object MimaExcludes {
   )
 
   // Exclude rules for 4.0.x from 3.5.0
-  lazy val v40excludes = defaultExcludes ++ Seq(
+  lazy val v40excludes = defaultExcludes ++ scala3Excludes ++ Seq(
     // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$"),
@@ -237,6 +237,37 @@ object MimaExcludes {
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
+
+  // Enable -Xsource:3 compiler flag
+  lazy val scala3Excludes = Seq(
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Metric.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Metric.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Metric.curried"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Metric$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply$default$3"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.curried"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.paths.SparkPath.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.paths.SparkPath.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.paths.SparkPath.copy$default$1"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.paths.SparkPath.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.apply$default$7"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.curried"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.AccumulableInfo$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.apply$default$7"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.curried"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationInfo.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationInfo.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationInfo.curried"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationInfo$"),
+  )
 
   // Default exclude rules
   lazy val defaultExcludes = Seq(

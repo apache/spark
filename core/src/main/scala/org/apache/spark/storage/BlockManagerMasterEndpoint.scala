@@ -585,7 +585,7 @@ class BlockManagerMasterEndpoint(
   private def removeBlockFromWorkers(blockId: BlockId): Unit = {
     val locations = blockLocations.get(blockId)
     if (locations != null) {
-      locations.foreach { blockManagerId: BlockManagerId =>
+      locations.foreach { blockManagerId =>
         val blockManager = blockManagerInfo.get(blockManagerId)
         blockManager.foreach { bm =>
           // Remove the block from the BlockManager.
@@ -602,7 +602,7 @@ class BlockManagerMasterEndpoint(
 
   // Return a map from the block manager id to max memory and remaining memory.
   private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    blockManagerInfo.map { case(blockManagerId, info) =>
+    blockManagerInfo.map { case (blockManagerId, info) =>
       (blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
   }

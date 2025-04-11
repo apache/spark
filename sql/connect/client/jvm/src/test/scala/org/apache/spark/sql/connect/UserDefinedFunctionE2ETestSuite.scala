@@ -129,7 +129,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
 
     val result3 = Seq("a b c", "d e")
       .toDF("words")
-      .explode("words", "word") { word: String =>
+      .explode("words", "word") { (word: String) =>
         word.split(' ').toSeq
       }
       .select(col("word"))
@@ -140,7 +140,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
 
     val result4 = Seq("a b c", "d e")
       .toDF("words")
-      .explode("words", "word") { word: String =>
+      .explode("words", "word") { (word: String) =>
         word.split(' ').map(s => s -> s.head.toInt).toSeq
       }
       .select(col("word"), col("words"))

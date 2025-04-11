@@ -128,7 +128,7 @@ class IndexedRowMatrix @Since("1.0.0") (
     val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt
     val numColBlocks = math.ceil(n.toDouble / colsPerBlock).toInt
 
-    val blocks = rows.flatMap { ir: IndexedRow =>
+    val blocks = rows.flatMap { (ir: IndexedRow) =>
       val blockRow = ir.index / rowsPerBlock
       val rowInBlock = ir.index % rowsPerBlock
 

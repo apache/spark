@@ -20,6 +20,7 @@ package org.apache.spark.ml.fpm
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
+import org.json4s._
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
