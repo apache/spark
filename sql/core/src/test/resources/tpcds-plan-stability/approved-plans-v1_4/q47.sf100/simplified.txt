@@ -58,7 +58,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_bra
                                                                                     InputAdapter
                                                                                       BroadcastExchange #6
                                                                                         WholeStageCodegen (2)
-                                                                                          Filter [s_store_sk,s_store_name,s_company_name]
+                                                                                          Filter [s_store_sk,s_company_name,s_store_name]
                                                                                             ColumnarToRow
                                                                                               InputAdapter
                                                                                                 Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_company_name]

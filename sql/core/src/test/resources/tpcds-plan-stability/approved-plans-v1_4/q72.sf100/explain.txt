@@ -154,7 +154,7 @@ Input [8]: [cs_ship_date_sk#1, cs_bill_cdemo_sk#2, cs_item_sk#4, cs_promo_sk#5, 
 Output [2]: [d_date_sk#14, d_date#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_date)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -162,7 +162,7 @@ Input [2]: [d_date_sk#14, d_date#15]
 
 (20) Filter [codegen id : 3]
 Input [2]: [d_date_sk#14, d_date#15]
-Condition : (isnotnull(d_date#15) AND isnotnull(d_date_sk#14))
+Condition : (isnotnull(d_date_sk#14) AND isnotnull(d_date#15))
 
 (21) BroadcastExchange
 Input [2]: [d_date_sk#14, d_date#15]
@@ -244,7 +244,7 @@ Output [4]: [inv_item_sk#22, inv_warehouse_sk#23, inv_quantity_on_hand#24, inv_d
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(inv_date_sk#25), dynamicpruningexpression(true)]
-PushedFilters: [IsNotNull(inv_quantity_on_hand), IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk)]
+PushedFilters: [IsNotNull(inv_item_sk), IsNotNull(inv_quantity_on_hand), IsNotNull(inv_warehouse_sk)]
 ReadSchema: struct<inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
 
 (39) ColumnarToRow [codegen id : 13]
@@ -252,7 +252,7 @@ Input [4]: [inv_item_sk#22, inv_warehouse_sk#23, inv_quantity_on_hand#24, inv_da
 
 (40) Filter [codegen id : 13]
 Input [4]: [inv_item_sk#22, inv_warehouse_sk#23, inv_quantity_on_hand#24, inv_date_sk#25]
-Condition : ((isnotnull(inv_quantity_on_hand#24) AND isnotnull(inv_item_sk#22)) AND isnotnull(inv_warehouse_sk#23))
+Condition : ((isnotnull(inv_item_sk#22) AND isnotnull(inv_quantity_on_hand#24)) AND isnotnull(inv_warehouse_sk#23))
 
 (41) Scan parquet spark_catalog.default.warehouse
 Output [2]: [w_warehouse_sk#26, w_warehouse_name#27]
