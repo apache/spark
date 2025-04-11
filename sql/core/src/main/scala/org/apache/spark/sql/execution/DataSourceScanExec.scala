@@ -939,14 +939,23 @@ case class FileSourceScanExec(
     } else {
       this.broadcastVarCollector
     }
-    this.copy(
-      proxyForPushedBroadcastVar = nullSafeProxyVar.map(_.map(_.canonicalized)),
-      output = this.output.map(QueryPlan.normalizeExpressions(_, output)),
-      partitionFilters = QueryPlan.normalizePredicates(
+
+    FileSourceScanExec(
+      relation,
+      nullSafebcCollector,
+      // remove stream on canonicalization; this is needed for reused shuffle to be effective in
+      // self-join
+      None,
+      output.map(QueryPlan.normalizeExpressions(_, output)),
+      requiredSchema,
+      QueryPlan.normalizePredicates(
         filterUnusedDynamicPruningExpressions(partitionFilters), output),
-      dataFilters = QueryPlan.normalizePredicates(
-        filterUnusedDynamicPruningExpressions(dataFilters), output),
-      broadcastVarCollector = nullSafebcCollector
+      optionalBucketSet,
+      optionalNumCoalescedBuckets,
+      QueryPlan.normalizePredicates(dataFilters, output),
+      None,
+      disableBucketedScan,
+      nullSafeProxyVar
     )
   }
 
