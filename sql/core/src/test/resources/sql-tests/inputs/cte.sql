@@ -176,6 +176,98 @@ with cte AS (SELECT * FROM va) SELECT * FROM cte;
 -- Self-refer to non-existent cte, should fail.
 with cte as (select * from cte) select * from cte;
 
+-- WithCTE placement for WITH in boch UNION branches
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  ) UNION ALL (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  )
+);
+
+-- CTE in the left UNION branch with a subquery referencing that CTE name on the right
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  ) UNION ALL (
+    SELECT 1 WHERE EXISTS (
+      SELECT * FROM cte
+    )
+  )
+);
+
+-- CTEs in subqueries in both branches of UNION
+SELECT
+  *
+FROM
+  VALUES (1)
+WHERE EXISTS (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+)
+UNION ALL (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+);
+
+WITH cte AS (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+)
+SELECT * FROM cte;
+
+SELECT * FROM (
+  WITH cte AS (SELECT 1)
+  SELECT
+    *
+  FROM VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+);
+
+-- CTE name with dots
+WITH `a.b.c` AS (
+  SELECT 1
+)
+SELECT * FROM `a.b.c`;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

@@ -13,6 +13,22 @@ AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW v1 AS SELECT 1 AS col1
+-- !query analysis
+CreateViewCommand `v1`, SELECT 1 AS col1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS col1#x]
+      +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW v2 AS SELECT 1 AS col1
+-- !query analysis
+CreateViewCommand `v2`, SELECT 1 AS col1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS col1#x]
+      +- OneRowRelation
+
+
+-- !query
 SELECT a FROM testData ORDER BY a
 -- !query analysis
 Sort [a#x ASC NULLS FIRST], true
@@ -185,6 +201,90 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT col1 FROM VALUES (1, 2) GROUP BY col1 ORDER BY MAX(col2), RAND()
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT 1 AS col1, col1 FROM VALUES (10) ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Project [1 AS col1#x, col1#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v2
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query analysis
+Project [count(DISTINCT col1)#xL]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Aggregate [col1#x], [count(distinct col1#x) AS count(DISTINCT col1)#xL, col1#x]
+      +- Project [col1#x]
+         +- Join Inner, (col1#x = col1#x)
+            :- SubqueryAlias v1
+            :  +- View (`v1`, [col1#x])
+            :     +- Project [cast(col1#x as int) AS col1#x]
+            :        +- Project [1 AS col1#x]
+            :           +- OneRowRelation
+            +- SubqueryAlias v2
+               +- View (`v2`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [1 AS col1#x]
+                        +- OneRowRelation
+
+
+-- !query
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v1
+GROUP BY
+  col1
+ORDER BY
+  col1
+-- !query analysis
+Project [count(DISTINCT col1)#xL]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Aggregate [col1#x], [count(distinct col1#x) AS count(DISTINCT col1)#xL, col1#x]
+      +- Project [col1#x]
+         +- Join Inner, (col1#x = col1#x)
+            :- SubqueryAlias v1
+            :  +- View (`v1`, [col1#x])
+            :     +- Project [cast(col1#x as int) AS col1#x]
+            :        +- Project [1 AS col1#x]
+            :           +- OneRowRelation
+            +- SubqueryAlias v1
+               +- View (`v1`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [1 AS col1#x]
+                        +- OneRowRelation
+
+
+-- !query
 DROP VIEW IF EXISTS testData
 -- !query analysis
 DropTempViewCommand testData
+
+
+-- !query
+DROP VIEW IF EXISTS v1
+-- !query analysis
+DropTempViewCommand v1
+
+
+-- !query
+DROP VIEW IF EXISTS v2
+-- !query analysis
+DropTempViewCommand v2
