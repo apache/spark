@@ -427,7 +427,7 @@ class DenseMatrix @Since("1.3.0") (
     if (isTransposed) {
       Iterator.tabulate(numCols) { j =>
         val col = new Array[Double](numRows)
-        BLAS.nativeBLAS.dcopy(numRows, values, j, numCols, col, 0, 1)
+        newlinalg.BLAS.nativeBLAS.dcopy(numRows, values, j, numCols, col, 0, 1)
         new DenseVector(col)
       }
     } else {
