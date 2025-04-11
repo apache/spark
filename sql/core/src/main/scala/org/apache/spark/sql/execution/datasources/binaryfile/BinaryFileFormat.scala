@@ -55,7 +55,7 @@ import org.apache.spark.util.SerializableConfiguration
  *     .load("/path/to/fileDir");
  * }}}
  */
-class BinaryFileFormat extends FileFormat with DataSourceRegister {
+case class BinaryFileFormat() extends FileFormat with DataSourceRegister {
 
   import BinaryFileFormat._
 
