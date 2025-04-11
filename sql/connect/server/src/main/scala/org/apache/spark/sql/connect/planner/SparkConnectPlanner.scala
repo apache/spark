@@ -4025,6 +4025,12 @@ class SparkConnectPlanner(
         } else {
           UnresolvedTableArgPlanId(planId)
         }
+      case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN =>
+        UnresolvedInSubqueryPlanId(
+          getSubqueryExpression.getInSubqueryValuesList.asScala.map { value =>
+            transformExpression(value)
+          }.toSeq,
+          planId)
       case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")
     }
   }
