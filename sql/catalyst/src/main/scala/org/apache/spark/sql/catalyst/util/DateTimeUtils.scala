@@ -791,7 +791,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       // Math.floorDiv gets the next lower negative integer so the full second value in the
       // original decimal will not match what is in the error message.
       if (fullSecs > Int.MaxValue || fullSecs < 0) {
-        // Make this error message consistent with what is thrown by LocalTime.of when the provide
+        // Make this error message consistent with what is thrown by LocalTime.of when the
         // seconds are invalid
         throw new DateTimeException(
           s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
