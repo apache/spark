@@ -475,8 +475,9 @@ case class TransformWithStateExec(
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val info = getStateInfo
+    val stateSchemaDir = stateSchemaDirPath()
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion,
-      info, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
+      info, stateSchemaDir, session, operatorStateMetadataVersion, conf.stateStoreEncodingFormat)
   }
 
   /** Metadata of this stateful operator and its states stores. */

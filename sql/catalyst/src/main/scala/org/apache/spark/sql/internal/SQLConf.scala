@@ -2572,8 +2572,8 @@ object SQLConf {
         "be modified after running.")
       .version("3.0.0")
       .intConf
-      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
-      .createWithDefault(2)
+      .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")
+      .createWithDefault(3)
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
