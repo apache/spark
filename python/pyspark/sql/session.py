@@ -1190,11 +1190,11 @@ class SparkSession(SparkConversionMixin):
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
         """
-        # make sure data could consumed multiple times
-        if not isinstance(data, list):
-            data = list(data)
-
         if schema is None or isinstance(schema, (list, tuple)):
+            # make sure data could be consumed multiple times
+            if not isinstance(data, list):
+                data = list(data)
+
             struct = self._inferSchemaFromList(data, names=schema)
             converter = _create_converter(struct)
             tupled_data: Iterable[Tuple] = map(converter, data)
