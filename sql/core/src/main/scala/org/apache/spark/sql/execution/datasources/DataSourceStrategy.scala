@@ -251,15 +251,14 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private lazy val readDataSourceIgnoreOptions: Boolean =
-    SQLConf.get.getConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS)
-
   private def readDataSourceTable(
       table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName =
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
+    val readDataSourceIgnoreOptions: Boolean =
+      SQLConf.get.getConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS)
     catalog.getCachedTable(qualifiedTableName) match {
       case null =>
         val dataSource =

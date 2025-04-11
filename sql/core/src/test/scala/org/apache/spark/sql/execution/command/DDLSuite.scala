@@ -1385,16 +1385,16 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       // check initial contents of table
       checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
 
-      // no option
-      checkAnswer(
-        spark.sql("SELECT * FROM t"),
-        Row("a;b", "c") :: Row("hello; world", "test") :: Nil
-      )
-
       // respect delimiter option
       checkAnswer(
         spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
         Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+      )
+
+      // no option
+      checkAnswer(
+        spark.sql("SELECT * FROM t"),
+        Row("a;b", "c") :: Row("hello; world", "test") :: Nil
       )
 
       // respect lineSep option
@@ -1402,11 +1402,28 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
         Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
       )
+    }
+  }
 
-      // when legacy conf enabled, new options ignored and the previous cached option returned.
-      withSQLConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS.key -> "true") {
+  test("SPARK-51747: When legacy conf enabled data source read ignores option change") {
+    withSQLConf(SQLConf.READ_DATA_SOURCE_LEGACY_IGNORE_OPTIONS.key -> "true") {
+      withTable("t") {
+        spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
+        spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+        spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
+
+        // check initial contents of table
+        checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
+
+        // no option
         checkAnswer(
-          spark.sql("SELECT * FROM t WITH ('delimiter' = 'a')"),
+          spark.sql("SELECT * FROM t"),
+          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
+        )
+
+        // ignore delimiter option, unlike when legacy conf disabled (the default setting)
+        checkAnswer(
+          spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
           Row("a;b", "c") :: Row("hello; world", "test") :: Nil
         )
       }
