@@ -378,28 +378,32 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 WITH RECURSIVE
   t1 AS (
     SELECT 1 AS level
-    UNION (
+    UNION ALL (
       WITH t2 AS (SELECT level + 1 FROM t1 WHERE level < 10)
       SELECT * FROM t2
     )
   )
 SELECT * FROM t1
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 100,
-    "stopIndex" : 101,
-    "fragment" : "t1"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- UnionLoop xxxx
+:        :- Project [1 AS level#x]
+:        :  +- OneRowRelation
+:        +- WithCTE
+:           :- CTERelationDef xxxx, false
+:           :  +- SubqueryAlias t2
+:           :     +- Project [(level#x + 1) AS (level + 1)#x]
+:           :        +- Filter (level#x < 10)
+:           :           +- SubqueryAlias t1
+:           :              +- UnionLoopRef xxxx, [level#x], false
+:           +- Project [(level + 1)#x]
+:              +- SubqueryAlias t2
+:                 +- CTERelationRef xxxx, true, [(level + 1)#x], false, false
++- Project [level#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -424,21 +428,34 @@ WITH
   )
 SELECT * FROM t2
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 159,
-    "stopIndex" : 160,
-    "fragment" : "t1"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1 AS 1#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- UnionLoop xxxx
+:        :- Project [1 AS level#x]
+:        :  +- OneRowRelation
+:        +- WithCTE
+:           :- CTERelationDef xxxx, false
+:           :  +- SubqueryAlias t3
+:           :     +- Project [(level#x + 1) AS (level + 1)#x]
+:           :        +- Filter (level#x < 10)
+:           :           +- SubqueryAlias t1
+:           :              +- UnionLoopRef xxxx, [level#x], false
+:           +- Project [(level + 1)#x]
+:              +- SubqueryAlias t3
+:                 +- CTERelationRef xxxx, true, [(level + 1)#x], false, false
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t2
+:     +- Project [level#x]
+:        +- SubqueryAlias t1
+:           +- CTERelationRef xxxx, true, [level#x], false, false
++- Project [level#x]
+   +- SubqueryAlias t2
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -962,24 +979,25 @@ SELECT * FROM r2
 -- !query analysis
 WithCTE
 :- CTERelationDef xxxx, false
-:  +- SubqueryAlias r1
-:     +- UnionLoop xxxx
-:        :- Project [0 AS innerlevel#x]
-:        :  +- OneRowRelation
-:        +- Project [(innerlevel#x + 1) AS (innerlevel + 1)#x]
-:           +- Filter (innerlevel#x < 3)
-:              +- SubqueryAlias r1
-:                 +- UnionLoopRef xxxx, [innerlevel#x], false
-:- CTERelationDef xxxx, false
 :  +- SubqueryAlias r2
-:     +- UnionLoop xxxx
-:        :- Project [0 AS outerlevel#x, innerlevel#x]
+:     +- WithCTE
+:        :- CTERelationDef xxxx, false
 :        :  +- SubqueryAlias r1
-:        :     +- CTERelationRef xxxx, true, [innerlevel#x], false, false
-:        +- Project [(outerlevel#x + 1) AS (outerlevel + 1)#x, innerlevel#x]
-:           +- Filter (outerlevel#x < 3)
-:              +- SubqueryAlias r2
-:                 +- UnionLoopRef xxxx, [outerlevel#x, innerlevel#x], false
+:        :     +- UnionLoop xxxx
+:        :        :- Project [0 AS innerlevel#x]
+:        :        :  +- OneRowRelation
+:        :        +- Project [(innerlevel#x + 1) AS (innerlevel + 1)#x]
+:        :           +- Filter (innerlevel#x < 3)
+:        :              +- SubqueryAlias r1
+:        :                 +- UnionLoopRef xxxx, [innerlevel#x], false
+:        +- UnionLoop xxxx
+:           :- Project [0 AS outerlevel#x, innerlevel#x]
+:           :  +- SubqueryAlias r1
+:           :     +- CTERelationRef xxxx, true, [innerlevel#x], false, false
+:           +- Project [(outerlevel#x + 1) AS (outerlevel + 1)#x, innerlevel#x]
+:              +- Filter (outerlevel#x < 3)
+:                 +- SubqueryAlias r2
+:                    +- UnionLoopRef xxxx, [outerlevel#x, innerlevel#x], false
 +- Project [outerlevel#x, innerlevel#x]
    +- SubqueryAlias r2
       +- CTERelationRef xxxx, true, [outerlevel#x, innerlevel#x], false, false
@@ -1001,25 +1019,26 @@ SELECT * FROM r
 WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias r
-:     +- Project [col1#x AS level#x]
-:        +- UnionLoop xxxx
-:           :- LocalRelation [col1#x]
-:           +- Project [(level#x + 1) AS (level + 1)#x]
-:              +- Filter (level#x < 3)
-:                 +- SubqueryAlias r
-:                    +- Project [col1#x AS level#x]
-:                       +- UnionLoopRef xxxx, [col1#x], false
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias r
 :     +- Project [level#x AS level#x]
-:        +- Union false, false
-:           :- Project [level#x]
+:        +- WithCTE
+:           :- CTERelationDef xxxx, false
 :           :  +- SubqueryAlias r
-:           :     +- CTERelationRef xxxx, true, [level#x], false, false
-:           +- Project [(level#x + 1) AS (level + 1)#x]
-:              +- Filter (level#x < 3)
-:                 +- SubqueryAlias r
-:                    +- CTERelationRef xxxx, true, [level#x], false, false
+:           :     +- Project [col1#x AS level#x]
+:           :        +- UnionLoop xxxx
+:           :           :- LocalRelation [col1#x]
+:           :           +- Project [(level#x + 1) AS (level + 1)#x]
+:           :              +- Filter (level#x < 3)
+:           :                 +- SubqueryAlias r
+:           :                    +- Project [col1#x AS level#x]
+:           :                       +- UnionLoopRef xxxx, [col1#x], false
+:           +- Union false, false
+:              :- Project [level#x]
+:              :  +- SubqueryAlias r
+:              :     +- CTERelationRef xxxx, true, [level#x], false, false
+:              +- Project [(level#x + 1) AS (level + 1)#x]
+:                 +- Filter (level#x < 3)
+:                    +- SubqueryAlias r
+:                       +- CTERelationRef xxxx, true, [level#x], false, false
 +- Project [level#x]
    +- SubqueryAlias r
       +- CTERelationRef xxxx, true, [level#x], false, false
@@ -1041,21 +1060,22 @@ SELECT * FROM r
 WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias r
-:     +- Project [col1#x AS level#x]
-:        +- UnionLoop xxxx
-:           :- LocalRelation [col1#x]
-:           +- Project [(level#x + 1) AS (level + 1)#x]
-:              +- Filter (level#x < 3)
-:                 +- SubqueryAlias r
-:                    +- Project [col1#x AS level#x]
-:                       +- UnionLoopRef xxxx, [col1#x], false
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias r
 :     +- Project [level#x AS level#x]
 :        +- UnionLoop xxxx
-:           :- Project [level#x]
-:           :  +- SubqueryAlias r
-:           :     +- CTERelationRef xxxx, true, [level#x], false, false
+:           :- WithCTE
+:           :  :- CTERelationDef xxxx, false
+:           :  :  +- SubqueryAlias r
+:           :  :     +- Project [col1#x AS level#x]
+:           :  :        +- UnionLoop xxxx
+:           :  :           :- LocalRelation [col1#x]
+:           :  :           +- Project [(level#x + 1) AS (level + 1)#x]
+:           :  :              +- Filter (level#x < 3)
+:           :  :                 +- SubqueryAlias r
+:           :  :                    +- Project [col1#x AS level#x]
+:           :  :                       +- UnionLoopRef xxxx, [col1#x], false
+:           :  +- Project [level#x]
+:           :     +- SubqueryAlias r
+:           :        +- CTERelationRef xxxx, true, [level#x], false, false
 :           +- Project [(level#x + 1) AS (level + 1)#x]
 :              +- Filter (level#x < 3)
 :                 +- SubqueryAlias r
@@ -1299,4 +1319,152 @@ WithCTE
 :                       +- CTERelationRef xxxx, true, [a#x, b#x], false, false
 +- Project [n#x]
    +- SubqueryAlias t2
+      +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1 (n) AS (
+    VALUES(1)
+    UNION ALL
+    (
+    WITH t2(j) AS (
+            SELECT n + 1 FROM t1
+        ),
+        t3(k) AS (
+            SELECT j FROM t2
+        )
+        SELECT k FROM t3 WHERE k <= 5
+    )
+)
+SELECT n FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [col1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- WithCTE
+:              :- CTERelationDef xxxx, false
+:              :  +- SubqueryAlias t2
+:              :     +- Project [(n + 1)#x AS j#x]
+:              :        +- Project [(n#x + 1) AS (n + 1)#x]
+:              :           +- SubqueryAlias t1
+:              :              +- Project [col1#x AS n#x]
+:              :                 +- UnionLoopRef xxxx, [col1#x], false
+:              :- CTERelationDef xxxx, false
+:              :  +- SubqueryAlias t3
+:              :     +- Project [j#x AS k#x]
+:              :        +- Project [j#x]
+:              :           +- SubqueryAlias t2
+:              :              +- CTERelationRef xxxx, true, [j#x], false, false
+:              +- Project [k#x]
+:                 +- Filter (k#x <= 5)
+:                    +- SubqueryAlias t3
+:                       +- CTERelationRef xxxx, true, [k#x], false, false
++- Project [n#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE r2(outerlevel1, innerlevel1) AS (
+    WITH RECURSIVE r1 AS (
+        SELECT 0 AS innerlevel
+        UNION ALL
+        SELECT innerlevel + 1 FROM r1 WHERE innerlevel < 3
+    )
+    SELECT 0 AS outerlevel, innerlevel FROM r1
+    UNION ALL
+    SELECT outerlevel1 + 1, innerlevel1 FROM r2 WHERE outerlevel1 < 3
+)
+SELECT * FROM r2
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r2
+:     +- Project [outerlevel#x AS outerlevel1#x, innerlevel#x AS innerlevel1#x]
+:        +- WithCTE
+:           :- CTERelationDef xxxx, false
+:           :  +- SubqueryAlias r1
+:           :     +- UnionLoop xxxx
+:           :        :- Project [0 AS innerlevel#x]
+:           :        :  +- OneRowRelation
+:           :        +- Project [(innerlevel#x + 1) AS (innerlevel + 1)#x]
+:           :           +- Filter (innerlevel#x < 3)
+:           :              +- SubqueryAlias r1
+:           :                 +- UnionLoopRef xxxx, [innerlevel#x], false
+:           +- UnionLoop xxxx
+:              :- Project [0 AS outerlevel#x, innerlevel#x]
+:              :  +- SubqueryAlias r1
+:              :     +- CTERelationRef xxxx, true, [innerlevel#x], false, false
+:              +- Project [(outerlevel1#x + 1) AS (outerlevel1 + 1)#x, innerlevel1#x]
+:                 +- Filter (outerlevel1#x < 3)
+:                    +- SubqueryAlias r2
+:                       +- Project [outerlevel#x AS outerlevel1#x, innerlevel#x AS innerlevel1#x]
+:                          +- UnionLoopRef xxxx, [outerlevel#x, innerlevel#x], false
++- Project [outerlevel1#x, innerlevel1#x]
+   +- SubqueryAlias r2
+      +- CTERelationRef xxxx, true, [outerlevel1#x, innerlevel1#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x]
+:        +- WithCTE
+:           :- CTERelationDef xxxx, false
+:           :  +- SubqueryAlias t2
+:           :     +- Project [n#x AS n#x]
+:           :        +- Project [n#x]
+:           :           +- SubqueryAlias t1
+:           :              +- Project [1#x AS n#x]
+:           :                 +- UnionLoopRef xxxx, [1#x], false
+:           +- UnionLoop xxxx
+:              :- Project [1 AS 1#x]
+:              :  +- OneRowRelation
+:              +- Project [(n#x + 1) AS (n + 1)#x]
+:                 +- Filter (n#x < 5)
+:                    +- SubqueryAlias t2
+:                       +- CTERelationRef xxxx, true, [n#x], false, false
++- Project [n#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- WithCTE
+:        :- CTERelationDef xxxx, false
+:        :  +- SubqueryAlias t2
+:        :     +- Project [n#x AS n#x]
+:        :        +- Project [n#x]
+:        :           +- SubqueryAlias t1
+:        :              +- UnionLoopRef xxxx, [n#x], false
+:        +- UnionLoop xxxx
+:           :- Project [1 AS n#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- Filter (n#x < 5)
+:                 +- SubqueryAlias t2
+:                    +- CTERelationRef xxxx, true, [n#x], false, false
++- Project [n#x]
+   +- SubqueryAlias t1
       +- CTERelationRef xxxx, true, [n#x], false, false
