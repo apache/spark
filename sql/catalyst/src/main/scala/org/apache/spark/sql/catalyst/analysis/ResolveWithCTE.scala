@@ -97,7 +97,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 }
 
               // The case of CTE name followed by a parenthesized list of column name(s), eg.
-              // WITH RECURSIVE t(n), with CTEs inside.
+              // WITH RECURSIVE t(n).
               case alias @ SubqueryAlias(_,
                   columnAlias @ UnresolvedSubqueryColumnAliases(
                   colNames,
