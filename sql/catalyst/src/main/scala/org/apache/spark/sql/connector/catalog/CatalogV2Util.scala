@@ -325,7 +325,7 @@ private[sql] object CatalogV2Util {
 
         case drop: DropConstraint =>
           val existingConstraint = findExistingConstraint(drop.name)
-          if (existingConstraint.isEmpty && !drop.isIfExists) {
+          if (existingConstraint.isEmpty && !drop.ifExists) {
             throw new AnalysisException(
               errorClass = "CONSTRAINT_DOES_NOT_EXIST",
               messageParameters =

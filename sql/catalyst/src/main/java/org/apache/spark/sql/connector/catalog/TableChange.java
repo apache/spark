@@ -809,9 +809,9 @@ public interface TableChange {
     private final Constraint constraint;
     private final String validatedTableVersion;
 
-    private AddConstraint(Constraint constraint, boolean validate) {
+    private AddConstraint(Constraint constraint, String validatedTableVersion) {
       this.constraint = constraint;
-      this.validatedTableVersion = null;
+      this.validatedTableVersion = validatedTableVersion;
     }
 
     public Constraint constraint() {
@@ -861,7 +861,7 @@ public interface TableChange {
       return name;
     }
 
-    public boolean isIfExists() {
+    public boolean ifExists() {
       return ifExists;
     }
 
