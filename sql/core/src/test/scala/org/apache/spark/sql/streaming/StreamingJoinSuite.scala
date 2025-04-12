@@ -696,7 +696,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       })
   }
 
-  test("SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
+  testWithoutVirtualColumnFamilyJoins(
+    "SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
@@ -753,8 +754,9 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
-   "changing the join condition (key schema) should fail the query") {
+  testWithoutVirtualColumnFamilyJoins(
+    "SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+    "changing the join condition (key schema) should fail the query") {
     // NOTE: We are also changing the schema of input compared to the checkpoint.
     // In the checkpoint we define the input schema as (Int, Long), which does not have name
     // in both left and right.
@@ -823,7 +825,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+  testWithoutVirtualColumnFamilyJoins(
+    "SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
    "changing the value schema should fail the query") {
     // NOTE: We are also changing the schema of input compared to the checkpoint.
     // In the checkpoint we define the input schema as (Int, Long), which does not have name
@@ -1514,7 +1517,8 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
+  testWithoutVirtualColumnFamilyJoins(
+    "SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
@@ -1840,7 +1844,8 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     }
   }
 
-  test("SPARK-49829 left-outer join, input being unmatched is between WM for late event and " +
+  testWithoutVirtualColumnFamilyJoins(
+    "SPARK-49829 left-outer join, input being unmatched is between WM for late event and " +
     "WM for eviction") {
 
     withTempDir { checkpoint =>
@@ -2398,7 +2403,8 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("SPARK-49829 two chained stream-stream left outer joins among three input streams") {
+  testWithoutVirtualColumnFamilyJoins(
+    "SPARK-49829 two chained stream-stream left outer joins among three input streams") {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       val memoryStream1 = MemoryStream[(Long, Int)]
       val memoryStream2 = MemoryStream[(Long, Int)]
