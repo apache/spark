@@ -21,6 +21,8 @@ import java.io.{File, PrintWriter}
 import java.net.URI
 import java.util.Locale
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
@@ -35,10 +37,12 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, _}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
@@ -343,6 +347,24 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     } finally {
       waitForTasksToFinish()
       Utils.deleteRecursively(tableLoc)
+    }
+  }
+
+  private def checkCachedTableOptions(
+      tableName: String,
+      expectedOptions: Map[String, String]): Unit = {
+    val catalog = spark.sessionState.catalog
+    val qualifiedTableName = QualifiedTableName(
+      CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, tableName)
+
+    val cachedPlan =
+      catalog.getCachedTable(qualifiedTableName)
+
+    cachedPlan match {
+      case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _) =>
+        assert(new CaseInsensitiveStringMap(fsRelation.options.asJava) ==
+          new CaseInsensitiveStringMap(expectedOptions.asJava))
+      case _ => assert(false)
     }
   }
 
@@ -1377,36 +1399,50 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-51747: Data source cached plan should respect options") {
-    withTable("t") {
-      spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
-      spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
-      spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
+    withNamespace("ns") {
+      withTable("t") {
+        spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
+        spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+        spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
 
-      // check initial contents of table
-      checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
+        // check initial contents of table
+        checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
 
-      // respect delimiter option
-      checkAnswer(
-        spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
-        Row("a", "b,c") :: Row("hello", " world,test") :: Nil
-      )
+        // respect delimiter option
+        checkAnswer(
+          spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
+          Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+        )
 
-      // no option
-      checkAnswer(
-        spark.sql("SELECT * FROM t"),
-        Row("a;b", "c") :: Row("hello; world", "test") :: Nil
-      )
+        // check cache
+        val expectedOptions = DataSourceUtils.generateDatasourceOptions(
+          new CaseInsensitiveStringMap(Map.empty[String, String].asJava),
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier("t")))
+        checkCachedTableOptions("t", expectedOptions)
 
-      // respect lineSep option
-      checkAnswer(
-        spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
-        Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
-      )
+        // respect no option
+        checkAnswer(
+          spark.sql("SELECT * FROM t"),
+          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
+        )
+
+        // respect lineSep option
+        checkAnswer(
+          spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
+          Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
+        )
+
+        // test scala API
+        checkAnswer(
+          spark.read.option("delimiter", ";").table("t"),
+          Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+        )
+      }
     }
   }
 
   test("SPARK-51747: When legacy conf enabled data source read ignores option change") {
-    withSQLConf(SQLConf.READ_DATA_SOURCE_CACHE_IGNORE_OPTIONS.key -> "true") {
+    withSQLConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> "true") {
       withTable("t") {
         spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
         spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
@@ -1421,9 +1457,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           Row("a;b", "c") :: Row("hello; world", "test") :: Nil
         )
 
+        // check cache
+        val expectedOptions = DataSourceUtils.generateDatasourceOptions(
+          new CaseInsensitiveStringMap(Map.empty[String, String].asJava),
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier("t")))
+        checkCachedTableOptions("t", expectedOptions)
+
         // ignore delimiter option, unlike when legacy conf disabled (the default setting)
         checkAnswer(
           spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
+          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
+        )
+
+        // test scala API
+        checkAnswer(
+          spark.read.option("delimiter", ";").table("t"),
           Row("a;b", "c") :: Row("hello; world", "test") :: Nil
         )
       }
