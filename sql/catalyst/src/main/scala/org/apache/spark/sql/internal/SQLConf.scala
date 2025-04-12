@@ -5264,7 +5264,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions")
       .internal()
       .doc("When set to true, reading from file source table caches the first query plan and " +
-        "ignores subsequent changes in query options, e.g. `delimiters` option for csv tables.")
+        "ignores subsequent changes in query options.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)

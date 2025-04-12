@@ -264,7 +264,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         val dataSource =
           DataSource(
             sparkSession,
-            // In older version(prior to 2.1) of Spark,the table schema can be empty and should be
+            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
             // inferred at runtime. We should still support it.
             userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
             partitionColumns = table.partitionColumnNames,

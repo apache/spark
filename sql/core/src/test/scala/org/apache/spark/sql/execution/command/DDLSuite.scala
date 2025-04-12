@@ -1399,81 +1399,64 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-51747: Data source cached plan should respect options") {
-    withNamespace("ns") {
-      withTable("t") {
-        spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
-        spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
-        spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
+    Seq("true", "false").foreach { ignoreOption =>
+      withSQLConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> ignoreOption) {
+        withNamespace("ns") {
+          withTable("t") {
+            spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
+            spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+            spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
 
-        // check initial contents of table
-        checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
+            // check initial contents of table
+            checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
 
-        // respect delimiter option
-        checkAnswer(
-          spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
-          Row("a", "b,c") :: Row("hello", " world,test") :: Nil
-        )
+            val shouldIgnoreOption = ignoreOption == "true"
+            val resultNoOptions = Row("a;b", "c") :: Row("hello; world", "test") :: Nil
 
-        // check cache
-        val expectedOptions = DataSourceUtils.generateDatasourceOptions(
-          new CaseInsensitiveStringMap(Map.empty[String, String].asJava),
-          spark.sessionState.catalog.getTableMetadata(TableIdentifier("t")))
-        checkCachedTableOptions("t", expectedOptions)
+            // delimiter ; option
+            checkAnswer(
+              spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
+              if (shouldIgnoreOption) {
+                resultNoOptions
+              } else {
+                Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+              }
+            )
 
-        // respect no option
-        checkAnswer(
-          spark.sql("SELECT * FROM t"),
-          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
-        )
+            // check cache
+            val expectedOptions = DataSourceUtils.generateDatasourceOptions(
+              new CaseInsensitiveStringMap(Map.empty[String, String].asJava),
+              spark.sessionState.catalog.getTableMetadata(TableIdentifier("t")))
+            checkCachedTableOptions("t", expectedOptions)
 
-        // respect lineSep option
-        checkAnswer(
-          spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
-          Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
-        )
+            // no option
+            checkAnswer(
+              spark.sql("SELECT * FROM t"),
+              resultNoOptions
+            )
 
-        // test scala API
-        checkAnswer(
-          spark.read.option("delimiter", ";").table("t"),
-          Row("a", "b,c") :: Row("hello", " world,test") :: Nil
-        )
-      }
-    }
-  }
+            // lineSep ; option
+            checkAnswer(
+              spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
+              if (shouldIgnoreOption) {
+                resultNoOptions
+              } else {
+                Row("a", null) :: Row("b", "c\n") :: Row("hello", null) ::
+                  Row(" world", "test\n") :: Nil
+              }
+            )
 
-  test("SPARK-51747: When legacy conf enabled data source read ignores option change") {
-    withSQLConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> "true") {
-      withTable("t") {
-        spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
-        spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
-        spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
-
-        // check initial contents of table
-        checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
-
-        // no option
-        checkAnswer(
-          spark.sql("SELECT * FROM t"),
-          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
-        )
-
-        // check cache
-        val expectedOptions = DataSourceUtils.generateDatasourceOptions(
-          new CaseInsensitiveStringMap(Map.empty[String, String].asJava),
-          spark.sessionState.catalog.getTableMetadata(TableIdentifier("t")))
-        checkCachedTableOptions("t", expectedOptions)
-
-        // ignore delimiter option, unlike when legacy conf disabled (the default setting)
-        checkAnswer(
-          spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
-          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
-        )
-
-        // test scala API
-        checkAnswer(
-          spark.read.option("delimiter", ";").table("t"),
-          Row("a;b", "c") :: Row("hello; world", "test") :: Nil
-        )
+            // test scala API
+            checkAnswer(
+              spark.read.option("delimiter", ";").table("t"),
+              if (shouldIgnoreOption) {
+                resultNoOptions
+              } else {
+                Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+              }
+            )
+          }
+        }
       }
     }
   }
