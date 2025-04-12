@@ -861,7 +861,7 @@ class CatalogSuite extends SparkFunSuite {
     assert(table.constraints.isEmpty)
 
     for ((constraint, index) <- constraints.zipWithIndex) {
-      val updated = catalog.alterTable(testIdent, TableChange.addConstraint(constraint, false))
+      val updated = catalog.alterTable(testIdent, TableChange.addConstraint(constraint, null))
       assert(updated.constraints.length === index + 1)
       assert(updated.constraints.apply(index) === constraint)
     }
@@ -884,7 +884,7 @@ class CatalogSuite extends SparkFunSuite {
     for (constraint <- constraints) {
       checkError(
         exception = intercept[AnalysisException] {
-          catalog.alterTable(testIdent, TableChange.addConstraint(constraint, false))
+          catalog.alterTable(testIdent, TableChange.addConstraint(constraint, null))
         },
         condition = "CONSTRAINT_ALREADY_EXISTS",
         parameters = Map("constraintName" -> constraint.name, "oldConstraint" -> constraint.toDDL))

@@ -301,8 +301,8 @@ public interface TableChange {
   /**
    * Create a TableChange for adding a new table constraint
    */
-  static TableChange addConstraint(Constraint constraint, boolean validate) {
-    return new AddConstraint(constraint, validate);
+  static TableChange addConstraint(Constraint constraint, String validatedTableVersion) {
+    return new AddConstraint(constraint, validatedTableVersion);
   }
 
   /**
