@@ -658,7 +658,7 @@ class SubqueryTestsMixin:
                     ),
                 )
 
-            with self.subTest("IN (NULL)"):
+            with self.subTest("col IN (NULL)"):
                 assertDataFrameEqual(
                     self.spark.table("l").where(sf.col("a").isin(None)),
                     self.spark.sql("""SELECT * FROM l WHERE a IN (NULL)"""),

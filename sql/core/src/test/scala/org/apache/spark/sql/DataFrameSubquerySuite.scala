@@ -495,7 +495,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       sql("select a from l l1 where a in (select a from l where a < 3 group by a)"))
   }
 
-  test("IN (NULL)") {
+  test("col IN (NULL)") {
     checkAnswer(spark.table("l").where($"a".isin(null)), sql("SELECT * FROM l WHERE a IN (NULL)"))
     checkAnswer(
       spark.table("l").where(!$"a".isin(null)),
