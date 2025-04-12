@@ -1398,7 +1398,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
-  test("SPARK-51747: Data source cached plan should respect options") {
+  test("SPARK-51747: Data source cached plan respects options if ignore conf disabled") {
     Seq("true", "false").foreach { ignoreOption =>
       withSQLConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> ignoreOption) {
         withNamespace("ns") {
@@ -1411,6 +1411,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
             checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
 
             val shouldIgnoreOption = ignoreOption == "true"
+            // If shouldIgnoreOption conf set to true, then the result is always with no options
             val resultNoOptions = Row("a;b", "c") :: Row("hello; world", "test") :: Nil
 
             // delimiter ; option
