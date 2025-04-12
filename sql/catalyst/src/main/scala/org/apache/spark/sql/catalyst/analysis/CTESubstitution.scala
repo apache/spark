@@ -227,7 +227,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
 
         val tempCteDefs = ArrayBuffer.empty[CTERelationDef]
         val resolvedCTERelations = if (recursiveCTERelationAncestor.isDefined) {
-          resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, tempCteDefs,
+          resolveCTERelations(relations, isLegacy = false, forceInline = false, outerCTEDefs, tempCteDefs,
             recursiveCTERelationAncestor, allowRecursion) ++ outerCTEDefs
         } else {
           resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs,
