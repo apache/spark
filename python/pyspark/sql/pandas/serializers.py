@@ -20,6 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
+from typing import TYPE_CHECKING, Optional
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -47,6 +48,10 @@ from pyspark.sql.types import (
     LongType,
     IntegerType,
 )
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import pyarrow as pa
 
 
 class SpecialLengths:
@@ -472,7 +477,12 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             )
         return s
 
-    def _create_struct_array(self, df, arrow_struct_type, spark_type=None):
+    def _create_struct_array(
+        self,
+        df: "pd.DataFrame",
+        arrow_struct_type: "pa.StructType",
+        spark_type: Optional[StructType] = None,
+    ):
         """
         Create an Arrow StructArray from the given pandas.DataFrame and arrow struct type.
 
@@ -480,7 +490,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         ----------
         df : pandas.DataFrame
             A pandas DataFrame
-        arrow_struct_type : pyarrow.DataType
+        arrow_struct_type : pyarrow.StructType
             pyarrow struct type
 
         Returns
@@ -518,8 +528,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
                 for i, field in enumerate(arrow_struct_type)
             ]
 
-        struct_names = [field.name for field in arrow_struct_type]
-        return pa.StructArray.from_arrays(struct_arrs, struct_names)
+        return pa.StructArray.from_arrays(struct_arrs, fields=list(arrow_struct_type))
 
     def _create_batch(self, series):
         """
