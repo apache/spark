@@ -396,7 +396,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ResolveDefaultCollation ::
+      ApplyDefaultCollationToStringType ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
