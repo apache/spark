@@ -227,8 +227,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
 
         val tempCteDefs = ArrayBuffer.empty[CTERelationDef]
         val resolvedCTERelations = if (recursiveCTERelationAncestor.isDefined) {
-          resolveCTERelations(relations, isLegacy = false, forceInline = false, outerCTEDefs, tempCteDefs,
-            recursiveCTERelationAncestor, allowRecursion) ++ outerCTEDefs
+          resolveCTERelations(relations, isLegacy = false, forceInline = false, outerCTEDefs,
+            tempCteDefs, recursiveCTERelationAncestor, allowRecursion) ++ outerCTEDefs
         } else {
           resolveCTERelations(relations, isLegacy = false, forceInline, outerCTEDefs, cteDefs,
             recursiveCTERelationAncestor, allowRecursion) ++ outerCTEDefs
@@ -385,7 +385,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         .find(r => conf.resolver(r._1, table))
         .map {
           case (_, d) =>
-            if (alwaysInline && !d.hasSelfReferenceAsCTERef) {
+            if (alwaysInline) {
               d.child
             } else {
               // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
