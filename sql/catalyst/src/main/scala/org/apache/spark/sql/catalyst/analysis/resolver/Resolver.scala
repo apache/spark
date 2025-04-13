@@ -137,18 +137,6 @@ class Resolver(
 
     planLogger.logPlanResolutionEvent(planAfterSubstitution, "Metadata lookup")
 
-    recreateRelationMetadataProvider(analyzerBridgeState)
-
-    planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
-
-    relationMetadataProvider.resolve(planAfterSubstitution)
-
-    planAfterSubstitution.setTagValue(Resolver.TOP_LEVEL_OPERATOR, ())
-
-    resolve(planAfterSubstitution)
-  }
-
-  def recreateRelationMetadataProvider(analyzerBridgeState: Option[AnalyzerBridgeState]) : Unit =
     relationMetadataProvider = analyzerBridgeState match {
       case Some(analyzerBridgeState) =>
         new BridgedRelationMetadataProvider(
@@ -160,6 +148,15 @@ class Resolver(
       case None =>
         relationMetadataProvider
     }
+
+    planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
+
+    relationMetadataProvider.resolve(planAfterSubstitution)
+
+    planAfterSubstitution.setTagValue(Resolver.TOP_LEVEL_OPERATOR, ())
+
+    resolve(planAfterSubstitution)
+  }
 
   /**
    * This method takes an unresolved [[LogicalPlan]] and chooses the right `resolve*` method using
