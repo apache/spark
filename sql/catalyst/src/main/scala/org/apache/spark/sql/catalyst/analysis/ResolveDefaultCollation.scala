@@ -30,13 +30,14 @@ import org.apache.spark.sql.types.{DataType, StringType}
 object ResolveDefaultCollation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val defaultCollation = fetchDefaultCollation(plan)
+    plan
   }
 
   /** Default collation used, if object level collation is not provided */
   private def defaultCollation: String = "UTF8_BINARY"
 
   /** Returns the string type that should be used in a given DDL command */
-  private def fetchDefaultCollation(plan: LogicalPlan): Option(StringType) = {
+  private def fetchDefaultCollation(plan: LogicalPlan): Option[StringType] = {
     plan match {
       case createTable: CreateTable if createTable.tableSpec.collation.isDefined =>
         Some(StringType(createTable.tableSpec.collation.get))
