@@ -30,7 +30,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
-  BridgedRelationId,
   HybridAnalyzer,
   Resolver => OperatorResolver,
   ResolverExtension,
