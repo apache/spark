@@ -276,6 +276,8 @@ class DataFrameTestsMixin:
         # shouldn't drop a non-null row
         self.assertEqual(df.dropDuplicates().count(), 2)
 
+        self.assertEqual(df.dropDuplicates([]).count(), 2)
+
         self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
 
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
