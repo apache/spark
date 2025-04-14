@@ -67,7 +67,7 @@ trait TableConstraint {
    *
    * @return The constraint name (either user-specified or generated)
    */
-  final def getConstraintName: String = {
+  final def constraintName: String = {
     if (name == null || name.isEmpty) {
       generateConstraintName(tableName)
     } else {
