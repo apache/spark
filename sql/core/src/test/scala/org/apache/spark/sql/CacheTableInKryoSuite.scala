@@ -38,7 +38,7 @@ class CacheTableInKryoSuite extends QueryTest
     }
   }
 
-  test("UTF8String should be registered in KryoSerializer") {
+  test("SPARK-51790: UTF8String should be registered in KryoSerializer") {
     withTable("t1") {
       sql(
         """

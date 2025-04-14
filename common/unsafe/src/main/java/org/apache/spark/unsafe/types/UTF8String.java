@@ -27,6 +27,10 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.ibm.icu.lang.UCharacter;
 
 import org.apache.spark.sql.catalyst.util.CollationFactory;
@@ -47,7 +51,7 @@ import org.apache.spark.util.SparkEnvUtils$;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Externalizable,
+public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable,
   Cloneable {
 
   // These are only updated by readExternal() or read()
@@ -2169,6 +2173,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     numBytes = in.readInt();
     base = new byte[numBytes];
     in.readFully((byte[]) base);
+  }
+
+  @Override
+  public void write(Kryo kryo, Output out) {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.write(bytes);
+  }
+
+  @Override
+  public void read(Kryo kryo, Input in) {
+    this.offset = BYTE_ARRAY_OFFSET;
+    this.numBytes = in.readInt();
+    this.base = new byte[numBytes];
+    in.read((byte[]) base);
   }
 
   /**

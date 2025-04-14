@@ -235,7 +235,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(Utils.classForName("scala.reflect.ClassTag$GenericClassTag"))
     kryo.register(classOf[ArrayBuffer[Any]])
     kryo.register(classOf[Array[Array[Byte]]])
-    kryo.register(classOf[UTF8String], new UTF8StringSerializer)
+    kryo.register(classOf[UTF8String])
 
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
@@ -751,20 +751,5 @@ private object JavaIterableWrapperSerializer extends Logging {
         logError(log"Failed to find the underlying field in ${MDC(CLASS_NAME, wrapperClass)}", e)
         None
     }
-  }
-}
-
-private class UTF8StringSerializer extends KryoClassSerializer[UTF8String] {
-  override def write(kryo: Kryo, output: KryoOutput, str: UTF8String): Unit = {
-    val bytes = str.getBytes
-    output.writeInt(bytes.length)
-    output.write(bytes)
-  }
-
-  override def read(kryo: Kryo, input: KryoInput, cls: Class[UTF8String]): UTF8String = {
-    val length = input.readInt()
-    val bytes = new Array[Byte](length)
-    input.read(bytes)
-    UTF8String.fromBytes(bytes)
   }
 }
