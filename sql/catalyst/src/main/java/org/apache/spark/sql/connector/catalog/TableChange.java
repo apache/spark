@@ -865,7 +865,7 @@ public interface TableChange {
       return ifExists;
     }
 
-    public Mode getMode() {
+    public Mode mode() {
       return mode;
     }
 
