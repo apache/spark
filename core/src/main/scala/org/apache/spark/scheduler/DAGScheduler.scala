@@ -1554,7 +1554,6 @@ private[spark] class DAGScheduler(
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
         mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
         sms.shuffleDep.newShuffleMergeState()
-
       case _ =>
     }
 
