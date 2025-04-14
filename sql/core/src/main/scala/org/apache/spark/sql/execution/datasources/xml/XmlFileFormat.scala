@@ -137,7 +137,7 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[XmlFileFormat]
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: VariantType => false
+    case _: VariantType => true
 
     case _: TimeType => false
     case _: AtomicType => true

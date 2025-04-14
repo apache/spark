@@ -358,30 +358,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 WITH RECURSIVE
   t1 AS (
     SELECT 1 AS level
-    UNION (
+    UNION ALL (
       WITH t2 AS (SELECT level + 1 FROM t1 WHERE level < 10)
       SELECT * FROM t2
     )
   )
 SELECT * FROM t1
 -- !query schema
-struct<>
+struct<level:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 100,
-    "stopIndex" : 101,
-    "fragment" : "t1"
-  } ]
-}
+1
+10
+2
+3
+4
+5
+6
+7
+8
+9
 
 
 -- !query
@@ -408,23 +403,18 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<level:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 159,
-    "stopIndex" : 160,
-    "fragment" : "t1"
-  } ]
-}
+1
+10
+2
+3
+4
+5
+6
+7
+8
+9
 
 
 -- !query
@@ -1198,3 +1188,95 @@ struct<n:int>
 1
 2
 3
+
+
+-- !query
+WITH RECURSIVE t1 (n) AS (
+    VALUES(1)
+    UNION ALL
+    (
+    WITH t2(j) AS (
+            SELECT n + 1 FROM t1
+        ),
+        t3(k) AS (
+            SELECT j FROM t2
+        )
+        SELECT k FROM t3 WHERE k <= 5
+    )
+)
+SELECT n FROM t1
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
+
+
+-- !query
+WITH RECURSIVE r2(outerlevel1, innerlevel1) AS (
+    WITH RECURSIVE r1 AS (
+        SELECT 0 AS innerlevel
+        UNION ALL
+        SELECT innerlevel + 1 FROM r1 WHERE innerlevel < 3
+    )
+    SELECT 0 AS outerlevel, innerlevel FROM r1
+    UNION ALL
+    SELECT outerlevel1 + 1, innerlevel1 FROM r2 WHERE outerlevel1 < 3
+)
+SELECT * FROM r2
+-- !query schema
+struct<outerlevel1:int,innerlevel1:int>
+-- !query output
+0	0
+0	1
+0	2
+0	3
+1	0
+1	1
+1	2
+1	3
+2	0
+2	1
+2	2
+2	3
+3	0
+3	1
+3	2
+3	3
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1
+-- !query schema
+struct<n:int>
+-- !query output
+1
+2
+3
+4
+5

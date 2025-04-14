@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python 3.11, MacOS)"
+name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, ARM)"
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 15 * * *'
   workflow_dispatch:
 
 jobs:
@@ -29,5 +29,9 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/python_hosted_runner_test.yml
+    uses: ./.github/workflows/maven_test.yml
     if: github.repository == 'apache/spark'
+    with:
+      java: 21
+      os: ubuntu-24.04-arm
+      arch: arm64
