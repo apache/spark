@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier, InMemoryCatalog, InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ArrayImplicits._
 
@@ -63,5 +63,12 @@ trait CommandSuiteBase extends SharedSparkSession {
 
     assert(partMetadata.containsKey("location"))
     assert(partMetadata.get("location") === expected)
+  }
+
+  def loadTable(catalog: String, schema : String, table: String): InMemoryTable = {
+    import CatalogV2Implicits._
+    val catalogPlugin = spark.sessionState.catalogManager.catalog(catalog)
+    catalogPlugin.asTableCatalog.loadTable(Identifier.of(Array(schema), table))
+      .asInstanceOf[InMemoryTable]
   }
 }
