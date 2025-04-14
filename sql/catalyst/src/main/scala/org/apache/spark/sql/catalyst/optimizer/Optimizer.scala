@@ -673,7 +673,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           // Collect the references for all the subquery expressions in the plan.
           AttributeSet.fromAttributeSets(plan.expressions.flatMap { e =>
             e.collect {
-              case e: SubqueryExpression => e.references
+              case s: SubqueryExpression => s.references
             }
           })
         } else {
