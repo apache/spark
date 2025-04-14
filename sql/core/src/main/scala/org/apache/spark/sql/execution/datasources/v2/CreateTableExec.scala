@@ -47,6 +47,7 @@ case class CreateTableExec(
           .withColumns(columns)
           .withPartitions(partitioning.toArray)
           .withProperties(tableProperties.asJava)
+          .withConstraints(tableSpec.constraints.toArray)
           .build()
         catalog.createTable(identifier, tableInfo)
       } catch {
