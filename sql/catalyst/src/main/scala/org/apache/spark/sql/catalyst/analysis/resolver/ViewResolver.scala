@@ -39,7 +39,7 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
     if (viewResolutionContextStack.isEmpty) {
       None
     } else {
-      Some(viewResolutionContextStack.peek().catalogAndNamespace)
+      viewResolutionContextStack.peek().catalogAndNamespace
     }
 
   /**
@@ -108,8 +108,7 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
       val prevContext = if (viewResolutionContextStack.isEmpty()) {
         ViewResolutionContext(
           nestedViewDepth = 0,
-          maxNestedViewDepth = conf.maxNestedViewDepth,
-          catalogAndNamespace = unresolvedView.desc.viewCatalogAndNamespace
+          maxNestedViewDepth = conf.maxNestedViewDepth
         )
       } else {
         viewResolutionContextStack.peek()
@@ -117,7 +116,7 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
 
       val viewResolutionContext = prevContext.copy(
         nestedViewDepth = prevContext.nestedViewDepth + 1,
-        catalogAndNamespace = unresolvedView.desc.viewCatalogAndNamespace
+        catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace)
       )
       viewResolutionContext.validate(unresolvedView)
 
@@ -150,7 +149,7 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
 case class ViewResolutionContext(
     nestedViewDepth: Int,
     maxNestedViewDepth: Int,
-    catalogAndNamespace: Seq[String]) {
+    catalogAndNamespace: Option[Seq[String]] = None) {
   def validate(unresolvedView: View): Unit = {
     if (nestedViewDepth > maxNestedViewDepth) {
       throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(

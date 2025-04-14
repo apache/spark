@@ -21,9 +21,9 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 /**
  * The [[BridgedRelationId]] is a unique identifier for an unresolved relation in the whole logical
  * plan including all the nested views. It is used to lookup relations with resolved metadata which
- * were processed by the fixed-point. Storing [[catalogAndNamespace]] is required to differentiate
- * tables/views created in different catalogs, as their
- * [[UnresolvedRelation]]s could have same structure.
+ * were processed by the fixed-point when running two Analyzers in dual-run mode. Storing
+ * [[catalogAndNamespace]] is required to differentiate tables/views created in different catalogs
+ * as their [[UnresolvedRelation]]s could have same structure.
  */
 case class BridgedRelationId(
     unresolvedRelation: UnresolvedRelation,
