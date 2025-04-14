@@ -81,8 +81,8 @@ class ExecutorSuite extends SparkFunSuite
       resources: immutable.Map[String, ResourceInformation]
         = immutable.Map.empty[String, ResourceInformation])(f: Executor => Unit): Unit = {
     var executor: Executor = null
-    val customHostname = PrivateMethod[Option[String]](Symbol("customHostname"))
-    val defaultCustomHostNameValue = Utils.invokePrivate(customHostname())
+    val getCustomHostname = PrivateMethod[Option[String]](Symbol("customHostname"))
+    val defaultCustomHostNameValue = Utils.invokePrivate(getCustomHostname())
     try {
       executor = new Executor(executorId, executorHostname, env, userClassPath, isLocal,
         uncaughtExceptionHandler, resources)
