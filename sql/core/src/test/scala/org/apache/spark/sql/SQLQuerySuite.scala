@@ -4292,15 +4292,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("Extract time field from time should work in ANSI mode") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkAnswer(sql(s"select extract(hour from to_time('03:04:05'))"), Row(3))
-      checkAnswer(sql(s"select extract(minute from to_time('03:04:05'))"), Row(4))
-      checkAnswer(sql(s"select extract(second from to_time('03:04:05'))"), Row(5))
-      checkAnswer(sql(s"select extract(second from to_time('03:04:05.987654321'))"), Row(5.987654))
-    }
-  }
-
   test("SPARK-35937: Extract date field from timestamp should work in ANSI mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       Seq("to_timestamp", "to_timestamp_ntz").foreach { func =>

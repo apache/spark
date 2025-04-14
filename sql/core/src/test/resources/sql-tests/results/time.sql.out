@@ -261,14 +261,6 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
-select secondoftime_with_fraction(to_time('23-59-59.987654', 'HH-mm-ss.SSSSSS'))
--- !query schema
-struct<secondoftime_with_fraction(to_time(23-59-59.987654, HH-mm-ss.SSSSSS)):decimal(8,6)>
--- !query output
-59.987654
-
-
--- !query
 select second(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
 -- !query schema
 struct<second(to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
@@ -293,121 +285,161 @@ struct<hour(to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
 
 
 -- !query
-select extract(HOUR from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(HOUR from time'00:59:00.987654')
 -- !query schema
-struct<extract(HOUR FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(HOUR FROM TIME '00:59:00.987654'):int>
+-- !query output
+0
+
+
+-- !query
+select extract(H from time'23:59:00.987654')
+-- !query schema
+struct<extract(H FROM TIME '23:59:00.987654'):int>
 -- !query output
 23
 
 
 -- !query
-select extract(H from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(HOURS from time'00:00:00')
 -- !query schema
-struct<extract(H FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(HOURS FROM TIME '00:00:00'):int>
+-- !query output
+0
+
+
+-- !query
+select extract(HR from time'23:59:59.999999')
+-- !query schema
+struct<extract(HR FROM TIME '23:59:59.999999'):int>
 -- !query output
 23
 
 
 -- !query
-select extract(HOURS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(HRS from time'23:59:58.987654')
 -- !query schema
-struct<extract(HOURS FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(HRS FROM TIME '23:59:58.987654'):int>
 -- !query output
 23
 
 
 -- !query
-select extract(HR from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(MINUTE from time'00:59:00.987654')
 -- !query schema
-struct<extract(HR FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
--- !query output
-23
-
-
--- !query
-select extract(HRS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
--- !query schema
-struct<extract(HRS FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
--- !query output
-23
-
-
--- !query
-select extract(MINUTE from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
--- !query schema
-struct<extract(MINUTE FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(MINUTE FROM TIME '00:59:00.987654'):int>
 -- !query output
 59
 
 
 -- !query
-select extract(M from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(M from time'23:59:00.987654')
 -- !query schema
-struct<extract(M FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(M FROM TIME '23:59:00.987654'):int>
 -- !query output
 59
 
 
 -- !query
-select extract(MIN from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(M from time'23:00:59.987654')
 -- !query schema
-struct<extract(MIN FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(M FROM TIME '23:00:59.987654'):int>
+-- !query output
+0
+
+
+-- !query
+select extract(MIN from time'00:00:00')
+-- !query schema
+struct<extract(MIN FROM TIME '00:00:00'):int>
+-- !query output
+0
+
+
+-- !query
+select extract(MINS from time'23:59:59.999999')
+-- !query schema
+struct<extract(MINS FROM TIME '23:59:59.999999'):int>
 -- !query output
 59
 
 
 -- !query
-select extract(MINS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(MINUTES from time'23:59:58.987654')
 -- !query schema
-struct<extract(MINS FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(MINUTES FROM TIME '23:59:58.987654'):int>
 -- !query output
 59
 
 
 -- !query
-select extract(MINUTES from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(SECOND from time'00:59:00.987654')
 -- !query schema
-struct<extract(MINUTES FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>
+struct<extract(SECOND FROM TIME '00:59:00.987654'):decimal(8,6)>
 -- !query output
-59
+0.987654
 
 
 -- !query
-select extract(SECOND from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(SECOND from time'00:0:00.000001')
 -- !query schema
-struct<extract(SECOND FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):decimal(8,6)>
+struct<extract(SECOND FROM TIME '00:00:00.000001'):decimal(8,6)>
 -- !query output
-58.987654
+0.000001
 
 
 -- !query
-select extract(S from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(SECOND from time'00:0:00.100000')
 -- !query schema
-struct<extract(S FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):decimal(8,6)>
+struct<extract(SECOND FROM TIME '00:00:00.1'):decimal(8,6)>
 -- !query output
-58.987654
+0.100000
 
 
 -- !query
-select extract(SEC from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(SECOND from time'00:0:00.100001')
 -- !query schema
-struct<extract(SEC FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):decimal(8,6)>
+struct<extract(SECOND FROM TIME '00:00:00.100001'):decimal(8,6)>
 -- !query output
-58.987654
+0.100001
 
 
 -- !query
-select extract(SECONDS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(S from time'23:59:00.987654')
 -- !query schema
-struct<extract(SECONDS FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):decimal(8,6)>
+struct<extract(S FROM TIME '23:59:00.987654'):decimal(8,6)>
 -- !query output
-58.987654
+0.987654
 
 
 -- !query
-select extract(SECS from  to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
+select extract(SEC from time'00:00:00')
 -- !query schema
-struct<extract(SECS FROM to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):decimal(8,6)>
+struct<extract(SEC FROM TIME '00:00:00'):decimal(8,6)>
+-- !query output
+0.000000
+
+
+-- !query
+select extract(SEC from time'00:00:00.000000')
+-- !query schema
+struct<extract(SEC FROM TIME '00:00:00'):decimal(8,6)>
+-- !query output
+0.000000
+
+
+-- !query
+select extract(SECONDS from time'23:59:59.999999')
+-- !query schema
+struct<extract(SECONDS FROM TIME '23:59:59.999999'):decimal(8,6)>
+-- !query output
+59.999999
+
+
+-- !query
+select extract(SECS from time'23:59:58.987654')
+-- !query schema
+struct<extract(SECS FROM TIME '23:59:58.987654'):decimal(8,6)>
 -- !query output
 58.987654
 

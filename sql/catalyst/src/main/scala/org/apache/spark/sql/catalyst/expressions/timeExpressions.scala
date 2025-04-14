@@ -312,19 +312,6 @@ object HourExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(time_expr) - Returns the second component with fraction of the given time.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(TIME'23:59:59.999999');
-       59.999999
-  """,
-  since = "4.1.0",
-  group = "datetime_funcs")
-// scalastyle:on line.size.limit
 case class SecondsOfTimeWithFraction(child: Expression)
     extends RuntimeReplaceable
     with ExpectsInputTypes {
