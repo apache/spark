@@ -23,11 +23,39 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AddConstraint
 
 class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
-  test("Create table with unique constraint - table level") {
-    val sql = "CREATE TABLE t (a INT, b STRING, UNIQUE (a)) USING parquet"
-    val constraint = UniqueConstraint(columns = Seq("a"), tableName = "t")
-    val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
+  test("Create table with unnamed unique constraint") {
+    Seq(
+      "CREATE TABLE t (a INT, b STRING, UNIQUE (a)) USING parquet",
+      "CREATE TABLE t (a INT UNIQUE, b STRING) USING parquet"
+    ).foreach { sql =>
+      val constraint = UniqueConstraint(columns = Seq("a"), tableName = "t")
+      val constraints = Seq(constraint)
+      verifyConstraints(sql, constraints)
+    }
+  }
+
+  test("Create table with composite unique constraint - table level") {
+    Seq(
+      ("CREATE TABLE t (a INT, b STRING, UNIQUE (a, b)) USING parquet", Seq("a", "b")),
+      ("CREATE TABLE t (a INT, b STRING, UNIQUE (b, a)) USING parquet", Seq("b", "a"))
+    ).foreach { case (sql, columns) =>
+      val constraint = UniqueConstraint(columns = columns, tableName = "t")
+      val constraints = Seq(constraint)
+      verifyConstraints(sql, constraints)
+    }
+  }
+
+  test("Create table with multiple unique constraints") {
+    Seq(
+      "CREATE TABLE t (a INT UNIQUE, b STRING, UNIQUE (b)) USING parquet",
+      "CREATE TABLE t (a INT, UNIQUE (a), b STRING UNIQUE) USING parquet"
+    ).foreach { sql =>
+      val constraints = Seq(
+        UniqueConstraint(columns = Seq("a"), tableName = "t"),
+        UniqueConstraint(columns = Seq("b"), tableName = "t")
+      )
+      verifyConstraints(sql, constraints)
+    }
   }
 
   test("Create table with named unique constraint - table level") {
@@ -41,14 +69,66 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
     verifyConstraints(sql, constraints)
   }
 
-  test("Create table with composite unique constraint - table level") {
-    val sql = "CREATE TABLE t (a INT, b STRING, UNIQUE (a, b)) USING parquet"
+
+  test("Add unnamed unique constraint") {
+    val sql =
+      """
+        |ALTER TABLE a.b.c ADD UNIQUE (d)
+        |""".stripMargin
+    val plan = parsePlan(sql)
+    plan match {
+      case a: AddConstraint =>
+        val table = a.table.asInstanceOf[UnresolvedTable]
+        assert(table.multipartIdentifier == Seq("a", "b", "c"))
+        val constraint = UniqueConstraint(columns = Seq("d"), tableName = "c")
+        assert(a.tableConstraint == constraint)
+
+      case other =>
+        fail(s"Expected AddConstraint, but got: $other")
+    }
+  }
+
+  test("Replace table with unnamed unique constraint") {
+    Seq(
+      "REPLACE TABLE t (a INT, b STRING, UNIQUE (a)) USING parquet",
+      "REPLACE TABLE t (a INT UNIQUE, b STRING) USING parquet"
+    ).foreach { sql =>
+      val constraints = Seq(UniqueConstraint(columns = Seq("a"), tableName = "t"))
+      verifyConstraints(sql, constraints, isCreateTable = false)
+    }
+  }
+
+  test("Replace table with composite unique constraint - table level") {
+    Seq(
+      ("REPLACE TABLE t (a INT, b STRING, UNIQUE (a, b)) USING parquet", Seq("a", "b")),
+      ("REPLACE TABLE t (a INT, b STRING, UNIQUE (b, a)) USING parquet", Seq("b", "a"))
+    ).foreach { case (sql, columns) =>
+      val constraints = Seq(UniqueConstraint(columns = columns, tableName = "t"))
+      verifyConstraints(sql, constraints, isCreateTable = false)
+    }
+  }
+
+  test("Replace table with multiple unique constraints") {
+    Seq(
+      "REPLACE TABLE t (a INT UNIQUE, b STRING, UNIQUE (b)) USING parquet",
+      "REPLACE TABLE t (a INT, UNIQUE (a), b STRING UNIQUE) USING parquet"
+    ).foreach { sql =>
+      val constraints = Seq(
+        UniqueConstraint(columns = Seq("a"), tableName = "t"),
+        UniqueConstraint(columns = Seq("b"), tableName = "t"))
+      verifyConstraints(sql, constraints, isCreateTable = false)
+    }
+  }
+
+  test("Replace table with named unique constraint - column level") {
+    val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT uk1 UNIQUE (a)) USING parquet"
     val constraint = UniqueConstraint(
-      columns = Seq("a", "b"),
+      columns = Seq("a"),
+      name = "uk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
+    verifyConstraints(sql, constraints, isCreateTable = false)
   }
 
   test("Create table with unique constraint - column level") {
@@ -69,14 +149,6 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t"
     )
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
-  }
-
-  test("Create table with multiple unique constraints") {
-    val sql = "CREATE TABLE t (a INT UNIQUE, b STRING, UNIQUE (b)) USING parquet"
-    val constraint1 = UniqueConstraint(columns = Seq("a"), tableName = "t")
-    val constraint2 = UniqueConstraint(columns = Seq("b"), tableName = "t")
-    val constraints = Seq(constraint1, constraint2)
     verifyConstraints(sql, constraints)
   }
 
