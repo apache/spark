@@ -75,6 +75,58 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
     verifyConstraints(sql, constraints)
   }
 
+  test("Replace table with foreign key - table level") {
+    val sql = "REPLACE TABLE t (a INT, b STRING," +
+      " FOREIGN KEY (a) REFERENCES parent(id)) USING parquet"
+    val constraint = ForeignKeyConstraint(
+      tableName = "t",
+      childColumns = Seq("a"),
+      parentTableId = Seq("parent"),
+      parentColumns = Seq("id")
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with named foreign key - table level") {
+    val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT fk1 FOREIGN KEY (a)" +
+      " REFERENCES parent(id)) USING parquet"
+    val constraint = ForeignKeyConstraint(
+      childColumns = Seq("a"),
+      parentTableId = Seq("parent"),
+      parentColumns = Seq("id"),
+      name = "fk1",
+      tableName = "t"
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with foreign key - column level") {
+    val sql = "REPLACE TABLE t (a INT REFERENCES parent(id), b STRING) USING parquet"
+    val constraint = ForeignKeyConstraint(
+      tableName = "t",
+      childColumns = Seq("a"),
+      parentTableId = Seq("parent"),
+      parentColumns = Seq("id")
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
+  test("Replace table with named foreign key - column level") {
+    val sql = "REPLACE TABLE t (a INT CONSTRAINT fk1 REFERENCES parent(id), b STRING) USING parquet"
+    val constraint = ForeignKeyConstraint(
+      childColumns = Seq("a"),
+      parentTableId = Seq("parent"),
+      parentColumns = Seq("id"),
+      name = "fk1",
+      tableName = "t"
+    )
+    val constraints = Seq(constraint)
+    verifyConstraints(sql, constraints, isCreateTable = false)
+  }
+
   test("Add foreign key constraint") {
     Seq(
       ("", null),
