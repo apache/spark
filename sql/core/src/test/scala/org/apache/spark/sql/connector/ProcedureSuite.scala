@@ -454,6 +454,76 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     checkAnswer(sql("CALL cat.ns.sum(5)"), Row(9) :: Nil)
   }
 
+  test("SPARK-51780: Implement DESC PROCEDURE") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
+    catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
+    catalog.createProcedure(Identifier.of(Array(""), "xyz"), UnboundComplexProcedure)
+    catalog.createProcedure(Identifier.of(Array(), "xxx"), UnboundStructProcedure)
+
+    sql("USE cat")
+    withNamespace("cat2.db_1") {
+      sql("CREATE NAMESPACE cat2.db_1")
+
+      catalog("cat2").createProcedure(Identifier.of(Array("ns_1", "db_1"), "foo"),
+        UnboundVoidProcedure)
+
+      checkError(
+        // check non-existing procedure
+        exception = intercept[AnalysisException](
+          sql("DESC PROCEDURE cat.ns.non_exist")
+        ),
+        sqlState = Some("38000"),
+        condition = "FAILED_TO_LOAD_ROUTINE",
+        parameters = Map("routineName" -> "`cat`.`ns`.`non_exist`")
+      )
+
+      checkAnswer(
+        sql("DESC PROCEDURE cat.ns.foo"),
+        Row("Procedure:   sum") ::
+          Row("Description: sum integers") :: Nil)
+
+      checkAnswer(
+        // use DESCRIBE instead of DESC
+        sql("DESCRIBE PROCEDURE cat.ns.foo"),
+        Row("Procedure:   sum") ::
+          Row("Description: sum integers") :: Nil)
+
+      checkAnswer(
+        // use default catalog
+        sql("DESC PROCEDURE ns.foo"),
+        Row("Procedure:   sum") ::
+          Row("Description: sum integers") :: Nil)
+
+      checkAnswer(
+        // use multi-part namespace
+        sql("DESCRIBE PROCEDURE cat.ns.db.abc"),
+        Row("Procedure:   long_sum") ::
+          Row("Description: sum longs") :: Nil)
+
+      checkAnswer(
+        // use multi-part namespace with default catalog
+        sql("DESCRIBE PROCEDURE ns.db.abc"),
+        Row("Procedure:   long_sum") ::
+          Row("Description: sum longs") :: Nil)
+
+      checkAnswer(
+        sql("DESC PROCEDURE cat.``.xyz"),
+        Row("Procedure:   complex") ::
+          Row("Description: complex procedure") :: Nil)
+
+      checkAnswer(
+        sql("DESC PROCEDURE cat.xxx"),
+        Row("Procedure:   struct_input") ::
+          Row("Description: struct procedure") :: Nil)
+
+      checkAnswer(
+        // check across catalogs
+        sql("DESC PROCEDURE cat2.ns_1.db_1.foo"),
+        Row("Procedure:   void") ::
+          Row("Description: void procedure") :: Nil)
+    }
+  }
+
   object UnboundVoidProcedure extends UnboundProcedure {
     override def name: String = "void"
     override def description: String = "void procedure"
