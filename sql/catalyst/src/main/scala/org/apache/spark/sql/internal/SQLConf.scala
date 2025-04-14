@@ -5264,7 +5264,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions")
       .internal()
       .doc("When set to true, reading from file source table caches the first query plan and " +
-        "ignores subsequent changes in query options.")
+        "ignores subsequent changes in query options. Otherwise, query options will be applied " +
+        "to the cached plan and may produce different results.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
