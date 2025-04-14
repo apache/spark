@@ -145,9 +145,9 @@ class Resolver(
         relationMetadataProvider
     }
 
-    planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
-
     relationMetadataProvider.resolve(planAfterSubstitution)
+
+    planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
 
     planAfterSubstitution.setTagValue(Resolver.TOP_LEVEL_OPERATOR, ())
 

@@ -151,9 +151,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       OptionParser parser = new OptionParser(true);
       parser.parse(submitArgs);
       this.isSpecialCommand = parser.isSpecialCommand;
-      if (conf.containsKey("spark.remote") || "connect".equalsIgnoreCase(getApiMode(conf))) {
-        isRemote = true;
-      }
     } else {
       this.isExample = isExample;
       this.isSpecialCommand = true;
@@ -553,6 +550,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
           conf.put(setConf[0], setConf[1]);
+          // If both spark.remote and spark.mater are set, the error will be thrown later when
+          // the application is started.
+          isRemote |= conf.containsKey("spark.remote");
+          isRemote |= "connect".equalsIgnoreCase(getApiMode(conf));
         }
         case CLASS -> {
           // The special classes require some special command line handling, since they allow
