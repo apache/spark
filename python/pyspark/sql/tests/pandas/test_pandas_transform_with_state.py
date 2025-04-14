@@ -17,6 +17,7 @@
 
 import json
 import os
+import sys
 import time
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
@@ -506,7 +507,9 @@ class TransformWithStateInPandasTestsMixin:
             ProcTimeStatefulProcessor(), check_results
         )
 
-    def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results):
+    def _test_transform_with_state_in_pandas_event_time(
+        self, stateful_processor, check_results, time_mode="eventtime"
+    ):
         import pyspark.sql.functions as f
 
         input_path = tempfile.mkdtemp()
@@ -521,6 +524,7 @@ class TransformWithStateInPandasTestsMixin:
 
         def prepare_batch3(input_path):
             with open(input_path + "/text-test2.txt", "w") as fw:
+                fw.write("a, 2\n")
                 fw.write("a, 11\n")
                 fw.write("a, 13\n")
                 fw.write("a, 15\n")
@@ -551,7 +555,7 @@ class TransformWithStateInPandasTestsMixin:
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
-                timeMode="eventtime",
+                timeMode=time_mode,
             )
             .writeStream.queryName(query_name)
             .foreachBatch(check_results)
@@ -594,6 +598,32 @@ class TransformWithStateInPandasTestsMixin:
 
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
+        )
+
+    def test_transform_with_state_with_wmark_and_non_event_time(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                # watermark for late event = 0 and min event = 20
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="20"),
+                }
+            elif batch_id == 1:
+                # watermark for late event = 0 and min event = 4
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="4"),
+                }
+            else:
+                # watermark for late event = 10 and min event = 2 with no filtering
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="2"),
+                }
+
+        self._test_transform_with_state_in_pandas_event_time(
+            MinEventTimeStatefulProcessor(), check_results, "None"
+        )
+
+        self._test_transform_with_state_in_pandas_event_time(
+            MinEventTimeStatefulProcessor(), check_results, "ProcessingTime"
         )
 
     def _test_transform_with_state_init_state_in_pandas(
@@ -1539,6 +1569,33 @@ class EventTimeStatefulProcessor(StatefulProcessor):
         self.handle.registerTimer(timerValues.getCurrentWatermarkInMs())
 
         yield pd.DataFrame({"id": key, "timestamp": max_event_time})
+
+    def close(self) -> None:
+        pass
+
+
+# A stateful processor that output the min event time it has seen.
+class MinEventTimeStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", StringType(), True)])
+        self.handle = handle
+        self.min_state = handle.getValueState("min_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        timestamp_list = []
+        for pdf in rows:
+            # int64 will represent timestamp in nanosecond, restore to second
+            timestamp_list.extend((pdf["eventTime"].astype("int64") // 10**9).tolist())
+
+        if self.min_state.exists():
+            cur_min = int(self.min_state.get()[0])
+        else:
+            cur_min = sys.maxsize
+        min_event_time = str(min(cur_min, min(timestamp_list)))
+
+        self.min_state.update((min_event_time,))
+
+        yield pd.DataFrame({"id": key, "timestamp": min_event_time})
 
     def close(self) -> None:
         pass
