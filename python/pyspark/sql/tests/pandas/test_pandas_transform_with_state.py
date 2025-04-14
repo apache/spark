@@ -53,8 +53,11 @@ if have_pandas:
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    cast(
+        str,
+        pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+    ),
 )
 class TransformWithStateInPandasTestsMixin:
     @classmethod

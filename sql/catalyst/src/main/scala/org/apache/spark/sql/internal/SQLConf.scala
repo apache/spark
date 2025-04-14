@@ -274,6 +274,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY =
+    buildConf("spark.sql.analyzer.singlePassResolver.enabledTentatively")
+      .internal()
+      .doc(
+        "When true, use the single-pass Resolver instead of the fixed-point Analyzer only if " +
+        "a SQL query or a DataFrame program is fully supported by the single-pass Analyzer. " +
+        "This is an alternative Analyzer framework, which resolves the parsed logical plan in a " +
+        "single post-order traversal. It uses ExpressionResolver to resolve expressions and " +
+        "NameScope to control the visibility of names. In contrast to the current fixed-point " +
+        "framework, subsequent in-tree traversals are disallowed. Most of the fixed-point " +
+        "Analyzer code is reused in the form of specific node transformation functions " +
+        "(AliasResolution.resolve, FunctionResolution.resolveFunction, etc)." +
+        "This feature is currently under development."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER =
     buildConf("spark.sql.analyzer.singlePassResolver.dualRunWithLegacy")
       .internal()
@@ -297,6 +315,19 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  val ANALYZER_DUAL_RUN_SAMPLE_RATE =
+    buildConf("spark.sql.analyzer.singlePassResolver.dualRunSampleRate")
+      .internal()
+      .doc(
+        "Represents the rate of queries that will be run in both fixed-point and single-pass " +
+        "mode (dual run). It should be taken into account that the sample rate is not a strict " +
+        "percentage (in tests we don't sample). It is determined whether query should be run in " +
+        "dual run mode by comparing a random value with the value of this flag."
+      )
+      .version("4.1.0")
+      .doubleConf
+      .createWithDefault(if (Utils.isTesting) 1.0 else 0.001)
 
   val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
@@ -327,6 +358,16 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_THROW_FROM_RESOLVER_GUARD =
+    buildConf("spark.sql.analyzer.singlePassResolver.throwFromResolverGuard")
+      .internal()
+      .doc(
+        "When set to true, ResolverGuard will throw a descriptive error on unsupported features."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
@@ -2291,6 +2332,70 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.multiplierForMinVersionDiffToLog")
+      .internal()
+      .doc(
+        "Determines the version threshold for logging warnings when a state store falls behind. " +
+        "The coordinator logs a warning when the store's uploaded snapshot version trails the " +
+        "query's latest version by the configured number of deltas needed to create a snapshot, " +
+        "times this multiplier."
+      )
+      .version("4.1.0")
+      .longConf
+      .checkValue(k => k >= 1L, "Must be greater than or equal to 1")
+      .createWithDefault(5L)
+
+  val STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG =
+    buildConf("spark.sql.streaming.stateStore.multiplierForMinTimeDiffToLog")
+      .internal()
+      .doc(
+        "Determines the time threshold for logging warnings when a state store falls behind. " +
+        "The coordinator logs a warning when the store's uploaded snapshot timestamp trails the " +
+        "current time by the configured maintenance interval, times this multiplier."
+      )
+      .version("4.1.0")
+      .longConf
+      .checkValue(k => k >= 1L, "Must be greater than or equal to 1")
+      .createWithDefault(10L)
+
+  val STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG =
+    buildConf("spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag")
+      .internal()
+      .doc(
+        "When enabled, the state store coordinator will report state stores whose snapshot " +
+        "have not been uploaded for some time. See the conf snapshotLagReportInterval for " +
+        "the minimum time between reports, and the conf multiplierForMinVersionDiffToLog " +
+        "and multiplierForMinTimeDiffToLog for the logging thresholds."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL =
+    buildConf("spark.sql.streaming.stateStore.snapshotLagReportInterval")
+      .internal()
+      .doc(
+        "The minimum amount of time between the state store coordinator's reports on " +
+        "state store instances trailing behind in snapshot uploads."
+      )
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(5))
+
+  val STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT =
+    buildConf("spark.sql.streaming.stateStore.maxLaggingStoresToReport")
+      .internal()
+      .doc(
+        "Maximum number of state stores the coordinator will report as trailing in " +
+        "snapshot uploads. Stores are selected based on the most lagging behind in " +
+        "snapshot version."
+      )
+      .version("4.1.0")
+      .intConf
+      .checkValue(k => k >= 0, "Must be greater than or equal to 0")
+      .createWithDefault(5)
+
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()
@@ -3446,6 +3551,19 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH =
+    buildConf("spark.sql.execution.arrow.maxRecordsPerOutputBatch")
+      .doc("When using Apache Arrow, limit the maximum number of records that can be output " +
+        "in a single ArrowRecordBatch to the downstream operator. If set to zero or negative " +
+        "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
+        "the number of records is limited when sending it to the downstream operator. This is " +
+        "used to avoid large batches being sent to the downstream operator including " +
+        "the columnar-based operator implemented by third-party libraries.")
+      .version("4.1.0")
+      .internal()
+      .intConf
+      .createWithDefault(-1)
+
   val ARROW_EXECUTION_MAX_BYTES_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxBytesPerBatch")
       .internal()
@@ -3547,6 +3665,15 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
+
+  val PYSPARK_ARROW_VALIDATE_SCHEMA =
+    buildConf("spark.sql.execution.arrow.pyspark.validateSchema.enabled")
+      .doc(
+        "When true, validate the schema of Arrow batches returned by mapInArrow, mapInPandas " +
+        "and DataSource against the expected schema to ensure that they are compatible.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
@@ -5890,6 +6017,21 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
     getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
 
+  def stateStoreCoordinatorMultiplierForMinVersionDiffToLog: Long =
+    getConf(STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG)
+
+  def stateStoreCoordinatorMultiplierForMinTimeDiffToLog: Long =
+    getConf(STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_TIME_DIFF_TO_LOG)
+
+  def stateStoreCoordinatorReportSnapshotUploadLag: Boolean =
+    getConf(STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG)
+
+  def stateStoreCoordinatorSnapshotLagReportInterval: Long =
+    getConf(STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL)
+
+  def stateStoreCoordinatorMaxLaggingStoresToReport: Int =
+    getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
+
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
@@ -6433,6 +6575,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
+  def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
+
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
   def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
@@ -6447,6 +6591,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
+
+  def pysparkArrowValidateSchema: Boolean = getConf(PYSPARK_ARROW_VALIDATE_SCHEMA)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)

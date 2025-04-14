@@ -37,6 +37,10 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
    * node. Method ensures that the downwards traversal never visits previously resolved nodes by
    * tracking the limits of the traversal with a tag. Invokes a resolver callback to resolve
    * children, but DOES NOT resolve the root of the subtree.
+   *
+   * If the result of the callback is the same object as the source `expression`, we don't perform
+   * the downwards traversal. This is both more optimal and a fail-safe mechanism in case we
+   * accidentally lose the [[ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY]] tag.
    */
   protected def withResolvedSubtree(
       expression: Expression,
@@ -45,8 +49,31 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
       child.setTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY, ())
     }
 
-    val result = body
+    val resultExpression = body
 
-    withResolvedChildren(result, expressionResolver)
+    if (resultExpression.eq(expression)) {
+      expression.children.foreach { child =>
+        child.unsetTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY)
+      }
+      resultExpression
+    } else {
+      withResolvedChildren(resultExpression, expressionResolver)
+    }
+  }
+
+  /**
+   * Try to pop the tag that marks the boundary of the single-pass subtree resolution.
+   * [[ExpressionResolver]] calls this method to check if the subtree traversal needs to be stopped
+   * because lower subtree is already resolved.
+   */
+  protected def tryPopSinglePassSubtreeBoundary(unresolvedExpression: Expression): Boolean = {
+    if (unresolvedExpression
+        .getTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY)
+        .isDefined) {
+      unresolvedExpression.unsetTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY)
+      true
+    } else {
+      false
+    }
   }
 }

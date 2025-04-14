@@ -1895,9 +1895,12 @@ class SparkConnectClient(object):
                         status.message,
                         self._fetch_enriched_error(info),
                         self._display_server_stack_trace(),
+                        status.code,
                     ) from None
 
-            raise SparkConnectGrpcException(status.message) from None
+            raise SparkConnectGrpcException(
+                message=status.message, grpc_status_code=status.code
+            ) from None
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
