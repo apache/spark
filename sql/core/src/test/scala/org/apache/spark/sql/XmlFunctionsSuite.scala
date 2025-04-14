@@ -126,10 +126,10 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDS().select(from_xml($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
       },
-      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "DATATYPE_MISMATCH.INVALID_XML_SCHEMA",
       parameters = Map(
-        "inputSchema" -> "\"ARRAY<int>\"",
-        "dataType" -> "\"ARRAY<INT>\""
+        "schema" -> "\"ARRAY<INT>\"",
+        "sqlExpr" -> "\"from_xml(value)\""
       ),
       context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern)
     )
@@ -138,10 +138,10 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDF("xml").selectExpr(s"from_xml(xml, 'ARRAY<int>')")
       },
-      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "DATATYPE_MISMATCH.INVALID_XML_SCHEMA",
       parameters = Map(
-        "inputSchema" -> "\"ARRAY<int>\"",
-        "dataType" -> "\"ARRAY<INT>\""
+        "schema" -> "\"ARRAY<INT>\"",
+        "sqlExpr" -> "\"from_xml(xml)\""
       ),
       context = ExpectedContext(
         fragment = "from_xml(xml, 'ARRAY<int>')",

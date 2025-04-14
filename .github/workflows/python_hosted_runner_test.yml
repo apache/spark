@@ -40,6 +40,16 @@ on:
         required: false
         type: string
         default: hadoop3
+      os:
+        description: OS to run this build.
+        required: false
+        type: string
+        default: macos-15
+      arch:
+        description: The target architecture (x86, x64, arm64) of the Python or PyPy interpreter.
+        required: false
+        type: string
+        default: arm64
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -48,7 +58,7 @@ on:
 jobs:
   build:
     name: "PySpark test on macos: ${{ matrix.modules }}"
-    runs-on: macos-15
+    runs-on: ${{ inputs.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -129,6 +139,11 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
+      - name: Install Python ${{matrix.python}}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python}}
+          architecture: ${{ inputs.arch }}
       - name: Install Python packages (Python ${{matrix.python}})
         run: |
           python${{matrix.python}} -m pip install --ignore-installed 'blinker>=1.6.2'
@@ -152,12 +167,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
+          name: test-results-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
           path: "**/target/test-reports/*.xml"
       - name: Upload unit tests log files
         env: ${{ fromJSON(inputs.envs) }}
         if: ${{ !success() }}
         uses: actions/upload-artifact@v4
         with:
-          name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
+          name: unit-tests-log-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
           path: "**/target/unit-tests.log"

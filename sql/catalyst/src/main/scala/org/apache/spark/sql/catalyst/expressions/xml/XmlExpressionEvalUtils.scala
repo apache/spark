@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.xml
 
-import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.catalyst.xml.XmlInferSchema
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
+import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -116,6 +119,51 @@ case class XPathListEvaluator(path: UTF8String) extends XPathEvaluator {
       new GenericArrayData(ret)
     } else {
       null
+    }
+  }
+}
+
+case class XmlToStructsEvaluator(
+    options: Map[String, String],
+    nullableSchema: DataType,
+    nameOfCorruptRecord: String,
+    timeZoneId: Option[String],
+    child: Expression
+) {
+  @transient lazy val parsedOptions = new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord)
+
+  // This converts parsed rows to the desired output by the given schema.
+  @transient
+  private lazy val converter =
+    (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+
+  // Parser that parse XML strings as internal rows
+  @transient
+  private lazy val parser = {
+    val mode = parsedOptions.parseMode
+    if (mode != PermissiveMode && mode != FailFastMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
+    }
+
+    // The parser is only used when the input schema is StructType
+    val schema = nullableSchema.asInstanceOf[StructType]
+    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    val rawParser = new StaxXmlParser(schema, parsedOptions)
+
+    val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+
+    new FailureSafeParser[String](
+      input => rawParser.doParseColumn(input, mode, xsdSchema),
+      mode,
+      schema,
+      parsedOptions.columnNameOfCorruptRecord)
+  }
+
+  final def evaluate(xml: UTF8String): Any = {
+    if (xml == null) return null
+    nullableSchema match {
+      case _: VariantType => StaxXmlParser.parseVariant(xml.toString, parsedOptions)
+      case _: StructType => converter(parser.parse(xml.toString))
     }
   }
 }

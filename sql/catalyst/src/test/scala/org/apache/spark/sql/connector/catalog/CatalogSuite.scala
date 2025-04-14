@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{Expressions, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, LogicalExpressions, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -163,6 +164,36 @@ class CatalogSuite extends SparkFunSuite {
     assert(parsed == Seq("test", "`", ".", "test_table"))
     assert(table.columns === columns)
     assert(table.properties == properties)
+
+    assert(catalog.tableExists(testIdent))
+  }
+
+  test("createTable: with constraints") {
+    val catalog = newCatalog()
+
+    val columns = Array(
+      Column.create("id", IntegerType, false),
+      Column.create("data", StringType))
+    val constraints: Array[Constraint] = Array(
+      Constraint.primaryKey("pk", Array(FieldReference.column("id"))).build(),
+      Constraint.check("chk").predicateSql("id > 0").build(),
+      Constraint.unique("uk", Array(FieldReference.column("data"))).build(),
+      Constraint.foreignKey("fk", Array(FieldReference.column("data")), testIdentNew,
+        Array(FieldReference.column("id"))).build()
+    )
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(emptyTrans)
+      .withProperties(emptyProps)
+      .withConstraints(constraints)
+      .build()
+    val table = catalog.createTable(testIdent, tableInfo)
+
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+    assert(parsed == Seq("test", "`", ".", "test_table"))
+    assert(table.columns === columns)
+    assert(table.constraints === constraints)
+    assert(table.properties.asScala == Map())
 
     assert(catalog.tableExists(testIdent))
   }
