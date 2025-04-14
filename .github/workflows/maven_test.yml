@@ -187,6 +187,8 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         run: |
+          python3 -c "import sys, platform; print(f'Version: {sys.version}, Architecture: {platform.architecture()}')"
+
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
