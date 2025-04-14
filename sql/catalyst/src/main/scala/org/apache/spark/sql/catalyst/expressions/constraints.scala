@@ -18,9 +18,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.UUID
 
-import org.antlr.v4.runtime.ParserRuleContext
-
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.{DataType, StringType}
 
 trait TableConstraint {
@@ -52,10 +51,9 @@ trait TableConstraint {
   /** Creates a new constraint with the given characteristic
    *
    * @param c Constraint characteristic (ENFORCED, RELY)
-   * @param ctx Parser context for error reporting
    * @return New TableConstraint instance
    */
-  def withCharacteristic(c: ConstraintCharacteristic, ctx: ParserRuleContext): TableConstraint
+  def withCharacteristic(c: ConstraintCharacteristic): TableConstraint
 
   // Generate a constraint name based on the table name if the name is not specified
   protected def generateConstraintName(tableName: String): String
@@ -80,6 +78,20 @@ trait TableConstraint {
   // identifiers.
   final protected def randomSuffix: String = {
     UUID.randomUUID().toString.replace("-", "").take(7)
+  }
+
+  protected def failIfEnforced(c: ConstraintCharacteristic, constraintType: String): Unit = {
+    if (c.enforced.contains(true)) {
+      val origin = CurrentOrigin.get
+      throw new ParseException(
+        command = origin.sqlText,
+        start = origin,
+        errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        messageParameters = Map(
+          "characteristic" -> "ENFORCED",
+          "constraintType" -> constraintType)
+      )
+    }
   }
 }
 
@@ -114,9 +126,7 @@ case class CheckConstraint(
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(
-      c: ConstraintCharacteristic,
-      ctx: ParserRuleContext): TableConstraint =
+  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint =
     copy(characteristic = c)
 }
 
@@ -132,18 +142,8 @@ case class PrimaryKeyConstraint(
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(
-    c: ConstraintCharacteristic,
-    ctx: ParserRuleContext): TableConstraint = {
-    if (c.enforced.contains(true)) {
-      throw new ParseException(
-        errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
-        messageParameters = Map(
-          "characteristic" -> "ENFORCED",
-          "constraintType" -> "PRIMARY KEY"),
-        ctx = ctx
-      )
-    }
+  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
+    failIfEnforced(c, "PRIMARY KEY")
     copy(characteristic = c)
   }
 }
@@ -163,18 +163,8 @@ case class UniqueConstraint(
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(
-    c: ConstraintCharacteristic,
-    ctx: ParserRuleContext): TableConstraint = {
-    if (c.enforced.contains(true)) {
-      throw new ParseException(
-        errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
-        messageParameters = Map(
-          "characteristic" -> "ENFORCED",
-          "constraintType" -> "UNIQUE"),
-        ctx = ctx
-      )
-    }
+  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
+    failIfEnforced(c, "UNIQUE")
     copy(characteristic = c)
   }
 }
@@ -195,18 +185,8 @@ case class ForeignKeyConstraint(
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(
-    c: ConstraintCharacteristic,
-    ctx: ParserRuleContext): TableConstraint = {
-    if (c.enforced.contains(true)) {
-      throw new ParseException(
-        errorClass = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
-        messageParameters = Map(
-          "characteristic" -> "ENFORCED",
-          "constraintType" -> "FOREIGN KEY"),
-        ctx = ctx
-      )
-    }
-    copy(name = name, characteristic = c)
+  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
+    failIfEnforced(c, "FOREIGN KEY")
+    copy(characteristic = c)
   }
 }

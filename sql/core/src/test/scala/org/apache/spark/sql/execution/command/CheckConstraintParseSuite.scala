@@ -56,7 +56,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic, null)
+        val constraint = constraint1.withName("c1").withCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -101,7 +101,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT CONSTRAINT c1 CHECK (a > 0)" +
           s" $enforcedStr $relyStr, b STRING) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic, null)
+        val constraint = constraint1.withName("c1").withCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -149,7 +149,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"REPLACE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic, null)
+        val constraint = constraint1.withName("c1").withCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint), isCreateTable = false)
     }
   }
