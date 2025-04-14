@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NormalizeableRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -45,7 +45,8 @@ case class LogicalRelation(
   extends LeafNode
   with StreamSourceAwareLogicalPlan
   with MultiInstanceRelation
-  with ExposesMetadataColumns {
+  with ExposesMetadataColumns
+  with NormalizeableRelation {
 
   // Only care about relation when canonicalizing.
   override def doCanonicalize(): LogicalPlan = copy(
@@ -101,6 +102,13 @@ case class LogicalRelation(
   override def withStream(stream: SparkDataStream): LogicalRelation = copy(stream = Some(stream))
 
   override def getStream: Option[SparkDataStream] = stream
+
+  /**
+   * Minimally normalizes this [[LogicalRelation]] to make it comparable in [[NormalizePlan]].
+   */
+  override def normalize(): LogicalPlan = {
+    copy(catalogTable = catalogTable.map(CatalogTable.normalize))
+  }
 }
 
 object LogicalRelation {
