@@ -76,11 +76,6 @@
       <scope>test</scope>
     </dependency>
 
-    <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>chill_${scala.binary.version}</artifactId>
-    </dependency>
-
     <!-- Core dependencies -->
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
