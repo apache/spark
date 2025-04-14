@@ -2384,8 +2384,8 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   }
 
   Seq(TimeMode.None(), TimeMode.ProcessingTime()).foreach { timeMode =>
-    test("transformWithState - using watermark but time mode as None should not perform " +
-      s"late record filtering with timeMode=$timeMode") {
+    test(s"transformWithState - using watermark but time mode as $timeMode should not perform " +
+      s"late record filtering") {
       withSQLConf(
         SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
           classOf[RocksDBStateStoreProvider].getName,
