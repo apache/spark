@@ -632,6 +632,9 @@ private[sql] class RocksDBStateStoreProvider
 
   override def getReadStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     try {
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+      }
       val stamp = stateMachine.acquireStore()
       try {
         rocksDB.load(
