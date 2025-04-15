@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.execution.{BinaryExecNode, BroadcastVarFilterCollector, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, PartitionSpec}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
@@ -73,8 +74,14 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
       bucketSpec = Some(BucketSpec(setting.numBuckets, setting.cols.map(_.name), Nil)),
       fileFormat = new ParquetFileFormat(),
       options = Map.empty)(spark)
-    FileSourceScanExec(relation, None, setting.cols, relation.dataSchema, Nil, None, None, Nil,
-      None)
+    val broadcastVarCollector = relation.fileFormat match {
+      case _: ParquetFileFormat => Some(BroadcastVarFilterCollector(setting.cols.toStructType,
+        relation.partitionSchema.map(sf => FieldReference.column(sf.name)).toArray))
+
+      case _ => None
+    }
+    FileSourceScanExec(relation, broadcastVarCollector, None, setting.cols, relation.dataSchema,
+      Nil, None, None, Nil, None)
   }
 
   private def run(setting: JoinSetting): Unit = {
