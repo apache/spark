@@ -1425,7 +1425,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
         put(saveStore, key1, key2, get(restoreStore, key1, key2).get + 1)
         saveStore.commit()
-        restoreStore.abort()
       }
 
       // check that state is correct for next batch
