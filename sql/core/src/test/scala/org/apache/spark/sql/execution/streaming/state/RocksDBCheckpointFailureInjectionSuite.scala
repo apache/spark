@@ -457,7 +457,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
               checkpointLocation = checkpointDir.getAbsolutePath,
               additionalConfs = additionalConfs),
             AddData(inputData, 3),
-            CheckLastBatch((3, 1)),
+            CheckNewAnswer((3, 1)),
             AddData(inputData, 3, 2),
             // We should categorize this error.
             // TODO after the error is categorized, we should check error class
@@ -475,14 +475,14 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
               additionalConfs = additionalConfs),
             AddData(inputData, 4),
             if (failureConf.logType == "commits") {
-              // If the failure is in the commit log, data is already committed. The batch will
-              // rerun but the comit will be no-op.
-              CheckLastBatch((3, 3), (1, 1), (4, 1))
+              // If the failure is in the commit log, data is already committed.
+              // MemorySink isn't a EactlyOnce sink, so we will see the data from the previous
+              // batch. We should see the data from the previous batch and the new data.
+              CheckNewAnswer((3, 2), (2, 1), (3, 3), (1, 1), (4, 1))
             } else {
               // If the failure is in the offset log, previous batch didn't run. when the query
-              // restarts, it will include data from the previous batch, so (2, 1) will be
-              // committed.
-              CheckLastBatch((3, 3), (1, 1), (4, 1), (2, 1))
+              // restarts, it will include all data since the last finished batch.
+              CheckNewAnswer((3, 3), (1, 1), (4, 1), (2, 1))
 
             },
             StopStream
