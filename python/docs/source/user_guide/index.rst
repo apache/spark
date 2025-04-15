@@ -20,9 +20,8 @@
 User Guide
 ================
 
-This page contains user guides focusing in the fundamentals of PySpark.
-
-Below is the contents of the user guide:
+Welcome to the PySpark user guide!
+Each of the below sections contains code-driven examples to help you get familiar with PySpark.
 
 .. toctree::
    :maxdepth: 2
