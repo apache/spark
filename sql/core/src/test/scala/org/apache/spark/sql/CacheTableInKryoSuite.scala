@@ -37,4 +37,19 @@ class CacheTableInKryoSuite extends QueryTest
       checkAnswer(sql("SELECT * FROM t1").persist(StorageLevel.DISK_ONLY), Seq(Row(1)))
     }
   }
+
+  test("SPARK-51790: UTF8String should be registered in KryoSerializer") {
+    withTable("t1") {
+      sql(
+        """
+          |CREATE TABLE t1 AS
+          |  SELECT * from
+          |  VALUES ('apache', 'spark', 'community'),
+          |         ('Apache', 'Spark', 'Community')
+          |  as t(a, b, c)
+          |""".stripMargin)
+        checkAnswer(sql("SELECT a, b, c FROM t1").persist(StorageLevel.DISK_ONLY),
+            Seq(Row("apache", "spark", "community"), Row("Apache", "Spark", "Community")))
+    }
+  }
 }
