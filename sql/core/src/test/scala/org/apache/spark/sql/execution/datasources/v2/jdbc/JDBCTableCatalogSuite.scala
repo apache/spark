@@ -536,7 +536,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
             true,
             defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
           .add(
-            "c2",
+            "c3",
             IntegerType,
             true,
             defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
