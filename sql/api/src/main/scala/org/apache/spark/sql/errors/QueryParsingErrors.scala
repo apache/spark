@@ -661,9 +661,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def createFuncWithConstraintError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_COLUMN_CONSTRAINTS",
-      ctx)
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_COLUMN_CONSTRAINTS", ctx)
   }
 
   def defineTempFuncWithIfNotExistsError(ctx: ParserRuleContext): Throwable = {

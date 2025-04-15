@@ -226,9 +226,9 @@ case class StructField(
 
   private def getDDLDefault =
     getParameterDefault()
-    .orElse(getCurrentDefaultValue())
-    .map(" DEFAULT " + _)
-    .getOrElse("")
+      .orElse(getCurrentDefaultValue())
+      .map(" DEFAULT " + _)
+      .getOrElse("")
 
   private def getDDLComment = getComment()
     .map(QuotingUtils.escapeSingleQuotedString)
