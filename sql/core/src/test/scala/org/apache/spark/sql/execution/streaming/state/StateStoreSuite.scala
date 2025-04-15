@@ -1763,7 +1763,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     )
     // Make maintenance interval very large (30s) so that task thread runs before maintenance.
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 30000L)
-    // Use the `MaintenanceErrorOnCertainPartitionsProvider` to run the test
+    // Use the `FakeStateStoreProviderTracksCloseThread` to run the test
     sqlConf.setConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS,
       classOf[FakeStateStoreProviderTracksCloseThread].getName
@@ -1773,7 +1773,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     withSpark(SparkContext.getOrCreate(conf)) { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
-        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-48997"
+        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-51596"
         val providerId =
           StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
         val providerId2 =
