@@ -18,7 +18,8 @@ import unittest
 
 from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixIn,
-    TransformWithStateInPySparkTestsMixIn,
+    # TODO: need to unblock once we implement transformWithState in Python Spark Connect
+    # TransformWithStateInPySparkTestsMixIn,
 )
 from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -65,8 +66,8 @@ class TransformWithStateInPandasParityTests(
 #
 #     @classmethod
 #     def conf(cls):
-#         # Due to multiple inheritance from the same level, we need to explicitly setting configs in
-#         # both TransformWithStateInPySparkTestsMixIn and ReusedConnectTestCase here
+#         # Due to multiple inheritance from the same level, we need to explicitly setting configs
+#         # in both TransformWithStateInPySparkTestsMixIn and ReusedConnectTestCase here
 #         cfg = SparkConf(loadDefaults=False)
 #         for base in cls.__bases__:
 #             if hasattr(base, "conf"):

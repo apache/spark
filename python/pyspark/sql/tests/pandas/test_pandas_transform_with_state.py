@@ -19,7 +19,6 @@ from abc import abstractmethod
 
 import json
 import os
-import sys
 import time
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor
