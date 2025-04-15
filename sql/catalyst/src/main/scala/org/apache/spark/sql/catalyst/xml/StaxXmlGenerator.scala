@@ -364,18 +364,18 @@ class StaxXmlGenerator(
    * @param pos The position in the Variant data array where the field value starts
    */
   private def writeVariantPrimitive(name: String, v: VariantVal, pos: Int): Unit = {
-    val primitiveVal = VariantUtil.getType(v.getValue, pos) match {
+    val primitiveVal: String = VariantUtil.getType(v.getValue, pos) match {
       case VariantUtil.Type.NULL => Option(options.nullValue).orNull
       case VariantUtil.Type.BOOLEAN =>
-        VariantUtil.getBoolean(v.getValue, pos)
+        VariantUtil.getBoolean(v.getValue, pos).toString
       case VariantUtil.Type.LONG =>
-        VariantUtil.getLong(v.getValue, pos)
+        VariantUtil.getLong(v.getValue, pos).toString
       case VariantUtil.Type.STRING =>
         VariantUtil.getString(v.getValue, pos)
       case VariantUtil.Type.DOUBLE =>
-        VariantUtil.getDouble(v.getValue, pos)
+        VariantUtil.getDouble(v.getValue, pos).toString
       case VariantUtil.Type.DECIMAL =>
-        VariantUtil.getDecimal(v.getValue, pos)
+        VariantUtil.getDecimal(v.getValue, pos).toString
       case VariantUtil.Type.DATE =>
         dateFormatter.format(VariantUtil.getLong(v.getValue, pos).toInt)
       case VariantUtil.Type.TIMESTAMP =>
@@ -384,15 +384,15 @@ class StaxXmlGenerator(
         timestampNTZFormatter.format(
           DateTimeUtils.microsToLocalDateTime(VariantUtil.getLong(v.getValue, pos))
         )
-      case VariantUtil.Type.FLOAT => VariantUtil.getFloat(v.getValue, pos)
+      case VariantUtil.Type.FLOAT => VariantUtil.getFloat(v.getValue, pos).toString
       case VariantUtil.Type.BINARY =>
         Base64.getEncoder.encodeToString(VariantUtil.getBinary(v.getValue, pos))
-      case VariantUtil.Type.UUID => VariantUtil.getUuid(v.getValue, pos)
+      case VariantUtil.Type.UUID => VariantUtil.getUuid(v.getValue, pos).toString
       case _ =>
         throw new SparkIllegalArgumentException("invalid variant primitive type for XML")
     }
 
-    val value = if (primitiveVal == null) options.nullValue else primitiveVal.toString
+    val value = if (primitiveVal == null) options.nullValue else primitiveVal
 
     // Handle attributes first
     val isAttribute = name.startsWith(options.attributePrefix) && name != options.valueTag
