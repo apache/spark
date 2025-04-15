@@ -78,15 +78,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
     var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
-    assert(t.schema === expectedSchema)
+    // If function is not overriden we don't want to compare external engine types
+    var expectedSchemaWithoutExternalEngineTypeName =
+      removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
+    var schemaWithoutExternalEngineTypeName =
+      removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
+    assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
 
     // If function is not overriden we don't want to compare external engine types
-    val expectedSchemaWithoutExternalEngineTypeName =
+    expectedSchemaWithoutExternalEngineTypeName =
       removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
-    val schemaWithoutExternalEngineTypeName =
+    schemaWithoutExternalEngineTypeName =
       removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
     assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
     // Update nullability of not existing column

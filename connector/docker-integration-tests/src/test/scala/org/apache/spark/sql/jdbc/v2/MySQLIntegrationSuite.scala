@@ -36,11 +36,6 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
-  object ExternalEngineTypeNames {
-    val INTEGER = "INT"
-    val STRING = "LONGTEXT"
-  }
-
   override def excluded: Seq[String] = Seq(
     "scan with aggregate push-down: VAR_POP with DISTINCT",
     "scan with aggregate push-down: VAR_SAMP with DISTINCT",
@@ -64,9 +59,14 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
 
+  case class ExternalEngineTypeNames(INTEGER: String, STRING: String)
+
+  val externalEngineTypeNames: ExternalEngineTypeNames =
+    ExternalEngineTypeNames(INTEGER = "INT", STRING = "LONGTEXT")
+
   override def defaultMetadata(
       dataType: DataType = StringType,
-      externalEngineTypeName: String = ExternalEngineTypeNames.STRING): Metadata =
+      externalEngineTypeName: String = externalEngineTypeNames.STRING): Metadata =
     new MetadataBuilder()
       .putLong("scale", 0)
       .putBoolean("isTimestampNTZ", false)
@@ -114,7 +114,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, externalEngineTypeNames.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -168,7 +168,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       s" TBLPROPERTIES('ENGINE'='InnoDB', 'DEFAULT CHARACTER SET'='utf8')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, externalEngineTypeNames.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
@@ -297,6 +297,19 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
  */
 @DockerTest
 class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
+  val externalEngineTypeNames: ExternalEngineTypeNames =
+    ExternalEngineTypeNames(INTEGER = "INTEGER", STRING = "LONGTEXT")
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      externalEngineTypeName: String = externalEngineTypeNames.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", true)
+      .putString("externalEngineTypeName", externalEngineTypeName)
+      .build()
+
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +

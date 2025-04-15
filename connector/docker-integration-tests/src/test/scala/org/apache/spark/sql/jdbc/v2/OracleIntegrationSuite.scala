@@ -121,7 +121,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "ID",
         DecimalType(10, 0),
         true,
-        self.defaultMetadata(DecimalType(10, 0), ExternalEngineTypeNames.NUMBER))
+        super.defaultMetadata(DecimalType(10, 0), ExternalEngineTypeNames.NUMBER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
@@ -130,7 +130,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "ID",
         DecimalType(19, 0),
         true,
-        self.defaultMetadata(DecimalType(19, 0), ExternalEngineTypeNames.NUMBER))
+        super.defaultMetadata(DecimalType(19, 0), ExternalEngineTypeNames.NUMBER))
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
