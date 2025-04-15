@@ -55,7 +55,7 @@ import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task,
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
-import org.apache.spark.util.{LongAccumulator, SparkUncaughtExceptionHandler, ThreadUtils, UninterruptibleThread}
+import org.apache.spark.util.{LongAccumulator, SparkUncaughtExceptionHandler, ThreadUtils, UninterruptibleThread, Utils}
 
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
@@ -81,6 +81,8 @@ class ExecutorSuite extends SparkFunSuite
       resources: immutable.Map[String, ResourceInformation]
         = immutable.Map.empty[String, ResourceInformation])(f: Executor => Unit): Unit = {
     var executor: Executor = null
+    val getCustomHostname = PrivateMethod[Option[String]](Symbol("customHostname"))
+    val defaultCustomHostNameValue = Utils.invokePrivate(getCustomHostname())
     try {
       executor = new Executor(executorId, executorHostname, env, userClassPath, isLocal,
         uncaughtExceptionHandler, resources)
@@ -90,6 +92,10 @@ class ExecutorSuite extends SparkFunSuite
       if (executor != null) {
         executor.stop()
       }
+      // SPARK-51633: Reset the custom hostname to its default value in finally block
+      // to avoid contaminating other tests
+      val setCustomHostname = PrivateMethod[Unit](Symbol("customHostname_$eq"))
+      Utils.invokePrivate(setCustomHostname(defaultCustomHostNameValue))
     }
   }
 
