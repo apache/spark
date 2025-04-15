@@ -307,7 +307,7 @@ class SparkContext:
         assert self._gateway is not None
         auth_token = self._gateway.gateway_parameters.auth_token
         is_unix_domain_sock = (
-            self._conf.get("spark.python.unix.domain.socket.enabled", "true").lower() == "true"
+            self._conf.get("spark.python.unix.domain.socket.enabled", "false").lower() == "true"
         )
         socket_path = None
         if is_unix_domain_sock:
