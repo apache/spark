@@ -200,6 +200,7 @@ case class DefaultValueExpression(
     exposeCurrentDefaultAsExprV2: Boolean)
   extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
+  override def stringArgs: Iterator[Any] = Iterator(child, originalSQL)
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
