@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.DataOutputStream
-import java.net.ServerSocket
+import java.nio.channels.ServerSocketChannel
 
 import scala.collection.mutable
 
@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
   val stateName = "test"
   val iteratorId = "testId"
-  val serverSocket: ServerSocket = mock(classOf[ServerSocket])
+  val serverSocket: ServerSocketChannel = mock(classOf[ServerSocketChannel])
   val groupingKeySchema: StructType = StructType(Seq())
   val stateSchema: StructType = StructType(Array(StructField("value", IntegerType)))
   // Below byte array is a serialized row with a single integer value 1.
