@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -90,7 +91,7 @@ object ExtractValue {
   }
 }
 
-trait ExtractValue extends Expression {
+trait ExtractValue extends Expression with QueryErrorsBase {
   override def nullIntolerant: Boolean = true
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
   val child: Expression
@@ -312,6 +313,30 @@ case class GetArrayItem(
         }
       """
     })
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (_: ArrayType, e2) if !e2.isInstanceOf[IntegralType] =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(IntegralType),
+            "inputSql" -> toSQLExpr(right),
+            "inputType" -> toSQLType(right.dataType))
+        )
+      case (e1, _) if !e1.isInstanceOf[ArrayType] =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(TypeCollection(ArrayType)),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
+      case _ => TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   override protected def withNewChildrenInternal(
