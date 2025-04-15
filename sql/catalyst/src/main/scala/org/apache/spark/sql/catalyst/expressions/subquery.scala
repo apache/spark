@@ -512,7 +512,7 @@ case class LateralSubquery(
         s"but got ${nestedOuterAttrs.mkString(", ")}")
     copy(nestedOuterAttrs = nestedOuterAttrs)
   }
-  
+
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
