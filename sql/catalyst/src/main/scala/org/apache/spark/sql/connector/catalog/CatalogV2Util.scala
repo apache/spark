@@ -298,9 +298,9 @@ private[sql] object CatalogV2Util {
   }
 
   /**
-   * Apply Table Constraints changes to an existing table and return the result.
+   * Extracts and validates table constraints from a sequence of table changes.
    */
-  def applyConstraintChanges(
+  def collectConstraintChanges(
       table: Table,
       changes: Seq[TableChange]): Array[Constraint] = {
     val constraints = table.constraints()

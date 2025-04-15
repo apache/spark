@@ -143,7 +143,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       tableProvider = Some("in-memory"),
       statementType = "ALTER TABLE")
     val finalPartitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
-    val constraints = CatalogV2Util.applyConstraintChanges(table, changes)
+    val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {
