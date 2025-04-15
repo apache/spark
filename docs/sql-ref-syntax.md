@@ -90,6 +90,23 @@ ability to generate logical and physical plan for a given query using
    * [star (*) Clause](sql-ref-syntax-qry-star.html)
  * [EXPLAIN](sql-ref-syntax-qry-explain.html)
 
+### SQL Scripting Statements
+
+You use SQL scripting to execute procedural logic in SQL.
+
+* [CASE](control-flow/case-stmt.md)
+* [compound statement](control-flow/compound-stmt.md)
+* [FOR](control-flow/for-stmt.md)
+* [GET DIAGNOSTICS](control-flow/get-diagnostics-stmt.md)
+* [IF](control-flow/if-stmt.md)
+* [ITERATE](control-flow/iterate-stmt.md)
+* [LEAVE](control-flow/leave-stmt.md)
+* [LOOP](control-flow/loop-stmt.md)
+* [REPEAT](control-flow/repeat-stmt.md)
+* [RESIGNAL](control-flow/resignal-stmt.md)
+* [SIGNAL](control-flow/signal-stmt.md)
+* [WHILE](control-flow/while-stmt.md)
+
 ### Auxiliary Statements
 
  * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
