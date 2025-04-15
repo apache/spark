@@ -5048,6 +5048,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS =
+    buildConf("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions")
+      .internal()
+      .doc("When set to true, reading from file source table caches the first query plan and " +
+        "ignores subsequent changes in query options. Otherwise, query options will be applied " +
+        "to the cached plan and may produce different results.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
       "in addition to the write-side padding. This config is true by default to better enforce " +

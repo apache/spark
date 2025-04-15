@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -1376,32 +1377,84 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
-  test("SPARK-51747: Data source cached plan should respect options") {
-    withTable("t") {
-      spark.sql("CREATE TABLE t(a string, b string) USING CSV".stripMargin)
-      spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
-      spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
+  test("SPARK-51747: Data source cached plan respects options if ignore conf disabled") {
+    val catalog = spark.sessionState.catalog
 
-      // check initial contents of table
-      checkAnswer(spark.table("t"), Row("a;b", "c") :: Row("hello; world", "test") :: Nil)
+    // util to get cached table plan options
+    def getCachedTableOptions(
+        qualifiedTableName: QualifiedTableName): Map[String, String] = {
+      catalog.getCachedTable(qualifiedTableName) match {
+        case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _) => fsRelation.options
+      }
+    }
 
-      // no option
-      checkAnswer(
-        spark.sql("SELECT * FROM t"),
-        Row("a;b", "c") :: Row("hello; world", "test") :: Nil
-      )
+    Seq(true, false).foreach { ignoreOption =>
+      withSQLConf(
+        SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> ignoreOption.toString) {
+        withNamespace("ns") {
+          withTable("t") {
+            spark.sql(("CREATE TABLE t(a string, b string) " +
+              "USING CSV OPTIONS (maxColumns 500)").stripMargin)
+            spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+            spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
 
-      // respect delimiter option
-      checkAnswer(
-        spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
-        Row("a", "b,c") :: Row("hello", " world,test") :: Nil
-      )
+            // check initial contents of table
+            val resultNoOptions = Row("a;b", "c") :: Row("hello; world", "test") :: Nil
+            checkAnswer(spark.table("t"), resultNoOptions)
 
-      // respect lineSep option
-      checkAnswer(
-        spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
-        Row("a", null) :: Row("b", "c\n") :: Row("hello", null) :: Row(" world", "test\n") :: Nil
-      )
+            // check cached plan contains create table options
+            val qualifiedTableName = QualifiedTableName(
+              CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
+            val pathOption = catalog.getTableMetadata(TableIdentifier("t"))
+              .storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+            val createTableOptions: Map[String, String] = Map("maxcolumns" -> "500") ++ pathOption
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+
+            // delimiter ; option
+            val expectedResultDelimiter =
+              if (ignoreOption) {
+                resultNoOptions
+              } else {
+                Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+              }
+            checkAnswer(
+              spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
+              expectedResultDelimiter
+            )
+            checkAnswer(
+              spark.read.option("delimiter", ";").table("t"), // scala API test
+              expectedResultDelimiter
+            )
+            // cached plan should still only contain create table options
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+
+            // no option
+            checkAnswer(
+              spark.sql("SELECT * FROM t"),
+              resultNoOptions
+            )
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+
+            // lineSep ; option
+            val expectedResultLineSep =
+              if (ignoreOption) {
+                resultNoOptions
+              } else {
+                Row("a", null) :: Row("b", "c\n") :: Row("hello", null) ::
+                  Row(" world", "test\n") :: Nil
+              }
+            checkAnswer(
+              spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
+              expectedResultLineSep
+            )
+            checkAnswer(
+              spark.read.option("lineSep", ";").table("t"), // scala API test
+              expectedResultLineSep
+            )
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+          }
+        }
+      }
     }
   }
 
