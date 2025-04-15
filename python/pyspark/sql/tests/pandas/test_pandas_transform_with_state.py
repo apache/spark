@@ -45,7 +45,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 
-from python.pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     SimpleStatefulProcessorWithInitialStateFactory,
     StatefulProcessorWithInitialStateTimersFactory,
     StatefulProcessorWithListStateInitialStateFactory,
@@ -548,7 +548,7 @@ class TransformWithStateTestsMixin:
             ProcTimeStatefulProcessorFactory(), check_results
         )
 
-    def _test_transform_with_state_in_pandas_event_time(
+    def _test_transform_with_state_event_time(
         self, stateful_processor_factory, check_results, time_mode="eventtime"
     ):
         import pyspark.sql.functions as f
