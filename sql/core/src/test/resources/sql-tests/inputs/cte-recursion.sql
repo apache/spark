@@ -143,20 +143,18 @@ WITH
 SELECT * FROM t2;
 
 
--- recursive reference is not allowed in a nested CTE
--- TABLE_OR_VIEW_NOT_FOUND is thrown now, although it some check should be added to exactly inform
--- that this is not allowed
+-- recursive reference in a nested CTE
 WITH RECURSIVE
   t1 AS (
     SELECT 1 AS level
-    UNION (
+    UNION ALL (
       WITH t2 AS (SELECT level + 1 FROM t1 WHERE level < 10)
       SELECT * FROM t2
     )
   )
 SELECT * FROM t1;
 
--- recursive reference and conflicting outer CTEs are not allowed in a nested CTE
+-- recursive reference and conflicting outer CTEs in a nested CTE
 SET spark.sql.legacy.ctePrecedencePolicy=CORRECTED;
 WITH
   t1 AS (SELECT 1),
@@ -500,3 +498,50 @@ t2(n) AS (
     SELECT n + 1 FROM t2, t1 WHERE n + 1 = a
 )
 SELECT * FROM t2;
+
+-- Multiple CTEs within rCTE
+WITH RECURSIVE t1 (n) AS (
+    VALUES(1)
+    UNION ALL
+    (
+    WITH t2(j) AS (
+            SELECT n + 1 FROM t1
+        ),
+        t3(k) AS (
+            SELECT j FROM t2
+        )
+        SELECT k FROM t3 WHERE k <= 5
+    )
+)
+SELECT n FROM t1;
+
+-- Column aliases with CTEs inside rCTEs
+WITH RECURSIVE r2(outerlevel1, innerlevel1) AS (
+    WITH RECURSIVE r1 AS (
+        SELECT 0 AS innerlevel
+        UNION ALL
+        SELECT innerlevel + 1 FROM r1 WHERE innerlevel < 3
+    )
+    SELECT 0 AS outerlevel, innerlevel FROM r1
+    UNION ALL
+    SELECT outerlevel1 + 1, innerlevel1 FROM r2 WHERE outerlevel1 < 3
+)
+SELECT * FROM r2;
+
+-- An inner cte that is defined for both the anchor and recursion but called only in the recursion
+-- with subquery alias
+WITH RECURSIVE t1(n) AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1;
+
+-- An inner cte that is defined for both the anchor and recursion but called only in the recursion
+-- without query alias
+WITH RECURSIVE t1 AS (
+    WITH t2(n) AS (SELECT * FROM t1)
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n+1 FROM t2 WHERE n < 5)
+SELECT * FROM t1;

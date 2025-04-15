@@ -165,6 +165,11 @@ class XmlOptions(
   val charset = parameters.getOrElse(ENCODING,
     parameters.getOrElse(CHARSET, XmlOptions.DEFAULT_CHARSET))
 
+  // This option takes in a column name and specifies that the entire XML record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("xml").option("singleVariantColumn", "colName")
+  val singleVariantColumn = parameters.get(SINGLE_VARIANT_COLUMN)
+
   def buildXmlFactory(): XMLInputFactory = {
     XMLInputFactory.newInstance()
   }
@@ -208,6 +213,7 @@ object XmlOptions extends DataSourceOptions {
   val INDENT = newOption("indent")
   val PREFERS_DECIMAL = newOption("prefersDecimal")
   val VALIDATE_NAME = newOption("validateName")
+  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

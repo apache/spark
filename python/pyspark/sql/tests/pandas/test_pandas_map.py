@@ -24,6 +24,8 @@ from typing import cast
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
 from pyspark.errors import PythonException
+from pyspark.sql.session import SparkSession
+from pyspark.sql.types import StructType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -42,6 +44,8 @@ if have_pandas:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class MapInPandasTestsMixin:
+    spark: SparkSession
+
     @staticmethod
     def identity_dataframes_iter(*columns: str):
         def func(iterator):
@@ -127,6 +131,27 @@ class MapInPandasTestsMixin:
         actual = df.mapInPandas(func, df.schema).collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
+
+    def test_not_null(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"a": [1, 2]})
+
+        schema = "a long not null"
+        df = self.spark.range(1).mapInPandas(func, schema)
+        self.assertEqual(df.schema, StructType.fromDDL(schema))
+        self.assertEqual(df.collect(), [Row(1), Row(2)])
+
+    def test_violate_not_null(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"a": [1, None]})
+
+        schema = "a long not null"
+        df = self.spark.range(1).mapInPandas(func, schema)
+        self.assertEqual(df.schema, StructType.fromDDL(schema))
+        with self.assertRaisesRegex(Exception, "is null"):
+            df.collect()
 
     def test_different_output_length(self):
         def func(iterator):

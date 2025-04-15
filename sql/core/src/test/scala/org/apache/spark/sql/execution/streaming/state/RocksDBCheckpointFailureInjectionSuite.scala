@@ -523,7 +523,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
         loggingId = s"[Thread-${Thread.currentThread.getId}]",
         useColumnFamilies = true,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        partitionId = 0)
+        partitionId = 0,
+        eventForwarder = None)
       db.load(version, checkpointId)
       func(db)
     } finally {
