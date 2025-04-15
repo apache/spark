@@ -70,7 +70,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     new MetadataBuilder()
       .putLong("scale", 0)
       .putBoolean("isTimestampNTZ", false)
-      .putBoolean("isSigned", , dataType.isInstanceOf[NumericType])
+      .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
       .putString("externalEngineTypeName", externalEngineTypeName)
       .build()
 
