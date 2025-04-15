@@ -75,11 +75,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
 
-  override def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      remoteTypeName: String = OracleRemoteTypeNames.STRING): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
     .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
+    .putString("remoteTypeName", remoteTypeName)
     .build()
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -153,4 +156,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row("Eason", "Y  ")))
     }
   }
+}
+
+object OracleRemoteTypeNames {
+  val INTEGER = "NUMBER"
+  val STRING = "VARCHAR2"
 }

@@ -48,11 +48,25 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def notSupportsTableComment: Boolean = false
 
-  def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
+  def defaultMetadata(
+      dataType: DataType = StringType,
+      remoteTypeName: String = "STRING"): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+    .putString("remoteTypeName", remoteTypeName)
     .build()
+
+  def removeMetadataFromAllFields(structType: StructType, metadataKey: String): StructType = {
+    val updatedFields = structType.fields.map { field =>
+      val oldMetadata = field.metadata
+      val newMetadataBuilder = new MetadataBuilder()
+        .withMetadata(oldMetadata)
+        .remove(metadataKey)
+      field.copy(metadata = newMetadataBuilder.build())
+    }
+    StructType(updatedFields)
+  }
 
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
@@ -109,18 +123,30 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       var t = spark.table(s"$catalogName.alt_table")
       var expectedSchema = new StructType()
         .add("ID", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      var expectedSchemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
+      var schemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(t.schema, "remoteTypeName")
+      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
         .add("C1", StringType, true, defaultMetadata())
         .add("C2", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      expectedSchemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
+      schemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(t.schema, "remoteTypeName")
+      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
         .add("C3", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      expectedSchemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
+      schemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(t.schema, "remoteTypeName")
+      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
       // Add already existing column
       checkError(
         exception = intercept[AnalysisException] {
@@ -152,7 +178,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val t = spark.table(s"$catalogName.alt_table")
       val expectedSchema = new StructType()
         .add("C2", StringType, true, defaultMetadata())
-      assert(t.schema === expectedSchema)
+      val expectedSchemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
+      val schemaWithoutRemoteTypeName =
+        removeMetadataFromAllFields(t.schema, "remoteTypeName")
+      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
       // Drop not existing column
       val sqlText = s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column"
       checkError(
