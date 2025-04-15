@@ -297,7 +297,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
  */
 @DockerTest
 class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
-  val externalEngineTypeNames: ExternalEngineTypeNames =
+  override val externalEngineTypeNames: ExternalEngineTypeNames =
     ExternalEngineTypeNames(INTEGER = "INTEGER", STRING = "LONGTEXT")
 
   override def defaultMetadata(
