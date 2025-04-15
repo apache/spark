@@ -500,7 +500,7 @@
         <version>${kryo.version}</version>
       </dependency>
       <!--
-        SPARK-51806: Kryo 4.0.x depends on version objenesis 2.5.1, while Spark currently
+        SPARK-51806: Kryo 4.0.x depends on objenesis 2.5.1, while Spark currently
         depends on objenesis 3.3. Here, it is uniformly defined as version 3.3.
         -->
       <dependency>
