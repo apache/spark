@@ -123,6 +123,21 @@ abstract class Expression extends TreeNode[Expression] {
    * which constitutes inDeterminism. Contrasted with [[deterministic]] flag which is always true
    * for Leaf Expressions like [[AttributeReference]], [[hasIndeterminism]] carries information
    * about the nature of the evaluated value, represented by the [[Expression]]
+   *
+   *
+   * To further elaborate, consider following Alias expression:
+   *
+   *  // The boolean hasInDeterminism carries the information
+   *  // that the value AttributeReference represents, has an inDeterministic
+   *  // Component to it.
+   *  val aliasExpr = new Alias (random() * Literal(3), "X")
+   *  assert aliasExpr.deterministic == false
+   *  assert aliasExpr.hasInDeterminism == true
+   *
+   *  val attribRef  = aliasExpr.toAttribute
+   *  assert attribRef.deterministic == true
+   *  assert attribRef.hasInDeterminism == true
+   *
    * @return Boolean true if the expression's evaluated value is a result of some indeterministic
    *         quantity.
    */
