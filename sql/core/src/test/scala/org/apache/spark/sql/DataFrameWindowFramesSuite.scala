@@ -155,7 +155,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         Row(2, default, default, default, default) :: Nil)
   }
 
-  test("SPARK-51757: lead/lag column as default when offset exceeds partition") {
+  test("lead/lag with column reference as default when offset exceeds window group size") {
     val df = spark.range(0, 10, 1, 1).toDF("id")
     val window = Window.partitionBy(expr("div(id, 2)")).orderBy($"id")
 

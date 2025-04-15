@@ -183,8 +183,10 @@ abstract class OffsetWindowFunctionFrameBase(
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     resetStates(rows)
     if (absOffset > rows.length) {
-//      fillDefaultValue(EmptyRow)
-      // handle in write() func
+      // When absOffset is greater than rows.length
+      // and default value is references attribute,
+      // call fillDefaultValue(EmptyRow) causes NullPointerException.
+      // handle it in write() func.
     } else {
       if (ignoreNulls) {
         prepareForIgnoreNulls()
