@@ -71,7 +71,10 @@ case class DynamicPruningSubquery(
     nestedOuterAttrs: Seq[Expression]
   ): DynamicPruningSubquery = {
     // DynamicPruningSubquery should not have nested outer attrs
-    assert(nestedOuterAttrs.isEmpty)
+    if (nestedOuterAttrs.nonEmpty) {
+      throw SparkException.internalError(
+        "DynamicPruningSubquery should not have nested outer attributes.")
+    }
     copy()
   }
 

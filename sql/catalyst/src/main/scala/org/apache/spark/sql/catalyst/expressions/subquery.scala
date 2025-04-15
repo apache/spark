@@ -501,6 +501,7 @@ case class LateralSubquery(
   override def dataType: DataType = plan.output.toStructType
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
+
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery = copy(
     outerAttrs = outerAttrs)
   override def withNewNestedOuterAttrs(
@@ -511,6 +512,7 @@ case class LateralSubquery(
         s"but got ${nestedOuterAttrs.mkString(", ")}")
     copy(nestedOuterAttrs = nestedOuterAttrs)
   }
+  
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
