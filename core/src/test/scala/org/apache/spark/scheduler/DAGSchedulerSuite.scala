@@ -3172,7 +3172,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   private def constructTwoStages(
       stage1InDeterminate: Boolean,
       stage2InDeterminate: Boolean,
-      isDependencyBetweenStagesTransitive: Boolean = true): (Int, Int) = {
+      isDependencyBetweenStagesTransitive: Boolean = true,
+      hostNamesToCompleteFirstStage: Seq[String] = Seq.empty[String]): (Int, Int) = {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = stage1InDeterminate)
 
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
@@ -3197,7 +3198,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val stageId1 = this.scheduler.shuffleIdToMapStage(shuffleId1).id
 
     // Finish the first shuffle map stage.
-    completeShuffleMapStageSuccessfully(stageId1, 0, 2)
+    completeShuffleMapStageSuccessfully(stageId1, 0, 2, hostNamesToCompleteFirstStage)
     import org.scalatest.concurrent.Eventually._
     import org.scalatest.matchers.should.Matchers._
     import org.scalatest.time.SpanSugar._
@@ -3220,7 +3221,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
 
   test("SPARK-51272: retry all the partitions of result stage, if the first result task" +
-    " has failed and failing ShuffleMap stage is inDeterminate") {
+    " has failed due to indeterminate shuffle stage2") {
     this.dagSchedulerInterceptor = createDagInterceptorForSpark51272(
       () => taskSets.find(_.shuffleId.isEmpty).get.tasks(1), "RELEASE_LATCH")
 
@@ -3231,43 +3232,44 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       stage1InDeterminate = false,
       stage2InDeterminate = true,
       isDependencyBetweenStagesTransitive = false)
-    val shuffleStage1 = this.scheduler.shuffleIdToMapStage(shuffleId1)
-    val shuffleStage2 = this.scheduler.shuffleIdToMapStage(shuffleId2)
-    completeShuffleMapStageSuccessfully(shuffleStage2.id, 0, numPartitions)
+    val shuffleStage1Det = this.scheduler.shuffleIdToMapStage(shuffleId1)
+    val shuffleStage2InDet = this.scheduler.shuffleIdToMapStage(shuffleId2)
+    // Complete Map task for indeterminate shuffle stage 2
+    completeShuffleMapStageSuccessfully(shuffleStage2InDet.id, 0, numPartitions,
+      Seq("hostB1", "hostB2"))
     val resultStage = scheduler.stageIdToStage(2).asInstanceOf[ResultStage]
     val activeJob = resultStage.activeJob
     assert(activeJob.isDefined)
     // The result stage is still waiting for its 2 tasks to complete
     assert(resultStage.findMissingPartitions() == Seq.tabulate(numPartitions)(i => i))
 
-    // The below event is going to initiate the retry of previous indeterminate stages, and also
+    // The below event is going to initiate the retry of indeterminate stage2, and also
     // the retry of all result tasks. But before the "ResubmitFailedStages" event is added to the
     // queue of Scheduler, a successful completion of the result partition task is added to the
     // event queue.  Due to scenario, the bug surfaces where instead of retry of all partitions
     // of result tasks (2 tasks in total), only some (1 task) get retried
+    // The stage1 being determinate, should not be retried.
     runEvent(
       makeCompletionEvent(
         taskSets.find(_.stageId == resultStage.id).get.tasks(0),
-        FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+        FetchFailed(makeBlockManagerId("hostB1"), shuffleId2, 0L, 0, 0, "ignored"),
         null))
 
     import org.scalatest.concurrent.Eventually._
     import org.scalatest.matchers.should.Matchers._
     import org.scalatest.time.SpanSugar._
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
-      shuffleStage1.latestInfo.attemptNumber() should equal(1)
+      shuffleStage2InDet.latestInfo.attemptNumber() should equal(1)
     }
-    completeShuffleMapStageSuccessfully(shuffleStage1.id, 1, numPartitions)
+    completeShuffleMapStageSuccessfully(shuffleStage2InDet.id, 1, numPartitions)
 
-    eventually(timeout(3.minutes), interval(500.milliseconds)) {
-      shuffleStage2.latestInfo.attemptNumber() should equal(1)
-    }
-    completeShuffleMapStageSuccessfully(shuffleStage2.id, 1, numPartitions)
     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       resultStage.latestInfo.attemptNumber() should equal(1)
     }
     org.scalatest.Assertions.assert(resultStage.latestInfo.numTasks == numPartitions)
     org.scalatest.Assertions.assert(resultStage.findMissingPartitions().size == numPartitions)
+    // shuffle stage1 being determinate should not be retried
+    org.scalatest.Assertions.assert(shuffleStage1Det.latestInfo.attemptNumber() == 0)
   }
 
   test("SPARK-51272: retry all the partitions of result stage, if the first result task" +
@@ -3282,7 +3284,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val (detShuffleId1, indetShuffleId2) = constructTwoStages(
       stage1InDeterminate = false,
       stage2InDeterminate = true,
-      isDependencyBetweenStagesTransitive = false)
+      isDependencyBetweenStagesTransitive = false,
+      hostNamesToCompleteFirstStage = Seq("hostB1", "hostB2"))
     val detShuffleStage1 = this.scheduler.shuffleIdToMapStage(detShuffleId1)
     val inDetshuffleStage2 = this.scheduler.shuffleIdToMapStage(indetShuffleId2)
     completeShuffleMapStageSuccessfully(inDetshuffleStage2.id, 0, numPartitions)
@@ -3308,7 +3311,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(
       makeCompletionEvent(
         taskSets.find(_.shuffleId.isEmpty).get.tasks(0),
-        FetchFailed(makeBlockManagerId("hostA"), detShuffleId1, 0L, 0, 0, "ignored"),
+        FetchFailed(makeBlockManagerId("hostB1"), detShuffleId1, 0L, 0, 0, "ignored"),
         null))
 
     import org.scalatest.concurrent.Eventually._
@@ -3319,21 +3322,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     completeShuffleMapStageSuccessfully(detShuffleStage1.id, 1, numPartitions)
 
-    // Though the inDetShuffleStage2 has not suffered any loss, but source code of DagScheduler
-    // has code to remove shuffleoutputs based on the lost BlockManager , which in this case will
-    // result in loss of output of shuffle2 also. It looses one partition and hence will be
-    // re-attempted..
-    // But that re-attempt should fetch all partitions!
-    eventually(timeout(3.minutes), interval(500.milliseconds)) {
-      inDetshuffleStage2.latestInfo.attemptNumber() should equal(1)
-    }
-    org.scalatest.Assertions.assert(inDetshuffleStage2.latestInfo.numTasks == 2)
-    org.scalatest.Assertions.assert(inDetshuffleStage2.findMissingPartitions().size == 2)
-    completeShuffleMapStageSuccessfully(inDetshuffleStage2.id, 1, numPartitions)
-    eventually(timeout(3.minutes), interval(500.milliseconds)) {
+     eventually(timeout(3.minutes), interval(500.milliseconds)) {
       resultStage.latestInfo.attemptNumber() should equal(1)
     }
     org.scalatest.Assertions.assert(resultStage.latestInfo.numTasks == numPartitions)
+
+    // shuffle stage2 should not be retried as its hosting executors were not lost
+    org.scalatest.Assertions.assert(inDetshuffleStage2.latestInfo.attemptNumber() == 0)
   }
 
   test("SPARK-51272: retry all the partitions of Shuffle stage, if any task of ShuffleStage " +
@@ -3351,6 +3346,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     )
     // This will trigger the resubmit failed stage and in before adding resubmit message to the
     // queue, a successful partition completion event will arrive.
+    // Get shuffle ID2 's stage. ( To get Stage corresponding to shuffleId2 , we cannot rely
+    // on stageID's value.
     runEvent(
       makeCompletionEvent(
         taskSets.filter(_.shuffleId.isDefined).maxBy(_.shuffleId.get).tasks(0),
