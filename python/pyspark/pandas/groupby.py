@@ -2976,7 +2976,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             When the given function has the return type annotated, the original index of the
             GroupBy object will be lost, and a default index will be attached to the result.
             Please be careful about configuring the default index. See also `Default Index Type
-            <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/options.html#default-index-type>`_.
+            <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/options.html#default-index-type>`_.
 
         .. note:: the series within ``func`` is actually a pandas series. Therefore,
             any pandas API within this function is allowed.
