@@ -399,8 +399,8 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
                 RemoteSparkSession._set_default_and_active_session(
-                    session
-                )  # type: ignore[union-attr, operator, arg-type]
+                    session  # type: ignore[union-attr, operator, arg-type]
+                )
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
