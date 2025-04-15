@@ -106,7 +106,7 @@ case class CreateSQLFunctionCommand(
         val qualifier = Seq(name.funcName)
         val input = param.map(p => Alias(
           {
-            val defaultExpr = p.getParameterDefault()
+            val defaultExpr = p.getDefault()
             if (defaultExpr.isEmpty) {
               Literal.create(null, p.dataType)
             } else {
