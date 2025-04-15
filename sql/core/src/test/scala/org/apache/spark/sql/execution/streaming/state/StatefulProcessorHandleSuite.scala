@@ -51,6 +51,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
           UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
         assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
         handle.getValueState[Long]("testState", TTLConfig.NONE)
+        store.commit()
       }
     }
   }
@@ -99,6 +100,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
             createValueStateInstance(handle)
           }
         }
+        store.commit()
       }
     }
   }
@@ -135,6 +137,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         ),
         matchPVals = true
       )
+      store.abort()
     }
   }
 
@@ -155,6 +158,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
         ImplicitGroupingKeyTracker.removeImplicitKey()
         assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
+        store.commit()
       }
     }
   }
@@ -195,6 +199,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         assert(timers2.toSeq.sorted === timerTimestamps2.sorted)
         ImplicitGroupingKeyTracker.removeImplicitKey()
         assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
+        store.commit()
       }
     }
   }
@@ -213,6 +218,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
             registerTimer(handle)
           }
         }
+        store.commit()
       }
     }
   }
@@ -232,6 +238,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === valueStateWithTTL)
+      store.commit()
     }
   }
 
@@ -250,6 +257,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === listStateWithTTL)
+      store.commit()
     }
   }
 
@@ -269,6 +277,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === mapStateWithTTL)
+      store.commit()
     }
   }
 
@@ -284,6 +293,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         TTLConfig.NONE)
 
       assert(handle.ttlStates.isEmpty)
+      store.commit()
     }
   }
 }
