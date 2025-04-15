@@ -77,7 +77,7 @@ private[spark] object Python {
       "to Spark Classic and Spark Connect server.")
     .version("4.1.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(sys.env.get("PYSPARK_UDS_MODE").contains("true"))
 
   val PYTHON_UNIX_DOMAIN_SOCKET_DIR = ConfigBuilder("spark.python.unix.domain.socket.dir")
     .doc("When specified, it uses the directory to create Unix domain socket files. " +
