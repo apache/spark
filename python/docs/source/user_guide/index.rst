@@ -27,5 +27,12 @@ Below is the contents of the user guide:
 .. toctree::
    :maxdepth: 2
 
-   dataframes_user_guide
+   dataframes
+   touroftypes
+   dataprep
+   bugbusting
+   udfsandudtfs
+   sql
+   loadandbehold
+
 
