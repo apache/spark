@@ -18,11 +18,9 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
-import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
@@ -124,6 +122,7 @@ object SerdeInfo {
   }
 }
 
+
 /**
  * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
@@ -134,19 +133,19 @@ case class QualifiedColType(
     nullable: Boolean,
     comment: Option[String],
     position: Option[FieldPosition],
-    default: Option[String]) {
+    default: Option[DefaultValueExpression]) extends Expression with Unevaluable {
+  override lazy val resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved) &&
+    default.forall(_.resolved)
+
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
-  def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
+  def getV2Default: ColumnDefaultValue = default.map(_.toV2("", colName)).orNull
 
-  def getV2Default: ColumnDefaultValue = {
-    default.map { sql =>
-      val e = ResolveDefaultColumns.analyze(colName, dataType, sql, "ALTER TABLE")
-      assert(e.resolved && e.foldable,
-        "The existence default value must be a simple SQL string that is resolved and foldable, " +
-          "but got: " + sql)
-      new ColumnDefaultValue(sql, LiteralValue(e.eval(), dataType))
-    }.orNull
+  override def children: Seq[Expression] = default.toSeq
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(default = newChildren.headOption.map(_.asInstanceOf[DefaultValueExpression]))
   }
 }
 

@@ -3560,11 +3560,10 @@ class DataSourceV2SQLSuiteV1Filter
         val exception = analysisException(
           // Rand function is not foldable
           s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT rand()")
-        assert(exception.getSqlState == "42623")
-        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NOT_CONSTANT")
-        assert(exception.messageParameters("colName") == "`col2`")
-        assert(exception.messageParameters("defaultValue") == "rand()")
-        assert(exception.messageParameters("statement") == "ALTER TABLE")
+        assert(exception.getSqlState == "42K0E")
+        assert(exception.errorClass.get == "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
+        assert(exception.messageParameters("sqlExprs") ==
+          "\"qualifiedcoltype(defaultvalueexpression(rand()))\"")
       }
       foldableExpressions.foreach(expr => {
         withTable("tab") {

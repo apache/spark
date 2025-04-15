@@ -5145,7 +5145,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
     val defaultExpr = defaultExpression.map(visitDefaultExpression).map { field =>
       if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
-        field.originalSQL
+        field
       } else {
         throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
       }

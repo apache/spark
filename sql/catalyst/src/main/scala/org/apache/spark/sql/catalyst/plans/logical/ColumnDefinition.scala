@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, Expression, Literal, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
@@ -199,16 +198,8 @@ case class DefaultValueExpression(
     child: Expression,
     originalSQL: String,
     analyzedChild: Option[Expression] = None)
-  extends UnaryExpression
-  with Unevaluable
-  with AnalysisAwareExpression[DefaultValueExpression] {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(ANALYSIS_AWARE_EXPRESSION)
-
+  extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
-  override def stringArgs: Iterator[Any] = Iterator(child, originalSQL)
-  override def markAsAnalyzed(): DefaultValueExpression =
-    copy(analyzedChild = Some(child))
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
