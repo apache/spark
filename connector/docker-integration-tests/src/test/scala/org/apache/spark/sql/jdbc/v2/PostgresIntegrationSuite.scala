@@ -39,14 +39,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   override val catalogName: String = "postgresql"
   override val db = new PostgresDatabaseOnDocker
 
+  object ExternalEngineTypeNames {
+    val INTEGER = "int4"
+    val STRING = "text"
+  }
+
   override def defaultMetadata(
       dataType: DataType = StringType,
-      remoteTypeName: String = PostgresRemoteTypeNames.STRING): Metadata =
+      externalEngineTypeName: String = ExternalEngineTypeNames.STRING): Metadata =
     new MetadataBuilder()
       .putLong("scale", 0)
       .putBoolean("isTimestampNTZ", false)
       .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
-      .putString("remoteTypeName", remoteTypeName)
+      .putString("externalEngineTypeName", externalEngineTypeName)
       .build()
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -204,7 +209,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, PostgresRemoteTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -233,7 +238,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       s" TBLPROPERTIES('TABLESPACE'='pg_default')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, PostgresRemoteTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
@@ -408,9 +413,4 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows.length === 1)
     assert(rows(0).getString(0) === "amy")
   }
-}
-
-object PostgresRemoteTypeNames {
-  val INTEGER = "int4"
-  val STRING = "text"
 }

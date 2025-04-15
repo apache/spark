@@ -75,14 +75,19 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
 
+  object ExternalEngineTypeNames {
+    val NUMBER = "NUMBER"
+    val STRING = "VARCHAR2"
+  }
+
   override def defaultMetadata(
       dataType: DataType = StringType,
-      remoteTypeName: String = OracleRemoteTypeNames.STRING): Metadata = new MetadataBuilder()
+      externalEngineTypeName: String = ExternalEngineTypeNames.STRING): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
     .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
-    .putString("remoteTypeName", remoteTypeName)
+    .putString("externalEngineTypeName", externalEngineTypeName)
     .build()
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -108,12 +113,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", DecimalType(10, 0), true, super.defaultMetadata(DecimalType(10, 0)))
+      .add(
+        "ID",
+        DecimalType(10, 0),
+        true,
+        defaultMetadata(DecimalType(10, 0), ExternalEngineTypeNames.NUMBER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
     expectedSchema = new StructType()
-      .add("ID", DecimalType(19, 0), true, super.defaultMetadata(DecimalType(19, 0)))
+      .add(
+        "ID",
+        DecimalType(19, 0),
+        true,
+        defaultMetadata(DecimalType(19, 0), ExternalEngineTypeNames.NUMBER))
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -156,9 +169,4 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row("Eason", "Y  ")))
     }
   }
-}
-
-object OracleRemoteTypeNames {
-  val INTEGER = "NUMBER"
-  val STRING = "VARCHAR2"
 }

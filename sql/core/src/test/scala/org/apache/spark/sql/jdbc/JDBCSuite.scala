@@ -78,11 +78,18 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  def defaultMetadata(dataType: DataType, remoteTypeName: String): Metadata = new MetadataBuilder()
+  object ExternalEngineTypeNames {
+    val INTEGER = "INTEGER"
+    val STRING = "CHARACTER VARYING"
+  }
+
+  def defaultMetadata(
+      dataType: DataType,
+      externalEngineTypeName: String): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
-    .putString("remoteTypeName", remoteTypeName)
+    .putString("externalEngineTypeName", externalEngineTypeName)
     .build()
 
   override def beforeAll(): Unit = {
@@ -1431,12 +1438,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
     val schema = StructType(Seq(
-      StructField("name", StringType, false, defaultMetadata(StringType, H2RemoteTypeNames.STRING)),
+      StructField(
+        "name",
+        StringType,
+        false,
+        defaultMetadata(StringType, ExternalEngineTypeNames.STRING)),
       StructField(
         "theid",
         IntegerType,
         false,
-        defaultMetadata(IntegerType, H2RemoteTypeNames.INTEGER))
+        defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
     ))
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
@@ -1459,9 +1470,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(df.schema.size === 2)
     val structType = CatalystSqlParser.parseTableSchema(customSchema)
     val sparkToRemoteDataType: Map[DataType, String] = Map(
-      IntegerType -> H2RemoteTypeNames.INTEGER,
-      StringType -> H2RemoteTypeNames.STRING,
-      VarcharType(32) -> H2RemoteTypeNames.STRING)
+      IntegerType -> ExternalEngineTypeNames.INTEGER,
+      StringType -> ExternalEngineTypeNames.STRING,
+      VarcharType(32) -> ExternalEngineTypeNames.STRING)
     val expectedSchema = new StructType(structType.map(
       f => StructField(
         f.name,
@@ -1486,9 +1497,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       val df = sql("select * from people_view")
       assert(df.schema.length === 2)
       val sparkToRemoteDataType: Map[DataType, String] = Map(
-        IntegerType -> H2RemoteTypeNames.INTEGER,
-        StringType -> H2RemoteTypeNames.STRING,
-        VarcharType(32) -> H2RemoteTypeNames.STRING)
+        IntegerType -> ExternalEngineTypeNames.INTEGER,
+        StringType -> ExternalEngineTypeNames.STRING,
+        VarcharType(32) -> ExternalEngineTypeNames.STRING)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
         .map(f => StructField(
           f.name,
@@ -1646,11 +1657,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         "NAME",
         VarcharType(32),
         true,
-        defaultMetadata(VarcharType(32), H2RemoteTypeNames.STRING)),
+        defaultMetadata(VarcharType(32), ExternalEngineTypeNames.STRING)),
       StructField("THEID",
         IntegerType,
         true,
-        defaultMetadata(IntegerType, H2RemoteTypeNames.INTEGER))))
+        defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))))
     schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
@@ -2279,9 +2290,4 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         parameters = Map("jdbcDialect" -> dialect.getClass.getSimpleName))
     }
   }
-}
-
-object H2RemoteTypeNames {
-  val INTEGER = "INTEGER"
-  val STRING = "CHARACTER VARYING"
 }

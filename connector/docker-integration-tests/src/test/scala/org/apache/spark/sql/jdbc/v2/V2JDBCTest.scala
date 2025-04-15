@@ -50,13 +50,17 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def defaultMetadata(
       dataType: DataType = StringType,
-      remoteTypeName: String = "STRING"): Metadata = new MetadataBuilder()
+      externalEngineTypeName: String = "STRING"): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
-    .putString("remoteTypeName", remoteTypeName)
+    .putString("externalEngineTypeName", externalEngineTypeName)
     .build()
 
+  /**
+   * Returns a copy of the given [[StructType]] with the specified metadata key removed
+   * from all of its fields.
+   */
   def removeMetadataFromAllFields(structType: StructType, metadataKey: String): StructType = {
     val updatedFields = structType.fields.map { field =>
       val oldMetadata = field.metadata
@@ -78,7 +82,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
-    assert(t.schema === expectedSchema)
+
+    // If function is not overriden we don't want to compare external engine types
+    val expectedSchemaWithoutExternalEngineTypeName =
+      removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
+    val schemaWithoutExternalEngineTypeName =
+      removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
+    assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
     // Update nullability of not existing column
     val sqlText = s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL"
     checkError(
@@ -99,7 +109,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata())
       .add("ID1", StringType, true, defaultMetadata())
       .add("ID2", StringType, true, defaultMetadata())
-    assert(t.schema === expectedSchema)
+
+    // If function is not overriden we don't want to compare external engine types
+    val expectedSchemaWithoutExternalEngineTypeName =
+      removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
+    val schemaWithoutExternalEngineTypeName =
+      removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
+    assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
   }
 
   def testCreateTableWithProperty(tbl: String): Unit = {}
@@ -123,30 +139,30 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       var t = spark.table(s"$catalogName.alt_table")
       var expectedSchema = new StructType()
         .add("ID", StringType, true, defaultMetadata())
-      var expectedSchemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
-      var schemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(t.schema, "remoteTypeName")
-      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
+      var expectedSchemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
+      var schemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
+      assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
         .add("C1", StringType, true, defaultMetadata())
         .add("C2", StringType, true, defaultMetadata())
-      expectedSchemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
-      schemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(t.schema, "remoteTypeName")
-      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
+      expectedSchemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
+      schemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
+      assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
         .add("C3", StringType, true, defaultMetadata())
-      expectedSchemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
-      schemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(t.schema, "remoteTypeName")
-      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
+      expectedSchemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
+      schemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
+      assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
       // Add already existing column
       checkError(
         exception = intercept[AnalysisException] {
@@ -178,11 +194,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val t = spark.table(s"$catalogName.alt_table")
       val expectedSchema = new StructType()
         .add("C2", StringType, true, defaultMetadata())
-      val expectedSchemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(expectedSchema, "remoteTypeName")
-      val schemaWithoutRemoteTypeName =
-        removeMetadataFromAllFields(t.schema, "remoteTypeName")
-      assert(schemaWithoutRemoteTypeName === expectedSchemaWithoutRemoteTypeName)
+      val expectedSchemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(expectedSchema, "externalEngineTypeName")
+      val schemaWithoutExternalEngineTypeName =
+        removeMetadataFromAllFields(t.schema, "externalEngineTypeName")
+      assert(schemaWithoutExternalEngineTypeName === expectedSchemaWithoutExternalEngineTypeName)
       // Drop not existing column
       val sqlText = s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column"
       checkError(

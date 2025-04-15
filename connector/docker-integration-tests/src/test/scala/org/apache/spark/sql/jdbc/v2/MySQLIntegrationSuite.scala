@@ -36,6 +36,11 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  object ExternalEngineTypeNames {
+    val INTEGER = "INT"
+    val STRING = "LONGTEXT"
+  }
+
   override def excluded: Seq[String] = Seq(
     "scan with aggregate push-down: VAR_POP with DISTINCT",
     "scan with aggregate push-down: VAR_SAMP with DISTINCT",
@@ -61,12 +66,13 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
   override def defaultMetadata(
       dataType: DataType = StringType,
-      remoteTypeName: String = MySQLTypeNames.STRING): Metadata = new MetadataBuilder()
-    .putLong("scale", 0)
-    .putBoolean("isTimestampNTZ", false)
-    .putBoolean("isSigned", true)
-    .putString("remoteTypeName", remoteTypeName)
-    .build()
+      externalEngineTypeName: String = ExternalEngineTypeNames.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", , dataType.isInstanceOf[NumericType])
+      .putString("externalEngineTypeName", externalEngineTypeName)
+      .build()
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
@@ -108,7 +114,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, MySQLTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -162,7 +168,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       s" TBLPROPERTIES('ENGINE'='InnoDB', 'DEFAULT CHARACTER SET'='utf8')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, MySQLTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
@@ -296,9 +302,4 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
         s"&useSSL=false"
   }
-}
-
-object MySQLTypeNames {
-  val INTEGER = "INTEGER"
-  val STRING = "LONGTEXT"
 }
