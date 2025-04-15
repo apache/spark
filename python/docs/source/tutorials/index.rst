@@ -17,10 +17,10 @@
 
 
 ===========
-User Guides
+Tutorials
 ===========
 
-PySpark specific user guides are available here:
+PySpark specific tutorials are available here:
  
 .. toctree::
    :maxdepth: 2
