@@ -2830,4 +2830,17 @@ class SubquerySuite extends QueryTest
         Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
     }
   }
+
+  test("analyzer same error class") {
+    sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2);")
+    sql("CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);")
+    sql("CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1))," +
+      " (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4));")
+    sql("CREATE VIEW t4(c1, c2) AS VALUES (0, 1), (0, 2)," +
+      " (1, 1), (1, 3);")
+
+    val query = "SELECT * FROM t1, LATERAL" +
+      " (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*, t3.* FROM t2 AS t3))"
+    val res = sql(query).collect()
+  }
 }
