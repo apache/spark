@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, TableConstraint, Unevaluable}
-import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
@@ -208,13 +209,25 @@ case class AlterColumnSpec(
     newNullability: Option[Boolean],
     newComment: Option[String],
     newPosition: Option[FieldPosition],
-    newDefaultExpression: Option[String]) extends Expression with Unevaluable {
+    newDefaultExpression: Option[DefaultValueExpression]) extends Expression with Unevaluable {
 
-  override def children: Seq[Expression] = Seq(column) ++ newPosition.toSeq
+  override def children: Seq[Expression] = Seq(column) ++ newPosition.toSeq ++
+    newDefaultExpression.toSeq
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("dataType")
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(column = newChildren(0).asInstanceOf[FieldName])
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    val newColumn = newChildren(0).asInstanceOf[FieldName]
+    val newPosition = newChildren collectFirst {
+      case p: FieldPosition => p
+    }
+    val newDefault = newChildren collectFirst {
+      case d: DefaultValueExpression => d
+    }
+    copy(column = newColumn, newPosition = newPosition, newDefaultExpression = newDefault)
+  }
+
+
 }
 
 /**
@@ -242,17 +255,11 @@ case class AlterColumns(
           "FieldPosition should be resolved before it's converted to TableChange.")
         TableChange.updateColumnPosition(colName, newPosition.position)
       }
-      val defaultValueChange = spec.newDefaultExpression.map { newDefaultExpression =>
-        if (newDefaultExpression.nonEmpty) {
-          // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
-          // value parses successfully, and return an error otherwise
-          val newDataType = spec.newDataType.getOrElse(
-            column.asInstanceOf[ResolvedFieldName].field.dataType)
-          ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
-            "ALTER TABLE ALTER COLUMN")
-        }
-        TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+      val defaultValueChange = spec.newDefaultExpression.map { newDefault =>
+        TableChange.updateColumnDefaultValue(colName,
+          newDefault.toV2CurrentDefault("ALTER TABLE", column.name.quoted))
       }
+
       typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
     }
   }

@@ -105,7 +105,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           }
       }
       // Add the current default column value string (if any) to the column metadata.
-      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, c) }
+      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+        c.originalSQL) }
       val newColumn = StructField(
         colName,
         dataType,

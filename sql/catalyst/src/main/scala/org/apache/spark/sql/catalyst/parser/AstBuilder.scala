@@ -5243,11 +5243,11 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         None
       }
-      val setDefaultExpression: Option[String] =
+      val setDefaultExpression: Option[DefaultValueExpression] =
         if (action.defaultExpression != null) {
-          Option(action.defaultExpression()).map(visitDefaultExpression).map(_.originalSQL)
+          Option(action.defaultExpression()).map(visitDefaultExpression)
         } else if (action.dropDefault != null) {
-          Some("")
+          Some(DefaultValueExpression(Literal(""), ""))
         } else {
           None
         }
