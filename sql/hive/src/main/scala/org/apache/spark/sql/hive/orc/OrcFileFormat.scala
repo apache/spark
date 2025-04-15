@@ -55,7 +55,10 @@ import org.apache.spark.util.SerializableConfiguration
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
  * `DataSource`'s backwardCompatibilityMap.
  */
-private[sql] case class OrcFileFormat() extends FileFormat with DataSourceRegister with Serializable {
+private[sql] case class OrcFileFormat()
+    extends FileFormat
+    with DataSourceRegister
+    with Serializable {
 
   override def shortName(): String = "orc"
 
