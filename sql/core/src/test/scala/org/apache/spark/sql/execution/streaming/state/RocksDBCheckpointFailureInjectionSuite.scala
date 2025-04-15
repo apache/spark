@@ -476,7 +476,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
             AddData(inputData, 4),
             if (failureConf.logType == "commits") {
               // If the failure is in the commit log, data is already committed.
-              // MemorySink isn't a EactlyOnce sink, so we will see the data from the previous
+              // MemorySink isn't an ExactlyOnce sink, so we will see the data from the previous
               // batch. We should see the data from the previous batch and the new data.
               CheckNewAnswer((3, 2), (2, 1), (3, 3), (1, 1), (4, 1))
             } else {
