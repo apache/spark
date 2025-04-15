@@ -1397,7 +1397,7 @@ class DataFrameAggregateSuite extends QueryTest
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "\"INTEGRAL\""),
+        "requiredType" -> "\"INT\""),
       context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
