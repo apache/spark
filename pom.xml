@@ -145,6 +145,7 @@
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
+    <kryo.version>4.0.3</kryo.version>
     <ivy.version>2.5.3</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
@@ -492,6 +493,16 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.esotericsoftware</groupId>
+        <artifactId>kryo-shaded</artifactId>
+        <version>${kryo.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.objenesis</groupId>
+        <artifactId>objenesis</artifactId>
+        <version>3.3</version>
       </dependency>
       <dependency>
         <groupId>com.github.jnr</groupId>
