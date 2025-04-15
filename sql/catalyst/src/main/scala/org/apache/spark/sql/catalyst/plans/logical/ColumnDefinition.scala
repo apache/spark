@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FoldableUnevaluable, Literal, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
@@ -194,7 +194,10 @@ object ColumnDefinition {
 /**
  * A fake expression to hold the column/variable default value expression and its original SQL text.
  */
-case class DefaultValueExpression(child: Expression, originalSQL: String)
+case class DefaultValueExpression(
+    child: Expression,
+    originalSQL: String,
+    exposeCurrentDefaultAsExprV2: Boolean)
   extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
@@ -203,8 +206,19 @@ case class DefaultValueExpression(child: Expression, originalSQL: String)
   // Convert the default expression to ColumnDefaultValue, which is required by DS v2 APIs.
   def toV2(statement: String, colName: String): ColumnDefaultValue = child match {
     case Literal(value, dataType) =>
-      new ColumnDefaultValue(originalSQL, LiteralValue(value, dataType))
+      val literalV2 = LiteralValue(value, dataType)
+      val exprV2 = if (exposeCurrentDefaultAsExprV2) literalV2 else null
+      new ColumnDefaultValue(originalSQL, exprV2, literalV2)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
+  }
+}
+
+object DefaultValueExpression {
+  def apply(expr: Expression, originalSQL: String): DefaultValueExpression = {
+    // only expose V2 expressions as current defaults if all Catalyst expressions are evaluable
+    // Catalyst expressions like CURRENT_USER or CURRENT_DATE will require special handling
+    val exposeCurrentDefaultAsExprV2 = !expr.exists(_.isInstanceOf[FoldableUnevaluable])
+    apply(expr, originalSQL, exposeCurrentDefaultAsExprV2)
   }
 }
