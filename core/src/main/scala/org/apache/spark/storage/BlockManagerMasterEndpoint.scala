@@ -864,7 +864,7 @@ class BlockManagerMasterEndpoint(
       requesterHost: String): Option[BlockLocationsAndStatus] = {
     val allLocations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val blockStatusWithBlockManagerId: Option[(BlockStatus, BlockManagerId)] =
-      (if (externalShuffleServiceRddFetchEnabled) {
+      (if (externalShuffleServiceRddFetchEnabled && blockId.isRDD) {
         // If fetching disk persisted RDD from the external shuffle service is enabled then first
         // try to find the block in the external shuffle service preferring the one running on
         // the same host. This search includes blocks stored on already killed executors as well.
@@ -879,7 +879,7 @@ class BlockManagerMasterEndpoint(
       } else {
         // trying to find it in the executors running on the same host and persisted on the disk
         // Implementation detail: using flatMap on iterators makes the transformation lazy.
-        allLocations.find(_.host == requesterHost).iterator
+        allLocations.filter(_.host == requesterHost).iterator
           .flatMap { bmId =>
             blockManagerInfo.get(bmId).flatMap { blockInfo =>
               blockInfo.getStatus(blockId).map((_, bmId))
