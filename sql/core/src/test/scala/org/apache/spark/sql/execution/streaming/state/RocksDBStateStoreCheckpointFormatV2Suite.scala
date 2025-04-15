@@ -61,6 +61,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   override def id: StateStoreId = innerStore.id
   override def version: Long = innerStore.version
 
+  override def getReadStamp: Long = innerStore.getReadStamp
+
   override def get(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = {
@@ -178,6 +180,14 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
   override def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore = {
     new WrappedReadStateStore(
       CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
+  }
+
+  override def getWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = {
+    CkptIdCollectingStateStoreWrapper(innerProvider.getWriteStore(
+        readStore, version, uniqueId))
   }
 
   override def doMaintenance(): Unit = innerProvider.doMaintenance()

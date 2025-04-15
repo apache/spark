@@ -73,6 +73,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val iter = provider.rocksDB.iterator()
       assert(iter.hasNext)
       val kv = iter.next()
+      store.commit()
 
       // Verify the version encoded in first byte of the key and value byte arrays
       assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
@@ -259,7 +260,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
             RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
             colFamiliesEnabled)) { provider =>
-            provider.getStore(0)
+            provider.getStore(0).abort()
         }
       }
 
@@ -354,6 +355,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result1 === (timerTimestamps ++ timerTimestamps1).sorted)
+      store1.commit()
     }
   }
 
@@ -521,6 +523,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result1 === (timerTimestamps ++ timerTimestamps1).sorted)
+      store1.commit()
     }
   }
 
@@ -627,6 +630,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.commit()
     }
   }
 
@@ -1402,6 +1406,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }.toSeq
 
       assert(result1 === timerTimestamps1.map(_._2).sorted)
+      store1.commit()
     }
   }
 
@@ -1456,6 +1461,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           (key._1, key._2)
         }.toSeq
       assert(result.map(_._1) === timerTimestamps.map(_._1).sorted)
+      store.commit()
     }
   }
 
@@ -1501,6 +1507,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.commit()
     }
   }
 
@@ -1544,6 +1551,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }.toSeq
         assert(result.size === 1)
       }
+      store.commit()
     }
   }
 
@@ -1581,6 +1589,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }.toSeq
         assert(result.size === idx + 1)
       }
+      store.commit()
     }
   }
 
@@ -1607,6 +1616,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(valueRowToData(store.get(keyRow2)) === 2)
       store.remove(keyRow2)
       assert(store.get(keyRow2) === null)
+      store.commit()
     }
   }
 
@@ -1641,6 +1651,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(!iterator2.hasNext)
 
         assert(get(store, "a", 0).isEmpty)
+        store.commit()
       }
     }
   }
@@ -1680,6 +1691,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
@@ -1716,6 +1728,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
@@ -1750,6 +1763,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       verifyStoreOperationUnsupported("prefixScan", colFamiliesEnabled, colFamilyName) {
         store.prefixScan(dataToKeyRow("a", 1), colFamilyName)
       }
+      store.commit()
     }
   }
 
@@ -1804,6 +1818,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         sqlState = Some("42802"),
         parameters = Map("operationType" -> "get", "colFamilyName" -> colFamily1)
       )
+      store.abort()
 
       store = provider.getStore(1)
       // version 1 data recovered correctly
@@ -1856,12 +1871,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // this should return the old id, because we didn't remove this colFamily for version 1
       store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
+      store.commit()
 
       store = provider.getRocksDBStateStore(3)
       store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
+      store.commit()
     }
   }
 
@@ -2217,10 +2234,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPair = store
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPair.isDefined && metricPair.get._2 === 4)
-        assert(rowPairsToDataSet(provider.getStore(1).iterator(cfName)) ===
+        val store1 = provider.getStore(1)
+        assert(rowPairsToDataSet(store1.iterator(cfName)) ===
           Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(provider.getStore(1).iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(store1.iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("m", 0) -> 2, ("n", 0) -> 3, ("b", 0) -> 4))
+        store1.abort()
 
         // Reload the store and remove some keys
         val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
@@ -2237,10 +2256,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPairUpdated = reloadedStore
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPairUpdated.isDefined && metricPairUpdated.get._2 === 3)
-        assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator(cfName)) ===
+        val reloadedStore2 = reloadedProvider.getStore(2)
+        assert(rowPairsToDataSet(reloadedStore2.iterator(cfName)) ===
           Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(reloadedStore2.iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("n", 0) -> 3, ("b", 0) -> 4))
+        reloadedStore2.commit()
       }
     }
   }
@@ -2283,6 +2304,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           sqlState = Some("42802"),
           parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
         )
+        store.abort()
       }
     }
   }
@@ -2398,7 +2420,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(provider.stateStoreId,
       useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
-      reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
+      val store = reloadedProvider.getStore(versionToRead)
+      val res = store.iterator().map(rowPairToDataPair).toSet
+      store.abort()
+      res
     }
   }
 

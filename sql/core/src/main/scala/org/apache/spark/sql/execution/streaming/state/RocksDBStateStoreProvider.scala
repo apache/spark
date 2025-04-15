@@ -43,7 +43,7 @@ private[sql] class RocksDBStateStoreProvider
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
-  class RocksDBStateStore(lastVersion: Long) extends StateStore {
+  class RocksDBStateStore(lastVersion: Long, val stamp: Long) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
@@ -57,6 +57,10 @@ private[sql] class RocksDBStateStoreProvider
     private case object METRICS extends TRANSITION
 
     @volatile private var state: STATE = UPDATING
+
+    override def getReadStamp: Long = {
+      stamp
+    }
 
     /**
      * Validates the expected state, throws exception if state is not as expected.
@@ -81,6 +85,7 @@ private[sql] class RocksDBStateStoreProvider
     private def validateAndTransitionState(transition: TRANSITION): Unit = {
       val newState = transition match {
         case UPDATE =>
+          stateMachine.verifyStamp(stamp)
           state match {
             case UPDATING => UPDATING
             case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
@@ -90,14 +95,18 @@ private[sql] class RocksDBStateStoreProvider
           }
         case ABORT =>
           state match {
-            case UPDATING => ABORTED
+            case UPDATING =>
+              stateMachine.verifyStamp(stamp)
+              ABORTED
             case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
               "Cannot abort after committed")
             case ABORTED => ABORTED
           }
         case COMMIT =>
           state match {
-            case UPDATING => COMMITTED
+            case UPDATING =>
+              stateMachine.verifyStamp(stamp)
+              COMMITTED
             case COMMITTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
               "Cannot commit after committed")
             case ABORTED => throw StateStoreErrors.stateStoreOperationOutOfOrder(
@@ -118,10 +127,14 @@ private[sql] class RocksDBStateStoreProvider
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
       _ =>
         try {
-          abort()
+          if (state == UPDATING) {
+            abort()
+          }
         } catch {
           case NonFatal(e) =>
             logWarning("Failed to abort state store", e)
+        } finally {
+          stateMachine.releaseStore(stamp, throwEx = false)
         }
     })
 
@@ -318,15 +331,18 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
+    private var storedMetrics: Option[RocksDBMetrics] = None
+
     override def commit(): Long = synchronized {
       validateState(List(UPDATING))
-
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         val (newVersion, newCheckpointInfo) = rocksDB.commit()
         checkpointInfo = Some(newCheckpointInfo)
+        storedMetrics = rocksDB.metricsOpt
         validateAndTransitionState(COMMIT)
-        state = COMMITTED
+        stateMachine.releaseStore(stamp)
+
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
         newVersion
@@ -342,6 +358,7 @@ private[sql] class RocksDBStateStoreProvider
           log"for ${MDC(STATE_STORE_ID, id)}")
         rocksDB.rollback()
         validateAndTransitionState(ABORT)
+        stateMachine.releaseStore(stamp)
       }
     }
 
@@ -541,15 +558,26 @@ private[sql] class RocksDBStateStoreProvider
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
+  private lazy val stateMachine: RocksDBStateStoreProviderStateMachine =
+    new RocksDBStateStoreProviderStateMachine(stateStoreId, RocksDBConf(storeConf))
+
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
-      new RocksDBStateStore(version)
+      val stamp = stateMachine.acquireStore()
+      try {
+        rocksDB.load(
+          version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+          readOnly = false)
+        new RocksDBStateStore(version, stamp)
+      } catch {
+        case e: Throwable =>
+          stateMachine.releaseStore(stamp)
+          throw e
+      }
     }
     catch {
       case e: SparkException
@@ -564,16 +592,58 @@ private[sql] class RocksDBStateStoreProvider
     }
   }
 
-  override def getReadStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+  override def getWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = {
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = true)
-      new RocksDBStateStore(version)
+      assert(version == readStore.version)
+      try {
+        rocksDB.load(
+          version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+          readOnly = false)
+        readStore match {
+          case stateStore: RocksDBStateStore =>
+            stateStore
+          case _ =>
+            throw new IllegalArgumentException
+        }
+      } catch {
+        case e: Throwable =>
+          stateMachine.releaseStore(readStore.getReadStamp)
+          throw e
+      }
+    } catch {
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
+        throw e
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "ROCKSDB_STORE_PROVIDER",
+          e)
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+
+  override def getReadStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+    try {
+      val stamp = stateMachine.acquireStore()
+      try {
+        rocksDB.load(
+          version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+          readOnly = true)
+        new RocksDBStateStore(version, stamp)
+      } catch {
+        case e: Throwable =>
+          stateMachine.releaseStore(stamp)
+          throw e
+      }
     }
     catch {
       case e: SparkException
@@ -590,6 +660,7 @@ private[sql] class RocksDBStateStoreProvider
 
   override def doMaintenance(): Unit = {
     try {
+      stateMachine.maintenanceStore()
       rocksDB.doMaintenance()
     } catch {
       // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
@@ -601,6 +672,7 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def close(): Unit = {
+    stateMachine.closeStore()
     rocksDB.close()
   }
 
@@ -657,8 +729,15 @@ private[sql] class RocksDBStateStoreProvider
       if (endVersion < snapshotVersion) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
-      rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
-      new RocksDBStateStore(endVersion)
+      val stamp = stateMachine.acquireStore()
+      try {
+        rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
+        new RocksDBStateStore(endVersion, stamp)
+      } catch {
+        case e: Throwable =>
+          stateMachine.releaseStore(stamp)
+          throw e
+      }
     }
     catch {
       case e: OutOfMemoryError =>

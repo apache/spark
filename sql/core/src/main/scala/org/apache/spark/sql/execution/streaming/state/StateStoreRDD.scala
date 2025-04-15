@@ -27,6 +27,10 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
+trait StateStoreRDDProvider {
+  def getStateStoreForPartition(partitionId: Int): Option[ReadStateStore]
+}
+
 abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     checkpointLocation: String,
@@ -82,23 +86,40 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) {
+    sessionState, storeCoordinator, extraOptions) with StateStoreRDDProvider {
+
+  // Using a ConcurrentHashMap to track state stores by partition ID
+  @transient private lazy val partitionStores =
+    new java.util.concurrent.ConcurrentHashMap[Int, ReadStateStore]()
+
+  override def getStateStoreForPartition(partitionId: Int): Option[ReadStateStore] = {
+    Option(partitionStores.get(partitionId))
+  }
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
+    val partitionId = partition.index
 
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      stateStoreCkptIds.map(_.apply(partition.index).head),
+      stateStoreCkptIds.map(_.apply(partitionId).head),
       stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
+
+    // Store reference for this partition
+    partitionStores.put(partitionId, store)
+
+    // Register a cleanup callback to be executed when the task completes
+    ctxt.addTaskCompletionListener[Unit](_ => {
+      partitionStores.remove(partitionId)
+    })
+
     storeReadFunction(store, inputIter)
   }
 }
-
 /**
  * An RDD that allows computations to be executed against [[StateStore]]s. It
  * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
@@ -126,16 +147,60 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
+  // Recursively find a state store provider in the RDD lineage
+  private def findStateStoreProvider(rdd: RDD[_]): Option[StateStoreRDDProvider] = {
+    rdd match {
+      case null => None
+      case provider: StateStoreRDDProvider => Some(provider)
+      case _ if rdd.dependencies.isEmpty => None
+      case _ =>
+        // Search all dependencies
+        rdd.dependencies.view
+          .map(dep => findStateStoreProvider(dep.rdd))
+          .find(_.isDefined)
+          .flatten
+    }
+  }
+
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
-
     val inputIter = dataRDD.iterator(partition, ctxt)
-    val store = StateStore.get(
-      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      uniqueId.map(_.apply(partition.index).head),
-      stateSchemaBroadcast,
-      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey)
+
+    // Try to find a state store provider in the RDD lineage
+    val store = findStateStoreProvider(dataRDD).flatMap { provider =>
+      provider.getStateStoreForPartition(partition.index)
+    } match {
+      case Some(readStore) =>
+        // Convert the read store to a writable store
+        StateStore.getWriteStore(
+          readStore,
+          storeProviderId,
+          keySchema,
+          valueSchema,
+          keyStateEncoderSpec,
+          storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies,
+          storeConf,
+          hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
+
+      case None =>
+        // Fall back to creating a new store
+        StateStore.get(
+          storeProviderId,
+          keySchema,
+          valueSchema,
+          keyStateEncoderSpec,
+          storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies,
+          storeConf,
+          hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
+    }
     storeUpdateFunction(store, inputIter)
   }
 }

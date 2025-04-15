@@ -55,6 +55,7 @@ class TimerSuite extends StateVariableSuiteBase {
       assert(timerState.listTimers().toSet === Set(20000L, 1000L))
       timerState.deleteTimer(20000L)
       assert(timerState.listTimers().toSet === Set(1000L))
+      store.commit()
     }
   }
 
@@ -81,6 +82,7 @@ class TimerSuite extends StateVariableSuiteBase {
       assert(timerState1.listTimers().toSet === Set(20000L, 15000L, 1000L))
       timerState1.deleteTimer(20000L)
       assert(timerState1.listTimers().toSet === Set(15000L, 1000L))
+      store.commit()
     }
   }
 
@@ -113,6 +115,7 @@ class TimerSuite extends StateVariableSuiteBase {
       ImplicitGroupingKeyTracker.setImplicitKey("test_key2")
       assert(timerState2.listTimers().toSet === Set(15000L))
       assert(timerState2.getExpiredTimers(1500L).toSeq === Seq(("test_key1", 1000L)))
+      store.commit()
     }
   }
 
@@ -132,6 +135,7 @@ class TimerSuite extends StateVariableSuiteBase {
         timerTimerstamps.sorted.takeWhile(_ <= 4200L))
       assert(timerState.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
       ImplicitGroupingKeyTracker.removeImplicitKey()
+      store.commit()
     }
   }
 
@@ -164,6 +168,7 @@ class TimerSuite extends StateVariableSuiteBase {
       assert(timerState1.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
       assert(timerState1.getExpiredTimers(8000L).toSeq.map(_._2) ===
         (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted.takeWhile(_ <= 8000L))
+      store.commit()
     }
   }
 
@@ -183,6 +188,7 @@ class TimerSuite extends StateVariableSuiteBase {
       assert(timerState.listTimers().toSet === Set(20000L, 1000L))
       timerState.deleteTimer(20000L)
       assert(timerState.listTimers().toSet === Set(1000L))
+      store.commit()
     }
   }
 }

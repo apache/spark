@@ -1128,9 +1128,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   testWithAllCodec("get, put, remove, commit, and all data iterator") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
-
       val store = provider.getStore(0)
+      assert(store.iterator().isEmpty)
       assert(!store.hasCommitted)
       assert(get(store, "a", 0) === None)
       assert(store.iterator().isEmpty)
@@ -1150,7 +1149,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(store.metrics.numKeys === 1)
 
       assert(store.hasCommitted)
-      assert(rowPairsToDataSet(provider.getStore(1).iterator()) === Set(("b", 0) -> 2))
+      val store1 = provider.getStore(1)
+      assert(rowPairsToDataSet(store1.iterator()) === Set(("b", 0) -> 2))
+      store1.abort()
       assert(getLatestData(provider,
         useColumnFamilies = colFamiliesEnabled) === Set(("b", 0) -> 2))
 
@@ -1170,8 +1171,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         val reloadedStore = reloadedProvider.getStore(1)
         put(reloadedStore, "c", 0, 4)
         assert(reloadedStore.commit() === 2)
-        assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator()) ===
+        val reloadedStore2 = reloadedProvider.getStore(2)
+        assert(rowPairsToDataSet(reloadedStore2.iterator()) ===
           Set(("b", 0) -> 2, ("c", 0) -> 4))
+        reloadedStore2.commit()
         assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled)
           === Set(("b", 0) -> 2, ("c", 0) -> 4))
         assert(getData(provider, version = 1, useColumnFamilies = colFamiliesEnabled)
@@ -1183,10 +1186,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   testWithAllCodec("prefix scan") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(keySchema, PrefixKeyScanStateEncoderSpec(keySchema, 1),
       colFamiliesEnabled)) { provider =>
-      // Verify state before starting a new set of updates
-      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       var store = provider.getStore(0)
+      assert(store.iterator().isEmpty)
 
       def putCompositeKeys(keys: Seq[(String, Int)]): Unit = {
         val randomizedKeys = scala.util.Random.shuffle(keys.toList)
@@ -1237,15 +1239,15 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       // prefix scan should not reflect the uncommitted changes
       verifyScan(key1AtVersion0, key2AtVersion0)
       verifyScan(Seq("d"), Seq.empty)
+      store.abort()
     }
   }
 
   testWithAllCodec(s"numKeys metrics") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
-      // Verify state before starting a new set of updates
-      assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
 
       val store = provider.getStore(0)
+      assert(store.iterator().isEmpty)
       put(store, "a", 0, 1)
       put(store, "b", 0, 2)
       put(store, "c", 0, 3)
@@ -1263,16 +1265,18 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       remove(reloadedStore, _._1 == "b")
       assert(reloadedStore.commit() === 2)
       assert(reloadedStore.metrics.numKeys === 4)
-      assert(rowPairsToDataSet(reloadedProvider.getStore(2).iterator()) ===
+      val store2 = reloadedProvider.getStore(2)
+      assert(rowPairsToDataSet(store2.iterator()) ===
         Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+      store2.commit()
     }
   }
 
   testWithAllCodec(s"removing while iterating") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
       val store = provider.getStore(0)
+      assert(store.iterator().isEmpty)
       put(store, "a", 0, 1)
       put(store, "b", 0, 2)
 
@@ -1289,6 +1293,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         tuple => keyRowToData(tuple.key) == ("b", 0) }
       filtered2.foreach { tuple => store.remove(tuple.key) }
       assert(get(store, "b", 0) === None)
+      store.commit()
     }
   }
 
@@ -1297,10 +1302,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
       store.commit()
-      assert(rowPairsToDataSet(provider.getStore(1).iterator()) === Set(("a", 0) -> 1))
-
       // cancelUpdates should not change the data in the files
       val store1 = provider.getStore(1)
+      assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
       put(store1, "b", 0, 1)
       store1.abort()
     }
@@ -1346,6 +1350,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
+      store1_.abort()
 
       checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
       checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
@@ -1357,47 +1362,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(store1.commit() === 2)
       val store2 = provider.getStore(2)
       assert(rowPairsToDataSet(store2.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
-
+      store2.abort()
       checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
       checkInvalidVersion(3, provider.isInstanceOf[HDFSBackedStateStoreProvider])
-    }
-  }
-
-  testWithAllCodec("two concurrent StateStores - one for read-only and one for read-write") {
-    colFamiliesEnabled =>
-    // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
-    // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`. `StateStore.abort`
-    // will be called for these StateStores if they haven't committed their results. We need to
-    // make sure that `abort` in read-only store after a `commit` in the read-write store doesn't
-    // accidentally lead to the deletion of state.
-    val dir = newDir()
-    val storeId = StateStoreId(dir, 0L, 1)
-    val key1 = "a"
-    val key2 = 0
-
-    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider0 =>
-      // prime state
-      val store = provider0.getStore(0)
-
-      put(store, key1, key2, 1)
-      store.commit()
-      assert(rowPairsToDataSet(provider0.getStore(1).iterator()) === Set((key1, key2) -> 1))
-    }
-
-    // two state stores
-    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider1 =>
-      val restoreStore = provider1.getReadStore(1)
-      val saveStore = provider1.getStore(1)
-
-      put(saveStore, key1, key2, get(restoreStore, key1, key2).get + 1)
-      saveStore.commit()
-      restoreStore.abort()
-    }
-
-    // check that state is correct for next batch
-    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider2 =>
-      val finalStore = provider2.getStore(2)
-      assert(rowPairsToDataSet(finalStore.iterator()) === Set((key1, key2) -> 2))
     }
   }
 
@@ -1414,6 +1381,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store = provider.getStore(0)
       put(store, "a", 0, 0)
       val e = intercept[SparkException](quietly { store.commit() } )
+      store.abort()
 
       assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
       if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
@@ -1424,6 +1392,48 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(e.getMessage contains "Error writing state store files")
       assert(e.getCause.getMessage.contains("Failed to rename"))
     }
+  }
+
+  testWithAllCodec("two concurrent StateStores - one for read-only and one for read-write") {
+    colFamiliesEnabled =>
+      // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
+      // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`.
+      // `StateStore.abort`
+      // will be called for these StateStores if they haven't committed their results. We need to
+      // make sure that `abort` in read-only store after a `commit` in the read-write store doesn't
+      // accidentally lead to the deletion of state.
+      val dir = newDir()
+      val storeId = StateStoreId(dir, 0L, 1)
+      val key1 = "a"
+      val key2 = 0
+
+      tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider0 =>
+        // prime state
+        val store = provider0.getStore(0)
+
+        put(store, key1, key2, 1)
+        store.commit()
+        val store1 = provider0.getStore(1)
+        assert(rowPairsToDataSet(store1.iterator()) === Set((key1, key2) -> 1))
+        store1.commit()
+      }
+
+      // two state stores
+      tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider1 =>
+        val restoreStore = provider1.getReadStore(1)
+        val saveStore = provider1.getWriteStore(restoreStore, 1)
+
+        put(saveStore, key1, key2, get(restoreStore, key1, key2).get + 1)
+        saveStore.commit()
+        restoreStore.abort()
+      }
+
+      // check that state is correct for next batch
+      tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider2 =>
+        val finalStore = provider2.getStore(2)
+        assert(rowPairsToDataSet(finalStore.iterator()) === Set((key1, key2) -> 2))
+        finalStore.commit()
+      }
   }
 
   // This test illustrates state store iterator behavior differences leading to SPARK-38320.
@@ -1447,7 +1457,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val itr3 = store.iterator()  // itr3 is created after all writes.
 
       val intermediateState = Set(("1", 11) -> 100, ("2", 22) -> 200) // The intermediate state.
-      val finalState = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300) // The final state.
+      val finalState = Set(("1", 11) -> 101,
+        ("2", 22) -> 200, ("3", 33) -> 300) // The final state.
       // Itr1 does not see any updates - original state of the store (SPARK-38320)
       assert(rowPairsToDataSet(itr1) === Set.empty[Set[((String, Int), Int)]])
       if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
@@ -1631,13 +1642,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   test("SPARK-35659: StateStore.put cannot put null value") {
     tryWithProviderResource(newStoreProvider()) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       val store = provider.getStore(0)
+      assert(store.iterator().isEmpty)
       val err = intercept[IllegalArgumentException] {
         store.put(dataToKeyRow("key", 0), null)
       }
       assert(err.getMessage.contains("Cannot put a null value"))
+      store.commit()
     }
   }
 
