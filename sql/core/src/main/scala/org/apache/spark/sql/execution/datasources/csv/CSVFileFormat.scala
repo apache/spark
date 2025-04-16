@@ -35,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * Provides access to CSV data from pure SQL statements.
  */
-class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
+case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"
 
@@ -157,10 +157,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
   override def toString: String = "CSV"
-
-  override def hashCode(): Int = getClass.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
   /**
    * Allow reading variant from CSV, but don't allow writing variant into CSV. This is because the
