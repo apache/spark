@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -361,12 +362,21 @@ object PartitioningUtils extends SQLConfHelper {
     }.mkString("/")
   }
 
-  def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String =
-    dataType match {
-      case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-        Option(castPartValueToDesiredType(dataType, value, null)).map(_.toString).orNull
-      case _ => value
+  def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String = {
+    try {
+      dataType match {
+        case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
+          Option(castPartValueToDesiredType(dataType, value, null)).map(_.toString).orNull
+        case _ => value
+      }
+    } catch {
+      case NonFatal(_) =>
+        if (SQLConf.get.validatePartitionColumns) {
+          throw QueryExecutionErrors.failedToCastValueToDataTypeForPartitionColumnError(
+              value, dataType, null)
+        } else value
     }
+  }
 
   def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
     getPathFragment(spec, DataTypeUtils.fromAttributes(partitionColumns))

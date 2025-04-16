@@ -1405,6 +1405,14 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     assert("p_int=10/p_float=1.0" === path)
   }
 
+  test("SPARK-51830 handle exception and validate partition column as false") {
+    SQLConf.get.setConf(SQLConf.VALIDATE_PARTITION_COLUMNS, false)
+    val spec = Map("p_int" -> "not_a_number")
+    val schema = new StructType().add("p_int", "int")
+    val path = PartitioningUtils.getPathFragment(spec, schema)
+    assert("p_int=not_a_number" === path)
+  }
+
   test("SPARK-39417: Null partition value") {
     // null partition value is replaced by DEFAULT_PARTITION_NAME before hitting getPathFragment.
     val spec = Map("p_int"-> ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
