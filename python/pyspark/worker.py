@@ -587,14 +587,12 @@ def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
 
 def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, values):
-        if type(values) != tuple:
-            assert mode != TransformWithStateInPySparkFuncMode.PROCESS_DATA
-            # This should be iter([])
-            values_gen = iter([])
-            init_states_gen = iter([])
-        else:
+        if mode == TransformWithStateInPySparkFuncMode.PROCESS_DATA:
             values_gen = values[0]
             init_states_gen = values[1]
+        else:
+            values_gen = iter([])
+            init_states_gen = iter([])
 
         result_iter = f(stateful_processor_api_client, mode, key, values_gen, init_states_gen)
 

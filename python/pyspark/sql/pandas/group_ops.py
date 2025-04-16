@@ -515,9 +515,7 @@ class PandasGroupedOpsMixin:
 
         The `outputStructType` should be a :class:`StructType` describing the schema of all
         elements in the returned value, `Row`. The column labels of all elements in
-        returned `Row` must either match the field names in the defined schema if
-        specified as strings, or match the field data types by position if not strings,
-        e.g. integer indices.
+        returned `Row` must either match the field names in the defined schema.
 
         The number of `Row` in the iterator in both the input and output can be arbitrary.
 
@@ -576,9 +574,9 @@ class PandasGroupedOpsMixin:
         ...         else:
         ...             existing_violations = 0
         ...         for row in rows:
-        ...             if row["temperature"] is not None:
+        ...             if row.temperature is not None:
         ...                  count += 1
-        ...                  if row["temperature"] > 100:
+        ...                  if row.temperature > 100:
         ...                      new_violations += 1
         ...         updated_violations = new_violations + existing_violations
         ...         self.num_violations_state.update((updated_violations,))
@@ -649,6 +647,7 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_util = TransformWithStateInPySparkUdfUtils(statefulProcessor, timeMode)
 
+        # explicitly set the type to Any since it could match to various types (literals)
         functionType: Any = None
         if usePandas and initialState is None:
             functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
