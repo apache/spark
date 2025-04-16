@@ -204,6 +204,7 @@ case class UnionLoopExec(
             val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
               case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
             }
+            Project(prevPlanToRefMapping, prevPlan)
         }
 
         val (df, count) = executeAndCacheAndCount(newRecursion, currentLimit)
