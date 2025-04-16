@@ -31,12 +31,12 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   val constraint1 = CheckConstraint(
     child = GreaterThan(UnresolvedAttribute("a"), Literal(0)),
     condition = "a > 0",
-    name = "c1",
+    userProvidedName = "c1",
     tableName = "t")
   val constraint2 = CheckConstraint(
     child = EqualTo(UnresolvedAttribute("b"), Literal("foo")),
     condition = "b = 'foo'",
-    name = "c2",
+    userProvidedName = "c2",
     tableName = "t")
 
   test("Create table with one check constraint - table level") {
@@ -56,7 +56,8 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic)
+        val constraint = constraint1.withUserProvidedName("c1")
+          .withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -101,7 +102,8 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT CONSTRAINT c1 CHECK (a > 0)" +
           s" $enforcedStr $relyStr, b STRING) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic)
+        val constraint = constraint1.withUserProvidedName("c1")
+          .withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -149,7 +151,8 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"REPLACE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic)
+        val constraint = constraint1.withUserProvidedName("c1")
+          .withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint), isCreateTable = false)
     }
   }
@@ -229,9 +232,9 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         CheckConstraint(
           child = GreaterThan(UnresolvedAttribute("d"), Literal(0)),
           condition = "d > 0",
-          name = "c1",
+          userProvidedName = "c1",
           tableName = "t",
-          characteristic = characteristic
+          userProvidedCharacteristic = characteristic
         ))
       comparePlans(parsed, expected)
     }
@@ -268,7 +271,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         case c: CreateTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
-          assert(tableSpec.constraints.head == constraint1.withName(null))
+          assert(tableSpec.constraints.head == constraint1.withUserProvidedName(null))
           assert(tableSpec.constraints.head.constraintName.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
@@ -287,7 +290,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
         case c: ReplaceTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
-          assert(tableSpec.constraints.head == constraint1.withName(null))
+          assert(tableSpec.constraints.head == constraint1.withUserProvidedName(null))
           assert(tableSpec.constraints.head.constraintName.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
@@ -306,7 +309,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case a: AddConstraint =>
         val table = a.table.asInstanceOf[UnresolvedTable]
         assert(table.multipartIdentifier == Seq("a", "b", "t"))
-        assert(a.tableConstraint == constraint1.withName(null))
+        assert(a.tableConstraint == constraint1.withUserProvidedName(null))
         assert(a.tableConstraint.constraintName.matches("t_chk_[0-9a-f]{7}"))
 
       case other =>

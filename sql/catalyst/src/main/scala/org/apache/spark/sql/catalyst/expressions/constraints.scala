@@ -24,21 +24,21 @@ import org.apache.spark.sql.types.{DataType, StringType}
 
 trait TableConstraint {
 
-  /** Returns the name of the constraint */
-  def name: String
+  /** Returns the user-provided name of the constraint */
+  def userProvidedName: String
 
   /** Returns the name of the table containing this constraint */
   def tableName: String
 
-  /** Returns the characteristics of the constraint (e.g., ENFORCED, RELY) */
-  def characteristic: ConstraintCharacteristic
+  /** Returns the user-provided characteristics of the constraint (e.g., ENFORCED, RELY) */
+  def userProvidedCharacteristic: ConstraintCharacteristic
 
-  /** Creates a new constraint with the given name
+  /** Creates a new constraint with the user-provided name
    *
    * @param name Constraint name
    * @return New TableConstraint instance
    */
-  def withName(name: String): TableConstraint
+  def withUserProvidedName(name: String): TableConstraint
 
   /**
    * Creates a new constraint with the given table name
@@ -48,16 +48,15 @@ trait TableConstraint {
    */
   def withTableName(tableName: String): TableConstraint
 
-  /** Creates a new constraint with the given characteristic
+  /** Creates a new constraint with the user-provided characteristic
    *
    * @param c Constraint characteristic (ENFORCED, RELY)
    * @return New TableConstraint instance
    */
-  def withCharacteristic(c: ConstraintCharacteristic): TableConstraint
+  def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint
 
   // Generate a constraint name based on the table name if the name is not specified
   protected def generateConstraintName(tableName: String): String
-
 
   /**
    * Gets the constraint name. If no name is specified (null or empty),
@@ -66,10 +65,10 @@ trait TableConstraint {
    * @return The constraint name (either user-specified or generated)
    */
   final def constraintName: String = {
-    if (name == null || name.isEmpty) {
+    if (userProvidedName == null || userProvidedName.isEmpty) {
       generateConstraintName(tableName)
     } else {
-      name
+      userProvidedName
     }
   }
 
@@ -101,15 +100,17 @@ object ConstraintCharacteristic {
   val empty: ConstraintCharacteristic = ConstraintCharacteristic(None, None)
 }
 
+// scalastyle:off line.size.limit
 case class CheckConstraint(
     child: Expression,
     condition: String,
-    override val name: String = null,
+    override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
+    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends UnaryExpression
   with Unevaluable
   with TableConstraint {
+// scalastyle:on line.size.limit
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -118,75 +119,82 @@ case class CheckConstraint(
     s"${tableName}_chk_$randomSuffix"
   }
 
-  override def sql: String = s"CONSTRAINT $name CHECK ($condition)"
+  override def sql: String = s"CONSTRAINT $userProvidedName CHECK ($condition)"
 
   override def dataType: DataType = StringType
 
-  override def withName(name: String): TableConstraint = copy(name = name)
+  override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint =
-    copy(characteristic = c)
+  override def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint =
+    copy(userProvidedCharacteristic = c)
 }
 
+// scalastyle:off line.size.limit
 case class PrimaryKeyConstraint(
     columns: Seq[String],
-    override val name: String = null,
+    override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
+    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
+// scalastyle:on line.size.limit
+
   override protected def generateConstraintName(tableName: String): String = s"${tableName}_pk"
 
-  override def withName(name: String): TableConstraint = copy(name = name)
+  override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
+  override def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
     failIfEnforced(c, "PRIMARY KEY")
-    copy(characteristic = c)
+    copy(userProvidedCharacteristic = c)
   }
 }
 
+// scalastyle:off line.size.limit
 case class UniqueConstraint(
     columns: Seq[String],
-    override val name: String = null,
+    override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
+    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
     extends TableConstraint {
+// scalastyle:on line.size.limit
 
   override protected def generateConstraintName(tableName: String): String = {
     s"${tableName}_uniq_$randomSuffix"
   }
 
-  override def withName(name: String): TableConstraint = copy(name = name)
+  override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
+  override def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
     failIfEnforced(c, "UNIQUE")
-    copy(characteristic = c)
+    copy(userProvidedCharacteristic = c)
   }
 }
 
+// scalastyle:off line.size.limit
 case class ForeignKeyConstraint(
     childColumns: Seq[String] = Seq.empty,
     parentTableId: Seq[String] = Seq.empty,
     parentColumns: Seq[String] = Seq.empty,
-    override val name: String = null,
+    override val userProvidedName: String = null,
     override val tableName: String = null,
-    override val characteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
+    override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends TableConstraint {
+// scalastyle:on line.size.limit
 
   override protected def generateConstraintName(tableName: String): String =
     s"${tableName}_${parentTableId.last}_fk_$randomSuffix"
 
-  override def withName(name: String): TableConstraint = copy(name = name)
+  override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
 
-  override def withCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
+  override def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
     failIfEnforced(c, "FOREIGN KEY")
-    copy(characteristic = c)
+    copy(userProvidedCharacteristic = c)
   }
 }

@@ -43,7 +43,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
-      name = "fk1",
+      userProvidedName = "fk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
@@ -68,7 +68,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
-      name = "fk1",
+      userProvidedName = "fk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
@@ -95,7 +95,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
-      name = "fk1",
+      userProvidedName = "fk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
@@ -120,7 +120,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       childColumns = Seq("a"),
       parentTableId = Seq("parent"),
       parentColumns = Seq("id"),
-      name = "fk1",
+      userProvidedName = "fk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
@@ -142,7 +142,7 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
           Seq("orders"),
           "ALTER TABLE ... ADD CONSTRAINT"),
         ForeignKeyConstraint(
-          name = expectedName,
+          userProvidedName = expectedName,
           tableName = "orders",
           childColumns = Seq("customer_id"),
           parentTableId = Seq("customers"),
@@ -189,12 +189,12 @@ class ForeignKeyConstraintParseSuite extends ConstraintParseSuiteBase {
           Seq("orders"),
           "ALTER TABLE ... ADD CONSTRAINT"),
         ForeignKeyConstraint(
-          name = "fk1",
+          userProvidedName = "fk1",
           tableName = "orders",
           childColumns = Seq("customer_id"),
           parentTableId = Seq("customers"),
           parentColumns = Seq("id"),
-          characteristic = characteristic
+          userProvidedCharacteristic = characteristic
         ))
       comparePlans(parsed, expected)
     }

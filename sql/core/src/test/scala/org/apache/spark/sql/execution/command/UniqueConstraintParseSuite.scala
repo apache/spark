@@ -62,7 +62,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
     val sql = "CREATE TABLE t (a INT, b STRING, CONSTRAINT uk1 UNIQUE (a)) USING parquet"
     val constraint = UniqueConstraint(
       columns = Seq("a"),
-      name = "uk1",
+      userProvidedName = "uk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
@@ -124,7 +124,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
     val sql = "REPLACE TABLE t (a INT, b STRING, CONSTRAINT uk1 UNIQUE (a)) USING parquet"
     val constraint = UniqueConstraint(
       columns = Seq("a"),
-      name = "uk1",
+      userProvidedName = "uk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
@@ -145,7 +145,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
     val sql = "CREATE TABLE t (a INT CONSTRAINT uk1 UNIQUE, b STRING) USING parquet"
     val constraint = UniqueConstraint(
       columns = Seq("a"),
-      name = "uk1",
+      userProvidedName = "uk1",
       tableName = "t"
     )
     val constraints = Seq(constraint)
@@ -164,7 +164,7 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           Seq("a", "b", "c"),
           "ALTER TABLE ... ADD CONSTRAINT"),
         UniqueConstraint(
-          name = expectedName,
+          userProvidedName = expectedName,
           tableName = "c",
           columns = Seq("email", "username")
         ))
@@ -206,10 +206,10 @@ class UniqueConstraintParseSuite extends ConstraintParseSuiteBase {
           Seq("a", "b", "c"),
           "ALTER TABLE ... ADD CONSTRAINT"),
         UniqueConstraint(
-          name = "uk1",
+          userProvidedName = "uk1",
           columns = Seq("email"),
           tableName = "c",
-          characteristic = characteristic
+          userProvidedCharacteristic = characteristic
         ))
       comparePlans(parsed, expected)
     }
