@@ -27,7 +27,32 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
+/**
+ * A trait that provides access to state stores for specific partitions in an RDD.
+ *
+ * This trait enables the state store optimization pattern for stateful operations
+ * where the same partition needs to be accessed for both reading and writing.
+ * Implementing classes maintain a mapping between partition IDs and their associated
+ * state stores, allowing lookups without creating duplicate connections.
+ *
+ * The primary use case is enabling the common pattern for stateful operations:
+ * 1. A read-only state store is opened to retrieve existing state
+ * 2. The same state store is then converted to read-write mode for updates
+ * 3. This avoids having two separate open connections to the same state store
+ *    which would cause blocking or contention issues
+ *
+ * Classes implementing this trait typically:
+ * - Track state stores by partition ID in a thread-safe collection
+ * - Provide cleanup mechanisms when tasks complete
+ * - Handle proper state store lifecycle to prevent resource leakage
+ */
 trait StateStoreRDDProvider {
+  /**
+   * Returns the state store associated with the specified partition, if one exists.
+   *
+   * @param partitionId The ID of the partition whose state store should be retrieved
+   * @return Some(store) if a state store exists for the given partition, None otherwise
+   */
   def getStateStoreForPartition(partitionId: Int): Option[ReadStateStore]
 }
 
@@ -120,6 +145,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     storeReadFunction(store, inputIter)
   }
 }
+
 /**
  * An RDD that allows computations to be executed against [[StateStore]]s. It
  * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
@@ -147,7 +173,25 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
-  // Recursively find a state store provider in the RDD lineage
+  /**
+   * Recursively searches the RDD lineage to find a StateStoreRDDProvider containing
+   * an already-opened state store for the current partition.
+   *
+   * This method helps implement the read-then-write pattern for stateful operations
+   * without creating contention issues. Instead of opening separate read and write
+   * stores that would block each other (since a state store provider can only handle
+   * one open store at a time), this allows us to:
+   *   1. Find an existing read store in the RDD lineage
+   *   2. Convert it to a write store using getWriteStore()
+   *
+   * This is particularly important for stateful aggregations where StateStoreRestoreExec
+   * first reads previous state and StateStoreSaveExec then updates it.
+   *
+   * The method performs a depth-first search through the RDD dependency graph.
+   *
+   * @param rdd The starting RDD to search from
+   * @return Some(provider) if a StateStoreRDDProvider is found in the lineage, None otherwise
+   */
   private def findStateStoreProvider(rdd: RDD[_]): Option[StateStoreRDDProvider] = {
     rdd match {
       case null => None
