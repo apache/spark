@@ -19,11 +19,9 @@ license: |
   limitations under the License.
 ---
 
-# RESIGNAL statement
-
 Re-raises the condition handled by the condition handler.
 
-This statement may only be used within a [compound statement](compound-stmt.md).
+This statement may only be used within a [compound statement](compound-stmt.html).
 
 ## Syntax
 
@@ -78,17 +76,13 @@ None
 
 ## Related articles
 
-- [SQL Scripting](/sql/language-manual/sql-ref-scripting.md)
-- [CASE Statement](/sql/language-manual/control-flow/case-stmt.md)
-- [Compound Statement](/sql/language-manual/control-flow/compound-stmt.md)
-- [SIGNAL Statement](/sql/language-manual/control-flow/signal-stmt.md)
-- [FOR Statement](/sql/language-manual/control-flow/for-stmt.md)
-- [IF Statement](/sql/language-manual/control-flow/if-stmt.md)
-- [ITERATE Statement](/sql/language-manual/control-flow/iterate-stmt.md)
-- [REPEAT Statement](/sql/language-manual/control-flow/repeat-stmt.md)
-- [SIGNAL Statement](/sql/language-manual/control-flow/signal-stmt.md)
-- [Error handling and error messages](/error-messages/index.md)
-
-```
-
-```
+- [SQL Scripting](../sql-ref-scripting.html)
+- [CASE Statement](../control-flow/case-stmt.html)
+- [Compound Statement](../control-flow/compound-stmt.html)
+- [SIGNAL Statement](../control-flow/signal-stmt.html)
+- [FOR Statement](../control-flow/for-stmt.html)
+- [IF Statement](../control-flow/if-stmt.html)
+- [ITERATE Statement](../control-flow/iterate-stmt.html)
+- [REPEAT Statement](../control-flow/repeat-stmt.html)
+- [SIGNAL Statement](../control-flow/signal-stmt.html)
+- [Error handling and error messages](/error-messages/index.html)

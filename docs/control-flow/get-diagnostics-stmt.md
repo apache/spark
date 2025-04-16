@@ -19,11 +19,9 @@ license: |
   limitations under the License.
 ---
 
-# GET DIAGNOSTICS statement
-
 Retrieve information about a condition handled in an exception handler.
 
-This statement may only be used within a condition handler in a [compound statement](compound-stmt.md).
+This statement may only be used within a condition handler in a [compound statement](compound-stmt.html).
 
 ## Syntax
 
@@ -41,7 +39,7 @@ condition_info_item
 
 ## Parameters
 
-- **[variable_name](/sql/language-manual/sql-ref-names.md#variable-name)**
+- **variable_name**
 
   A local variable or session variable.
 
@@ -62,7 +60,7 @@ condition_info_item
 
   - **`MESSAGE_ARGUMENTS`**
 
-    Returns a `MAP<STRING, STRING>` mapping provided as arguments to the parameters of Databricks conditions.
+    Returns a `MAP<STRING, STRING>` mapping provided as arguments to the parameters of Spark conditions.
     For declared conditions, the only map key is `MESSAGE_TEXT`.
     `variable_name` must be a `MAP<STRING, STRING>`
 
@@ -116,7 +114,7 @@ condition_info_item
 
 ## Related articles
 
-- [SQL Scripting](/sql/language-manual/sql-ref-scripting.md)
-- [CASE Statement](/sql/language-manual/control-flow/case-stmt.md)
-- [Compound Statement](/sql/language-manual/control-flow/compound-stmt.md)
-- [FOR Statement](/sql/language-manual/control-flow/for-stmt.md)
+- [SQL Scripting](../sql-ref-scripting.html)
+- [CASE Statement](../control-flow/case-stmt.html)
+- [Compound Statement](../control-flow/compound-stmt.html)
+- [FOR Statement](../control-flow/for-stmt.html)

@@ -19,8 +19,6 @@ license: |
   limitations under the License.
 ---
 
-# BEGIN END compound statement
-
 Implements a SQL Script block that can contain a sequence of SQL statements, control-of-flow statements, local variable declarations, and exception handlers.
 
 ## Syntax
@@ -155,15 +153,15 @@ END;
 
 ## Related articles
 
-- [SQL Scripting](../sql-ref-scripting.md)
-- [CASE Statement](/sql/language-manual/control-flow/case-stmt.md)
-- [IF Statement](/sql/language-manual/control-flow/if-stmt.md)
-- [LOOP Statement](/sql/language-manual/control-flow/loop-stmt.md)
-- [WHILE Statement](/sql/language-manual/control-flow/while-stmt.md)
-- [REPEAT Statement](/sql/language-manual/control-flow/repeat-stmt.md)
-- [FOR Statement](/sql/language-manual/control-flow/for-stmt.md)
-- [ITERATE Statement](/sql/language-manual/control-flow/iterate-stmt.md)
-- [LEAVE Statement](/sql/language-manual/control-flow/leave-stmt.md)
-- [SIGNAL Statement](/sql/language-manual/control-flow/signal-stmt.md)
-- [RESIGNAL Statement](/sql/language-manual/control-flow/resignal-stmt.md)
-- [GET DIAGNOSTICS Statement](/sql/language-manual/control-flow/get-diagnostics-stmt.md)
+- [SQL Scripting](../sql-ref-scripting.html)
+- [CASE Statement](../control-flow/case-stmt.html)
+- [IF Statement](../control-flow/if-stmt.html)
+- [LOOP Statement](../control-flow/loop-stmt.html)
+- [WHILE Statement](../control-flow/while-stmt.html)
+- [REPEAT Statement](../control-flow/repeat-stmt.html)
+- [FOR Statement](../control-flow/for-stmt.html)
+- [ITERATE Statement](../control-flow/iterate-stmt.html)
+- [LEAVE Statement](../control-flow/leave-stmt.html)
+- [SIGNAL Statement](../control-flow/signal-stmt.html)
+- [RESIGNAL Statement](../control-flow/resignal-stmt.html)
+- [GET DIAGNOSTICS Statement](../control-flow/get-diagnostics-stmt.html)
