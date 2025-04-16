@@ -66,7 +66,7 @@ object StateStoreEncoding {
  *   not supported yet from the implementation. Note that some stateful operations would not work
  *   on disabling prefixScan functionality.
  */
-trait ReadStateStore extends Logging {
+trait ReadStateStore {
 
   /** Unique identifier of the store */
   def id: StateStoreId
