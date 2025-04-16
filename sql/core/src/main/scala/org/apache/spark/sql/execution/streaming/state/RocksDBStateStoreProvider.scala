@@ -61,7 +61,7 @@ private[sql] class RocksDBStateStoreProvider
    * verify that operations are performed by the owning thread and to prevent
    * concurrent modifications to the same store.
    */
-  class RocksDBStateStore(lastVersion: Long, val stamp: Long) extends StateStore {
+  class RocksDBStateStore(lastVersion: Long, stamp: Long) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE

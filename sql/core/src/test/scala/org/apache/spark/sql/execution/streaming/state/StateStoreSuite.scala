@@ -1368,32 +1368,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  testQuietly("SPARK-18342: commit fails when rename fails") {
-    import RenameReturnsFalseFileSystem._
-
-    val ROCKSDB_STATE_STORE = "RocksDBStateStore"
-    val dir = scheme + "://" + newDir()
-    val conf = new Configuration()
-    conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
-
-    val storeId = StateStoreId(dir, operatorId = 0, partitionId = 0)
-    tryWithProviderResource(newStoreProvider(storeId, conf)) { provider =>
-      val store = provider.getStore(0)
-      put(store, "a", 0, 0)
-      val e = intercept[SparkException](quietly { store.commit() } )
-      store.abort()
-
-      assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
-      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
-        assert(e.getMessage contains "RocksDBStateStore[id=(op=0,part=0)")
-      } else {
-        assert(e.getMessage contains "HDFSStateStore[id=(op=0,part=0)")
-      }
-      assert(e.getMessage contains "Error writing state store files")
-      assert(e.getCause.getMessage.contains("Failed to rename"))
-    }
-  }
-
   testWithAllCodec("two concurrent StateStores - one for read-only and one for read-write") {
     colFamiliesEnabled =>
       // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
@@ -1433,6 +1407,32 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         assert(rowPairsToDataSet(finalStore.iterator()) === Set((key1, key2) -> 2))
         finalStore.commit()
       }
+  }
+
+  testQuietly("SPARK-18342: commit fails when rename fails") {
+    import RenameReturnsFalseFileSystem._
+
+    val ROCKSDB_STATE_STORE = "RocksDBStateStore"
+    val dir = scheme + "://" + newDir()
+    val conf = new Configuration()
+    conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
+
+    val storeId = StateStoreId(dir, operatorId = 0, partitionId = 0)
+    tryWithProviderResource(newStoreProvider(storeId, conf)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 0)
+      val e = intercept[SparkException](quietly { store.commit() } )
+      store.abort()
+
+      assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(e.getMessage contains "RocksDBStateStore[id=(op=0,part=0)")
+      } else {
+        assert(e.getMessage contains "HDFSStateStore[id=(op=0,part=0)")
+      }
+      assert(e.getMessage contains "Error writing state store files")
+      assert(e.getCause.getMessage.contains("Failed to rename"))
+    }
   }
 
   // This test illustrates state store iterator behavior differences leading to SPARK-38320.
