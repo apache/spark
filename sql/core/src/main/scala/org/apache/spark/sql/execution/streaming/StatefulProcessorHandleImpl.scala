@@ -458,7 +458,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    null.asInstanceOf[ValueState[T]]
+    new DriverSideValueState[T](stateName)
   }
 
   override def getListState[T](
@@ -492,7 +492,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    null.asInstanceOf[ListState[T]]
+    new DriverSideListState[T](stateName)
   }
 
   override def getMapState[K, V](
@@ -522,7 +522,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val stateVariableInfo = TransformWithStateVariableUtils.
       getMapState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[MapState[K, V]]
+    new DriverSideMapState[K, V](stateName)
   }
 
   /**
