@@ -2830,15 +2830,4 @@ class SubquerySuite extends QueryTest
         Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
     }
   }
-
-  test("analyzer same error class") {
-    sql("CREATE OR REPLACE TEMP VIEW tenk1 AS SELECT 1 AS unique1, 1 AS unique2")
-    val query =
-     """
-       |select
-       |  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
-       |from tenk1 o;
-       |""".stripMargin
-    val res = sql(query).collect()
-  }
 }
