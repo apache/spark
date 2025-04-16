@@ -582,16 +582,12 @@ private[sql] class RocksDBStateStoreProvider
   /**
    * Creates and returns a state store with the specified parameters.
    *
-   * This private helper method handles the common logic for loading state stores,
-   * including version validation, RocksDB loading, stamp management, and error handling.
-   *
    * @param version The version of the state store to load
    * @param uniqueId Optional unique identifier for checkpoint
    * @param readOnly Whether to open the store in read-only mode
    * @param existingStamp Optional existing stamp to use instead of acquiring a new one
    * @param existingStore Optional existing store to reuse instead of creating a new one
    * @return The loaded state store
-   * @throws Various other exceptions wrapped in QueryExecutionErrors
    */
   private def loadStateStore(
       version: Long,
