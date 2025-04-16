@@ -929,7 +929,18 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
+    // Replace top-level integer literals in grouping expressions with ordinals, if
+    // `groupByOrdinal` is enabled.
+    val groupingExpressionsWithOrdinals = cols.map { col => col.expr match {
+      case Literal(value: Int, IntegerType) if sparkSession.sessionState.conf.groupByOrdinal =>
+        UnresolvedOrdinal(value)
+      case other => other
+    }}
+    RelationalGroupedDataset(
+      df = toDF(),
+      groupingExprs = groupingExpressionsWithOrdinals,
+      groupType = RelationalGroupedDataset.GroupByType
+    )
   }
 
   /** @inheritdoc */

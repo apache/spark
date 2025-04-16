@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.util.Locale
+import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
@@ -1286,17 +1286,17 @@ class AstBuilder extends DataTypeAstBuilder
     val withOrder = if (
       !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.orderByClause
-      Sort(order.asScala.map(visitSortItem).toSeq, global = true, query)
+      Sort(order.asScala.map(visitSortItemAndReplaceOrdinals).toSeq, global = true, query)
     } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.sortByClause
-      Sort(sort.asScala.map(visitSortItem).toSeq, global = false, query)
+      Sort(sort.asScala.map(visitSortItemAndReplaceOrdinals).toSeq, global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.distributeByClause
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       clause = PipeOperators.sortByDistributeByClause
       Sort(
-        sort.asScala.map(visitSortItem).toSeq,
+        sort.asScala.map(visitSortItemAndReplaceOrdinals).toSeq,
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
@@ -1825,24 +1825,27 @@ class AstBuilder extends DataTypeAstBuilder
           }
           visitNamedExpression(n)
         }.toSeq
+      val groupByExpressionsWithOrdinals =
+        replaceOrdinalsInGroupingExpressions(groupByExpressions)
       if (ctx.GROUPING != null) {
         // GROUP BY ... GROUPING SETS (...)
         // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
         // expressions that do not exist in GROUPING SETS (...), and the value is always null.
         // For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`, the output
         // of column `c` is always null.
-        val groupingSets =
-          ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-        Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
-          selectExpressions, query)
+        val groupingSetsWithOrdinals = visitGroupingSetAndReplaceOrdinals(ctx.groupingSet)
+        Aggregate(
+          Seq(GroupingSets(groupingSetsWithOrdinals, groupByExpressionsWithOrdinals)),
+          selectExpressions, query
+        )
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
         val mappedGroupByExpressions = if (ctx.CUBE != null) {
-          Seq(Cube(groupByExpressions.map(Seq(_))))
+          Seq(Cube(groupByExpressionsWithOrdinals.map(Seq(_))))
         } else if (ctx.ROLLUP != null) {
-          Seq(Rollup(groupByExpressions.map(Seq(_))))
+          Seq(Rollup(groupByExpressionsWithOrdinals.map(Seq(_))))
         } else {
-          groupByExpressions
+          groupByExpressionsWithOrdinals
         }
         Aggregate(mappedGroupByExpressions, selectExpressions, query)
       }
@@ -1856,8 +1859,12 @@ class AstBuilder extends DataTypeAstBuilder
             } else {
               expression(groupByExpr.expression)
             }
-          })
-      Aggregate(groupByExpressions.toSeq, selectExpressions, query)
+          }).toSeq
+      Aggregate(
+        groupingExpressions = replaceOrdinalsInGroupingExpressions(groupByExpressions),
+        aggregateExpressions = selectExpressions,
+        child = query
+      )
     }
   }
 
@@ -1865,7 +1872,7 @@ class AstBuilder extends DataTypeAstBuilder
       groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
     val groupingSets = groupingAnalytics.groupingSet.asScala
       .map(_.expression.asScala.map(e => expression(e)).toSeq)
-    if (groupingAnalytics.CUBE != null) {
+    val baseGroupingSet = if (groupingAnalytics.CUBE != null) {
       // CUBE(A, B, (A, B), ()) is not supported.
       if (groupingSets.exists(_.isEmpty)) {
         throw QueryParsingErrors.invalidGroupingSetError("CUBE", groupingAnalytics)
@@ -1889,6 +1896,9 @@ class AstBuilder extends DataTypeAstBuilder
       }
       GroupingSets(groupingSets.toSeq)
     }
+    baseGroupingSet.withNewChildren(
+      newChildren = replaceOrdinalsInGroupingExpressions(baseGroupingSet.children)
+    ).asInstanceOf[BaseGroupingSets]
   }
 
   /**
@@ -6532,12 +6542,12 @@ class AstBuilder extends DataTypeAstBuilder
             case n: NamedExpression =>
               newGroupingExpressions += n
               newAggregateExpressions += n
-            // If the grouping expression is an integer literal, create [[UnresolvedOrdinal]] and
-            // [[UnresolvedPipeAggregateOrdinal]] expressions to represent it in the final grouping
-            // and aggregate expressions, respectively. This will let the
+            // If the grouping expression is an [[UnresolvedOrdinal]], replace the ordinal value and
+            // create [[UnresolvedPipeAggregateOrdinal]] expressions to represent it in the final
+            // grouping and aggregate expressions, respectively. This will let the
             // [[ResolveOrdinalInOrderByAndGroupBy]] rule detect the ordinal in the aggregate list
             // and replace it with the corresponding attribute from the child operator.
-            case Literal(v: Int, IntegerType) if conf.groupByOrdinal =>
+            case UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
               newAggregateExpressions += UnresolvedAlias(UnresolvedPipeAggregateOrdinal(v), None)
             case e: Expression =>
@@ -6556,6 +6566,57 @@ class AstBuilder extends DataTypeAstBuilder
         aggregateExpressions = aggregateExpressions,
         child = left)
     }
+  }
+
+  /**
+   * Visits [[SortItemContext]] and replaces top-level [[Literal]]s with [[UnresolvedOrdinal]] in
+   * resulting expression, if `orderByOrdinal` is enabled.
+   */
+  private def visitSortItemAndReplaceOrdinals(sortItemContext: SortItemContext) = {
+    val visitedSortItem = visitSortItem(sortItemContext)
+    visitedSortItem.withNewChildren(
+      newChildren = Seq(replaceIntegerLiteralWithOrdinal(
+        expression = visitedSortItem.child,
+        canReplaceWithOrdinal = conf.orderByOrdinal
+      ))
+    ).asInstanceOf[SortOrder]
+  }
+
+  /**
+   * Replaces top-level integer [[Literal]]s with [[UnresolvedOrdinal]] in grouping expressions, if
+   * `groupByOrdinal` is enabled.
+   */
+  private def replaceOrdinalsInGroupingExpressions(groupingExpressions: Seq[Expression]) =
+    groupingExpressions.map(groupByExpression =>
+      replaceIntegerLiteralWithOrdinal(
+        expression = groupByExpression,
+        canReplaceWithOrdinal = conf.groupByOrdinal
+      )
+    ).toSeq
+
+  /**
+   * Visits grouping expressions in a [[GroupingSetContext]] and replaces top-level integer
+   * [[Literal]]s with [[UnresolvedOrdinal]]s in resulting expressions, if `groupByOrdinal` is
+   * enabled.
+   */
+  private def visitGroupingSetAndReplaceOrdinals(groupingSet: List[GroupingSetContext]) = {
+    groupingSet.asScala.map(_.expression.asScala.map(e => {
+      val visitedExpression = expression(e)
+      replaceIntegerLiteralWithOrdinal(
+        expression = visitedExpression,
+        canReplaceWithOrdinal = conf.groupByOrdinal
+      )
+    }).toSeq).toSeq
+  }
+
+  /**
+   * Replaces integer [[Literal]] with [[UnresolvedOrdinal]] if `canReplaceWithOrdinal` is true.
+   */
+  private def replaceIntegerLiteralWithOrdinal(
+      expression: Expression,
+      canReplaceWithOrdinal: Boolean = true) = expression match {
+    case Literal(value: Int, IntegerType) if canReplaceWithOrdinal => UnresolvedOrdinal(value)
+    case other => other
   }
 
   /**

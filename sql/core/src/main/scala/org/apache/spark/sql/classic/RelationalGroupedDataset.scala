@@ -23,7 +23,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql
 import org.apache.spark.sql.{AnalysisException, Column, Encoder}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedOrdinal}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -36,7 +36,7 @@ import org.apache.spark.sql.classic.TypedAggUtils.withInputType
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.sql.types.{IntegerType, NumericType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -67,7 +67,13 @@ class RelationalGroupedDataset protected[sql](
 
     @scala.annotation.nowarn("cat=deprecation")
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
-      groupingExprs match {
+      // We need to unwrap ordinals from grouping expressions in order to add grouping columns to
+      // aggregate expressions.
+      val groupingExpressionsWithUnwrappedOrdinals = groupingExprs.map {
+        case UnresolvedOrdinal(value) => Literal(value, IntegerType)
+        case other => other
+      }
+      groupingExpressionsWithUnwrappedOrdinals match {
         // call `toList` because `Stream` and `LazyList` can't serialize in scala 2.13
         case s: LazyList[Expression] => s.toList ++ aggExprs
         case s: Stream[Expression] => s.toList ++ aggExprs
