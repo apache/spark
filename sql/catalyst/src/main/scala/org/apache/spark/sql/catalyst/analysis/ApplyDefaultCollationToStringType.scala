@@ -32,8 +32,7 @@ import org.apache.spark.sql.types.{DataType, StringType}
  */
 object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val defaultCollation = fetchDefaultCollation(plan)
-    defaultCollation match {
+    fetchDefaultCollation(plan) match {
       case Some(newType) =>
         transform(plan, newType)
       case None => plan
