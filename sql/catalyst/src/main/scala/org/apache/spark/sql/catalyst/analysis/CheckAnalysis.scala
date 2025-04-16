@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -27,7 +28,6 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
-import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -239,7 +239,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       val output = plan.inputSet ++ expr.plan.inputSet
       throw QueryCompilationErrors.unresolvedColumnError(
         nestedOuterAttrName,
-        proposal = orderSuggestedIdentifiersBySimilarity(
+        proposal = StringUtils.orderSuggestedIdentifiersBySimilarity(
           nestedOuterAttrName,
           candidates = output.map(attribute => attribute.qualifier :+ attribute.name).toSeq
         )
