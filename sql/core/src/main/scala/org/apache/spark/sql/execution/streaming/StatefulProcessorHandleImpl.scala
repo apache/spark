@@ -458,7 +458,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    new DriverSideValueState[T](stateName)
+    new InvalidHandleValueState[T](stateName)
   }
 
   override def getListState[T](
@@ -492,7 +492,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    new DriverSideListState[T](stateName)
+    new InvalidHandleListState[T](stateName)
   }
 
   override def getMapState[K, V](
@@ -522,7 +522,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val stateVariableInfo = TransformWithStateVariableUtils.
       getMapState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    new DriverSideMapState[K, V](stateName)
+    new InvalidHandleMapState[K, V](stateName)
   }
 
   /**
@@ -656,7 +656,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   }
 }
 
-private[sql] trait DriverSideState {
+private[sql] trait InvalidHandleState {
   protected val stateName: String
 
   protected def throwInitPhaseError(operation: String): Nothing = {
@@ -665,16 +665,16 @@ private[sql] trait DriverSideState {
   }
 }
 
-private[sql] class DriverSideValueState[S](override val stateName: String)
-  extends ValueState[S] with DriverSideState {
+private[sql] class InvalidHandleValueState[S](override val stateName: String)
+  extends ValueState[S] with InvalidHandleState {
   override def exists(): Boolean = throwInitPhaseError("exists")
   override def get(): S = throwInitPhaseError("get")
   override def update(newState: S): Unit = throwInitPhaseError("update")
   override def clear(): Unit = throwInitPhaseError("clear")
 }
 
-private[sql] class DriverSideListState[S](override val stateName: String)
-  extends ListState[S] with DriverSideState {
+private[sql] class InvalidHandleListState[S](override val stateName: String)
+  extends ListState[S] with InvalidHandleState {
   override def exists(): Boolean = throwInitPhaseError("exists")
   override def get(): Iterator[S] = throwInitPhaseError("get")
   override def put(newState: Array[S]): Unit = throwInitPhaseError("put")
@@ -683,8 +683,8 @@ private[sql] class DriverSideListState[S](override val stateName: String)
   override def clear(): Unit = throwInitPhaseError("clear")
 }
 
-private[sql] class DriverSideMapState[K, V](override val stateName: String)
-  extends MapState[K, V] with DriverSideState {
+private[sql] class InvalidHandleMapState[K, V](override val stateName: String)
+  extends MapState[K, V] with InvalidHandleState {
   override def exists(): Boolean = throwInitPhaseError("exists")
   override def getValue(key: K): V = throwInitPhaseError("getValue")
   override def containsKey(key: K): Boolean = throwInitPhaseError("containsKey")
