@@ -22,6 +22,7 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.types.DataType;
 
@@ -295,6 +296,21 @@ public interface TableChange {
     public int hashCode() {
       return Objects.hash(property, value);
     }
+  }
+
+  /**
+   * Create a TableChange for adding a new table constraint
+   */
+  static TableChange addConstraint(Constraint constraint, String validatedTableVersion) {
+    return new AddConstraint(constraint, validatedTableVersion);
+  }
+
+  /**
+   * Create a TableChange for dropping a table constraint
+   */
+  static TableChange dropConstraint(String name, boolean ifExists, boolean cascade) {
+    DropConstraint.Mode mode = cascade ? DropConstraint.Mode.CASCADE : DropConstraint.Mode.RESTRICT;
+    return new DropConstraint(name, ifExists, mode);
   }
 
   /**
@@ -785,6 +801,84 @@ public interface TableChange {
     @Override
     public int hashCode() {
       return Arrays.hashCode(clusteringColumns);
+    }
+  }
+
+  /** A TableChange to alter table and add a constraint. */
+  final class AddConstraint implements TableChange {
+    private final Constraint constraint;
+    private final String validatedTableVersion;
+
+    private AddConstraint(Constraint constraint, String validatedTableVersion) {
+      this.constraint = constraint;
+      this.validatedTableVersion = validatedTableVersion;
+    }
+
+    public Constraint constraint() {
+      return constraint;
+    }
+
+    public String validatedTableVersion() {
+      return validatedTableVersion;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      AddConstraint that = (AddConstraint) o;
+      return constraint.equals(that.constraint) &&
+              Objects.equals(validatedTableVersion, that.validatedTableVersion);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(constraint, validatedTableVersion);
+    }
+  }
+
+  /** A TableChange to alter table and drop a constraint. */
+  final class DropConstraint implements TableChange {
+    private final String name;
+    private final boolean ifExists;
+    private final Mode mode;
+
+    /**
+     * Defines modes for dropping a constraint.
+     * <p>
+     * RESTRICT - Prevents dropping a constraint if it is referenced by other objects.
+     * CASCADE - Automatically drops objects that depend on the constraint.
+     */
+    public enum Mode { RESTRICT, CASCADE }
+
+    private DropConstraint(String name, boolean ifExists, Mode mode) {
+      this.name = name;
+      this.ifExists = ifExists;
+      this.mode = mode;
+    }
+
+    public String name() {
+      return name;
+    }
+
+    public boolean ifExists() {
+      return ifExists;
+    }
+
+    public Mode mode() {
+      return mode;
+    }
+
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      DropConstraint that = (DropConstraint) o;
+      return that.name.equals(name) && that.ifExists == ifExists && mode == that.mode;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(name, ifExists, mode);
     }
   }
 }

@@ -57,13 +57,19 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
       tableProvider = Some("in-memory"),
       statementType = "ALTER TABLE")
     val partitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
+    val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTable = new InMemoryRowLevelOperationTable(table.name, schema, partitioning, properties)
+    val newTable = new InMemoryRowLevelOperationTable(
+      name = table.name,
+      schema = schema,
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints)
     newTable.withData(table.data)
 
     tables.put(ident, newTable)
