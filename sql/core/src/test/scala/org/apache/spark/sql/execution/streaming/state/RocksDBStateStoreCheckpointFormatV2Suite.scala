@@ -176,7 +176,6 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
     val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
     CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
-
   override def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore = {
     new WrappedReadStateStore(
       CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
@@ -186,8 +185,21 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
       readStore: ReadStateStore,
       version: Long,
       uniqueId: Option[String] = None): StateStore = {
-    CkptIdCollectingStateStoreWrapper(innerProvider.getWriteStore(
-        readStore, version, uniqueId))
+
+    readStore match {
+      case wrapper: CkptIdCollectingStateStoreWrapper =>
+        // Get the inner store from the wrapper
+        val innerReadStore = wrapper.innerStore
+        // Call the inner provider's getWriteStore with the correct inner store
+        val innerWriteStore = innerProvider.getWriteStore(innerReadStore, version, uniqueId)
+        // Wrap the result
+        CkptIdCollectingStateStoreWrapper(innerWriteStore)
+
+      case _ =>
+        // This shouldn't happen, but handle it gracefully
+        throw new IllegalArgumentException(
+          "Expected CkptIdCollectingStateStoreWrapper but got " + readStore.getClass.getName)
+    }
   }
 
   override def doMaintenance(): Unit = innerProvider.doMaintenance()
