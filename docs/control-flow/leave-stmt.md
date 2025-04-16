@@ -19,11 +19,9 @@ license: |
   limitations under the License.
 ---
 
-# LEAVE statement
-
 Terminates the execution of an iteration of a looping statement and continues with the next iteration if the looping condition is met.
 
-This statement may only be used within a [compound statement](compound-stmt.md).
+This statement may only be used within a [compound statement](compound-stmt.html).
 
 ## Syntax
 
@@ -33,7 +31,7 @@ ITERATE label
 
 ## Parameters
 
-- **[label](/sql/language-manual/sql-ref-names.md#label-name)**
+- **label**
 
   The label identifies a statement to leave that directly or indirectly contains the `LEAVE` statement.
 
@@ -62,15 +60,12 @@ ITERATE label
 
 ## Related articles
 
-- [SQL Scripting](/sql/language-manual/sql-ref-scripting.md)
-- [CASE Statement](/sql/language-manual/control-flow/case-stmt.md)
-- [Compound Statement](/sql/language-manual/control-flow/compound-stmt.md)
-- [FOR Statement](/sql/language-manual/control-flow/for-stmt.md)
-- [LOOP Statement](/sql/language-manual/control-flow/loop-stmt.md)
-- [WHILE Statement](/sql/language-manual/control-flow/while-stmt.md)
-- [IF Statement](/sql/language-manual/control-flow/if-stmt.md)
-- [ITERATE Statement](/sql/language-manual/control-flow/iterate-stmt.md)
+- [SQL Scripting](../sql-ref-scripting.html)
+- [CASE Statement](../control-flow/case-stmt.html)
+- [Compound Statement](../control-flow/compound-stmt.html)
+- [FOR Statement](../control-flow/for-stmt.html)
+- [LOOP Statement](../control-flow/loop-stmt.html)
+- [WHILE Statement](../control-flow/while-stmt.html)
+- [IF Statement](../control-flow/if-stmt.html)
+- [ITERATE Statement](../control-flow/iterate-stmt.html)
 
-```
-
-```

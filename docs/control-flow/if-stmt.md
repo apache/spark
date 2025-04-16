@@ -19,11 +19,9 @@ license: |
   limitations under the License.
 ---
 
-# IF THEN ELSE statement
-
 Executes lists of statements based on the first condition that evaluates to true.
 
-This statement may only be used within a [compound statement](compound-stmt.md).
+This statement may only be used within a [compound statement](compound-stmt.html).
 
 ## Syntax
 
@@ -36,11 +34,11 @@ IF condition  THEN { stmt ; } [...]
 
 ## Parameters
 
-- **`condition`**
+- **condition**
 
   Any expression evaluating to a BOOLEAN.
 
-- **`stmt`**
+- **stmt**
 
   A SQL statement to execute if the `condition` is `true`.
 
@@ -67,11 +65,7 @@ IF condition  THEN { stmt ; } [...]
 
 ## Related articles
 
-- [SQL Scripting](/sql/language-manual/sql-ref-scripting.md)
-- [CASE Statement](/sql/language-manual/control-flow/case-stmt.md)
-- [Compound Statement](/sql/language-manual/control-flow/compound-stmt.md)
-- [FOR Statement](/sql/language-manual/control-flow/for-stmt.md)
-
-```
-
-```
+- [SQL Scripting](../sql-ref-scripting.html)
+- [CASE Statement](../control-flow/case-stmt.html)
+- [Compound Statement](../control-flow/compound-stmt.html)
+- [FOR Statement](../control-flow/for-stmt.html)

@@ -19,17 +19,15 @@ license: |
   limitations under the License.
 ---
 
-# CASE statement
-
 Executes `thenStmtN` for the first `optN` that equals `expr` or `elseStmt` if no `optN` matches `expr`.
 This is called a _simple case statement_.
 
 Executes `thenStmtN` for the first `condN` evaluating to `true`, or `elseStmt` if no `condN` evaluates to `true`.
 This is called a _searched case statement_.
 
-For case expressions that yield result values, see [CASE expression](../functions/case.md)
+For case expressions that yield result values, see `CASE expression`)
 
-This statement may only be used within a [compound statement](compound-stmt.md).
+This statement may only be used within a [compound statement](compound-stmt.html).
 
 ## Syntax
 
@@ -99,7 +97,6 @@ Conditions are evaluated in order, and only the first set of `stmt` for which `o
 
 ## Related articles
 
-- [SQL Scripting](../sql-ref-scripting.md)
-- [Compound statement](compound-stmt.md)
-- [CASE expression](../functions/case.md)
-- [IF statement](if-stmt.md)
+- [SQL Scripting](../sql-ref-scripting.html)
+- [compound statement](compound-stmt.html)
+- [IF statement](if-stmt.html)
