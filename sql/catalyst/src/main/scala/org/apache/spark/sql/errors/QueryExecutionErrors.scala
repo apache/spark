@@ -304,7 +304,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       messageParameters = Map("rangeMessage" -> e.getMessage),
       context = Array.empty,
-      summary = "")
+      summary = "",
+      cause = Some(e))
   }
 
   def invalidIntervalWithMicrosecondsAdditionError(): SparkIllegalArgumentException = {

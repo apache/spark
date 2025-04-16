@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DecimalType, IntegerType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
