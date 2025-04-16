@@ -602,11 +602,11 @@ object QueryExecution {
    * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
    */
   def prepareExecutedPlan(
-      session: SparkSession,
       plan: LogicalPlan,
       context: AdaptiveExecutionContext): SparkPlan = {
-    val sparkPlan = createSparkPlan(session.sessionState.planner, plan.clone())
-    val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
+    val sparkPlan = createSparkPlan(context.session.sessionState.planner, plan.clone())
+    val preparationRules =
+      preparations(context.session, Option(InsertAdaptiveSparkPlan(context)), true)
     prepareForExecution(preparationRules, sparkPlan.clone())
   }
 
