@@ -4222,14 +4222,29 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
     }
   }
 
+  def updateOuterReferenceInAllSubqueries(
+      s: SubqueryExpression, outerAliases: Seq[Alias]): SubqueryExpression = {
+    val planWithNestedSubqueriesRewritten =
+      s.plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
+        // Only update the nested subqueries if they have nested outer references
+        // And we don't collect new outerAliases along s.plan because this rule
+        // will be fired multiple times for each subquery plan in the Analyzer,
+        // we only collect outerAliases in the outer plan each time.
+        case s: SubqueryExpression if s.getNestedOuterAttrs.nonEmpty =>
+          updateOuterReferenceInAllSubqueries(s, outerAliases)
+      }
+    val newPlan = updateOuterReferenceInSubquery(planWithNestedSubqueriesRewritten, outerAliases)
+    s.withNewPlan(newPlan)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       _.containsAllPatterns(PLAN_EXPRESSION, FILTER, AGGREGATE), ruleId) {
       case f @ Filter(_, a: Aggregate) if f.resolved =>
+        val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
         f.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
           case s: SubqueryExpression if s.children.nonEmpty =>
             // Collect the aliases from output of aggregate.
-            val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
             // Update the subquery plan to record the OuterReference to point to outer query plan.
             s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
       }
