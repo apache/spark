@@ -218,7 +218,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
         }
       }
-      assert(resolvedExpressions.size <= 1)
+      // We use the first resolved expression here
+      // as the outerPlans are ordered by their depth and the
+      // first one is the closest to the subquery scope.
       resolvedExpressions.headOption
     } catch {
       case ae: AnalysisException =>
