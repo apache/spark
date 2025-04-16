@@ -655,3 +655,43 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     verifyStateVarOperations("delete_if_exists", PRE_INIT)
   }
 }
+
+private[sql] trait DriverSideState {
+  protected val stateName: String
+
+  protected def throwInitPhaseError(operation: String): Nothing = {
+    throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(
+      s"$stateName.$operation", PRE_INIT.toString)
+  }
+}
+
+private[sql] class DriverSideValueState[S](override val stateName: String)
+  extends ValueState[S] with DriverSideState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def get(): S = throwInitPhaseError("get")
+  override def update(newState: S): Unit = throwInitPhaseError("update")
+  override def clear(): Unit = throwInitPhaseError("clear")
+}
+
+private[sql] class DriverSideListState[S](override val stateName: String)
+  extends ListState[S] with DriverSideState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def get(): Iterator[S] = throwInitPhaseError("get")
+  override def put(newState: Array[S]): Unit = throwInitPhaseError("put")
+  override def appendValue(newState: S): Unit = throwInitPhaseError("appendValue")
+  override def appendList(newState: Array[S]): Unit = throwInitPhaseError("appendList")
+  override def clear(): Unit = throwInitPhaseError("clear")
+}
+
+private[sql] class DriverSideMapState[K, V](override val stateName: String)
+  extends MapState[K, V] with DriverSideState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def getValue(key: K): V = throwInitPhaseError("getValue")
+  override def containsKey(key: K): Boolean = throwInitPhaseError("containsKey")
+  override def updateValue(key: K, value: V): Unit = throwInitPhaseError("updateValue")
+  override def iterator(): Iterator[(K, V)] = throwInitPhaseError("iterator")
+  override def keys(): Iterator[K] = throwInitPhaseError("keys")
+  override def values(): Iterator[V] = throwInitPhaseError("values")
+  override def removeKey(key: K): Unit = throwInitPhaseError("removeKey")
+  override def clear(): Unit = throwInitPhaseError("clear")
+}
