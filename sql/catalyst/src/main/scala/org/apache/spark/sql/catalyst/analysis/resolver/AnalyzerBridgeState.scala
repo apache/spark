@@ -19,22 +19,37 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
  * The [[AnalyzerBridgeState]] is a state passed from legacy [[Analyzer]] to the single-pass
- * [[Resolver]].
+ * [[Resolver]]. It is used  in dual-run mode (when
+ * [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is true).
  *
- * @param relationsWithResolvedMetadata A map from [[UnresolvedRelation]] to the relations with
+ * @param relationsWithResolvedMetadata A map from [[BridgedRelationId]] to the relations with
  *   resolved metadata. It allows us to reuse the relation metadata and avoid duplicate
- *   catalog/table lookups in dual-run mode (when
- *   [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is true).
+ *   catalog/table lookups.
+ * @param catalogRelationsWithResolvedMetadata A map from [[UnresolvedCatalogRelation]] to the
+ *   relations with resolved metadata. It allows us to reuse the relation metadata and avoid
+ *   duplicate catalog/table lookups.
  */
 case class AnalyzerBridgeState(
     relationsWithResolvedMetadata: AnalyzerBridgeState.RelationsWithResolvedMetadata =
-      new AnalyzerBridgeState.RelationsWithResolvedMetadata)
+      new AnalyzerBridgeState.RelationsWithResolvedMetadata,
+    catalogRelationsWithResolvedMetadata: AnalyzerBridgeState.CatalogRelationsWithResolvedMetadata =
+      new AnalyzerBridgeState.CatalogRelationsWithResolvedMetadata
+) {
+  def addUnresolvedRelation(unresolvedRelation: UnresolvedRelation, relation: LogicalPlan): Unit = {
+    relationsWithResolvedMetadata.put(
+        BridgedRelationId(unresolvedRelation, AnalysisContext.get.catalogAndNamespace),
+        relation
+      )
+  }
+}
 
 object AnalyzerBridgeState {
-  type RelationsWithResolvedMetadata = HashMap[UnresolvedRelation, LogicalPlan]
+  type RelationsWithResolvedMetadata = HashMap[BridgedRelationId, LogicalPlan]
+  type CatalogRelationsWithResolvedMetadata = HashMap[UnresolvedCatalogRelation, LogicalPlan]
 }

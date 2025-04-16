@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.time.{Duration, Instant, LocalDate, LocalTime, Period}
 import java.util.concurrent.TimeUnit
 
 import org.scalacheck.{Arbitrary, Gen}
@@ -123,6 +123,14 @@ object LiteralGenerator {
       yield Literal.create(new Date(day * MILLIS_PER_DAY), DateType)
   }
 
+  lazy val timeLiteralGen: Gen[Literal] = {
+    // Valid range for TimeType is [00:00:00, 23:59:59.999999]
+    val minTime = DateTimeUtils.localTimeToMicros(LocalTime.MIN)
+    val maxTime = DateTimeUtils.localTimeToMicros(LocalTime.MAX)
+    for { t <- Gen.choose(minTime, maxTime) }
+      yield Literal(t, TimeType())
+  }
+
   private def millisGen = {
     // Catalyst's Timestamp type stores number of microseconds since epoch in
     // a variable of Long type. To prevent arithmetic overflow of Long on
@@ -196,6 +204,7 @@ object LiteralGenerator {
       case DoubleType => doubleLiteralGen
       case FloatType => floatLiteralGen
       case DateType => dateLiteralGen
+      case _: TimeType => timeLiteralGen
       case TimestampType => timestampLiteralGen
       case TimestampNTZType => timestampNTZLiteralGen
       case BooleanType => booleanLiteralGen

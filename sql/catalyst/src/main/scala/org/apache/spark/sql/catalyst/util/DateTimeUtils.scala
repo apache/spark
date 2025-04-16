@@ -106,6 +106,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the hour value of a given TIME (TimeType) value.
+   */
+  def getHoursOfTime(micros: Long): Int = {
+    microsToLocalTime(micros).getHour
+  }
+
+  /**
    * Returns the minute value of a given timestamp value. The timestamp is expressed in
    * microseconds since the epoch.
    */
@@ -128,6 +135,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
     getLocalDateTime(micros, zoneId).getSecond
   }
 
+  /**
+   * Returns the second value of a given TIME (TimeType) value.
+   */
+  def getSecondsOfTime(micros: Long): Int = {
+    microsToLocalTime(micros).getSecond
+  }
   /**
    * Returns the seconds part and its fractional part with microseconds.
    */

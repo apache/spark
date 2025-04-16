@@ -38,15 +38,17 @@ MAKE_R=false
 MAKE_SPARK_CONNECT=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
+SBT_ENABLED=false
+SBT="$SPARK_HOME/build/sbt"
 
 function exit_with_usage {
   set +x
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--pip] [--r] [--connect] [--mvn <mvn-command>]"
-  echo "make-distribution.sh $cl_options <maven build options>"
-  echo "See Spark's \"Building Spark\" doc for correct Maven options."
+  cl_options="[--name] [--tgz] [--pip] [--r] [--connect] [--mvn <mvn-command>] [--sbt-enabled] [--sbt <sbt-command>]"
+  echo "make-distribution.sh $cl_options <maven/sbt build options>"
+  echo "See Spark's \"Building Spark\" doc for correct Maven/SBT options."
   echo "SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version."
   echo ""
   exit 1
@@ -69,6 +71,13 @@ while (( "$#" )); do
       ;;
     --mvn)
       MVN="$2"
+      shift
+      ;;
+    --sbt-enabled)
+      SBT_ENABLED=true
+      ;;
+    --sbt)
+      SBT="$2"
       shift
       ;;
     --name)
@@ -124,32 +133,34 @@ if [ $(command -v git) ]; then
     unset GITREV
 fi
 
-
-if [ ! "$(command -v "$MVN")" ] ; then
-    echo -e "Could not locate Maven command: '$MVN'."
-    echo -e "Specify the Maven command with the --mvn flag"
-    exit -1;
+if [ "$SBT_ENABLED" == "true" && ! "$(command -v "$SBT")" ]; then
+  echo -e "Could not locate SBT command: '$SBT'."
+  echo -e "Specify the SBT command with the --sbt flag"
+  exit -1;
+elif [ ! "$(command -v "$MVN")" ]; then
+  echo -e "Could not locate Maven command: '$MVN'."
+  echo -e "Specify the Maven command with the --mvn flag"
+  exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
-SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
-SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
-SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ \
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | grep -F --count "<id>hive</id>";\
-    # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
-    # because we use "set -o pipefail"
-    echo -n)
+if [ "$SBT_ENABLED" == "true" ]; then
+  VERSION=$("$SBT" -no-colors "show version" | awk '/\[info\]/{ver=$2} END{print ver}')
+  SCALA_VERSION=$("$SBT" -no-colors "show scalaBinaryVersion" | awk '/\[info\]/{ver=$2} END{print ver}')
+  SPARK_HADOOP_VERSION=$("$SBT" -no-colors "show hadoopVersion" | awk '/\[info\]/{ver=$2} END{print ver}')
+else
+  VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
+      | grep -v "INFO"\
+      | grep -v "WARNING"\
+      | tail -n 1)
+  SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
+      | grep -v "INFO"\
+      | grep -v "WARNING"\
+      | tail -n 1)
+  SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
+      | grep -v "INFO"\
+      | grep -v "WARNING"\
+      | tail -n 1)
+fi
 
 if [ "$NAME" == "none" ]; then
   NAME=$SPARK_HADOOP_VERSION
@@ -166,18 +177,26 @@ fi
 # Build uber fat JAR
 cd "$SPARK_HOME"
 
-export MAVEN_OPTS="${MAVEN_OPTS:--Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m}"
+if [ "$SBT_ENABLED" == "true" ] ; then
+  export NOLINT_ON_COMPILE=1
+  # Store the command as an array because $SBT variable might have spaces in it.
+  # Normal quoting tricks don't work.
+  # See: http://mywiki.wooledge.org/BashFAQ/050
+  BUILD_COMMAND=("$SBT" clean package $@)
+else
+  export MAVEN_OPTS="${MAVEN_OPTS:--Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m}"
 
-# Store the command as an array because $MVN variable might have spaces in it.
-# Normal quoting tricks don't work.
-# See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" clean package \
-    -DskipTests \
-    -Dmaven.javadoc.skip=true \
-    -Dmaven.scaladoc.skip=true \
-    -Dmaven.source.skip \
-    -Dcyclonedx.skip=true \
-    $@)
+  # Store the command as an array because $MVN variable might have spaces in it.
+  # Normal quoting tricks don't work.
+  # See: http://mywiki.wooledge.org/BashFAQ/050
+  BUILD_COMMAND=("$MVN" clean package \
+      -DskipTests \
+      -Dmaven.javadoc.skip=true \
+      -Dmaven.scaladoc.skip=true \
+      -Dmaven.source.skip \
+      -Dcyclonedx.skip=true \
+      $@)
+fi
 
 # Actually build the jar
 echo -e "\nBuilding with..."

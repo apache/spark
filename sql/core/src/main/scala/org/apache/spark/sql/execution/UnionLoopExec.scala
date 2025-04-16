@@ -90,7 +90,8 @@ case class UnionLoopExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"))
+    "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"),
+    "numAnchorOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of anchor output rows"))
 
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
@@ -129,6 +130,7 @@ case class UnionLoopExec(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val numOutputRows = longMetric("numOutputRows")
     val numIterations = longMetric("numIterations")
+    val numAnchorOutputRows = longMetric("numAnchorOutputRows")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
 
@@ -141,6 +143,8 @@ case class UnionLoopExec(
     val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
+
+    numAnchorOutputRows += prevCount
 
     var currentLevel = 1
 
@@ -189,7 +193,6 @@ case class UnionLoopExec(
       // Update metrics
       numOutputRows += prevCount
       numIterations += 1
-      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
       if (!limitReached) {
         // the current plan is created by substituting UnionLoopRef node with the project node of
@@ -197,11 +200,10 @@ case class UnionLoopExec(
         // This way we support only UNION ALL case. Additional case should be added for UNION case.
         // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
         val newRecursion = recursion.transform {
-          case r: UnionLoopRef =>
+          case r: UnionLoopRef if r.loopId == loopId =>
             val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
               case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
             }
-            Project(prevPlanToRefMapping, prevPlan)
         }
 
         val (df, count) = executeAndCacheAndCount(newRecursion, currentLimit)
@@ -211,6 +213,8 @@ case class UnionLoopExec(
         currentLevel += 1
       }
     }
+
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
     if (unionChildren.isEmpty) {
       new EmptyRDD[InternalRow](sparkContext)

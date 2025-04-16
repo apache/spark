@@ -226,3 +226,10 @@ Project [raise_error(_LEGACY_ERROR_USER_RAISED_EXCEPTION, map(errorMessage, hell
 SET spark.sql.legacy.raiseErrorWithoutErrorClass=false
 -- !query analysis
 SetCommand (spark.sql.legacy.raiseErrorWithoutErrorClass,Some(false))
+
+
+-- !query
+SELECT assert_true(col1 <= col2) FROM VALUES ('2025-03-01', '2025-03-10')
+-- !query analysis
+Project [assert_true((col1#x <= col2#x), '(col1 <= col2)' is not true!) AS assert_true((col1 <= col2), '(col1 <= col2)' is not true!)#x]
++- LocalRelation [col1#x, col2#x]

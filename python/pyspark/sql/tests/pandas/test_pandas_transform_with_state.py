@@ -17,6 +17,7 @@
 
 import json
 import os
+import sys
 import time
 import tempfile
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
@@ -53,8 +54,11 @@ if have_pandas:
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    not have_pandas or not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
+    cast(
+        str,
+        pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
+    ),
 )
 class TransformWithStateInPandasTestsMixin:
     @classmethod
@@ -267,7 +271,9 @@ class TransformWithStateInPandasTestsMixin:
                 Row(id="1", countAsString="2"),
             }
 
-        self._test_transform_with_state_in_pandas_basic(ListStateProcessor(), check_results, True)
+        self._test_transform_with_state_in_pandas_basic(
+            ListStateProcessor(), check_results, True, "processingTime"
+        )
 
     # test list state with ttl has the same behavior as list state when state doesn't expire.
     def test_transform_with_state_in_pandas_list_state_large_ttl(self):
@@ -501,7 +507,9 @@ class TransformWithStateInPandasTestsMixin:
             ProcTimeStatefulProcessor(), check_results
         )
 
-    def _test_transform_with_state_in_pandas_event_time(self, stateful_processor, check_results):
+    def _test_transform_with_state_in_pandas_event_time(
+        self, stateful_processor, check_results, time_mode="eventtime"
+    ):
         import pyspark.sql.functions as f
 
         input_path = tempfile.mkdtemp()
@@ -516,6 +524,7 @@ class TransformWithStateInPandasTestsMixin:
 
         def prepare_batch3(input_path):
             with open(input_path + "/text-test2.txt", "w") as fw:
+                fw.write("a, 2\n")
                 fw.write("a, 11\n")
                 fw.write("a, 13\n")
                 fw.write("a, 15\n")
@@ -546,7 +555,7 @@ class TransformWithStateInPandasTestsMixin:
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
-                timeMode="eventtime",
+                timeMode=time_mode,
             )
             .writeStream.queryName(query_name)
             .foreachBatch(check_results)
@@ -589,6 +598,32 @@ class TransformWithStateInPandasTestsMixin:
 
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
+        )
+
+    def test_transform_with_state_with_wmark_and_non_event_time(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                # watermark for late event = 0 and min event = 20
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="20"),
+                }
+            elif batch_id == 1:
+                # watermark for late event = 0 and min event = 4
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="4"),
+                }
+            else:
+                # watermark for late event = 10 and min event = 2 with no filtering
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="2"),
+                }
+
+        self._test_transform_with_state_in_pandas_event_time(
+            MinEventTimeStatefulProcessor(), check_results, "None"
+        )
+
+        self._test_transform_with_state_in_pandas_event_time(
+            MinEventTimeStatefulProcessor(), check_results, "ProcessingTime"
         )
 
     def _test_transform_with_state_init_state_in_pandas(
@@ -1044,10 +1079,10 @@ class TransformWithStateInPandasTestsMixin:
                     metadata_df.select("operatorProperties").collect()[0][0]
                 )
                 state_var_list = operator_properties_json_obj["stateVariables"]
-                assert len(state_var_list) == 3
+                assert len(state_var_list) == 4
                 for state_var in state_var_list:
-                    if state_var["stateName"] in ["listState1", "listState2"]:
-                        state_var["stateVariableType"] == "ListState"
+                    if state_var["stateName"] in ["listState1", "listState2", "listStateTimestamp"]:
+                        assert state_var["stateVariableType"] == "ListState"
                     else:
                         assert state_var["stateName"] == "$procTimers_keyToTimestamp"
                         assert state_var["stateVariableType"] == "TimerState"
@@ -1097,7 +1132,7 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_in_pandas_basic(
             ListStateProcessor(),
             check_results,
-            True,
+            False,
             "processingTime",
             checkpoint_path=checkpoint_path,
             initial_state=None,
@@ -1539,6 +1574,33 @@ class EventTimeStatefulProcessor(StatefulProcessor):
         pass
 
 
+# A stateful processor that output the min event time it has seen.
+class MinEventTimeStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", StringType(), True)])
+        self.handle = handle
+        self.min_state = handle.getValueState("min_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        timestamp_list = []
+        for pdf in rows:
+            # int64 will represent timestamp in nanosecond, restore to second
+            timestamp_list.extend((pdf["eventTime"].astype("int64") // 10**9).tolist())
+
+        if self.min_state.exists():
+            cur_min = int(self.min_state.get()[0])
+        else:
+            cur_min = sys.maxsize
+        min_event_time = str(min(cur_min, min(timestamp_list)))
+
+        self.min_state.update((min_event_time,))
+
+        yield pd.DataFrame({"id": key, "timestamp": min_event_time})
+
+    def close(self) -> None:
+        pass
+
+
 # A stateful processor that output the accumulation of count of input rows; register
 # processing timer and clear the counter if timer expires.
 class ProcTimeStatefulProcessor(StatefulProcessor):
@@ -1733,11 +1795,16 @@ class ListStateProcessor(StatefulProcessor):
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema)
         self.list_state2 = handle.getListState("listState2", state_schema)
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        import datetime
+
         count = 0
+        time_list = []
         for pdf in rows:
             list_state_rows = [(120,), (20,)]
             self.list_state1.put(list_state_rows)
@@ -1748,6 +1815,11 @@ class ListStateProcessor(StatefulProcessor):
             self.list_state2.appendList(list_state_rows)
             pdf_count = pdf.count()
             count += pdf_count.get("temperature")
+            current_processing_time = datetime.datetime.fromtimestamp(
+                timerValues.getCurrentProcessingTimeInMs() / 1000
+            )
+            stored_time = current_processing_time + datetime.timedelta(minutes=1)
+            time_list.append((stored_time,))
         iter1 = self.list_state1.get()
         iter2 = self.list_state2.get()
         # Mixing the iterator to test it we can resume from the correct point
@@ -1772,6 +1844,9 @@ class ListStateProcessor(StatefulProcessor):
         assert next(iter1)[0] == self.dict[1]
         assert next(iter2)[0] == self.dict[1]
         assert next(iter3)[0] == self.dict[1]
+        if time_list:
+            # Validate timestamp type can work properly with arrow transmission
+            self.list_state_timestamp.put(time_list)
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:
@@ -1781,8 +1856,10 @@ class ListStateProcessor(StatefulProcessor):
 class ListStateLargeTTLProcessor(ListStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
+        timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema, 30000)
         self.list_state2 = handle.getListState("listState2", state_schema, 30000)
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
 
 class MapStateProcessor(StatefulProcessor):

@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
-import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery => ScalarSubqueryExpr, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -1063,16 +1063,6 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def scalar(): Column = {
-    Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))
-  }
-
-  /** @inheritdoc */
-  def exists(): Column = {
-    Column(ExpressionColumnNode(Exists(logicalPlan)))
-  }
-
-  /** @inheritdoc */
   @scala.annotation.varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withSameTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
@@ -1573,7 +1563,7 @@ class Dataset[T] private[sql](
     sparkSession.sessionState.executePlan(deserialized)
   }
 
-  private lazy val materializedRdd: RDD[T] = {
+  private[sql] lazy val materializedRdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
     rddQueryExecution.toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])

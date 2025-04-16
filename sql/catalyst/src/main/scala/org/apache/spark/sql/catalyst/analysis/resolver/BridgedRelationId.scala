@@ -14,22 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.analysis.resolver
 
-package org.apache.spark.sql.catalyst.optimizer
-
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Offset, Project}
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{OFFSET, PROJECT}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 
 /**
- * Pushes Project operator through Offset operator.
+ * The [[BridgedRelationId]] is a unique identifier for an unresolved relation in the whole logical
+ * plan including all the nested views. It is used to lookup relations with resolved metadata which
+ * were processed by the fixed-point when running two Analyzers in dual-run mode. Storing
+ * [[catalogAndNamespace]] is required to differentiate tables/views created in different catalogs
+ * as their [[UnresolvedRelation]]s could have same structure.
  */
-object PushProjectionThroughOffset extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAllPatterns(PROJECT, OFFSET)) {
-
-    case p @ Project(projectList, offset @ Offset(_, child))
-      if projectList.forall(_.deterministic) =>
-      offset.copy(child = p.copy(projectList, child))
-  }
-}
+case class BridgedRelationId(
+    unresolvedRelation: UnresolvedRelation,
+    catalogAndNamespace: Seq[String]
+)

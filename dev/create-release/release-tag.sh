@@ -73,6 +73,14 @@ cd spark
 git config user.name "$GIT_NAME"
 git config user.email "$GIT_EMAIL"
 
+# Remove test jars and classes that do not belong to source releases.
+rm $(<dev/test-jars.txt)
+:> dev/test-jars.txt
+rm $(<dev/test-classes.txt)
+:> dev/test-classes.txt
+git commit -a -m "Removing test jars and class files"
+JAR_RM_REF=$(git rev-parse HEAD)
+
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
 if [[ $RELEASE_VERSION != *"preview"* ]]; then
@@ -90,6 +98,9 @@ sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'
 git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
 git tag $RELEASE_TAG
+
+# Restore test jars for dev.
+git revert --no-edit $JAR_RM_REF
 
 # Create next version
 $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs

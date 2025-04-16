@@ -48,7 +48,7 @@ import org.apache.spark.util.SerializableJobConf
  *
  * TODO: implement the read logic.
  */
-class HiveFileFormat(fileSinkConf: FileSinkDesc)
+case class HiveFileFormat(fileSinkConf: FileSinkDesc)
   extends FileFormat with DataSourceRegister with Logging {
 
   def this() = this(null)
