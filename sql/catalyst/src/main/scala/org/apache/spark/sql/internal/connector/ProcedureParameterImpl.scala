@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.sql.connector.catalog.DefaultValue
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.types.DataType
@@ -25,5 +26,5 @@ case class ProcedureParameterImpl(
     mode: Mode,
     name: String,
     dataType: DataType,
-    defaultValueExpression: String,
+    defaultValue: DefaultValue,
     comment: String) extends ProcedureParameter

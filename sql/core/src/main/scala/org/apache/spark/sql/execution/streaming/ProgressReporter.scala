@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.{Clock, Utils}
@@ -60,6 +61,12 @@ class ProgressReporter(
 
   val noDataProgressEventInterval: Long =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
+
+  val coordinatorReportSnapshotUploadLag: Boolean =
+    sparkSession.sessionState.conf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  val stateStoreCoordinator: StateStoreCoordinatorRef =
+    sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
 
   private val timestampFormat =
     DateTimeFormatter
@@ -282,6 +289,17 @@ abstract class ProgressContext(
 
     progressReporter.lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
     progressReporter.updateProgress(newProgress)
+
+    // Ask the state store coordinator to log all lagging state stores
+    if (progressReporter.coordinatorReportSnapshotUploadLag) {
+      val latestVersion = lastEpochId + 1
+      progressReporter.stateStoreCoordinator
+        .logLaggingStateStores(
+          lastExecution.runId,
+          latestVersion,
+          lastExecution.isTerminatingTrigger
+        )
+    }
 
     // Update the value since this trigger executes a batch successfully.
     this.execStatsOnLatestExecutedBatch = Some(execStats)
@@ -559,7 +577,7 @@ abstract class ProgressContext(
       hasNewData: Boolean,
       sourceToNumInputRows: Map[SparkDataStream, Long],
       lastExecution: IncrementalExecution): ExecutionStats = {
-    val hasEventTime = progressReporter.logicalPlan().collect {
+    val hasEventTime = progressReporter.logicalPlan().collectFirst {
       case e: EventTimeWatermark => e
     }.nonEmpty
 

@@ -1940,12 +1940,14 @@ class SubqueryExpression(google.protobuf.message.Message):
         SUBQUERY_TYPE_SCALAR: SubqueryExpression._SubqueryType.ValueType  # 1
         SUBQUERY_TYPE_EXISTS: SubqueryExpression._SubqueryType.ValueType  # 2
         SUBQUERY_TYPE_TABLE_ARG: SubqueryExpression._SubqueryType.ValueType  # 3
+        SUBQUERY_TYPE_IN: SubqueryExpression._SubqueryType.ValueType  # 4
 
     class SubqueryType(_SubqueryType, metaclass=_SubqueryTypeEnumTypeWrapper): ...
     SUBQUERY_TYPE_UNKNOWN: SubqueryExpression.SubqueryType.ValueType  # 0
     SUBQUERY_TYPE_SCALAR: SubqueryExpression.SubqueryType.ValueType  # 1
     SUBQUERY_TYPE_EXISTS: SubqueryExpression.SubqueryType.ValueType  # 2
     SUBQUERY_TYPE_TABLE_ARG: SubqueryExpression.SubqueryType.ValueType  # 3
+    SUBQUERY_TYPE_IN: SubqueryExpression.SubqueryType.ValueType  # 4
 
     class TableArgOptions(google.protobuf.message.Message):
         """Nested message for table argument options."""
@@ -2010,6 +2012,7 @@ class SubqueryExpression(google.protobuf.message.Message):
     PLAN_ID_FIELD_NUMBER: builtins.int
     SUBQUERY_TYPE_FIELD_NUMBER: builtins.int
     TABLE_ARG_OPTIONS_FIELD_NUMBER: builtins.int
+    IN_SUBQUERY_VALUES_FIELD_NUMBER: builtins.int
     plan_id: builtins.int
     """(Required) The ID of the corresponding connect plan."""
     subquery_type: global___SubqueryExpression.SubqueryType.ValueType
@@ -2017,12 +2020,18 @@ class SubqueryExpression(google.protobuf.message.Message):
     @property
     def table_arg_options(self) -> global___SubqueryExpression.TableArgOptions:
         """(Optional) Options specific to table arguments."""
+    @property
+    def in_subquery_values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
+        """(Optional) IN subquery values."""
     def __init__(
         self,
         *,
         plan_id: builtins.int = ...,
         subquery_type: global___SubqueryExpression.SubqueryType.ValueType = ...,
         table_arg_options: global___SubqueryExpression.TableArgOptions | None = ...,
+        in_subquery_values: collections.abc.Iterable[global___Expression] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -2035,6 +2044,8 @@ class SubqueryExpression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_table_arg_options",
             b"_table_arg_options",
+            "in_subquery_values",
+            b"in_subquery_values",
             "plan_id",
             b"plan_id",
             "subquery_type",

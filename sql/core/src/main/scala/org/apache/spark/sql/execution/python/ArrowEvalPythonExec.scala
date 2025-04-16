@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, UserDefinedType}
 
 /**
  * Grouped a iterator into batches.
@@ -107,7 +107,9 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType)
+    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+      case udt: UserDefinedType[_] => udt.sqlType
+    })
 
     val batchIter = Iterator(iter)
 

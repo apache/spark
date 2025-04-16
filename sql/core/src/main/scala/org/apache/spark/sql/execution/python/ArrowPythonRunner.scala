@@ -107,8 +107,12 @@ class ArrowPythonWithNamedArgumentRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
-  override protected def writeUDF(dataOut: DataOutputStream): Unit =
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+      PythonWorkerUtils.writeUTF(schema.json, dataOut)
+    }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
+  }
 }
 
 object ArrowPythonRunner {

@@ -32,7 +32,7 @@ import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-private[image] class ImageFileFormat extends FileFormat with DataSourceRegister {
+private[image] case class ImageFileFormat() extends FileFormat with DataSourceRegister {
 
   override def inferSchema(
       sparkSession: SparkSession,

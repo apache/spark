@@ -811,6 +811,20 @@
     },
     "sqlState" : "XX000"
   },
+  "CONSTRAINT_ALREADY_EXISTS" : {
+    "message" : [
+      "Constraint '<constraintName>' already exists. Please delete the existing constraint first.",
+      "Existing constraint:",
+      "<oldConstraint>"
+    ],
+    "sqlState" : "42710"
+  },
+  "CONSTRAINT_DOES_NOT_EXIST" : {
+    "message" : [
+      "Cannot drop nonexistent constraint <constraintName> from table <tableName>."
+    ],
+    "sqlState" : "42704"
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
@@ -992,6 +1006,11 @@
       "INVALID_XML_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
+      "INVALID_XML_SCHEMA" : {
+        "message" : [
+          "Input schema <schema> must be a struct or a variant."
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -2351,6 +2370,12 @@
     },
     "sqlState" : "22022"
   },
+  "INVALID_CONSTRAINT_CHARACTERISTICS" : {
+    "message" : [
+      "Constraint characteristics [<characteristics>] are duplicated or conflict with each other."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_CORRUPT_RECORD_TYPE" : {
     "message" : [
       "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
@@ -2912,6 +2937,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_KRYO_SERIALIZER_NO_DATA" : {
+    "message" : [
+      "The object '<obj>' is invalid or malformed to <serdeOp> using <serdeClass>."
+    ],
+    "sqlState" : "22002"
+  },
   "INVALID_LABEL_USAGE" : {
     "message" : [
       "The usage of the label <labelName> is invalid."
@@ -2953,6 +2984,11 @@
       "NUM_ARGS_MISMATCH" : {
         "message" : [
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
+        ]
+      },
+      "PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION" : {
+        "message" : [
+          "You passed a lambda function to a parameter that does not accept it. Please check if lambda function argument is in the correct position."
         ]
       }
     },
@@ -3325,7 +3361,7 @@
   },
   "INVALID_SINGLE_VARIANT_COLUMN" : {
     "message" : [
-      "The `singleVariantColumn` option cannot be used if there is also a user specified schema."
+      "User specified schema <schema> is invalid when the `singleVariantColumn` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
     ],
     "sqlState" : "42613"
   },
@@ -3848,6 +3884,25 @@
     },
     "sqlState" : "22023"
   },
+  "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE" : {
+    "message" : [
+      "Malformed state in RatePerMicroBatch source."
+    ],
+    "subClass" : {
+      "INVALID_OFFSET" : {
+        "message" : [
+          "The offset value is invalid: startOffset should less than or equal to the endOffset, but startOffset(<startOffset>) > endOffset(<endOffset>)."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp value is invalid: startTimestamp should less than or equal to the endTimestamp, but startTimestamp(<startTimestamp>) > endTimestamp(<endTimestamp>).",
+          "This could happen when the streaming query is restarted with a newer `startingTimestamp` and reprocess the first batch (i.e. batch 0). Please consider using a new checkpoint location."
+        ]
+      }
+    },
+    "sqlState" : "22000"
+  },
   "MALFORMED_VARIANT" : {
     "message" : [
       "Variant binary is malformed. Please check the data source is valid."
@@ -3916,6 +3971,12 @@
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_PRIMARY_KEYS" : {
+    "message" : [
+      "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
+    ],
+    "sqlState" : "42P16"
   },
   "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
     "message" : [
@@ -4835,6 +4896,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_OPERATION_OUT_OF_ORDER" : {
+    "message" : [
+      "Streaming stateful operator attempted to access state store out of order. This is a bug, please retry. error_msg=<errorMsg>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY" : {
     "message" : [
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.SupportsFineGrainedReplay.",
@@ -5513,6 +5580,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC" : {
+    "message" : [
+      "Constraint characteristic '<characteristic>' is not supported for constraint type '<constraintType>'."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {

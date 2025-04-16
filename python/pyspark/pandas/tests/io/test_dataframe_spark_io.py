@@ -23,6 +23,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_openpyxl, openpyxl_requirement_message
 
 
 class DataFrameSparkIOTestsMixin:
@@ -253,6 +254,7 @@ class DataFrameSparkIOTestsMixin:
                 expected_idx.sort_values(by="f").to_spark().toPandas(),
             )
 
+    @unittest.skipIf(not have_openpyxl, openpyxl_requirement_message)
     def test_read_excel(self):
         with self.temp_dir() as tmp:
             path1 = "{}/file1.xlsx".format(tmp)
@@ -343,6 +345,27 @@ class DataFrameSparkIOTestsMixin:
                     psdfs["Sheet_name_2"].sort_index(),
                     pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
                 )
+
+    @unittest.skipIf(not have_openpyxl, openpyxl_requirement_message)
+    def test_read_large_excel(self):
+        n = 20000
+        pdf = pd.DataFrame(
+            {
+                "i32": np.arange(n, dtype=np.int32) % 3,
+                "i64": np.arange(n, dtype=np.int64) % 5,
+                "f": np.arange(n, dtype=np.float64),
+                "bhello": np.random.choice(["hello", "yo", "people"], size=n).astype("O"),
+            },
+            columns=["i32", "i64", "f", "bhello"],
+            index=np.random.rand(n),
+        )
+
+        with self.temp_dir() as tmp:
+            path = "{}/large_file.xlsx".format(tmp)
+            pdf.to_excel(path)
+
+            self.assert_eq(ps.read_excel(path), pd.read_excel(path))
+            self.assert_eq(ps.read_excel(path, nrows=10), pd.read_excel(path, nrows=10))
 
     def test_read_orc(self):
         with self.temp_dir() as tmp:

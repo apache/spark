@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.InMemoryV1Provider
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
@@ -409,7 +409,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties == defaultOwnership.asJava)
   }
@@ -424,7 +425,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
@@ -439,7 +441,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("prop" -> "value") ++ defaultOwnership).asJava)
   }
@@ -454,7 +457,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties == defaultOwnership.asJava)
   }
@@ -550,7 +554,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // table should not have been changed
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
   }
@@ -586,7 +591,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -602,10 +608,10 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(replaced.schema === new StructType()
-        .add("id", LongType)
-        .add("data", StringType)
-        .add("even_or_odd", StringType))
+    assert(replaced.columns sameElements Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType),
+      Column.create("even_or_odd", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -622,7 +628,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -638,10 +645,10 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(replaced.schema === new StructType()
-        .add("id", LongType)
-        .add("data", StringType)
-        .add("even_or_odd", StringType))
+    assert(replaced.columns sameElements Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType),
+      Column.create("even_or_odd", StringType)))
     assert(replaced.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -658,7 +665,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning.isEmpty)
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -674,10 +682,10 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(replaced.schema === new StructType()
-        .add("id", LongType)
-        .add("data", StringType)
-        .add("even_or_odd", StringType))
+    assert(replaced.columns sameElements
+      Array(Column.create("id", LongType),
+        Column.create("data", StringType),
+        Column.create("even_or_odd", StringType)))
     assert(replaced.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -701,7 +709,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(replaced.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(replaced.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }
@@ -719,7 +728,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.columns sameElements
+      Array(Column.create("id", LongType), Column.create("data", StringType)))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
 
@@ -735,10 +745,10 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(replaced.schema === new StructType()
-        .add("id", LongType)
-        .add("data", StringType)
-        .add("even_or_odd", StringType))
+    assert(replaced.columns sameElements Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType),
+      Column.create("even_or_odd", StringType)))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties === defaultOwnership.asJava)
   }

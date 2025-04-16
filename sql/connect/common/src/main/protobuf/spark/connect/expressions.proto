@@ -483,11 +483,15 @@ message SubqueryExpression {
   // (Optional) Options specific to table arguments.
   optional TableArgOptions table_arg_options = 3;
 
+  // (Optional) IN subquery values.
+  repeated Expression in_subquery_values = 4;
+
   enum SubqueryType {
     SUBQUERY_TYPE_UNKNOWN = 0;
     SUBQUERY_TYPE_SCALAR = 1;
     SUBQUERY_TYPE_EXISTS = 2;
     SUBQUERY_TYPE_TABLE_ARG = 3;
+    SUBQUERY_TYPE_IN = 4;
   }
 
   // Nested message for table argument options.

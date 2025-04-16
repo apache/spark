@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.net.ServerSocket
+import java.nio.channels.{Channels, ServerSocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
@@ -27,7 +27,9 @@ import com.google.protobuf.ByteString
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -52,7 +54,7 @@ import org.apache.spark.util.Utils
  * - Requests for managing state variables (e.g. valueState).
  */
 class TransformWithStateInPandasStateServer(
-    stateServerSocket: ServerSocket,
+    stateServerSocket: ServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
     timeZoneId: String,
@@ -79,6 +81,10 @@ class TransformWithStateInPandasStateServer(
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = outputStreamForTest
+
+  private val isUnixDomainSock = Option(SparkEnv.get)
+    .map(_.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED))
+    .getOrElse(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.defaultValue.get)
 
   /** State variable related class variables */
   // A map to store the value state name -> (value state, schema, value row deserializer) mapping.
@@ -138,10 +144,22 @@ class TransformWithStateInPandasStateServer(
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
+
+    // SPARK-51667: We have a pattern of sending messages continuously from one side
+    // (Python -> JVM, and vice versa) before getting response from other side. Since most
+    // messages we are sending are small, this triggers the bad combination of Nagle's algorithm
+    // and delayed ACKs, which can cause a significant delay on the latency.
+    // See SPARK-51667 for more details on how this can be a problem.
+    //
+    // Disabling either would work, but it's more common to disable Nagle's algorithm; there is
+    // lot less reference to disabling delayed ACKs, while there are lots of resources to
+    // disable Nagle's algorithm.
+    if (!isUnixDomainSock) listeningSocket.socket().setTcpNoDelay(true)
+
     inputStream = new DataInputStream(
-      new BufferedInputStream(listeningSocket.getInputStream))
+      new BufferedInputStream(Channels.newInputStream(listeningSocket)))
     outputStream = new DataOutputStream(
-      new BufferedOutputStream(listeningSocket.getOutputStream)
+      new BufferedOutputStream(Channels.newOutputStream(listeningSocket))
     )
 
     while (listeningSocket.isConnected &&
@@ -463,7 +481,7 @@ class TransformWithStateInPandasStateServer(
           sendResponse(2, s"state $stateName doesn't exist")
         }
       case ListStateCall.MethodCase.LISTSTATEPUT =>
-        val rows = deserializer.readArrowBatches(inputStream)
+        val rows = deserializer.readListElements(inputStream, listStateInfo)
         listStateInfo.listState.put(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.LISTSTATEGET =>
@@ -475,12 +493,10 @@ class TransformWithStateInPandasStateServer(
         }
         if (!iteratorOption.get.hasNext) {
           sendResponse(2, s"List state $stateName doesn't contain any value.")
-          return
         } else {
           sendResponse(0)
+          sendIteratorForListState(iteratorOption.get)
         }
-        sendIteratorAsArrowBatches(iteratorOption.get, listStateInfo.schema,
-          arrowStreamWriterForTest) { data => listStateInfo.serializer(data)}
       case ListStateCall.MethodCase.APPENDVALUE =>
         val byteArray = message.getAppendValue.getValue.toByteArray
         val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema,
@@ -488,7 +504,7 @@ class TransformWithStateInPandasStateServer(
         listStateInfo.listState.appendValue(newRow)
         sendResponse(0)
       case ListStateCall.MethodCase.APPENDLIST =>
-        val rows = deserializer.readArrowBatches(inputStream)
+        val rows = deserializer.readListElements(inputStream, listStateInfo)
         listStateInfo.listState.appendList(rows.toArray)
         sendResponse(0)
       case ListStateCall.MethodCase.CLEAR =>
@@ -497,6 +513,28 @@ class TransformWithStateInPandasStateServer(
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
+  }
+
+  private def sendIteratorForListState(iter: Iterator[Row]): Unit = {
+    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
+    // when there are multiple state variables, user tries to access a different state variable
+    // while the current state variable is not exhausted yet.
+    var rowCount = 0
+    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+      val data = iter.next()
+
+      // Serialize the value row as a byte array
+      val valueBytes = PythonSQLUtils.toPyRow(data)
+      val lenBytes = valueBytes.length
+
+      outputStream.writeInt(lenBytes)
+      outputStream.write(valueBytes)
+
+      rowCount += 1
+    }
+    outputStream.writeInt(-1)
+    outputStream.flush()
   }
 
   private[sql] def handleMapStateRequest(message: MapStateCall): Unit = {

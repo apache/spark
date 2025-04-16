@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.RelationResolution
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -31,15 +32,17 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 class BridgedRelationMetadataProvider(
     override val catalogManager: CatalogManager,
     override val relationResolution: RelationResolution,
-    analyzerBridgeState: AnalyzerBridgeState
+    analyzerBridgeState: AnalyzerBridgeState,
+    viewResolver: ViewResolver
 ) extends RelationMetadataProvider {
   override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
-  updateRelationsWithResolvedMetadata()
 
   /**
    * We update relations on each [[resolve]] call, because relation IDs might have changed.
    * This can happen for the nested views, since catalog name may differ, and expanded table name
-   * will differ for the same [[UnresolvedRelation]].
+   * will differ for the same [[UnresolvedRelation]]. In order to overcome this issue, we use
+   * [[viewResolver]]'s context to peek into the most recent context and to only resolve the
+   * relations which were created under this same context.
    *
    * See [[ViewResolver.resolve]] for more info on how SQL configs are propagated to nested views).
    */
@@ -49,12 +52,37 @@ class BridgedRelationMetadataProvider(
 
   private def updateRelationsWithResolvedMetadata(): Unit = {
     analyzerBridgeState.relationsWithResolvedMetadata.forEach(
-      (unresolvedRelation, relationWithResolvedMetadata) => {
-        relationsWithResolvedMetadata.put(
-          relationIdFromUnresolvedRelation(unresolvedRelation),
-          relationWithResolvedMetadata
-        )
+      (bridgeRelationId, relationWithResolvedMetadata) => {
+        if (viewResolver.getCatalogAndNamespace.getOrElse(Seq.empty)
+          == bridgeRelationId.catalogAndNamespace) {
+          relationsWithResolvedMetadata.put(
+            relationIdFromUnresolvedRelation(bridgeRelationId.unresolvedRelation),
+            tryConvertUnresolvedCatalogRelation(relationWithResolvedMetadata)
+          )
+        }
       }
     )
+  }
+
+  private def tryConvertUnresolvedCatalogRelation(source: LogicalPlan): LogicalPlan = {
+    source match {
+      case unresolvedCatalogRelation: UnresolvedCatalogRelation
+          if analyzerBridgeState.catalogRelationsWithResolvedMetadata
+            .containsKey(unresolvedCatalogRelation) =>
+        analyzerBridgeState.catalogRelationsWithResolvedMetadata.get(unresolvedCatalogRelation)
+
+      case SubqueryAlias(id, unresolvedCatalogRelation: UnresolvedCatalogRelation)
+          if analyzerBridgeState.catalogRelationsWithResolvedMetadata
+            .containsKey(unresolvedCatalogRelation) =>
+        SubqueryAlias(
+          id,
+          analyzerBridgeState.catalogRelationsWithResolvedMetadata.get(
+            unresolvedCatalogRelation
+          )
+        )
+
+      case _ =>
+        source
+    }
   }
 }

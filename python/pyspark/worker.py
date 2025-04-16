@@ -45,7 +45,6 @@ from pyspark.serializers import (
     write_long,
     read_int,
     SpecialLengths,
-    UTF8Deserializer,
     CPickleSerializer,
     BatchedSerializer,
 )
@@ -223,7 +222,7 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
 
     return (
         args_kwargs_offsets,
-        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type),
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type, return_type),
     )
 
 
@@ -1548,6 +1547,8 @@ def read_udfs(pickleSer, infile, eval_type):
             or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
         ):
             state_server_port = read_int(infile)
+            if state_server_port == -1:
+                state_server_port = utf8_deserializer.loads(infile)
             key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
@@ -1614,6 +1615,13 @@ def read_udfs(pickleSer, infile, eval_type):
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF uses explicit Arrow cast for type coercion
             arrow_cast = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            # Arrow-optimized Python UDF takes input types
+            input_types = (
+                [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
+                if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                else None
+            )
+
             ser = ArrowStreamPandasUDFSerializer(
                 timezone,
                 safecheck,
@@ -1622,6 +1630,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 struct_in_pandas,
                 ndarray_as_list,
                 arrow_cast,
+                input_types,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
@@ -1975,8 +1984,6 @@ def main(infile, outfile):
 
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)
-        boundPort = read_int(infile)
-        secret = UTF8Deserializer().loads(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -1984,6 +1991,12 @@ def main(infile, outfile):
         # initialize global state
         taskContext = None
         if isBarrier:
+            boundPort = read_int(infile)
+            secret = None
+            if boundPort == -1:
+                boundPort = utf8_deserializer.loads(infile)
+            else:
+                secret = utf8_deserializer.loads(infile)
             taskContext = BarrierTaskContext._getOrCreate()
             BarrierTaskContext._initialize(boundPort, secret)
             # Set the task context instance here, so we can get it by TaskContext.get for
@@ -2077,9 +2090,11 @@ def main(infile, outfile):
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
     # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
     write_int(os.getpid(), sock_file)
     sock_file.flush()

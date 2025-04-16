@@ -15,17 +15,39 @@
 # limitations under the License.
 #
 
+import base64
 import faulthandler
+import json
 import os
 import sys
+import typing
 from dataclasses import dataclass, field
-from typing import IO, List
+from typing import IO, Type, Union
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkValueError
+from pyspark.errors.exceptions.base import PySparkNotImplementedError
 from pyspark.serializers import SpecialLengths, UTF8Deserializer, read_int, write_int
-from pyspark.sql.datasource import DataSource, DataSourceReader, EqualTo, Filter
-from pyspark.sql.types import StructType, _parse_datatype_json_string
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceReader,
+    EqualNullSafe,
+    EqualTo,
+    Filter,
+    GreaterThan,
+    GreaterThanOrEqual,
+    In,
+    IsNotNull,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Not,
+    StringContains,
+    StringEndsWith,
+    StringStartsWith,
+)
+from pyspark.sql.types import StructType, VariantVal, _parse_datatype_json_string
+from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
 from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
@@ -39,6 +61,25 @@ from pyspark.worker_util import (
 
 utf8_deserializer = UTF8Deserializer()
 
+BinaryFilter = Union[
+    EqualTo,
+    EqualNullSafe,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    In,
+    StringStartsWith,
+    StringEndsWith,
+    StringContains,
+]
+
+binary_filters = {cls.__name__: cls for cls in typing.get_args(BinaryFilter)}
+
+UnaryFilter = Union[IsNotNull, IsNull]
+
+unary_filters = {cls.__name__: cls for cls in typing.get_args(UnaryFilter)}
+
 
 @dataclass(frozen=True)
 class FilterRef:
@@ -47,6 +88,34 @@ class FilterRef:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "id", id(self.filter))
+
+
+def deserializeVariant(variantDict: dict) -> VariantVal:
+    value = base64.b64decode(variantDict["value"])
+    metadata = base64.b64decode(variantDict["metadata"])
+    return VariantVal(value, metadata)
+
+
+def deserializeFilter(jsonDict: dict) -> Filter:
+    name = jsonDict["name"]
+    filter: Filter
+    if name in binary_filters:
+        binary_filter_cls: Type[BinaryFilter] = binary_filters[name]
+        filter = binary_filter_cls(
+            attribute=tuple(jsonDict["columnPath"]),
+            value=deserializeVariant(jsonDict["value"]).toPython(),
+        )
+    elif name in unary_filters:
+        unary_filter_cls: Type[UnaryFilter] = unary_filters[name]
+        filter = unary_filter_cls(attribute=tuple(jsonDict["columnPath"]))
+    else:
+        raise PySparkNotImplementedError(
+            errorClass="UNSUPPORTED_FILTER",
+            messageParameters={"name": name},
+        )
+    if jsonDict["isNegated"]:
+        filter = Not(filter)
+    return filter
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -63,11 +132,12 @@ def main(infile: IO, outfile: IO) -> None:
     - a `DataSource` instance representing the data source
     - a `StructType` instance representing the output schema of the data source
     - a list of filters to be pushed down
+    - configuration values
 
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. It applies the filters by calling the `pushFilters` method
-    on the reader and determines which filters are supported. The data source with updated reader
-    is then sent back to the JVM along with the indices of the supported filters.
+    on the reader and determines which filters are supported. The indices of the supported
+    filters are sent back to the JVM, along with the list of partitions and the read function.
     """
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
@@ -126,22 +196,9 @@ def main(infile: IO, outfile: IO) -> None:
             )
 
         # Receive the pushdown filters.
-        num_filters = read_int(infile)
-        filters: List[FilterRef] = []
-        for _ in range(num_filters):
-            name = utf8_deserializer.loads(infile)
-            if name == "EqualTo":
-                num_parts = read_int(infile)
-                column_path = tuple(utf8_deserializer.loads(infile) for _ in range(num_parts))
-                value = read_int(infile)
-                filters.append(FilterRef(EqualTo(column_path, value)))
-            else:
-                raise PySparkAssertionError(
-                    errorClass="DATA_SOURCE_UNSUPPORTED_FILTER",
-                    messageParameters={
-                        "name": name,
-                    },
-                )
+        json_str = utf8_deserializer.loads(infile)
+        filter_dicts = json.loads(json_str)
+        filters = [FilterRef(deserializeFilter(f)) for f in filter_dicts]
 
         # Push down the filters and get the indices of the unsupported filters.
         unsupported_filters = set(
@@ -165,10 +222,22 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Monkey patch the data source instance
-        # to return the existing reader with the pushed down filters.
-        data_source.reader = lambda schema: reader  # type: ignore[method-assign]
-        pickleSer._write_with_length(data_source, outfile)
+        # Receive the max arrow batch size.
+        max_arrow_batch_size = read_int(infile)
+        assert max_arrow_batch_size > 0, (
+            "The maximum arrow batch size should be greater than 0, but got "
+            f"'{max_arrow_batch_size}'"
+        )
+
+        # Return the read function and partitions. Doing this in the same worker as filter pushdown
+        # helps reduce the number of Python worker calls.
+        write_read_func_and_partitions(
+            outfile,
+            reader=reader,
+            data_source=data_source,
+            schema=schema,
+            max_arrow_batch_size=max_arrow_batch_size,
+        )
 
         # Return the supported filter indices.
         write_int(len(supported_filter_indices), outfile)
@@ -200,7 +269,9 @@ def main(infile: IO, outfile: IO) -> None:
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
     main(sock_file, sock_file)

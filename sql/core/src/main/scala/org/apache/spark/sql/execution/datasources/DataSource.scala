@@ -262,7 +262,8 @@ case class DataSource(
 
         val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
-        val isSingleVariantColumn = providingClass == classOf[json.JsonFileFormat] &&
+        val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
+          providingClass == classOf[csv.CSVFileFormat]) &&
           caseInsensitiveOptions.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && !isSingleVariantColumn &&
@@ -352,7 +353,7 @@ case class DataSource(
    *                        is considered as a non-streaming file based data source. Since we know
    *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
+  def resolveRelation(checkFilesExist: Boolean = true, readOnly: Boolean = false): BaseRelation = {
     val relation = (providingInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -443,7 +444,7 @@ case class DataSource(
         SchemaUtils.checkSchemaColumnNameDuplication(
           hs.partitionSchema,
           equality)
-        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
+        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema, readOnly)
       case _ =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           relation.schema,

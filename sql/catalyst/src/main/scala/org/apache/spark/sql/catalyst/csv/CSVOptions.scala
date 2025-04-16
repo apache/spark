@@ -306,6 +306,14 @@ class CSVOptions(
   private val isColumnPruningOptionEnabled: Boolean =
     getBool(COLUMN_PRUNING, !multiLine && columnPruning)
 
+  // This option takes in a column name and specifies that the entire CSV record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("csv").option("singleVariantColumn", "colName")
+  val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
+  def needHeaderForSingleVariantColumn: Boolean =
+    singleVariantColumn.isDefined && headerFlag
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -388,7 +396,7 @@ object CSVOptions extends DataSourceOptions {
   val EMPTY_VALUE = newOption("emptyValue")
   val LINE_SEP = newOption("lineSep")
   val INPUT_BUFFER_SIZE = newOption("inputBufferSize")
-  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
+  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val NULL_VALUE = newOption("nullValue")
   val NAN_VALUE = newOption("nanValue")
   val POSITIVE_INF = newOption("positiveInf")
@@ -407,4 +415,5 @@ object CSVOptions extends DataSourceOptions {
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
+  val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
 }

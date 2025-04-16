@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, SqlScriptingLocalVariableManager}
+import org.apache.spark.sql.catalyst.{
+  FunctionIdentifier,
+  SQLConfHelper,
+  SqlScriptingLocalVariableManager
+}
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionRegistry,
   GetViewColumnByNameAndOrdinal,
@@ -32,34 +36,10 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedStar,
   UnresolvedSubqueryColumnAliases
 }
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  AttributeReference,
-  BinaryArithmetic,
-  Cast,
-  ConditionalExpression,
-  CreateNamedStruct,
-  Expression,
-  Literal,
-  Predicate,
-  SubqueryExpression,
-  UpCast
-}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Distinct,
-  Filter,
-  GlobalLimit,
-  LocalLimit,
-  LocalRelation,
-  LogicalPlan,
-  OneRowRelation,
-  Project,
-  SubqueryAlias,
-  Union,
-  UnresolvedWith,
-  View
-}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode
 
@@ -75,46 +55,93 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   /**
    * Check the top level operator of the parsed operator.
    */
-  def apply(operator: LogicalPlan): Boolean =
-    checkConfValues() && checkVariables() && checkOperator(operator)
+  def apply(operator: LogicalPlan): Boolean = {
+    val unsupportedConf = detectUnsupportedConf()
+    if (unsupportedConf.isDefined) {
+      tryThrowUnsupportedSinglePassAnalyzerFeature(s"configuration: ${unsupportedConf.get}")
+    }
+
+    val areTempVariablesSupported = checkTempVariables()
+    if (!areTempVariablesSupported) {
+      tryThrowUnsupportedSinglePassAnalyzerFeature("temp variables")
+    }
+
+    val areScriptingVariablesSupported = checkScriptingVariables()
+    if (!areScriptingVariablesSupported) {
+      tryThrowUnsupportedSinglePassAnalyzerFeature("scripting variables")
+    }
+
+    !unsupportedConf.isDefined &&
+    areTempVariablesSupported &&
+    areScriptingVariablesSupported &&
+    checkOperator(operator)
+  }
 
   /**
    * Check if all the operators are supported. For implemented ones, recursively check
    * their children. For unimplemented ones, return false.
    */
-  private def checkOperator(operator: LogicalPlan): Boolean = operator match {
-    case unresolvedWith: UnresolvedWith =>
-      checkUnresolvedWith(unresolvedWith)
-    case project: Project =>
-      checkProject(project)
-    case filter: Filter =>
-      checkFilter(filter)
-    case unresolvedSubqueryColumnAliases: UnresolvedSubqueryColumnAliases =>
-      checkUnresolvedSubqueryColumnAliases(unresolvedSubqueryColumnAliases)
-    case subqueryAlias: SubqueryAlias =>
-      checkSubqueryAlias(subqueryAlias)
-    case globalLimit: GlobalLimit =>
-      checkGlobalLimit(globalLimit)
-    case localLimit: LocalLimit =>
-      checkLocalLimit(localLimit)
-    case distinct: Distinct =>
-      checkDistinct(distinct)
-    case view: View =>
-      checkView(view)
-    case unresolvedRelation: UnresolvedRelation =>
-      checkUnresolvedRelation(unresolvedRelation)
-    case unresolvedInlineTable: UnresolvedInlineTable =>
-      checkUnresolvedInlineTable(unresolvedInlineTable)
-    case resolvedInlineTable: ResolvedInlineTable =>
-      checkResolvedInlineTable(resolvedInlineTable)
-    case localRelation: LocalRelation =>
-      checkLocalRelation(localRelation)
-    case oneRowRelation: OneRowRelation =>
-      checkOneRowRelation(oneRowRelation)
-    case union: Union =>
-      checkUnion(union)
-    case _ =>
-      false
+  private def checkOperator(operator: LogicalPlan): Boolean = {
+    val isSupported = operator match {
+      case unresolvedWith: UnresolvedWith =>
+        checkUnresolvedWith(unresolvedWith)
+      case withCte: WithCTE =>
+        checkWithCte(withCte)
+      case project: Project =>
+        checkProject(project)
+      case aggregate: Aggregate =>
+        checkAggregate(aggregate)
+      case filter: Filter =>
+        checkFilter(filter)
+      case join: Join =>
+        checkJoin(join)
+      case unresolvedSubqueryColumnAliases: UnresolvedSubqueryColumnAliases =>
+        checkUnresolvedSubqueryColumnAliases(unresolvedSubqueryColumnAliases)
+      case subqueryAlias: SubqueryAlias =>
+        checkSubqueryAlias(subqueryAlias)
+      case globalLimit: GlobalLimit =>
+        checkGlobalLimit(globalLimit)
+      case localLimit: LocalLimit =>
+        checkLocalLimit(localLimit)
+      case offset: Offset =>
+        checkOffset(offset)
+      case tail: Tail =>
+        checkTail(tail)
+      case distinct: Distinct =>
+        checkDistinct(distinct)
+      case view: View =>
+        checkView(view)
+      case unresolvedRelation: UnresolvedRelation =>
+        checkUnresolvedRelation(unresolvedRelation)
+      case unresolvedInlineTable: UnresolvedInlineTable =>
+        checkUnresolvedInlineTable(unresolvedInlineTable)
+      case resolvedInlineTable: ResolvedInlineTable =>
+        checkResolvedInlineTable(resolvedInlineTable)
+      case localRelation: LocalRelation =>
+        checkLocalRelation(localRelation)
+      case range: Range =>
+        checkRange(range)
+      case oneRowRelation: OneRowRelation =>
+        checkOneRowRelation(oneRowRelation)
+      case cteRelationDef: CTERelationDef =>
+        checkCteRelationDef(cteRelationDef)
+      case cteRelationRef: CTERelationRef =>
+        checkCteRelationRef(cteRelationRef)
+      case union: Union =>
+        checkUnion(union)
+      case setOperation: SetOperation =>
+        checkSetOperation(setOperation)
+      case sort: Sort =>
+        checkSort(sort)
+      case _ =>
+        false
+    }
+
+    if (!isSupported) {
+      tryThrowUnsupportedSinglePassAnalyzerFeature(operator)
+    }
+
+    isSupported
   }
 
   /**
@@ -122,11 +149,9 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
    * For LeafNode types, we return true or false. For other ones, check their children.
    */
   private def checkExpression(expression: Expression): Boolean = {
-    expression match {
+    val isSupported = expression match {
       case alias: Alias =>
         checkAlias(alias)
-      case unresolvedBinaryArithmetic: BinaryArithmetic =>
-        checkUnresolvedBinaryArithmetic(unresolvedBinaryArithmetic)
       case unresolvedConditionalExpression: ConditionalExpression =>
         checkUnresolvedConditionalExpression(unresolvedConditionalExpression)
       case unresolvedCast: Cast =>
@@ -139,10 +164,16 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkUnresolvedAlias(unresolvedAlias)
       case unresolvedAttribute: UnresolvedAttribute =>
         checkUnresolvedAttribute(unresolvedAttribute)
-      case unresolvedPredicate: Predicate =>
-        checkUnresolvedPredicate(unresolvedPredicate)
       case literal: Literal =>
         checkLiteral(literal)
+      case unresolvedPredicate: Predicate =>
+        checkUnresolvedPredicate(unresolvedPredicate)
+      case scalarSubquery: ScalarSubquery =>
+        checkScalarSubquery(scalarSubquery)
+      case listQuery: ListQuery =>
+        checkListQuery(listQuery)
+      case outerReference: OuterReference =>
+        checkOuterReference(outerReference)
       case attributeReference: AttributeReference =>
         checkAttributeReference(attributeReference)
       case createNamedStruct: CreateNamedStruct =>
@@ -151,9 +182,17 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkUnresolvedFunction(unresolvedFunction)
       case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
         checkGetViewColumnBynameAndOrdinal(getViewColumnByNameAndOrdinal)
+      case expression if isGenerallySupportedExpression(expression) =>
+        expression.children.forall(checkExpression)
       case _ =>
         false
     }
+
+    if (!isSupported) {
+      tryThrowUnsupportedSinglePassAnalyzerFeature(expression)
+    }
+
+    isSupported
   }
 
   private def checkUnresolvedWith(unresolvedWith: UnresolvedWith) = {
@@ -163,8 +202,27 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     } && checkOperator(unresolvedWith.child)
   }
 
+  private def checkWithCte(withCte: WithCTE) = {
+    withCte.children.forall(checkOperator)
+  }
+
   private def checkProject(project: Project) = {
     checkOperator(project.child) && project.projectList.forall(checkExpression)
+  }
+
+  private def checkAggregate(aggregate: Aggregate) = {
+    checkOperator(aggregate.child) &&
+    aggregate.groupingExpressions.forall(checkExpression) &&
+    aggregate.aggregateExpressions.forall(checkExpression)
+  }
+
+  private def checkJoin(join: Join) = {
+    checkOperator(join.left) && checkOperator(join.right) && {
+      join.condition match {
+        case Some(condition) => checkExpression(condition)
+        case None => true
+      }
+    }
   }
 
   private def checkFilter(unresolvedFilter: Filter) =
@@ -182,6 +240,12 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkLocalLimit(localLimit: LocalLimit) =
     checkOperator(localLimit.child) && checkExpression(localLimit.limitExpr)
+
+  private def checkOffset(offset: Offset) =
+    checkOperator(offset.child) && checkExpression(offset.offsetExpr)
+
+  private def checkTail(tail: Tail) =
+    checkOperator(tail.child) && checkExpression(tail.limitExpr)
 
   private def checkDistinct(distinct: Distinct) =
     checkOperator(distinct.child)
@@ -201,16 +265,29 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   private def checkLocalRelation(localRelation: LocalRelation) =
     localRelation.output.forall(checkExpression)
 
+  private def checkRange(range: Range) = true
+
   private def checkUnion(union: Union) =
     !union.byName && !union.allowMissingCol && union.children.forall(checkOperator)
 
+  private def checkSetOperation(setOperation: SetOperation) =
+    setOperation.children.forall(checkOperator)
+
+  private def checkSort(sort: Sort) = {
+    checkOperator(sort.child) && sort.order.forall(
+      sortOrder => checkExpression(sortOrder.child)
+    )
+  }
+
   private def checkOneRowRelation(oneRowRelation: OneRowRelation) = true
 
-  private def checkAlias(alias: Alias) = checkExpression(alias.child)
+  private def checkCteRelationDef(cteRelationDef: CTERelationDef) = {
+    checkOperator(cteRelationDef.child)
+  }
 
-  private def checkUnresolvedBinaryArithmetic(unresolvedBinaryArithmetic: BinaryArithmetic) =
-    checkExpression(unresolvedBinaryArithmetic.left) &&
-    checkExpression(unresolvedBinaryArithmetic.right)
+  private def checkCteRelationRef(cteRelationRef: CTERelationRef) = true
+
+  private def checkAlias(alias: Alias) = checkExpression(alias.child)
 
   private def checkUnresolvedConditionalExpression(
       unresolvedConditionalExpression: ConditionalExpression) =
@@ -229,12 +306,13 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     !ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES.contains(unresolvedAttribute.nameParts.head) &&
     !unresolvedAttribute.getTagValue(LogicalPlan.PLAN_ID_TAG).isDefined
 
-  private def checkUnresolvedPredicate(unresolvedPredicate: Predicate) = {
-    unresolvedPredicate match {
-      case _: SubqueryExpression => false
-      case other =>
-        other.children.forall(checkExpression)
-    }
+  private def checkUnresolvedPredicate(unresolvedPredicate: Predicate) = unresolvedPredicate match {
+    case inSubquery: InSubquery =>
+      checkInSubquery(inSubquery)
+    case exists: Exists =>
+      checkExists(exists)
+    case _ =>
+      unresolvedPredicate.children.forall(checkExpression)
   }
 
   private def checkAttributeReference(attributeReference: AttributeReference) = true
@@ -253,22 +331,128 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkLiteral(literal: Literal) = true
 
+  private def checkScalarSubquery(scalarSubquery: ScalarSubquery) =
+    checkOperator(scalarSubquery.plan)
+
+  private def checkInSubquery(inSubquery: InSubquery) =
+    inSubquery.values.forall(checkExpression) && checkExpression(inSubquery.query)
+
+  private def checkListQuery(listQuery: ListQuery) = checkOperator(listQuery.plan)
+
+  private def checkExists(exists: Exists) = checkOperator(exists.plan)
+
+  private def checkOuterReference(outerReference: OuterReference) =
+    checkExpression(outerReference.e)
+
   private def checkGetViewColumnBynameAndOrdinal(
       getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal) = true
 
-  private def checkConfValues() =
-    // Case sensitive analysis is not supported.
-    !conf.caseSensitiveAnalysis &&
-    // Case-sensitive inference is not supported for Hive table schema.
-    conf.caseSensitiveInferenceMode == HiveCaseSensitiveInferenceMode.NEVER_INFER &&
-    // Legacy CTE resolution modes are not supported.
-    !conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS) &&
-    LegacyBehaviorPolicy.withName(conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY)) ==
-    LegacyBehaviorPolicy.CORRECTED
+  /**
+   * Most of the expressions come from resolving the [[UnresolvedFunction]], but here we have some
+   * popular expressions allowlist for two reasons:
+   *   1. Some of them are allocated in the Parser;
+   *   2. To allow the resolution of resolved DataFrame subtrees.
+   */
+  private def isGenerallySupportedExpression(expression: Expression): Boolean = {
+    expression match {
+      // Math
+      case _: UnaryMinus | _: BinaryArithmetic | _: LeafMathExpression | _: UnaryMathExpression |
+          _: UnaryLogExpression | _: BinaryMathExpression | _: BitShiftOperation | _: RoundCeil |
+          _: Conv | _: RoundBase | _: Factorial | _: Bin | _: Hex | _: Unhex | _: WidthBucket =>
+        true
+      // Strings
+      case _: Collate | _: Collation | _: ResolvedCollation | _: UnresolvedCollation | _: Concat |
+          _: Mask | _: ConcatWs | _: Elt | _: Upper | _: Lower | _: BinaryPredicate |
+          _: StringPredicate | _: IsValidUTF8 | _: MakeValidUTF8 | _: ValidateUTF8 |
+          _: TryValidateUTF8 | _: StringReplace | _: Overlay | _: StringTranslate | _: FindInSet |
+          _: String2TrimExpression | _: StringTrimBoth | _: StringInstr | _: SubstringIndex |
+          _: StringLocate | _: StringLPad | _: BinaryPad | _: StringRPad | _: FormatString |
+          _: InitCap | _: StringRepeat | _: StringSpace | _: Substring | _: Right | _: Left |
+          _: Length | _: BitLength | _: OctetLength | _: Levenshtein | _: SoundEx | _: Ascii |
+          _: Chr | _: Base64 | _: UnBase64 | _: Decode | _: StringDecode | _: Encode | _: ToBinary |
+          _: FormatNumber | _: Sentences | _: StringSplitSQL | _: SplitPart | _: Empty2Null |
+          _: Luhncheck =>
+        true
+      // Datetime
+      case _: TimeZoneAwareExpression =>
+        true
+      // Decimal
+      case _: UnscaledValue | _: MakeDecimal | _: CheckOverflow | _: CheckOverflowInSum |
+          _: DecimalAddNoOverflowCheck |
+          _: DecimalDivideWithOverflowCheck =>
+        true
+      // Interval
+      case _: ExtractIntervalPart[_] | _: IntervalNumOperation | _: MultiplyInterval |
+          _: DivideInterval | _: TryMakeInterval | _: MakeInterval | _: MakeDTInterval |
+          _: MakeYMInterval | _: MultiplyYMInterval | _: MultiplyDTInterval | _: DivideYMInterval |
+          _: DivideDTInterval =>
+        true
+      // Number format
+      case _: ToNumber | _: TryToNumber | _: ToCharacter =>
+        true
+      // Random
+      case _: Rand | _: Randn | _: Uniform | _: RandStr =>
+        true
+      // Regexp
+      case _: Like | _: ILike | _: LikeAll | _: NotLikeAll | _: LikeAny | _: NotLikeAny | _: RLike |
+          _: StringSplit | _: RegExpReplace | _: RegExpExtract | _: RegExpExtractAll |
+          _: RegExpCount | _: RegExpSubStr | _: RegExpInStr =>
+        true
+      // JSON
+      case _: JsonToStructs | _: StructsToJson |
+          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray =>
+        true
+      // CSV
+      case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>
+        true
+      // URL
+      case _: TryParseUrl | _: ParseUrl | _: UrlEncode | _: UrlDecode | _: TryUrlDecode =>
+        true
+      // XML
+      case _: XmlToStructs | _: SchemaOfXml | _: StructsToXml =>
+        true
+      // Misc
+      case _: TaggingExpression =>
+        true
+      case _ =>
+        false
+    }
+  }
 
-  private def checkVariables() =
-    catalogManager.tempVariableManager.isEmpty &&
-      SqlScriptingLocalVariableManager.get().forall(_.isEmpty)
+  private def detectUnsupportedConf(): Option[String] = {
+    if (conf.caseSensitiveAnalysis) {
+      Some("caseSensitiveAnalysis")
+    } else if (conf.caseSensitiveInferenceMode != HiveCaseSensitiveInferenceMode.NEVER_INFER) {
+      Some("hiveCaseSensitiveInferenceMode")
+    } else if (conf.getConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS)) {
+      Some("legacyInlineCTEInCommands")
+    } else if (LegacyBehaviorPolicy.withName(conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY)) !=
+      LegacyBehaviorPolicy.CORRECTED) {
+      Some("legacyCTEPrecedencePolicy")
+    } else {
+      None
+    }
+  }
+
+  private def checkTempVariables() =
+    catalogManager.tempVariableManager.isEmpty
+
+  private def checkScriptingVariables() =
+    SqlScriptingLocalVariableManager.get().forall(_.isEmpty)
+
+  private def tryThrowUnsupportedSinglePassAnalyzerFeature(operator: LogicalPlan): Unit = {
+    tryThrowUnsupportedSinglePassAnalyzerFeature(s"${operator.getClass} operator resolution")
+  }
+
+  private def tryThrowUnsupportedSinglePassAnalyzerFeature(expression: Expression): Unit = {
+    tryThrowUnsupportedSinglePassAnalyzerFeature(s"${expression.getClass} expression resolution")
+  }
+
+  private def tryThrowUnsupportedSinglePassAnalyzerFeature(feature: String): Unit = {
+    if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_THROW_FROM_RESOLVER_GUARD)) {
+      throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(feature)
+    }
+  }
 }
 
 object ResolverGuard {
@@ -276,16 +460,12 @@ object ResolverGuard {
   private val UNSUPPORTED_ATTRIBUTE_NAMES = {
     val map = new IdentifierMap[Unit]()
 
-    /**
-     * Some SQL functions can be called without the braces and thus they are found in the
-     * parsed operator as UnresolvedAttributes. This list contains the names of those functions
-     * so we can reject them. Find more information in [[ColumnResolutionHelper.literalFunctions]].
-     */
-    map += ("current_date", ())
-    map += ("current_timestamp", ())
+    // Not supported until we support their ''real'' function counterparts.
     map += ("current_user", ())
     map += ("user", ())
     map += ("session_user", ())
+
+    // Not supported until we support GroupingSets/Cube/Rollup.
     map += ("grouping__id", ())
 
     /**
@@ -319,7 +499,6 @@ object ResolverGuard {
     // Functions that are not resolved properly.
     map += ("collate", ())
     map += ("json_tuple", ())
-    map += ("schema_of_unstructured_agg", ())
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
     map += ("schema_of_json", ())

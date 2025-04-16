@@ -20,8 +20,13 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.ArrayDeque
 
 import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  AnalysisHelper,
+  LogicalPlan,
+  SubqueryAlias,
+  UnresolvedWith
+}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -54,9 +59,8 @@ class MetadataResolver(
    * calls for the [[UnresolvedRelation]]s present in that tree. During the `unresolvedPlan`
    * traversal we fill [[relationsWithResolvedMetadata]] with resolved metadata by relation id.
    * This map will be used to resolve the plan in single-pass by the [[Resolver]] using
-   * [[getRelationWithResolvedMetadata]]. If the generic metadata resolution using
-   * [[RelationResolution]] wasn't successful, we resort to using [[extensions]].
-   * Otherwise, we fail with an exception.
+   * [[getRelationWithResolvedMetadata]]. We always try to complete the default resolution using
+   * extensions.
    */
   override def resolve(unresolvedPlan: LogicalPlan): Unit = {
     traverseLogicalPlanTree(unresolvedPlan) {
@@ -64,20 +68,26 @@ class MetadataResolver(
         val relationId = relationIdFromUnresolvedRelation(unresolvedRelation)
 
         if (!relationsWithResolvedMetadata.containsKey(relationId)) {
-          val relationWithResolvedMetadata = resolveRelation(unresolvedRelation).orElse {
-            // In case the generic metadata resolution returned `None`, we try to check if any
-            // of the [[extensions]] matches this `unresolvedRelation`, and resolve it using
-            // that extension.
-            tryDelegateResolutionToExtension(unresolvedRelation, prohibitedResolver)
+          val relationAfterDefaultResolution =
+            resolveRelation(unresolvedRelation).getOrElse(unresolvedRelation)
+
+          val relationAfterExtensionResolution = relationAfterDefaultResolution match {
+            case subqueryAlias: SubqueryAlias =>
+              tryDelegateResolutionToExtension(subqueryAlias.child, prohibitedResolver).map {
+                relation =>
+                  subqueryAlias.copy(child = relation)
+              }
+            case _ =>
+              tryDelegateResolutionToExtension(relationAfterDefaultResolution, prohibitedResolver)
           }
 
-          relationWithResolvedMetadata match {
-            case Some(relationWithResolvedMetadata) =>
+          relationAfterExtensionResolution.getOrElse(relationAfterDefaultResolution) match {
+            case _: UnresolvedRelation =>
+            case relationWithResolvedMetadata =>
               relationsWithResolvedMetadata.put(
                 relationId,
                 relationWithResolvedMetadata
               )
-            case None =>
           }
         }
       case _ =>
@@ -109,18 +119,21 @@ class MetadataResolver(
         case Left(logicalPlan) =>
           visitor(logicalPlan)
 
-          for (child <- logicalPlan.children) {
-            stack.push(Left(child))
-          }
-          for (innerChild <- logicalPlan.innerChildren) {
-            innerChild match {
-              case plan: LogicalPlan =>
-                stack.push(Left(plan))
-              case _ =>
-            }
-          }
-          for (expression <- logicalPlan.expressions) {
-            stack.push(Right(expression))
+          logicalPlan match {
+            case unresolvedWith: UnresolvedWith =>
+              for (cteRelation <- unresolvedWith.cteRelations) {
+                stack.push(Left(cteRelation._2))
+              }
+
+              stack.push(Left(unresolvedWith.child))
+            case _ =>
+              for (child <- logicalPlan.children) {
+                stack.push(Left(child))
+              }
+
+              for (expression <- logicalPlan.expressions) {
+                stack.push(Right(expression))
+              }
           }
         case Right(expression) =>
           for (child <- expression.children) {
@@ -128,12 +141,8 @@ class MetadataResolver(
           }
 
           expression match {
-            case planExpression: PlanExpression[_] =>
-              planExpression.plan match {
-                case plan: LogicalPlan =>
-                  stack.push(Left(plan))
-                case _ =>
-              }
+            case subqueryExpression: SubqueryExpression =>
+              stack.push(Left(subqueryExpression.plan))
             case _ =>
           }
       }

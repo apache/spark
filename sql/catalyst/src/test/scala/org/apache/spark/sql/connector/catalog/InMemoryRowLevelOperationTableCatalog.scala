@@ -43,4 +43,37 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
   }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
+  }
+
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    val table = loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
+    val schema = CatalogV2Util.applySchemaChanges(
+      table.schema,
+      changes,
+      tableProvider = Some("in-memory"),
+      statementType = "ALTER TABLE")
+    val partitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
+    val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
+
+    // fail if the last column in the schema was dropped
+    if (schema.fields.isEmpty) {
+      throw new IllegalArgumentException(s"Cannot drop all fields")
+    }
+
+    val newTable = new InMemoryRowLevelOperationTable(
+      name = table.name,
+      schema = schema,
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints)
+    newTable.withData(table.data)
+
+    tables.put(ident, newTable)
+
+    newTable
+  }
 }
