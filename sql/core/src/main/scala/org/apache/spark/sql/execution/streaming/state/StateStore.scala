@@ -222,7 +222,7 @@ trait StateStore extends ReadStateStore {
 }
 
 /** Wraps the instance of StateStore to make the instance read-only. */
-class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
+class WrappedReadStateStore(private[state] val store: StateStore) extends ReadStateStore {
   override def id: StateStoreId = store.id
 
   override def version: Long = store.version

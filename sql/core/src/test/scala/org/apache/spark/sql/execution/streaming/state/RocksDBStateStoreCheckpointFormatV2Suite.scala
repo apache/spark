@@ -186,19 +186,27 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
       version: Long,
       uniqueId: Option[String] = None): StateStore = {
 
+    // Handle the case where we're given a WrappedReadStateStore
     readStore match {
-      case wrapper: CkptIdCollectingStateStoreWrapper =>
-        // Get the inner store from the wrapper
-        val innerReadStore = wrapper.innerStore
-        // Call the inner provider's getWriteStore with the correct inner store
-        val innerWriteStore = innerProvider.getWriteStore(innerReadStore, version, uniqueId)
-        // Wrap the result
-        CkptIdCollectingStateStoreWrapper(innerWriteStore)
+      case wrappedStore: WrappedReadStateStore =>
+        // Unwrap to get our wrapper
+        wrappedStore.store match {
+          case wrapper: CkptIdCollectingStateStoreWrapper =>
+            // Get the inner store from our wrapper
+            val innerReadStore = wrapper.innerStore
+            // Call the inner provider's getWriteStore with the inner store
+            val innerWriteStore = innerProvider.getWriteStore(innerReadStore, version, uniqueId)
+            // Wrap the result
+            CkptIdCollectingStateStoreWrapper(innerWriteStore)
+          case other =>
+            throw new IllegalArgumentException(
+              "Expected CkptIdCollectingStateStoreWrapper but got " + other.getClass.getName)
+        }
 
-      case _ =>
-        // This shouldn't happen, but handle it gracefully
+      case other =>
         throw new IllegalArgumentException(
-          "Expected CkptIdCollectingStateStoreWrapper but got " + readStore.getClass.getName)
+          "Expected WrappedReadStateStore but got " +
+            other.getClass.getName)
     }
   }
 
