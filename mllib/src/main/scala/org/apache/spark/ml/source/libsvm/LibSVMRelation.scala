@@ -67,7 +67,7 @@ private[libsvm] class LibSVMOutputWriter(
   }
 }
 
-/** @see [[LibSVMDataSource]] for public documentation. */
+// see `LibSVMDataSource` for public documentation.
 // If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
 private[libsvm] case class LibSVMFileFormat()
   extends TextBasedFileFormat
