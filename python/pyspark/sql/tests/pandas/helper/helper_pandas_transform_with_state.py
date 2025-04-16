@@ -1472,7 +1472,7 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
         self.min_state.update((min_event_time,))
 
-        yield Row(id=key, timestamp=min_event_time)
+        yield Row(id=key[0], timestamp=min_event_time)
 
     def close(self) -> None:
         pass
