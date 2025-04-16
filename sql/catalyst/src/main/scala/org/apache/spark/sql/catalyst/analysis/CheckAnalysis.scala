@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
-
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
+import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -229,19 +229,29 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   def checkNoNestedOuterReferencesInMainQuery(plan: LogicalPlan): Unit = {
+    def throwUnresolvedColumnErrorForNestedOuterAttrs(
+        plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+      val nestedOuterAttrName = expr.getNestedOuterAttrs.flatMap{
+        o => o.collect {
+          case a: AttributeReference => a.name
+        }
+      }.head
+      val output = plan.inputSet ++ expr.plan.inputSet
+      throw QueryCompilationErrors.unresolvedColumnError(
+        nestedOuterAttrName,
+        proposal = orderSuggestedIdentifiersBySimilarity(
+          nestedOuterAttrName,
+          candidates = output.map(attribute => attribute.qualifier :+ attribute.name).toSeq
+        )
+      )
+    }
     plan.expressions.foreach {
       case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty =>
-        subExpr.failAnalysis(
-          errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-          messageParameters = Map("objectName" -> toSQLId(
-            subExpr.getNestedOuterAttrs.head.prettyName)))
+        throwUnresolvedColumnErrorForNestedOuterAttrs(plan, subExpr)
       case expr if expr.containsPattern(PLAN_EXPRESSION) =>
         expr.collect {
           case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty =>
-            subExpr.failAnalysis(
-              errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-              messageParameters = Map("objectName" -> toSQLId(
-                subExpr.getNestedOuterAttrs.head.prettyName)))
+            throwUnresolvedColumnErrorForNestedOuterAttrs(plan, subExpr)
         }
       case _ =>
     }

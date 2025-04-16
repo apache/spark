@@ -91,9 +91,10 @@ case class FunctionTableSubqueryArgumentExpression(
   override def withNewNestedOuterAttrs(
     nestedOuterAttrs: Seq[Expression]
   ): FunctionTableSubqueryArgumentExpression = {
-    // FunctionTableSubquery should not have nested outer attrs
-    assert(nestedOuterAttrs.isEmpty)
-    copy()
+    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
+      s"nestedOuterAttrs must be a subset of outerAttrs, " +
+        s"but got ${nestedOuterAttrs.mkString(", ")}")
+    copy(nestedOuterAttrs = nestedOuterAttrs)
   }
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
