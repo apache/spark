@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.resolver.{AnalyzerBridgeState, HybridAnalyzer, Resolver => OperatorResolver, ResolverExtension, ResolverGuard}
@@ -2327,7 +2327,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // The previous outerPlanContext contains resolved nested outer plans
         // and unresolved direct outer plan. Append the current outer plan into
         // new outerPlanContext as current outer is guaranteed to be resolved.
-        val updatedOuterPlan = outerPlanContext.get ++ Seq(outer)
+        val updatedOuterPlan = Seq(outer) ++ outerPlanContext.get
         AnalysisContext.withOuterPlans(updatedOuterPlan) {
           executeSameContext(e.plan)
         }
@@ -2422,11 +2422,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             // Outer references within lateral subquery can only refer to attributes
             // in the containing plan of lateral subquery. Nested outer references
             // are not allowed.
-            throw new SparkIllegalArgumentException(
-              errorClass = "FIELD_NOT_FOUND",
-              messageParameters = Map(
-                "fieldName" -> toSQLId(nestedOuterReferences.head.prettyName),
-                "fields" -> plan.inputSet.map(f => toSQLId(f.name)).mkString(", "))
+            throw new AnalysisException(
+              errorClass = "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
+              messageParameters = Map.empty
             )
           }
           res

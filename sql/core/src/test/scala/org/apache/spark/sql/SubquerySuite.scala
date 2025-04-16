@@ -2832,15 +2832,13 @@ class SubquerySuite extends QueryTest
   }
 
   test("analyzer same error class") {
-    sql("CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2);")
-    sql("CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);")
-    sql("CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1))," +
-      " (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4));")
-    sql("CREATE VIEW t4(c1, c2) AS VALUES (0, 1), (0, 2)," +
-      " (1, 1), (1, 3);")
-
-    val query = "SELECT * FROM t1, LATERAL" +
-      " (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*, t3.* FROM t2 AS t3))"
+    sql("CREATE OR REPLACE TEMP VIEW tenk1 AS SELECT 1 AS unique1, 1 AS unique2")
+    val query =
+     """
+       |select
+       |  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
+       |from tenk1 o;
+       |""".stripMargin
     val res = sql(query).collect()
   }
 }
