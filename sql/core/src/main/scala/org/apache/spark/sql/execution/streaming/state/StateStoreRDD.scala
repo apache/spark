@@ -40,11 +40,6 @@ import org.apache.spark.util.SerializableConfiguration
  * 2. The same state store is then converted to read-write mode for updates
  * 3. This avoids having two separate open connections to the same state store
  *    which would cause blocking or contention issues
- *
- * Classes implementing this trait typically:
- * - Track state stores by partition ID in a thread-safe collection
- * - Provide cleanup mechanisms when tasks complete
- * - Handle proper state store lifecycle to prevent resource leakage
  */
 trait StateStoreRDDProvider {
   /**
