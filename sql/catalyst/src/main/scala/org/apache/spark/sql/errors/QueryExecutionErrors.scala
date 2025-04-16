@@ -296,7 +296,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "rangeMessage" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
-      summary = "")
+      summary = "",
+      cause = Some(e))
   }
 
   def ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e: Throwable): SparkDateTimeException = {
