@@ -25,15 +25,17 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.MIN_LEVEL_OF_TIME_TRUNC
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, StringType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -353,6 +355,8 @@ case class SecondsOfTime(child: Expression)
   )
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -629,4 +633,113 @@ case class SubtractTimes(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractTimes =
     copy(left = newLeft, right = newRight)
+}
+
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, expr) - Returns a TIME value representing `expr` truncated to the specified time unit.
+  """,
+  arguments = """
+    Arguments:
+      * unit - A STRING literal (case-insensitive) indicating the unit to truncate to.
+               Valid values are 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', and 'MICROSECOND'.
+               If the unit is not recognized, the function returns NULL.
+      * expr - A TIME value, or a STRING that can be cast to TIME.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', '09:32:05.359');
+       09:00:00
+      > SELECT _FUNC_('MILLISECOND', '09:32:05.123456');
+       09:32:05.123
+      > SELECT _FUNC_('MS', '09:32:05.123456');
+      NULL
+  """,
+  since = "4.1.0",
+  group = "datetime_funcs")
+case class TruncateTime(unit: Expression, timeExpr: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def nullable: Boolean = true
+  override def left: Expression = unit
+  override def right: Expression = timeExpr
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): TruncateTime =
+    copy(unit = newLeft, timeExpr = newRight)
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringType, TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
+
+  override def dataType: DataType = timeExpr.dataType
+  override def prettyName: String = "time_trunc"
+
+  // Pre-parse the unit literal if foldable
+  private lazy val truncLevel: Int =
+    DateTimeUtils.parseTruncLevelForTime(unit.eval().asInstanceOf[UTF8String])
+
+  override def eval(input: InternalRow): Any = {
+    val level = if (unit.foldable) {
+      truncLevel
+    } else {
+      DateTimeUtils.parseTruncLevelForTime(unit.eval(input).asInstanceOf[UTF8String])
+    }
+    if (level < MIN_LEVEL_OF_TIME_TRUNC) {
+      // unknown format or too small level
+      null
+    } else {
+      val rawTime = timeExpr.eval(input)
+      if (rawTime == null) {
+        null
+      } else {
+        val truncated = DateTimeUtils.truncTime(rawTime.asInstanceOf[Long], level)
+        if (truncated < 0) null else truncated
+      }
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
+    val javaType = CodeGenerator.javaType(dataType)
+    if (unit.foldable) {
+      if (truncLevel < DateTimeUtils.MIN_LEVEL_OF_TIME_TRUNC) {
+        ev.copy(code = code"""
+          boolean ${ev.isNull} = true;
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
+      } else {
+        val t = timeExpr.genCode(ctx)
+        ev.copy(code = code"""
+          ${t.code}
+          boolean ${ev.isNull} = ${t.isNull};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            long truncated = $dtu.truncTime((long)${t.value}, ${truncLevel.toString});
+            if (truncated < 0) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} = truncated;
+            }
+          }""")
+      }
+    } else {
+      // If unit isn't foldable => parse unit at runtime
+      nullSafeCodeGen(ctx, ev, (unitVal, timeVal) => {
+        val form = ctx.freshName("form")
+        s"""
+          int $form = $dtu.parseTruncLevelForTime($unitVal);
+          if ($form < $dtu.MIN_LEVEL_OF_TIME_TRUNC) {
+            ${ev.isNull} = true;
+          } else {
+            long truncated = $dtu.truncTime((long)$timeVal, $form);
+            if (truncated < 0) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} = truncated;
+            }
+          }
+        """
+      })
+    }
+  }
 }

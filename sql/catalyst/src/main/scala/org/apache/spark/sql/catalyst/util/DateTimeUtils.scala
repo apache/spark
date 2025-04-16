@@ -450,10 +450,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   // of TIMESTAMP values only.
   private[sql] val TRUNC_TO_MICROSECOND = 0
   private[sql] val MIN_LEVEL_OF_TIMESTAMP_TRUNC = TRUNC_TO_MICROSECOND
+  private[sql] val MIN_LEVEL_OF_TIME_TRUNC = TRUNC_TO_MICROSECOND
   private[sql] val TRUNC_TO_MILLISECOND = 1
   private[sql] val TRUNC_TO_SECOND = 2
   private[sql] val TRUNC_TO_MINUTE = 3
   private[sql] val TRUNC_TO_HOUR = 4
+  private[sql] val MAX_LEVEL_OF_TIME_TRUNC = TRUNC_TO_HOUR
   private[sql] val TRUNC_TO_DAY = 5
   // The levels from TRUNC_TO_WEEK to TRUNC_TO_YEAR are used in truncations
   // of DATE and TIMESTAMP values.
@@ -529,6 +531,44 @@ object DateTimeUtils extends SparkDateTimeUtils {
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case _ => TRUNC_INVALID
       }
+    }
+  }
+
+  /**
+   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_HOUR,
+   * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
+   */
+  def parseTruncLevelForTime(unit: UTF8String): Int = {
+    if (unit == null) return TRUNC_INVALID
+    unit.toString.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" => TRUNC_TO_MICROSECOND
+      case "MILLISECOND" => TRUNC_TO_MILLISECOND
+      case "SECOND" => TRUNC_TO_SECOND
+      case "MINUTE" => TRUNC_TO_MINUTE
+      case "HOUR" => TRUNC_TO_HOUR
+      case _ => TRUNC_INVALID
+    }
+  }
+
+  /**
+   * Truncates a time-of-day (represented in microseconds from midnight) to the specified level.
+   * Returns TRUNC_INVALID (–1) if the level is out of range or unrecognized.
+   */
+  def truncTime(microsOfDay: Long, level: Int): Long = {
+    if (level < MIN_LEVEL_OF_TIME_TRUNC || level > MAX_LEVEL_OF_TIME_TRUNC) {
+      return TRUNC_INVALID
+    }
+    level match {
+      case TRUNC_TO_MICROSECOND =>
+        microsOfDay // no truncation
+      case TRUNC_TO_MILLISECOND =>
+        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_MILLIS)
+      case TRUNC_TO_SECOND =>
+        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_SECOND)
+      case TRUNC_TO_MINUTE =>
+        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_MINUTE)
+      case TRUNC_TO_HOUR =>
+        microsOfDay - Math.floorMod(microsOfDay, MICROS_PER_HOUR)
     }
   }
 
