@@ -585,7 +585,6 @@ private[sql] class RocksDBStateStoreProvider
    * @param version The version of the state store to load
    * @param uniqueId Optional unique identifier for checkpoint
    * @param readOnly Whether to open the store in read-only mode
-   * @param existingStamp Optional existing stamp to use instead of acquiring a new one
    * @param existingStore Optional existing store to reuse instead of creating a new one
    * @return The loaded state store
    */
@@ -593,7 +592,6 @@ private[sql] class RocksDBStateStoreProvider
       version: Long,
       uniqueId: Option[String],
       readOnly: Boolean,
-      existingStamp: Option[Long] = None,
       existingStore: Option[ReadStateStore] = None): StateStore = {
     try {
       if (version < 0) {
@@ -601,10 +599,8 @@ private[sql] class RocksDBStateStoreProvider
       }
 
       // Determine stamp - either use existing or acquire new
-      val stamp = existingStamp.getOrElse {
-        existingStore.map(_.getReadStamp).getOrElse {
-          stateMachine.acquireStore()
-        }
+      val stamp = existingStore.map(_.getReadStamp).getOrElse {
+        stateMachine.acquireStore()
       }
 
       try {
