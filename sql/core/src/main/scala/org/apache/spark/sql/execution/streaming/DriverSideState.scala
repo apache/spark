@@ -20,7 +20,6 @@ import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.{ListState, MapState, ValueState}
 
-// First, let's create a common base trait for all driver-side state implementations
 trait DriverSideState {
   protected val stateName: String
 
@@ -30,7 +29,6 @@ trait DriverSideState {
   }
 }
 
-// Then implement each state type
 class DriverSideValueState[S](override val stateName: String)
   extends ValueState[S] with DriverSideState {
   override def exists(): Boolean = throwInitPhaseError("exists")
