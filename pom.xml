@@ -498,6 +498,12 @@
         <groupId>com.esotericsoftware</groupId>
         <artifactId>kryo-shaded</artifactId>
         <version>${kryo.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.objenesis</groupId>
+            <artifactId>objenesis</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <!--
         SPARK-51806: Kryo 4.0.x depends on objenesis 2.5.1, while Spark currently
