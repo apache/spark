@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Optional, Union, TYPE_CHECKING, cast
+from typing import List, Optional, Union, TYPE_CHECKING, cast, Any
 import warnings
 
 from pyspark.errors import PySparkTypeError
@@ -649,6 +649,7 @@ class PandasGroupedOpsMixin:
         df = self._df
         udf_util = TransformWithStateInPySparkUdfUtils(statefulProcessor, timeMode)
 
+        functionType: Any = None
         if usePandas and initialState is None:
             functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
         elif usePandas and initialState is not None:

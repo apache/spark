@@ -668,11 +668,11 @@ class TransformWithStateTestsMixin:
                     Row(id="a", timestamp="2"),
                 }
 
-        self._test_transform_with_state_in_pandas_event_time(
+        self._test_transform_with_state_event_time(
             MinEventTimeStatefulProcessorFactory(), check_results, "None"
         )
 
-        self._test_transform_with_state_in_pandas_event_time(
+        self._test_transform_with_state_event_time(
             MinEventTimeStatefulProcessorFactory(), check_results, "ProcessingTime"
         )
 

@@ -157,7 +157,7 @@ class TransformWithStateInPySparkUdfUtils:
         except StopIteration:
             input_rows_empty = True
         else:
-            input_rows = itertools.chain([first], input_rows)
+            input_rows = itertools.chain([first], input_rows)  # type: ignore
 
         if not input_rows_empty:
             result = self._handle_data_rows(stateful_processor_api_client, key, input_rows)
