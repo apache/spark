@@ -454,7 +454,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("DML rewrite", fixedPoint,
       RewriteDeleteFromTable,
       RewriteUpdateTable,
-      RewriteMergeIntoTable),
+      RewriteMergeIntoTable,
+      // Ensures columns of an output table are correctly resolved from the data in a logical plan.
+      ResolveOutputRelation),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -1225,8 +1227,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           // We put the synchronously resolved relation into the [[AnalyzerBridgeState]] for
           // it to be later reused by the single-pass [[Resolver]] to avoid resolving the relation
           // metadata twice.
-          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
-            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, relation)
+          AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+            bridgeState.addUnresolvedRelation(unresolvedRelation, relation)
           }
           relation
         }

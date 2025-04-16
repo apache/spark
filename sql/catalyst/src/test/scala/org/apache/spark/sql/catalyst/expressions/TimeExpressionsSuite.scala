@@ -21,6 +21,8 @@ import java.time.LocalTime
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, StringType, TimeType}
 
@@ -75,6 +77,18 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(builtExprForTime.isInstanceOf[HoursOfTime])
     assert(builtExprForTime.asInstanceOf[HoursOfTime].child eq timeExpr)
 
+    assert(builtExprForTime.checkInputDataTypes().isSuccess)
+
+    // test TIME-typed child should build HoursOfTime for all allowed custom precision values
+    (TimeType.MIN_PRECISION to TimeType.MICROS_PRECISION).foreach { precision =>
+      val timeExpr = Literal(localTime(12, 58, 59), TimeType(precision))
+      val builtExpr = HourExpressionBuilder.build("hour", Seq(timeExpr))
+
+      assert(builtExpr.isInstanceOf[HoursOfTime])
+      assert(builtExpr.asInstanceOf[HoursOfTime].child eq timeExpr)
+      assert(builtExpr.checkInputDataTypes().isSuccess)
+    }
+
     // test non TIME-typed child should build hour
     val tsExpr = Literal("2007-09-03 10:45:23")
     val builtExprForTs = HourExpressionBuilder.build("hour", Seq(tsExpr))
@@ -127,11 +141,22 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "docroot" -> SPARK_DOC_ROOT)
     )
 
-    // test TIME-typed child should build MinutesOfTime
+    // test TIME-typed child should build MinutesOfTime for default precision value
     val timeExpr = Literal(localTime(12, 58, 59), TimeType())
     val builtExprForTime = MinuteExpressionBuilder.build("minute", Seq(timeExpr))
     assert(builtExprForTime.isInstanceOf[MinutesOfTime])
     assert(builtExprForTime.asInstanceOf[MinutesOfTime].child eq timeExpr)
+    assert(builtExprForTime.checkInputDataTypes().isSuccess)
+
+    // test TIME-typed child should build MinutesOfTime for all allowed custom precision values
+    (TimeType.MIN_PRECISION to TimeType.MICROS_PRECISION).foreach { precision =>
+      val timeExpr = Literal(localTime(12, 58, 59), TimeType(precision))
+      val builtExpr = MinuteExpressionBuilder.build("minute", Seq(timeExpr))
+
+      assert(builtExpr.isInstanceOf[MinutesOfTime])
+      assert(builtExpr.asInstanceOf[MinutesOfTime].child eq timeExpr)
+      assert(builtExpr.checkInputDataTypes().isSuccess)
+    }
 
     // test non TIME-typed child should build Minute
     val tsExpr = Literal("2009-07-30 12:58:59")
@@ -262,5 +287,50 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => SecondsOfTime(child).replacement, TimeType())
+  }
+
+  test("CurrentTime") {
+    // test valid precision
+    var expr = CurrentTime(Literal(3))
+    assert(expr.dataType == TimeType(3), "Should produce TIME(3) data type")
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test default constructor => TIME(6)
+    expr = CurrentTime()
+    assert(expr.precision == 6, "Default precision should be 6")
+    assert(expr.dataType == TimeType(6))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test no value => TIME()
+    expr = CurrentTime()
+    assert(expr.precision == 6, "Default precision should be 6")
+    assert(expr.dataType == TimeType(6))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test foldable value
+    expr = CurrentTime(Literal(1 + 1))
+    assert(expr.precision == 2, "Precision should be 2")
+    assert(expr.dataType == TimeType(2))
+    assert(expr.checkInputDataTypes() == TypeCheckSuccess)
+
+    // test out of range precision => checkInputDataTypes fails
+    expr = CurrentTime(Literal(2 + 8))
+    assert(expr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> toSQLId("precision"),
+          "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
+          "currentValue" -> toSQLValue(10, IntegerType)
+        )
+      )
+    )
+
+    // test non number value should fail since we skip analyzer here
+    expr = CurrentTime(Literal("2"))
+    val failure = intercept[ClassCastException] {
+      expr.precision
+    }
+    assert(failure.getMessage.contains("cannot be cast to class java.lang.Number"))
   }
 }

@@ -134,6 +134,39 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Gets the number of microseconds since midnight using the session time zone.
+   */
+  def instantToMicrosOfDay(instant: Instant, timezone: String): Long = {
+    val zoneId = getZoneId(timezone)
+    val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
+    localDateTime.toLocalTime.getLong(MICRO_OF_DAY)
+  }
+
+  /**
+   * Truncates a time value (in microseconds) to the specified fractional precision `p`.
+   *
+   * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond the
+   * thousand-microsecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
+   * `123000` microseconds (12:34:56.123).
+   *
+   * @param micros
+   *   The original time in microseconds.
+   * @param p
+   *   The fractional second precision (range 0 to 6).
+   * @return
+   *   The truncated microsecond value, preserving only `p` fractional digits.
+   */
+  def truncateTimeMicrosToPrecision(micros: Long, p: Int): Long = {
+    assert(
+      p >= TimeType.MIN_PRECISION && p <= TimeType.MICROS_PRECISION,
+      s"Fractional second precision $p out" +
+        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MICROS_PRECISION}].")
+    val scale = TimeType.MICROS_PRECISION - p
+    val factor = math.pow(10, scale).toLong
+    (micros / factor) * factor
+  }
+
+  /**
    * Converts the timestamp `micros` from one timezone to another.
    *
    * Time-zone rules, such as daylight savings, mean that not every local date-time is valid for

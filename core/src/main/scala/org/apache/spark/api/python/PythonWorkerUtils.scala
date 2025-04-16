@@ -117,9 +117,15 @@ private[spark] object PythonWorkerUtils extends Logging {
         }
       }
       val server = new EncryptedPythonBroadcastServer(env, idsAndFiles)
-      dataOut.writeInt(server.port)
-      logTrace(s"broadcast decryption server setup on ${server.port}")
-      writeUTF(server.secret, dataOut)
+      server.connInfo match {
+        case portNum: Int =>
+          dataOut.writeInt(portNum)
+          writeUTF(server.secret, dataOut)
+        case sockPath: String =>
+          dataOut.writeInt(-1)
+          writeUTF(sockPath, dataOut)
+      }
+      logTrace(s"broadcast decryption server setup on ${server.connInfo}")
       sendBidsToRemove()
       idsAndFiles.foreach { case (id, _) =>
         // send new broadcast

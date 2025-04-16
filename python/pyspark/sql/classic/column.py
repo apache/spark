@@ -474,6 +474,13 @@ class Column(ParentColumn):
         return Column(jc)
 
     def isin(self, *cols: Any) -> ParentColumn:
+        from pyspark.sql.classic.dataframe import DataFrame
+
+        if len(cols) == 1 and isinstance(cols[0], DataFrame):
+            df: DataFrame = cols[0]
+            jc = self._jc.isin(df._jdf)
+            return Column(jc)
+
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             cols = cast(Tuple, cols[0])
         cols = cast(
