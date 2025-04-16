@@ -120,7 +120,10 @@ class Resolver(
    * This method is a top-level analysis entry point:
    * 1. Substitute IDENTIFIERs and CTEs in the `unresolvedPlan` using
    *    [[IdentifierAndCteSubstitutor]];
-   * 2. Resolve the metadata for the plan using [[MetadataResolver]];
+   * 2. Resolve the metadata for the plan using [[MetadataResolver]]. When
+   *    [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is enabled, we need to
+   *    re-instantiate the [[RelationMetadataProvider]] as [[View]] resolution context might have
+   *    changed in the meantime;
    * 3. Resolve the plan using [[resolve]].
    *
    * This method is called for the top-level query and each unresolved [[View]].
@@ -139,7 +142,8 @@ class Resolver(
         new BridgedRelationMetadataProvider(
           catalogManager,
           relationResolution,
-          analyzerBridgeState
+          analyzerBridgeState,
+          viewResolver
         )
       case None =>
         relationMetadataProvider
