@@ -145,7 +145,10 @@ class ConnectErrorsTest(unittest.TestCase):
         }
         truncated_message = "Root error message"
         exception = convert_exception(
-            info=ErrorInfo(**info), truncated_message=truncated_message, resp=resp
+            info=ErrorInfo(**info),
+            truncated_message=truncated_message,
+            resp=resp,
+            display_server_stacktrace=True,
         )
 
         self.assertIsInstance(exception, SparkConnectGrpcException)
