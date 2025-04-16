@@ -1,7 +1,7 @@
 ---
 layout: global
-title: SQL Syntax
-displayTitle: SQL Syntax
+title: SQL Scripting
+displayTitle: SQL Scripting
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,19 +19,17 @@ license: |
   limitations under the License.
 ---
 
-# SQL scripting
-
 You can employ powerful procedural logic using SQL/PSM standard-based scripting syntax.
-Any SQL script consists of and starts with a [compound statement](control-flow/compound-stmt.md) block (`BEGIN ... END`).
+Any SQL script consists of and starts with a [compound statement](control-flow/compound-stmt.html) block (`BEGIN ... END`).
 A compound statement starts with a section to declare local variables, user-defined conditions, and condition handlers, which are used to catch exceptions.
 This is followed by the compound statement body, which consists of:
 
-- Flow control statements include loops over predicate expressions, [FOR](control-flow/for-stmt.md) loops over query results, conditional logic such as [IF](control-flow/if-stmt.md) and [CASE](control-flow/case-stmt.md), and means to break out loops such as [LEAVE](control-flow/leave-stmt.md) and [ITERATE](control-flow/iterate-stmt.md).
+- Flow control statements include loops over predicate expressions, [FOR](control-flow/for-stmt.html) loops over query results, conditional logic such as [IF](control-flow/if-stmt.html) and [CASE](control-flow/case-stmt.html), and means to break out loops such as [LEAVE](control-flow/leave-stmt.html) and [ITERATE](control-flow/iterate-stmt.html).
 - DDL statements such as `ALTER`, `CREATE`, `DROP`.
-- DML statements [INSERT](sql-ref-syntax-dml-insert-into.md), [UPDATE](delta-update.md), [DELETE](delta-delete-from.md), and [MERGE](delta-merge-into.md).
-- [Queries](sql-ref-syntax-qry-query.md) that return result sets to the invoker of the script.
-- [SET](sql-ref-syntax-aux-set-variable.md) statements to set local variables as well as session variables.
-- The [EXECUTE IMMEDIATE](sql-ref-syntax-aux-execute-immediate.md) statement.
+- DML statements [INSERT](sql-ref-syntax-dml-insert-into.html).
+- [Queries](sql-ref-syntax-qry-select.html) that return result sets to the invoker of the script.
+- [SET](sql-ref-syntax-aux-set-var.html) statements to set local variables as well as session variables.
+- The [EXECUTE IMMEDIATE](sql-ref-syntax-aux-exec-imm.html) statement.
 - Nested compound statements, which provide nested scopes for variables, conditions, and condition handlers.
 
 ## Passing data between the invoker and the compound statement
@@ -44,13 +42,13 @@ There are two ways to pass data to and from a SQL script:
 ## Variable scoping
 
 Variables declared within a compound statement can be referenced in any expression within a compound statement.
-Spark resolves identifiers from the innermost scope outward, following the rules described in [Name Resolution](sql-ref-name-resolution.md).
-You can use the optional compound statement [labels](sql-ref-names.md#label-name) to disambiguate duplicate [variable names](sql-ref-names.md#variable-name).
+Spark resolves identifiers from the innermost scope outward, following the rules described in [Name Resolution](sql-ref-name-resolution.html).
+You can use the optional compound statement labels to disambiguate duplicate variable names.
 
 ## Condition handling
 
 SQL Scripting supports condition handlers, which are used to intercept and process exceptions to `EXIT` processing of the SQL script.
-Within the condition handler, you can [RESIGNAL](control-flow/resignal-stmt.md) the original exception, [SIGNAL](control-flow/signal-stmt.md) a new exception, or exit the compound statement without an exception.
+Within the condition handler, you can [RESIGNAL](control-flow/resignal-stmt.html) the original exception, [SIGNAL](control-flow/signal-stmt.html) a new exception, or exit the compound statement without an exception.
 
 Condition handlers can be defined to handle three distinct classes of conditions:
 
@@ -75,17 +73,17 @@ This condition handler is called the **most appropriate handler**:
 
 Unless a handler `SIGNAL`s or `RESIGNAL`s a condition of its own, the outcome of a condition handler is to execute the statement following the compound statement that declared the handler to execute next.
 
-The following is a list of supported control flow statement:
+The following is a list of supported control flow statements:
 
-* [CASE](control-flow/case-stmt.md)
-* [compound statement](control-flow/compound-stmt.md)
-* [FOR](control-flow/for-stmt.md)
-* [GET DIAGNOSTICS](control-flow/get-diagnostics-stmt.md)
-* [IF](control-flow/if-stmt.md)
-* [ITERATE](control-flow/iterate-stmt.md)
-* [LEAVE](control-flow/leave-stmt.md)
-* [LOOP](control-flow/loop-stmt.md)
-* [REPEAT](control-flow/repeat-stmt.md)
-* [RESIGNAL](control-flow/resignal-stmt.md)
-* [SIGNAL](control-flow/signal-stmt.md)
-* [WHILE](control-flow/while-stmt.md)
+* [CASE](control-flow/case-stmt.html)
+* [compound statement](control-flow/compound-stmt.html)
+* [FOR](control-flow/for-stmt.html)
+* [GET DIAGNOSTICS](control-flow/get-diagnostics-stmt.html)
+* [IF](control-flow/if-stmt.html)
+* [ITERATE](control-flow/iterate-stmt.html)
+* [LEAVE](control-flow/leave-stmt.html)
+* [LOOP](control-flow/loop-stmt.html)
+* [REPEAT](control-flow/repeat-stmt.html)
+* [RESIGNAL](control-flow/resignal-stmt.html)
+* [SIGNAL](control-flow/signal-stmt.html)
+* [WHILE](control-flow/while-stmt.html)

@@ -19,11 +19,9 @@ license: |
   limitations under the License.
 ---
 
-# REPEAT statement
-
 Repeat the execution of a list of statements until a condition is true.
 
-This statement may only be used within a [compound statement](compound-stmt.md).
+This statement may only be used within a [compound statement](compound-stmt.html).
 
 ## Syntax
 
@@ -36,16 +34,16 @@ This statement may only be used within a [compound statement](compound-stmt.md).
 
 ## Parameters
 
-- **[label](/sql/language-manual/sql-ref-names.md#label-name)**
+- **label**
 
   An optional label for the loop, which is unique amongst all labels for statements within which the `REPEAT` statement is contained.
-  The label can be used to [LEAVE](leave-stmt.md) or [ITERATE](iterate-stmt.md) the loop.
+  The label can be used to [LEAVE](leave-stmt.html) or [ITERATE](iterate-stmt.html) the loop.
 
-- **`cond`**
+- **cond**
 
   Any expression evaluating to a BOOLEAN
 
-- **`stmt`**
+- **stmt**
 
   A SQL statement
 
@@ -75,16 +73,12 @@ This statement may only be used within a [compound statement](compound-stmt.md).
 
 ## Related articles
 
-- [SQL Scripting](/sql/language-manual/sql-ref-scripting.md)
-- [CASE Statement](/sql/language-manual/control-flow/case-stmt.md)
-- [Compound Statement](/sql/language-manual/control-flow/compound-stmt.md)
-- [FOR Statement](/sql/language-manual/control-flow/for-stmt.md)
-- [IF Statement](/sql/language-manual/control-flow/if-stmt.md)
-- [ITERATE Statement](/sql/language-manual/control-flow/iterate-stmt.md)
-- [WHILE Statement](/sql/language-manual/control-flow/while-stmt.md)
-- [LEAVE Statement](/sql/language-manual/control-flow/leave-stmt.md)
-- [LOOP Statement](/sql/language-manual/control-flow/loop-stmt.md)
-
-```
-
-```
+- [SQL Scripting](../sql-ref-scripting.html)
+- [CASE Statement](../control-flow/case-stmt.html)
+- [Compound Statement](../control-flow/compound-stmt.html)
+- [FOR Statement](../control-flow/for-stmt.html)
+- [IF Statement](../control-flow/if-stmt.html)
+- [ITERATE Statement](../control-flow/iterate-stmt.html)
+- [WHILE Statement](../control-flow/while-stmt.html)
+- [LEAVE Statement](../control-flow/leave-stmt.html)
+- [LOOP Statement](../control-flow/loop-stmt.html)

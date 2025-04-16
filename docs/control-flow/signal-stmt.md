@@ -19,13 +19,11 @@ license: |
   limitations under the License.
 ---
 
-# SIGNAL statement
-
 Raises a condition.
 
-This statement may only be used within a [compound statement](compound-stmt.md).
+This statement may only be used within a [compound statement](compound-stmt.html).
 
-Note: Databricks recommends using [RESIGNAL](resignal-stmt.md) to raise conditions from within a handler.
+Note: Spark recommends using [RESIGNAL](resignal-stmt.html) to raise conditions from within a handler.
 RESIGNAL builds a diagnostic stack in the SQL Standard, while `SIGNAL` clears the stack.
 Using `RESIGNAL` within a handler preserves future exploitation of the diagnostic stack.
 
@@ -40,19 +38,19 @@ SIGNAL { condition_name
 
 ## Parameters
 
-- **[condition_name](/sql/language-manual/sql-ref-names.md#condition-name)**
+- **condition_name**
 
   The name of a locally defined condition or system-defined error condition.
 
-- **`argument_map`**
+- **argument_map**
 
   Optionally, a `MAP<STRING, STRING>` literal that assigns values to a system-defined parameterized condition message.
 
-- **`message_str`**
+- **message_str**
 
   Optionally, a `STRING` literal that provides a message string to the raised `SQLSTATE` or user-defined condition.
 
-- **`sqlstate`**
+- **sqlstate**
 
   A `STRING` literal of length 5. If specified, raise `USER_RAISED_EXCEPTION` with the specified `SQLSTATE`.
 
@@ -74,16 +72,12 @@ SIGNAL { condition_name
 
 ## Related articles
 
-- [SQL Scripting](/sql/language-manual/sql-ref-scripting.md)
-- [CASE Statement](/sql/language-manual/control-flow/case-stmt.md)
-- [Compound Statement](/sql/language-manual/control-flow/compound-stmt.md)
-- [FOR Statement](/sql/language-manual/control-flow/for-stmt.md)
-- [IF Statement](/sql/language-manual/control-flow/if-stmt.md)
-- [ITERATE Statement](/sql/language-manual/control-flow/iterate-stmt.md)
-- [REPEAT Statement](/sql/language-manual/control-flow/repeat-stmt.md)
-- [RESIGNAL Statement](/sql/language-manual/control-flow/resignal-stmt.md)
-- [Error handling and error messages](/error-messages/index.md)
-
-```
-
-```
+- [SQL Scripting](../sql-ref-scripting.html)
+- [CASE Statement](../control-flow/case-stmt.html)
+- [Compound Statement](../control-flow/compound-stmt.html)
+- [FOR Statement](../control-flow/for-stmt.html)
+- [IF Statement](../control-flow/if-stmt.html)
+- [ITERATE Statement](../control-flow/iterate-stmt.html)
+- [REPEAT Statement](../control-flow/repeat-stmt.html)
+- [RESIGNAL Statement](../control-flow/resignal-stmt.html)
+- [Error handling and error messages](/error-messages/index.html)
