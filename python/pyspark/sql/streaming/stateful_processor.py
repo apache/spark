@@ -396,9 +396,9 @@ class StatefulProcessor(ABC):
 
         The type of input data and return are different by which method is called.
 
-        * For `transformWithStateInPandas`, it should take parameters
+        - For `transformWithStateInPandas`, it should take parameters
         (key, Iterator[`pandas.DataFrame`]) and return another Iterator[`pandas.DataFrame`].
-        * For `transformWithState`, it should take parameters (key, Iterator[`pyspark.sql.Row`])
+        - For `transformWithState`, it should take parameters (key, Iterator[`pyspark.sql.Row`])
         and return another Iterator[`pyspark.sql.Row`].
 
         Note that the function should not make a guess of the number of elements in the iterator.
@@ -428,8 +428,8 @@ class StatefulProcessor(ABC):
 
         The type of return is different by which method is called.
 
-        * For `transformWithStateInPandas`, it should return Iterator[`pandas.DataFrame`].
-        * For `transformWithState`, it should return Iterator[`pyspark.sql.Row`].
+        - For `transformWithStateInPandas`, it should return Iterator[`pandas.DataFrame`].
+        - For `transformWithState`, it should return Iterator[`pyspark.sql.Row`].
 
         Parameters
         ----------
@@ -459,8 +459,8 @@ class StatefulProcessor(ABC):
 
         The type of initial state is different by which method is called.
 
-        * For `transformWithStateInPandas`, it should take `pandas.DataFrame`.
-        * For `transformWithState`, it should take `pyspark.sql.Row`.
+        - For `transformWithStateInPandas`, it should take `pandas.DataFrame`.
+        - For `transformWithState`, it should take `pyspark.sql.Row`.
 
         Parameters
         ----------
