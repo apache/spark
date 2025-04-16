@@ -43,6 +43,24 @@ private[sql] class RocksDBStateStoreProvider
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
+  /**
+   * Implementation of a state store that uses RocksDB as the backing data store.
+   *
+   * This store implements a state machine with the following states:
+   * - UPDATING: The store is being updated and has not yet been committed or aborted
+   * - COMMITTED: Updates have been successfully committed
+   * - ABORTED: Updates have been aborted
+   *
+   * Operations are validated against the current state to ensure proper usage:
+   * - Get/put/remove/iterator operations are only allowed in UPDATING state
+   * - Commit is only allowed in UPDATING state
+   * - Abort is allowed in UPDATING or ABORTED state
+   * - Metrics retrieval is only allowed in COMMITTED or ABORTED state
+   *
+   * Each store instance is assigned a unique stamp when created, which is used to
+   * verify that operations are performed by the owning thread and to prevent
+   * concurrent modifications to the same store.
+   */
   class RocksDBStateStore(lastVersion: Long, val stamp: Long) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE

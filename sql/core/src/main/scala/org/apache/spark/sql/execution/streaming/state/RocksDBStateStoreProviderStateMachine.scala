@@ -24,6 +24,30 @@ import javax.annotation.concurrent.GuardedBy
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
+/**
+ * A state machine that manages the lifecycle of RocksDB state store instances.
+ *
+ * This class enforces proper state transitions and ensures thread-safety for accessing
+ * state stores. It prevents concurrent modifications to the same state store by using
+ * a stamp-based locking mechanism.
+ *
+ * State Lifecycle:
+ * - RELEASED: The store is not being accessed by any thread
+ * - ACQUIRED: The store is currently being accessed by a thread
+ * - CLOSED: The store has been closed and can no longer be used
+ *
+ * Valid Transitions:
+ * - RELEASED -> ACQUIRED: When a thread acquires the store
+ * - ACQUIRED -> RELEASED: When a thread releases the store
+ * - RELEASED -> CLOSED: When the store is shut down
+ * - ACQUIRED -> MAINTENANCE: Maintenance can be performed on an acquired store
+ * - RELEASED -> MAINTENANCE: Maintenance can be performed on a released store
+ *
+ * Stamps:
+ * Each time a store is acquired, a unique stamp is generated. This stamp must be presented
+ * when performing operations on the store and when releasing it. This ensures that only
+ * the thread that acquired the store can release it or perform operations on it.
+ */
 class RocksDBStateStoreProviderStateMachine(
     stateStoreId: StateStoreId,
     rocksDBConf: RocksDBConf) extends Logging {
