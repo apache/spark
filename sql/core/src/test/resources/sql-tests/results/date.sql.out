@@ -56,7 +56,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
   }
 }
@@ -72,7 +71,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33"
   }
 }
