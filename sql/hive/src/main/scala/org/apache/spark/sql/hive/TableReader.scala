@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.{PartitionDesc, TableDesc}
-import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.serde2.{AbstractSerDe, Deserializer}
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -95,7 +95,7 @@ class HadoopTableReader(
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
       hiveTable,
-      tableDesc.getDeserializer(_broadcastedHadoopConf.value.value),
+      tableDesc.getDeserializer(_broadcastedHadoopConf.value.value).getClass,
       filterOpt = None)
 
   /**
@@ -109,7 +109,7 @@ class HadoopTableReader(
    */
   def makeRDDForTable(
       hiveTable: HiveTable,
-      deserializer: Deserializer,
+      abstractSerDeClass: Class[_ <: AbstractSerDe],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
 
     assert(!hiveTable.isPartitioned,
@@ -131,14 +131,20 @@ class HadoopTableReader(
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      val hconf = broadcastedHadoopConf.value.value
+      val abstractSerDe = abstractSerDeClass.getConstructor().newInstance()
+      DeserializerLock.synchronized {
+        abstractSerDe.initialize(hconf, localTableDesc.getProperties, null)
+      }
+      HadoopTableReader.fillObject(iter, abstractSerDe, attrsWithIndex, mutableRow, abstractSerDe)
     }
 
     deserializedHadoopRDD
   }
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
-    val partitionToDeserializer = partitions.map(part => (part, part.getDeserializer)).toMap
+    val partitionToDeserializer = partitions.map(part =>
+      (part, part.getDeserializer.getClass)).toMap
     makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None)
   }
 
@@ -153,9 +159,9 @@ class HadoopTableReader(
    *     subdirectory of each partition being read. If None, then all files are accepted.
    */
   def makeRDDForPartitionedTable(
-      partitionToDeserializer: Map[HivePartition, Deserializer],
+      partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
-    val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
+    val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializerClass) =>
       val partDesc = Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
@@ -174,7 +180,7 @@ class HadoopTableReader(
       }
 
       val broadcastedHiveConf = _broadcastedHadoopConf
-      val localDeserializer = partDeserializer
+      val localAbstractSerDeClass = partDeserializerClass
       val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
       // Splits all attributes into two groups, partition key attributes and those that are not.
@@ -203,7 +209,8 @@ class HadoopTableReader(
 
       createHadoopRDD(partDesc, inputPathStr).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
-        val deserializer = localDeserializer
+        val deserializer = localAbstractSerDeClass.getConstructor().newInstance()
+          .asInstanceOf[AbstractSerDe]
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties
         // and partition properties before initializing the deserializer. Note that partition
@@ -217,6 +224,9 @@ class HadoopTableReader(
           avroSchemaProperties.contains(k) && tableProperties.containsKey(k)
         }.foreach {
           case (key, value) => props.setProperty(key, value)
+        }
+        DeserializerLock.synchronized {
+          deserializer.initialize(hconf, props, partProps)
         }
         // get the table deserializer
         val tableSerDe = localTableDesc.getDeserializer(hconf)

@@ -35,7 +35,8 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{HiveMetaStoreClient, IMetaStoreClient, RetryingMetaStoreClient, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable, _}
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf
+import org.apache.hadoop.hive.ql.IDriver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.util.DirectionUtils
@@ -192,6 +193,9 @@ private[hive] class HiveClientImpl(
   /** Returns the configuration for the current session. */
   def conf: HiveConf = {
     val hiveConf = state.getConf
+    // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_QUERY_REEXECUTION_ENABLED, false)
+
     // Hive changed the default of datanucleus.schema.autoCreateAll from true to false
     // and hive.metastore.schema.verification from false to true since Hive 2.0.
     // For details, see the JIRA HIVE-6113, HIVE-12463 and HIVE-1841.
@@ -206,8 +210,10 @@ private[hive] class HiveClientImpl(
         (msConnUrl != null && msConnUrl.startsWith("jdbc:derby"))
     }
     if (isEmbeddedMetaStore) {
-      hiveConf.setBoolean("hive.metastore.schema.verification", false)
-      hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
+      MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.SCHEMA_VERIFICATION, false)
+      MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.AUTO_CREATE_ALL, true)
+      // TODO: check if this can be enabled back
+      MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.TRY_DIRECT_SQL, false)
     }
     hiveConf
   }
@@ -867,14 +873,8 @@ private[hive] class HiveClientImpl(
    * in the sequence is one row.
    * Since upgrading the built-in Hive to 2.3, hive-llap-client is needed when
    * running MapReduce jobs with `runHive`.
-   * Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
-    def closeDriver(driver: Driver): Unit = {
-      // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
-      // and the CommandProcessorFactory.clean function removed.
-      driver.getClass.getMethod("close").invoke(driver)
-    }
 
     // Hive query needs to start SessionState.
     SessionState.start(state)
@@ -887,7 +887,7 @@ private[hive] class HiveClientImpl(
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc = shim.getCommandProcessor(tokens(0), conf)
       proc match {
-        case driver: Driver =>
+        case driver: IDriver =>
           try {
             driver.run(cmd)
             driver.setMaxRows(maxRows)
@@ -901,7 +901,7 @@ private[hive] class HiveClientImpl(
               // This works for hive 4.x and later versions.
               throw new QueryExecutionException(Utils.stackTraceToString(e))
           } finally {
-            closeDriver(driver)
+            driver.close
           }
 
         case _ =>
@@ -1381,25 +1381,7 @@ private[hive] object HiveClientImpl extends Logging {
       case _ =>
         new HiveConf(conf, classOf[HiveConf])
     }
-    val hive = try {
-      Hive.getWithoutRegisterFns(hiveConf)
-    } catch {
-      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
-      // 2.3.8 doesn't), therefore here we fallback when encountering the exception.
-      case _: NoSuchMethodError =>
-        Hive.get(hiveConf)
-    }
-
-    // Follow behavior of HIVE-26633 (4.0.0), only apply the max message size when
-    // `hive.thrift.client.max.message.size` is set and the value is positive
-    Option(hiveConf.get("hive.thrift.client.max.message.size"))
-      .map(HiveConf.toSizeBytes(_).toInt).filter(_ > 0)
-      .foreach { maxMessageSize =>
-        logDebug(s"Trying to set metastore client thrift max message to $maxMessageSize")
-        configureMaxThriftMessageSize(hiveConf, hive.getMSC, maxMessageSize)
-      }
-
-    hive
+    Hive.getWithoutRegisterFns(hiveConf)
   }
 
   private def getFieldValue[T](obj: Any, fieldName: String): T = {
