@@ -618,7 +618,7 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="2"),
                 }
             else:
-                for q in self.spark.streams.active:
+                for q in batch_df.sparkSession.streams.active:
                     q.stop()
 
         self._test_transform_with_state_in_pandas_event_time(
