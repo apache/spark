@@ -104,8 +104,10 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @param refId
    *   the key used to look up the corresponding object
    */
-  def remove(refId: String): Unit = {
-    cachedModel.remove(refId)
+  def remove(refId: String): Boolean = {
+    val removed = cachedModel.remove(refId)
+    // remove returns null if the key is not present
+    removed != null
   }
 
   /**

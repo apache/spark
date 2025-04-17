@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
@@ -171,13 +172,15 @@ private[connect] object MLHandler extends Logging {
         }
 
       case proto.MlCommand.CommandCase.DELETE =>
-        var result = false
+        val deleted = mutable.ArrayBuilder.make[String]
         mlCommand.getDelete.getObjRefsList.asScala.toArray.foreach { objId =>
           if (!objId.getId.contains(".")) {
-            mlCache.remove(objId.getId)
-            result = true
+            if (mlCache.remove(objId.getId)) {
+              deleted += objId.getId
+            }
           }
         }
+        val result = deleted.result().mkString(",")
         proto.MlCommandResult
           .newBuilder()
           .setParam(LiteralValueProtoConverter.toLiteralProto(result))

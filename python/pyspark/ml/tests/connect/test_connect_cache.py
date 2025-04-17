@@ -1,0 +1,105 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+import unittest
+
+from pyspark.errors import PySparkException
+from pyspark.ml.linalg import Vectors, Matrices
+from pyspark.sql import DataFrame, Row
+from pyspark.ml.classification import LinearSVC
+from pyspark.testing.connectutils import ReusedConnectTestCase
+
+
+class MLConnectCacheTests(ReusedConnectTestCase):
+    def test_delete_model(self):
+        spark = self.spark
+        spark.client._cleanup_ml()
+
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+        svc = LinearSVC(maxIter=1, regParam=1.0)
+
+        model = svc.fit(df)
+
+        # model is cached in python side
+        self.assertEqual(len(spark.client.thread_local.ml_caches), 1)
+
+        # explicitly delete the model
+        del model
+
+        # model is removed in python side
+        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
+
+    def test_cleanup_ml(self):
+        spark = self.spark
+        spark.client._cleanup_ml()
+
+        df = (
+            spark.createDataFrame(
+                [
+                    (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                    (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                    (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                    (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                ],
+                ["label", "weight", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("weight")
+        )
+
+        svc = LinearSVC(maxIter=1, regParam=1.0)
+        model1 = svc.fit(df)
+        model2 = svc.fit(df)
+        model3 = svc.fit(df)
+
+        # all 3 models are cached in python side
+        self.assertEqual(len(spark.client.thread_local.ml_caches), 3)
+
+        # explicitly delete the model1
+        del model1
+
+        # model1 is removed in python side
+        self.assertEqual(len(spark.client.thread_local.ml_caches), 2)
+
+        spark.client._cleanup_ml()
+
+        # All models are removed in python side
+        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
+
+
+if __name__ == "__main__":
+    from pyspark.ml.tests.connect.test_connect_cache import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
