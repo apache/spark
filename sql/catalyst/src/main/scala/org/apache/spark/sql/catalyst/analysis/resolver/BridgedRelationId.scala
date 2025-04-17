@@ -14,26 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.analysis.resolver
 
-package org.apache.spark.api.r
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 
-import java.io.{DataInputStream, DataOutputStream}
-import java.net.Socket
-
-import org.apache.spark.SparkConf
-import org.apache.spark.security.SocketAuthHelper
-
-private[spark] class RAuthHelper(conf: SparkConf) extends SocketAuthHelper(conf) {
-  override val isUnixDomainSock = false
-
-  override protected def readUtf8(s: Socket): String = {
-    SerDe.readString(new DataInputStream(s.getInputStream()))
-  }
-
-  override protected def writeUtf8(str: String, s: Socket): Unit = {
-    val out = s.getOutputStream()
-    SerDe.writeString(new DataOutputStream(out), str)
-    out.flush()
-  }
-
-}
+/**
+ * The [[BridgedRelationId]] is a unique identifier for an unresolved relation in the whole logical
+ * plan including all the nested views. It is used to lookup relations with resolved metadata which
+ * were processed by the fixed-point when running two Analyzers in dual-run mode. Storing
+ * [[catalogAndNamespace]] is required to differentiate tables/views created in different catalogs
+ * as their [[UnresolvedRelation]]s could have same structure.
+ */
+case class BridgedRelationId(
+    unresolvedRelation: UnresolvedRelation,
+    catalogAndNamespace: Seq[String]
+)

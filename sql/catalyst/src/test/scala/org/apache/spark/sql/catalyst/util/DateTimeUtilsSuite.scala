@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -1164,6 +1165,52 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "expression" -> s"'$invalidTime'",
           "sourceType" -> "\"STRING\"",
           "targetType" -> "\"TIME(6)\""))
+    }
+  }
+
+  test("timeToMicros") {
+    val hour = 13
+    val min = 2
+    val sec = 23
+    val micros = 1234
+    val secAndMicros = Decimal(sec + (micros / MICROS_PER_SECOND.toFloat), 16, 6)
+
+    // Valid case
+    val microSecsTime = timeToMicros(hour, min, secAndMicros)
+    assert(microSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
+
+    // Invalid hour
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        timeToMicros(-1, min, secAndMicros)
+      },
+      condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+      parameters = Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): -1"))
+
+    // Invalid minute
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        timeToMicros(hour, -1, secAndMicros)
+      },
+      condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+      parameters = Map("rangeMessage" ->
+        "Invalid value for MinuteOfHour (valid values 0 - 59): -1"))
+
+    // Invalid second cases
+    Seq(
+      60.0,
+      9999999999.999999,
+      -999999999.999999,
+      // Full seconds overflows to a valid seconds integer when converted from long to int
+      4294967297.999999
+    ).foreach { invalidSecond =>
+      checkError(
+        exception = intercept[SparkDateTimeException] {
+          timeToMicros(hour, min, Decimal(invalidSecond, 16, 6))
+        },
+        condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+        parameters = Map("rangeMessage" ->
+          s"Invalid value for SecondOfMinute (valid values 0 - 59): ${invalidSecond.toLong}"))
     }
   }
 }

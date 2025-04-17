@@ -189,6 +189,15 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
 
+    def tearDown(self) -> None:
+        # force to clean up the ML cache after each test
+        try:
+            # in some tests (e.g. test_connect_basic),
+            # both connect session (self.connect) and classic session (self.spark) are used.
+            self.spark.client._cleanup_ml()
+        except Exception:
+            pass
+
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote
 

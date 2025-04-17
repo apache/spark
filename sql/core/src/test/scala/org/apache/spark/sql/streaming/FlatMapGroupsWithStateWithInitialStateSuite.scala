@@ -420,8 +420,12 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
   Seq(true, false).foreach { skipEmittingInitialStateKeys =>
     testWithAllStateVersions("flatMapGroupsWithState - initial state and initial batch " +
       s"have same keys and skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
-      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
-        skipEmittingInitialStateKeys.toString) {
+      withSQLConf(
+        SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
+        skipEmittingInitialStateKeys.toString,
+        // restore behavior before SPARK-51747
+        SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> "true"
+      ) {
         val initialState = Seq(
           ("apple", 1L),
           ("orange", 2L)).toDS().groupByKey(_._1).mapValues(_._2)

@@ -16,17 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.CharArrayWriter
-
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.expressions.xml.{XmlExpressionEvalUtils, XmlToStructsEvaluator}
+import org.apache.spark.sql.catalyst.expressions.xml.{StructsToXmlEvaluator, XmlExpressionEvalUtils, XmlToStructsEvaluator}
 import org.apache.spark.sql.catalyst.util.DropMalformedMode
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -247,6 +244,7 @@ case class StructsToXml(
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
       case _: StructType => TypeCheckSuccess
+      case _: VariantType => TypeCheckSuccess
       case _ => DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -260,33 +258,12 @@ case class StructsToXml(
   }
 
   @transient
-  lazy val writer = new CharArrayWriter()
-
-  @transient
-  lazy val inputSchema: StructType = child.dataType.asInstanceOf[StructType]
-
-  @transient
-  lazy val gen = new StaxXmlGenerator(
-    inputSchema, writer, new XmlOptions(options, timeZoneId.get), false)
-
-  // This converts rows to the XML output according to the given schema.
-  @transient
-  lazy val converter: Any => UTF8String = {
-    def getAndReset(): UTF8String = {
-      gen.flush()
-      val xmlString = writer.toString
-      writer.reset()
-      UTF8String.fromString(xmlString)
-    }
-    (row: Any) =>
-      gen.write(row.asInstanceOf[InternalRow])
-      getAndReset()
-  }
+  private lazy val evaluator = StructsToXmlEvaluator(options, child.dataType, timeZoneId)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(value: Any): Any = converter(value)
+  override def nullSafeEval(value: Any): Any = evaluator.evaluate(value)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)

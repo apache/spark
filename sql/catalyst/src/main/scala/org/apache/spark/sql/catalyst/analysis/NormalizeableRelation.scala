@@ -15,25 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.r
+package org.apache.spark.sql.catalyst.analysis
 
-import java.io.{DataInputStream, DataOutputStream}
-import java.net.Socket
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-import org.apache.spark.SparkConf
-import org.apache.spark.security.SocketAuthHelper
-
-private[spark] class RAuthHelper(conf: SparkConf) extends SocketAuthHelper(conf) {
-  override val isUnixDomainSock = false
-
-  override protected def readUtf8(s: Socket): String = {
-    SerDe.readString(new DataInputStream(s.getInputStream()))
-  }
-
-  override protected def writeUtf8(str: String, s: Socket): Unit = {
-    val out = s.getOutputStream()
-    SerDe.writeString(new DataOutputStream(out), str)
-    out.flush()
-  }
-
+/**
+ * [[NormalizeableRelation]] is extended by relations that contain non-deterministic or
+ * time-dependent objects that need to be normalized in the [[NormalizePlan]]. This way logical
+ * plans produced by different calls to the Analyzer could be compared.
+ *
+ * This is used in unit tests and to check whether the plans from the fixed-point and the
+ * single-pass Analyzers are the same.
+ */
+trait NormalizeableRelation {
+  def normalize(): LogicalPlan
 }

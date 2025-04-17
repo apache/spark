@@ -804,6 +804,26 @@ class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgum
   def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
   /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided Dataset/DataFrame.
+   *
+   * @group subquery
+   * @since 4.1.0
+   */
+  def isin(ds: Dataset[_]): Column = {
+    if (ds == null) {
+      // A single null should be handled as a value.
+      isin(Seq(ds): _*)
+    } else {
+      val values = node match {
+        case internal.UnresolvedFunction("struct", arguments, _, _, _, _) => arguments
+        case _ => Seq(node)
+      }
+      Column(internal.SubqueryExpression(ds, internal.SubqueryType.IN(values)))
+    }
+  }
+
+  /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
    *
    * @group expr_ops

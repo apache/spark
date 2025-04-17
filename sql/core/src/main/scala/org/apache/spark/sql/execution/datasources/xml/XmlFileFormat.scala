@@ -35,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * Provides access to XML data from pure SQL statements.
  */
-class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
+case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "xml"
 
@@ -131,10 +131,6 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
   override def toString: String = "XML"
-
-  override def hashCode(): Int = getClass.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[XmlFileFormat]
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => true
