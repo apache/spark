@@ -40,8 +40,8 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 
 
 if should_test_connect:
@@ -63,24 +63,23 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import SparkConnectException
 
 
-class SparkConnectColumnTests(SparkConnectSQLTestCase):
-    def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
-        from pyspark.sql.classic.dataframe import DataFrame as SDF
-        from pyspark.sql.connect.dataframe import DataFrame as CDF
+class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
+    @classmethod
+    def setUpClass(cls):
+        super(SparkConnectColumnTests, cls).setUpClass()
 
-        assert isinstance(df1, (SDF, CDF))
-        if isinstance(df1, SDF):
-            str1 = df1._jdf.showString(n, truncate, False)
-        else:
-            str1 = df1._show_string(n, truncate, False)
+        cls.tbl_name = "test_connect_column_table_1"
+        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
+        cls.spark.createDataFrame(
+            [(x, f"{x}") for x in range(100)], ["id", "name"]
+        ).write.saveAsTable(cls.tbl_name)
 
-        assert isinstance(df2, (SDF, CDF))
-        if isinstance(df2, SDF):
-            str2 = df2._jdf.showString(n, truncate, False)
-        else:
-            str2 = df2._show_string(n, truncate, False)
-
-        self.assertEqual(str1, str2)
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
+        finally:
+            super(SparkConnectColumnTests, cls).tearDownClass()
 
     def test_column_operator(self):
         # SPARK-41351: Column needs to support !=
