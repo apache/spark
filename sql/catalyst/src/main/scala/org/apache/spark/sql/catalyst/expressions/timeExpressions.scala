@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.MIN_LEVEL_OF_TIME_TRUNC
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -659,87 +658,51 @@ case class SubtractTimes(left: Expression, right: Expression)
   since = "4.1.0",
   group = "datetime_funcs")
 case class TruncateTime(unit: Expression, timeExpr: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with RuntimeReplaceable {
 
   override def nullable: Boolean = true
   override def left: Expression = unit
   override def right: Expression = timeExpr
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): TruncateTime =
-    copy(unit = newLeft, timeExpr = newRight)
-
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
+    Seq(
+      StringType,
+      TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*)
+    )
 
   override def dataType: DataType = timeExpr.dataType
   override def prettyName: String = "time_trunc"
 
-  // Pre-parse the unit literal if foldable
-  private lazy val truncLevel: Int =
-    DateTimeUtils.parseTruncLevelForTime(unit.eval().asInstanceOf[UTF8String])
+  override protected def withNewChildrenInternal(
+    newLeft: Expression,
+    newRight: Expression): TruncateTime =
+    copy(unit = newLeft, timeExpr = newRight)
 
-  override def eval(input: InternalRow): Any = {
-    val level = if (unit.foldable) {
-      truncLevel
-    } else {
-      DateTimeUtils.parseTruncLevelForTime(unit.eval(input).asInstanceOf[UTF8String])
-    }
-    if (level < MIN_LEVEL_OF_TIME_TRUNC) {
-      // unknown format or too small level
-      null
-    } else {
-      val rawTime = timeExpr.eval(input)
-      if (rawTime == null) {
-        null
-      } else {
-        val truncated = DateTimeUtils.truncTime(rawTime.asInstanceOf[Long], level)
-        if (truncated < 0) null else truncated
-      }
-    }
-  }
+  private def truncCall(u: Expression, t: Expression): Expression =
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      timeExpr.dataType,
+      "truncateTime",
+      Seq(u, t),
+      Seq(StringType, t.dataType))
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-
-    val javaType = CodeGenerator.javaType(dataType)
+  override lazy val replacement: Expression = {
     if (unit.foldable) {
-      if (truncLevel < DateTimeUtils.MIN_LEVEL_OF_TIME_TRUNC) {
-        ev.copy(code = code"""
-          boolean ${ev.isNull} = true;
-          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
+      val v = unit.eval()
+      if (v == null) {
+        Literal.create(null, dataType)
       } else {
-        val t = timeExpr.genCode(ctx)
-        ev.copy(code = code"""
-          ${t.code}
-          boolean ${ev.isNull} = ${t.isNull};
-          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          if (!${ev.isNull}) {
-            long truncated = $dtu.truncTime((long)${t.value}, ${truncLevel.toString});
-            if (truncated < 0) {
-              ${ev.isNull} = true;
-            } else {
-              ${ev.value} = truncated;
-            }
-          }""")
+        val lvl = DateTimeUtils.parseTruncLevelForTime(v.asInstanceOf[UTF8String])
+        if (lvl < DateTimeUtils.MIN_LEVEL_OF_TIME_TRUNC) {
+          Literal.create(null, dataType)
+        } else {
+          truncCall(unit, timeExpr)
+        }
       }
     } else {
-      // If unit isn't foldable => parse unit at runtime
-      nullSafeCodeGen(ctx, ev, (unitVal, timeVal) => {
-        val form = ctx.freshName("form")
-        s"""
-          int $form = $dtu.parseTruncLevelForTime($unitVal);
-          if ($form < $dtu.MIN_LEVEL_OF_TIME_TRUNC) {
-            ${ev.isNull} = true;
-          } else {
-            long truncated = $dtu.truncTime((long)$timeVal, $form);
-            if (truncated < 0) {
-              ${ev.isNull} = true;
-            } else {
-              ${ev.value} = truncated;
-            }
-          }
-        """
-      })
+      val call = truncCall(unit, timeExpr)
+      val isBad = LessThan(call, Literal.create(0L, dataType))
+      If(isBad, Literal.create(null, dataType), call)
     }
   }
 }
