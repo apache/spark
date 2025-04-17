@@ -17,12 +17,11 @@
 #
 
 import unittest
-import os
 
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_tuning import CrossValidatorTestsMixin
@@ -33,18 +32,12 @@ if should_test_connect:
         or torch_requirement_message
         or "Requires PySpark core library in Spark Connect server",
     )
-    class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, unittest.TestCase):
-        def setUp(self) -> None:
-            self.spark = (
-                SparkSession.builder.remote(
-                    os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-                )
-                .config("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
-                .getOrCreate()
-            )
-
-        def tearDown(self) -> None:
-            self.spark.stop()
+    class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, ReusedConnectTestCase):
+        @classmethod
+        def conf(cls):
+            c = super(ReusedConnectTestCase, cls).conf()
+            c.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
+            return c
 
 
 if __name__ == "__main__":
