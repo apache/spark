@@ -59,10 +59,10 @@ trait TableConstraint {
   protected def generateName(tableName: String): String
 
   /**
-   * Gets the constraint name. If no name is specified (null or empty),
-   * generates a name based on the table name using generateConstraintName.
+   * Gets the constraint name. If no name is provided by the user (null or empty),
+   * generates a name based on the table name using generateName.
    *
-   * @return The constraint name (either user-specified or generated)
+   * @return The constraint name (either user-provided or generated)
    */
   final def name: String = {
     if (userProvidedName == null || userProvidedName.isEmpty) {
