@@ -359,7 +359,7 @@ class StatefulProcessor(ABC):
     Class that represents the arbitrary stateful logic that needs to be provided by the user to
     perform stateful manipulations on keyed streams.
 
-    NOTE: The type of input data and return are different by which method is called, following:
+    NOTE: Type of input data and return are different by which method is called, such as:
 
     `transformWithStateInPandas` - :class:`pandas.DataFrame`
     `transformWithState` - :class:`pyspark.sql.Row`
@@ -394,7 +394,7 @@ class StatefulProcessor(ABC):
         """
         Function that will allow users to interact with input data rows along with the grouping key.
 
-        The type of input data and return are different by which method is called.
+        Type of input data and return are different by which method is called, such as:
 
         For `transformWithStateInPandas`, it should take parameters
         (key, Iterator[`pandas.DataFrame`]) and return another Iterator[`pandas.DataFrame`].

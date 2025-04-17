@@ -1322,7 +1322,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent
              from JVM.
-            This function flattens the columns of input rows and initial state rows and feed them
+            This function flatten the columns of input rows and initial state rows and feed them
              into the data generator.
             """
 
@@ -1499,7 +1499,7 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPySparkPythonInitialStateRunner` for arrow batch schema sent
              from JVM.
-            This function flatten the columns of input rows and initial state rows and feed them
+            This function flattens the columns of input rows and initial state rows and feed them
              into the data generator.
             """
 
