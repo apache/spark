@@ -34,7 +34,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class ClassificationTestsOnConnect(ClassificationTestsMixin, ReusedConnectTestCase):
     @classmethod
     def conf(cls):
-        config = super(ReusedConnectTestCase, cls).conf()
+        config = super(ClassificationTestsOnConnect, cls).conf()
         config.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
         return config
 
