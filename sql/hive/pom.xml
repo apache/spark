@@ -139,12 +139,33 @@
       <scope>${hive.llap.scope}</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-udf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-standalone-metastore-server</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-parser</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.calcite</groupId>
       <artifactId>calcite-core</artifactId>
+      <scope>runtime</scope>
+    </dependency-->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.datasketches</groupId>
+      <artifactId>datasketches-java</artifactId>
+      <version>3.1.0</version>
     </dependency>
 
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
@@ -197,10 +218,12 @@
     <dependency>
       <groupId>org.apache.derby</groupId>
       <artifactId>derby</artifactId>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.derby</groupId>
       <artifactId>derbytools</artifactId>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>

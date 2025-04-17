@@ -132,7 +132,7 @@
     <zookeeper.version>3.9.3</zookeeper.version>
     <curator.version>5.9.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
-    <hive.classifier>core</hive.classifier>
+    <hive.classifier></hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>4.0.1</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
@@ -196,7 +196,7 @@
     <commons-lang3.version>3.18.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.1</commons-pool2.version>
-    <datanucleus-core.version>4.1.17</datanucleus-core.version>
+    <datanucleus-core.version>5.2.10</datanucleus-core.version>
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
@@ -205,7 +205,7 @@
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
-    <antlr4.version>4.13.1</antlr4.version>
+    <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>4.21.0</selenium.version>
     <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
@@ -278,7 +278,7 @@
     <derby.deps.scope>compile</derby.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
-    <hive.storage.version>2.8.1</hive.storage.version>
+    <hive.storage.version>${hive.version}</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>test</hive.llap.scope>
@@ -828,6 +828,11 @@
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-slf4j2-impl</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
         <version>${log4j.version}</version>
       </dependency>
       <dependency>
@@ -1679,6 +1684,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2321,14 +2330,32 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>org.apache.hive</groupId>
+        <groupId>${hive.group}</groupId>
         <artifactId>hive-udf</artifactId>
         <version>${hive.version}</version>
       </dependency>
       <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-standalone-metastore-server</artifactId>
+        <version>${hive.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr-runtime</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!--dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-parser</artifactId>
+        <version>${hive.version}</version>
+        <scope>runtime</scope>
+      </dependency-->
+      <dependency>
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-core</artifactId>
         <version>1.38.0</version>
+        <scope>runtime</scope>
       </dependency>
 
       <dependency>
@@ -2808,7 +2835,7 @@
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
               <jvmArg>-Xms4g</jvmArg>
-              <jvmArg>-Xmx4g</jvmArg>
+              <jvmArg>-Xmx8g</jvmArg>
               <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
               <jvmArg>--enable-native-access=ALL-UNNAMED</jvmArg>

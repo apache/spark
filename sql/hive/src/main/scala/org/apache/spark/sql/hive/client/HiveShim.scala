@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, PartitionDropOptions, TableType}
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.IDriver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.DynamicPartitionCtx
@@ -109,7 +109,7 @@ private[client] sealed abstract class Shim {
 
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
-  def getDriverResults(driver: Driver): Seq[String]
+  def getDriverResults(driver: IDriver): Seq[String]
 
   def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long
 
@@ -446,7 +446,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     CommandProcessorFactory.get(Array(token), conf)
 
-  override def getDriverResults(driver: Driver): Seq[String] = {
+  override def getDriverResults(driver: IDriver): Seq[String] = {
     val res = new JArrayList[Object]()
     driver.getResults(res)
     res.asScala.map {
