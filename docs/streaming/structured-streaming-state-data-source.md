@@ -184,7 +184,7 @@ The following configurations are optional:
   <td>readRegisteredTimers</td>
   <td>boolean</td>
   <td>false</td>
-  <td>If true, the user can read registered timers used within the transformWithState operator. Note that currently this option only applies to the transformWithState operator.</td>
+  <td>If true, the user can read registered timers used within the transformWithState operator. Note that currently this option only applies to the transformWithState operator. This option and the stateVarName option described above are mutually exclusive and only one of them can be used at a time.</td>
 </tr>
 <tr>
   <td>flattenCollectionTypes</td>
@@ -209,7 +209,7 @@ TransformWithState is a stateful operator that allows users to maintain arbitrar
 This operator allows for multiple state variables to be used within the same query. However, because they could be of different composite types and encoding formats, they need to be read within a batch query one variable at a time.
 In order to allow this, the user needs to specify the `stateVarName` for the state variable they are interested in reading.
 
-Timers can read by setting the option `readRegisteredTimers` to true. This will return all the registered timer across grouping keys.
+Timers can be read by setting the option `readRegisteredTimers` to true. This will return all the registered timer across grouping keys.
 
 We also allow for composite type variables to be read in 2 formats:
 - Flattened: This is the default format where the composite types are flattened out into individual columns.
