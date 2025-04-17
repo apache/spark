@@ -535,6 +535,23 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Truncate a TIME‑of‑day value given as microseconds from midnight.
+   *
+   * @param unitUtf8  the requested unit ('HOUR', 'MINUTE', …) or null
+   * @param micros microseconds since 00:00:00
+   * @return truncated value as microseconds‑of‑day, or -1L if the unit is invalid
+   */
+  def truncateTime(unitUtf8: UTF8String, micros: Long): Long = {
+    val level = parseTruncLevelForTime(unitUtf8)
+    if (level < MIN_LEVEL_OF_TIME_TRUNC) {  // unknown unit
+      -1L
+    } else {
+      val out = truncTime(micros, level)         // may still return -1L on error
+      if (out < 0) -1L else out
+    }
+  }
+
+  /**
    * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_HOUR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
