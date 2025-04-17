@@ -510,6 +510,7 @@ pyspark_sql = Module(
         "pyspark.sql.observation",
         "pyspark.sql.tvf",
         # unittests
+        "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
@@ -1465,6 +1466,7 @@ pyspark_errors = Module(
     ],
     python_test_goals=[
         # unittests
+        "pyspark.errors.tests.test_connect_errors_conversion",
         "pyspark.errors.tests.test_errors",
         "pyspark.errors.tests.test_traceback",
         "pyspark.errors.tests.connect.test_parity_traceback",
