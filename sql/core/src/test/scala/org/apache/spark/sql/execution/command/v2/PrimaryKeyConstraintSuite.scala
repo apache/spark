@@ -33,12 +33,12 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
 
   test("Add primary key constraint") {
     validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
-      withNamespaceAndTable("ns", "tbl", catalog) { t =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-        assert(loadTable(catalog, "ns", "tbl").constraints.isEmpty)
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
         sql(s"ALTER TABLE $t ADD CONSTRAINT pk1 PRIMARY KEY (id) $characteristic")
-        val table = loadTable(catalog, "ns", "tbl")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "pk1")
@@ -49,10 +49,10 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
 
   test("Create table with primary key constraint") {
     validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
-      withNamespaceAndTable("ns", "tbl", catalog) { t =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         val constraintStr = s"CONSTRAINT pk1 PRIMARY KEY (id) $characteristic"
         sql(s"CREATE TABLE $t (id bigint, data string, $constraintStr) $defaultUsing")
-        val table = loadTable(catalog, "ns", "tbl")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "pk1")
@@ -62,9 +62,9 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
   }
 
   test("Add duplicated primary key constraint") {
-    withNamespaceAndTable("ns", "tbl", catalog) { t =>
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-      assert(loadTable(catalog, "ns", "tbl").constraints.isEmpty)
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
       sql(s"ALTER TABLE $t ADD CONSTRAINT pk1 PRIMARY KEY (id)")
       // Constraint names are case-insensitive
@@ -84,12 +84,12 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
   }
 
   test("Add primary key constraint with multiple columns") {
-    withNamespaceAndTable("ns", "tbl", catalog) { t =>
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id1 bigint, id2 bigint, data string) $defaultUsing")
-      assert(loadTable(catalog, "ns", "tbl").constraints.isEmpty)
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
       sql(s"ALTER TABLE $t ADD CONSTRAINT pk1 PRIMARY KEY (id1, id2)")
-      val table = loadTable(catalog, "ns", "tbl")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
       assert(table.constraints.length == 1)
       val constraint = table.constraints.head
       assert(constraint.name() == "pk1")

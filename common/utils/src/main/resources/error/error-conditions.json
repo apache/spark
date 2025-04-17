@@ -4280,6 +4280,12 @@
     ],
     "sqlState" : "38000"
   },
+  "NON_DETERMINISTIC_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` is non-deterministic. Check constraints must only contain deterministic expressions."
+    ],
+    "sqlState" : "42621"
+  },
   "NULLABLE_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is nullable while it's required to be non-nullable."

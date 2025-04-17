@@ -81,8 +81,8 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         }).get
         if (!analyzedExpression.deterministic) {
           analyzedExpression.failAnalysis(
-            errorClass = "INVALID_CHECK_CONSTRAINT.NONDETERMINISTIC",
-            messageParameters = Map.empty
+            errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+            messageParameters = Map("checkCondition" -> c.condition)
           )
         }
         c.withNewChildren(Seq(analyzedExpression)).asInstanceOf[CheckConstraint]

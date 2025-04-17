@@ -52,17 +52,17 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
 
   test("Create table with foreign key constraint") {
     validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
-      withNamespaceAndTable("ns", "tbl", catalog) { t =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         sql(s"CREATE TABLE ${t}_ref (id bigint, data string) $defaultUsing")
         val constraintStr = s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
           s"REFERENCES ${t}_ref(id) $characteristic"
         sql(s"CREATE TABLE $t (id bigint, fk bigint, data string, $constraintStr) $defaultUsing")
-        val table = loadTable(catalog, "ns", "tbl")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
         assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-          s"REFERENCES test_catalog.ns.tbl_ref (id) $expectedDDL")
+          s"REFERENCES non_part_test_catalog.ns.tbl_ref (id) $expectedDDL")
       }
     }
   }

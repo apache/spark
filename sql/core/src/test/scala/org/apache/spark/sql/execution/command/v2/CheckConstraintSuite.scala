@@ -37,9 +37,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       }
       checkError(
         exception = error,
-        condition = "INVALID_CHECK_CONSTRAINT.NONDETERMINISTIC",
+        condition = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
         sqlState = "42621",
-        parameters = Map.empty,
+        parameters = Map("checkCondition" -> "i > rand(0)"),
         context = ExpectedContext(
           fragment = "i > rand(0)",
           start = 40,
@@ -62,9 +62,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         }
         checkError(
           exception = error,
-          condition = "INVALID_CHECK_CONSTRAINT.NONDETERMINISTIC",
+          condition = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
           sqlState = "42621",
-          parameters = Map.empty,
+          parameters = Map("checkCondition" -> "i > rand(0)"),
           context = ExpectedContext(
             fragment = "i > rand(0)"
           )
@@ -125,14 +125,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   }
 
   test("Predicate should be null if it can't be converted to V2 predicate") {
-    withNamespaceAndTable("ns", "tbl", catalog) { t =>
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id bigint, j string) $defaultUsing")
       sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1)")
-      val table = loadTable(catalog, "ns", "tbl")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "c1")
       assert(constraint.toDDL ==
-        "CONSTRAINT c1 CHECK from_json(j, 'a INT').a > 1 ENFORCED VALID NORELY")
+        "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED VALID NORELY")
       assert(constraint.predicateSql() == "from_json(j, 'a INT').a > 1")
       assert(constraint.predicate() == null)
     }
@@ -156,36 +156,36 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Create table with check constraint") {
     getConstraintCharacteristics(true).foreach { case (characteristic, expectedDDL) =>
-      withNamespaceAndTable("ns", "tbl", catalog) { t =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         val constraintStr = s"CONSTRAINT c1 CHECK (id > 0) $characteristic"
         sql(s"CREATE TABLE $t (id bigint, data string, $constraintStr) $defaultUsing")
-        val table = loadTable(catalog, "ns", "tbl")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
-        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK id > 0 $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
       }
     }
   }
 
   test("Alter table add check constraint") {
     getConstraintCharacteristics(false).foreach { case (characteristic, expectedDDL) =>
-      withNamespaceAndTable("ns", "tbl", catalog) { t =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-        assert(loadTable(catalog, "ns", "tbl").constraints.isEmpty)
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
-        val table = loadTable(catalog, "ns", "tbl")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
-        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK id > 0 $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
       }
     }
   }
 
   test("Add duplicated check constraint") {
-    withNamespaceAndTable("ns", "tbl", catalog) { t =>
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-      assert(loadTable(catalog, "ns", "tbl").constraints.isEmpty)
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
 
       sql(s"ALTER TABLE $t ADD CONSTRAINT abc CHECK (id > 0)")
       // Constraint names are case-insensitive
@@ -198,7 +198,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "abc",
-            "oldConstraint" -> "CONSTRAINT abc CHECK id > 0 ENFORCED VALID NORELY")
+            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED VALID NORELY")
         )
       }
     }

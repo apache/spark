@@ -49,10 +49,10 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
 
   test("Create table with unique constraint") {
     validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
-      withNamespaceAndTable("ns", "tbl", catalog) { t =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         val constraintStr = s"CONSTRAINT uk1 UNIQUE (id) $characteristic"
         sql(s"CREATE TABLE $t (id bigint, data string, $constraintStr) $defaultUsing")
-        val table = loadTable(catalog, "ns", "tbl")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "uk1")
