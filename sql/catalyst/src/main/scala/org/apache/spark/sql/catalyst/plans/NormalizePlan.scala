@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{DeduplicateRelations, GetViewColumnByNameAndOrdinal}
+import org.apache.spark.sql.catalyst.analysis.{
+  DeduplicateRelations,
+  GetViewColumnByNameAndOrdinal,
+  NormalizeableRelation
+}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
@@ -173,6 +177,8 @@ object NormalizePlan extends PredicateHelper {
         cteIdNormalizer.normalizeDef(cteRelationDef)
       case cteRelationRef: CTERelationRef =>
         cteIdNormalizer.normalizeRef(cteRelationRef)
+      case normalizeableRelation: NormalizeableRelation =>
+        normalizeableRelation.normalize()
     }
   }
 
