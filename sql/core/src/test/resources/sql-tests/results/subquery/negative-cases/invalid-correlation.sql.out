@@ -71,20 +71,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
-    "input" : "\"min(t2a)\", \"t2c\"",
-    "missingAttributes" : "\"t2b\"",
-    "operator" : "!Filter t2c#x IN (list#x [t2b#x])"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 35,
-    "stopIndex" : 298,
-    "fragment" : "SELECT   min(t2a)\n               FROM     t2\n               GROUP BY t2c\n               HAVING   t2c IN (SELECT   max(t3c)\n                                FROM     t3\n                                GROUP BY t3b\n                                HAVING   t3b > t2b )"
-  } ]
+    "objectName" : "`t2b`",
+    "proposal" : "`t1`.`t1b`, `min(t2a)`, `t2`.`t2c`, `t1`.`t1a`, `t1`.`t1c`"
+  }
 }
 
 

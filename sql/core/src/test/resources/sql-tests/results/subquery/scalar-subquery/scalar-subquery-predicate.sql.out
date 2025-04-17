@@ -437,10 +437,17 @@ HAVING   max(t1b) <= (SELECT   max(t2b)
                       WHERE    t2c = t1c
                       GROUP BY t2c)
 -- !query schema
-struct<t1a:string>
+struct<>
 -- !query output
-val1b
-val1c
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`t1c`",
+    "proposal" : "`t1`.`t1c`, `t1`.`t1a`, `max(t1b)`, `t2`.`t2c`, `t2`.`t2a`"
+  }
+}
 
 
 -- !query

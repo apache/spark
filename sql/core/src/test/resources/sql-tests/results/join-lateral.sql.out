@@ -131,19 +131,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
-  "sqlState" : "42704",
-  "messageParameters" : {
-    "columns" : "`c1`, `c2`",
-    "targetString" : "`t1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 71,
-    "stopIndex" : 74,
-    "fragment" : "t1.*"
-  } ]
+  "errorClass" : "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
+  "sqlState" : "42703"
 }
 
 
@@ -477,20 +466,10 @@ SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`t1`.`c1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 62,
-    "stopIndex" : 66,
-    "fragment" : "t1.c1"
-  } ]
+  "errorClass" : "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
+  "sqlState" : "42703"
 }
 
 
@@ -499,20 +478,10 @@ SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`c2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 71,
-    "stopIndex" : 72,
-    "fragment" : "c2"
-  } ]
+  "errorClass" : "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
+  "sqlState" : "42703"
 }
 
 
@@ -541,19 +510,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "objectName" : "`t1`.`c1`",
-    "proposal" : "`t2`.`c1`, `t2`.`c2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 74,
-    "stopIndex" : 78,
-    "fragment" : "t1.c1"
-  } ]
+    "expression" : "spark_catalog.default.t1.c1"
+  }
 }
 
 

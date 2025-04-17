@@ -327,18 +327,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "objectName" : "`a`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 21,
-    "stopIndex" : 21,
-    "fragment" : "a"
-  } ]
+    "expression" : "foo2_2c.a"
+  }
 }
 
 
@@ -349,18 +342,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "objectName" : "`a`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 37,
-    "stopIndex" : 37,
-    "fragment" : "a"
-  } ]
+    "expression" : "foo2_2d.a"
+  }
 }
 
 
