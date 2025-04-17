@@ -18,13 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -126,27 +126,19 @@ object ValidateSubqueryExpression
       case _ =>
     }
 
-    def checkNestedOuterReferences(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+    def checkNestedOuterReferences(expr: SubqueryExpression): Unit = {
       if ((!SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) &&
         expr.getNestedOuterAttrs.nonEmpty) {
-        val nestedOuterAttrName = expr.getNestedOuterAttrs.flatMap{
-          o => o.collect {
-            case a: AttributeReference => a.name
-          }
-        }.head
-        val output = plan.inputSet ++ expr.plan.inputSet
-        throw QueryCompilationErrors.unresolvedColumnError(
-          nestedOuterAttrName,
-          proposal = orderSuggestedIdentifiersBySimilarity(
-            nestedOuterAttrName,
-            candidates = output.map(attribute => attribute.qualifier :+ attribute.name).toSeq
-          )
+        throw new AnalysisException(
+          errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+          messageParameters = Map(
+            "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
         )
       }
     }
 
     // Check if there are nested correlated subqueries in the plan.
-    checkNestedOuterReferences(plan, expr)
+    checkNestedOuterReferences(expr)
 
     // Check if there is outer attribute that cannot be found from the plan.
     checkOuterReference(plan, expr)
