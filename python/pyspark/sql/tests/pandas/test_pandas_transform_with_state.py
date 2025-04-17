@@ -1058,6 +1058,12 @@ class TransformWithStateTestsMixin:
     def _test_transform_with_map_state_metadata(self, initial_state):
         checkpoint_path = tempfile.mktemp()
 
+        # This has to be outside of FEB to avoid serialization issues.
+        if self.use_pandas():
+            expected_operator_name = "transformWithStateInPandasExec"
+        else:
+            expected_operator_name = "transformWithStateInPySparkExec"
+
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
@@ -1069,10 +1075,6 @@ class TransformWithStateTestsMixin:
                 metadata_df = batch_df.sparkSession.read.format("state-metadata").load(
                     checkpoint_path
                 )
-                if self.use_pandas():
-                    expected_operator_name = "transformWithStateInPandasExec"
-                else:
-                    expected_operator_name = "transformWithStateInPySparkExec"
 
                 assert set(
                     metadata_df.select(
