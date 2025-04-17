@@ -1,0 +1,85 @@
+================================================================================================
+Recursive CTE with only LocalRelation
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 10 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 10 integers using VALUES                       73             78           6          0.0     7293800.0       1.0X
+First 10 integers using SELECT                       33             36           3          0.0     3259475.0       2.2X
+First 10 integers using SELECT and LIMIT             52             54           2          0.0     5224191.6       1.4X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 20 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 20 integers using VALUES                       30             30           0          0.0     1488231.3       1.0X
+First 20 integers using SELECT                       33             39           6          0.0     1630387.5       0.9X
+First 20 integers using SELECT and LIMIT             59             64           6          0.0     2960481.3       0.5X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 30 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 30 integers using VALUES                       30             31           2          0.0      985383.3       1.0X
+First 30 integers using SELECT                       30             32           2          0.0     1001418.1       1.0X
+First 30 integers using SELECT and LIMIT             77             88          13          0.0     2557108.3       0.4X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 40 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 40 integers using VALUES                       39             42           3          0.0      978563.6       1.0X
+First 40 integers using SELECT                       57             62           8          0.0     1432281.3       0.7X
+First 40 integers using SELECT and LIMIT             92             97           6          0.0     2290003.1       0.4X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 50 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 50 integers using VALUES                       38             41           2          0.0      755995.0       1.0X
+First 50 integers using SELECT                       79             83           4          0.0     1584147.5       0.5X
+First 50 integers using SELECT and LIMIT            106            112           8          0.0     2112531.7       0.4X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 60 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 60 integers using VALUES                       40             40           0          0.0      672334.7       1.0X
+First 60 integers using SELECT                      101            108           9          0.0     1690200.7       0.4X
+First 60 integers using SELECT and LIMIT            123            125           2          0.0     2042203.5       0.3X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 70 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 70 integers using VALUES                       45             48           4          0.0      644548.2       1.0X
+First 70 integers using SELECT                      142            150           7          0.0     2026037.5       0.3X
+First 70 integers using SELECT and LIMIT            141            148          10          0.0     2018197.0       0.3X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 80 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 80 integers using VALUES                       51             53           4          0.0      631995.8       1.0X
+First 80 integers using SELECT                      155            157           1          0.0     1942920.8       0.3X
+First 80 integers using SELECT and LIMIT            159            165          10          0.0     1986177.1       0.3X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 90 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+First 90 integers using VALUES                       54             57           6          0.0      595910.6       1.0X
+First 90 integers using SELECT                      173            176           3          0.0     1925306.5       0.3X
+First 90 integers using SELECT and LIMIT            176            183          12          0.0     1950568.1       0.3X
+
+OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.3.2
+Apple M3 Max
+First 100 integers:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+First 100 integers using VALUES                       58             62           6          0.0      581955.4       1.0X
+First 100 integers using SELECT                      189            197           7          0.0     1892865.0       0.3X
+First 100 integers using SELECT and LIMIT            191            205          12          0.0     1913059.2       0.3X
+
+
