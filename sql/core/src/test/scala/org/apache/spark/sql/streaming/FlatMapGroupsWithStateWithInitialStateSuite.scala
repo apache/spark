@@ -441,16 +441,16 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
             .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
         testStream(result, Update)(
           StartStream(Trigger.ProcessingTime("1 second"), triggerClock = new StreamManualClock),
-            AddData(inputData, "apple"),
-            AddData(inputData, "apple"),
-            AddData(inputData, "orange"),
-            AdvanceManualClock(1 * 1000),
-            CheckNewAnswer(("apple", 3), ("orange", 3)),
-            AddData(inputData, "orange"),
-            AdvanceManualClock(1 * 1000),
-            CheckNewAnswer(("orange", 4)),
-            StopStream
-          )
+          AddData(inputData, "apple"),
+          AddData(inputData, "apple"),
+          AddData(inputData, "orange"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("apple", 3), ("orange", 3)),
+          AddData(inputData, "orange"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("orange", 4)),
+          StopStream
+        )
       }
     }
   }
