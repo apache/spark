@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{DataType, StringType}
 
 trait TableConstraint {
   // Convert to a data source v2 constraint
-  def asConstraint(isCreateTable: Boolean): Constraint
+  def toV2Constraint(isCreateTable: Boolean): Constraint
 
   /** Returns the user-provided name of the constraint */
   def userProvidedName: String
@@ -117,7 +117,7 @@ case class CheckConstraint(
   with TableConstraint {
 // scalastyle:on line.size.limit
 
-  def asConstraint(isCreateTable: Boolean): Constraint = {
+  def toV2Constraint(isCreateTable: Boolean): Constraint = {
     val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
     val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
@@ -166,8 +166,7 @@ case class PrimaryKeyConstraint(
   extends TableConstraint {
 // scalastyle:on line.size.limit
 
-
-  override def asConstraint(isCreateTable: Boolean): Constraint = {
+  override def toV2Constraint(isCreateTable: Boolean): Constraint = {
     val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
@@ -199,7 +198,7 @@ case class UniqueConstraint(
     extends TableConstraint {
 // scalastyle:on line.size.limit
 
-  override def asConstraint(isCreateTable: Boolean): Constraint = {
+  override def toV2Constraint(isCreateTable: Boolean): Constraint = {
     val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
@@ -237,7 +236,7 @@ case class ForeignKeyConstraint(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def asConstraint(isCreateTable: Boolean): Constraint = {
+  override def toV2Constraint(isCreateTable: Boolean): Constraint = {
     val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
