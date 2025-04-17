@@ -56,7 +56,7 @@ trait TableConstraint {
   def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint
 
   // Generate a constraint name based on the table name if the name is not specified
-  protected def generateConstraintName(tableName: String): String
+  protected def generateName(tableName: String): String
 
   /**
    * Gets the constraint name. If no name is specified (null or empty),
@@ -64,9 +64,9 @@ trait TableConstraint {
    *
    * @return The constraint name (either user-specified or generated)
    */
-  final def constraintName: String = {
+  final def name: String = {
     if (userProvidedName == null || userProvidedName.isEmpty) {
-      generateConstraintName(tableName)
+      generateName(tableName)
     } else {
       userProvidedName
     }
@@ -115,7 +115,7 @@ case class CheckConstraint(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
-  override protected def generateConstraintName(tableName: String): String = {
+  override protected def generateName(tableName: String): String = {
     s"${tableName}_chk_$randomSuffix"
   }
 
@@ -140,7 +140,7 @@ case class PrimaryKeyConstraint(
   extends TableConstraint {
 // scalastyle:on line.size.limit
 
-  override protected def generateConstraintName(tableName: String): String = s"${tableName}_pk"
+  override protected def generateName(tableName: String): String = s"${tableName}_pk"
 
   override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
 
@@ -161,7 +161,7 @@ case class UniqueConstraint(
     extends TableConstraint {
 // scalastyle:on line.size.limit
 
-  override protected def generateConstraintName(tableName: String): String = {
+  override protected def generateName(tableName: String): String = {
     s"${tableName}_uniq_$randomSuffix"
   }
 
@@ -186,7 +186,7 @@ case class ForeignKeyConstraint(
   extends TableConstraint {
 // scalastyle:on line.size.limit
 
-  override protected def generateConstraintName(tableName: String): String =
+  override protected def generateName(tableName: String): String =
     s"${tableName}_${parentTableId.last}_fk_$randomSuffix"
 
   override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
