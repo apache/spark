@@ -17,9 +17,7 @@
 
 import unittest
 
-from pyspark.errors import PySparkException
-from pyspark.ml.linalg import Vectors, Matrices
-from pyspark.sql import DataFrame, Row
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LinearSVC
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -77,6 +75,7 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         model1 = svc.fit(df)
         model2 = svc.fit(df)
         model3 = svc.fit(df)
+        self.assertEqual(len([model1, model2, model3]), 3)
 
         # all 3 models are cached in python side
         self.assertEqual(len(spark.client.thread_local.ml_caches), 3)
