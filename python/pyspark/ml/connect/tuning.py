@@ -168,7 +168,7 @@ def _parallelFitTasks(
         (int, float), an index into `epm` and the associated metric value.
     """
 
-    active_session = SparkSession.active()
+    active_session = SparkSession.getActiveSession()
 
     if active_session is None:
         raise RuntimeError(
