@@ -59,6 +59,21 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
 
+  case class JdbcClientTypes(INTEGER: String, STRING: String)
+
+  val jdbcClientTypes: JdbcClientTypes =
+    JdbcClientTypes(INTEGER = "INT", STRING = "LONGTEXT")
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = jdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -99,7 +114,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, jdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -153,7 +168,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       s" TBLPROPERTIES('ENGINE'='InnoDB', 'DEFAULT CHARACTER SET'='utf8')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, jdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
@@ -282,11 +297,18 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
  */
 @DockerTest
 class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
-  override def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
-    .putLong("scale", 0)
-    .putBoolean("isTimestampNTZ", false)
-    .putBoolean("isSigned", true)
-    .build()
+  override val jdbcClientTypes: JdbcClientTypes =
+    JdbcClientTypes(INTEGER = "INTEGER", STRING = "LONGTEXT")
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = jdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", true)
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
 
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =

@@ -314,6 +314,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
+      metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
