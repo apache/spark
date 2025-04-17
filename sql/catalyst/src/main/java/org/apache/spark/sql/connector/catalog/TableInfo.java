@@ -22,7 +22,6 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
-import java.util.Collections;
 import java.util.Map;
 
 public class TableInfo {
