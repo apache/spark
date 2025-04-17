@@ -411,9 +411,12 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
                 allInstanceMetrics.size == q.sparkSession.conf
                   .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
               )
-              // Two ids are blocked, making two lagging stores
               // However, creating a family column forces a snapshot regardless of maintenance
               // Thus, the version will be 1 for this case.
+              // Since join queries only use one state store now, the number of instance metrics
+              // is equal to the number of shuffle partitions as well.
+              // Two partition ids are blocked, making two lagging stores in total instead
+              // of 2 * 4 = 8 like previously.
               assert(badInstanceMetrics.count(_._2 == 1) == 2)
               // The rest should have uploaded a version greater than 1
               assert(

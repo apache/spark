@@ -466,10 +466,10 @@ class OperatorStateMetadataV2FileManager(
   }
 }
 
-case class StreamingJoinOperatorProperties(useVirtualColumnFamiliesForJoins: Boolean) {
+case class StreamingJoinOperatorProperties(useVirtualColumnFamilies: Boolean) {
   def json: String = {
     val json =
-      JObject("useVirtualColumnFamilies" -> JBool(useVirtualColumnFamiliesForJoins))
+      JObject("useVirtualColumnFamilies" -> JBool(useVirtualColumnFamilies))
     compact(render(json))
   }
 }

@@ -256,7 +256,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           Array(StateStoreMetadataV2("default", 0, numShufflePartitions, List.empty))
 
         val expectedProperties =
-          StreamingJoinOperatorProperties(useVirtualColumnFamiliesForJoins = true)
+          StreamingJoinOperatorProperties(useVirtualColumnFamilies = true)
 
         val expectedMetadata = OperatorStateMetadataV2(
           OperatorInfoV1(0, "symmetricHashJoin"),

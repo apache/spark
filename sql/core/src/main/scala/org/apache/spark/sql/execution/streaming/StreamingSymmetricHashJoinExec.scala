@@ -196,11 +196,11 @@ case class StreamingSymmetricHashJoinExec(
   private val allowMultipleStatefulOperators =
     conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-  private val useVirtualColumnFamiliesForJoins = stateFormatVersion == 3
+  private val useVirtualColumnFamilies = stateFormatVersion == 3
 
   // Determine the store names and metadata version based on format version
   private val (numStoresPerPartition, _stateStoreNames, _operatorStateMetadataVersion) =
-    if (useVirtualColumnFamiliesForJoins) {
+    if (useVirtualColumnFamilies) {
       // We have 1 state store using virtual column families
       (1, Seq(StateStoreId.DEFAULT_STORE_NAME), 2)
     } else {
@@ -245,13 +245,13 @@ case class StreamingSymmetricHashJoinExec(
       stateSchemaPaths: List[List[String]] = List.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    if (useVirtualColumnFamiliesForJoins) {
+    if (useVirtualColumnFamilies) {
       // Use MetadataV2 for join operators that use virtual column families
       val stateStoreInfo = stateStoreNames.zip(stateSchemaPaths).map {
         case (storeName, schemaPath) =>
           StateStoreMetadataV2(storeName, 0, info.numPartitions, schemaPath)
       }.toArray
-      val properties = StreamingJoinOperatorProperties(useVirtualColumnFamiliesForJoins)
+      val properties = StreamingJoinOperatorProperties(useVirtualColumnFamilies)
       OperatorStateMetadataV2(operatorInfo, stateStoreInfo, properties.json)
     } else {
       val stateStoreInfo =
@@ -262,7 +262,7 @@ case class StreamingSymmetricHashJoinExec(
 
   override def getColFamilySchemas(
       shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
-    assert(useVirtualColumnFamiliesForJoins)
+    assert(useVirtualColumnFamilies)
     // We only have one state store for the join, but there are four distinct schemas
     SymmetricHashJoinStateManager
       .getSchemasForStateStoreWithColFamily(LeftSide, left.output, leftKeys, stateFormatVersion) ++
@@ -286,7 +286,7 @@ case class StreamingSymmetricHashJoinExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    if (useVirtualColumnFamiliesForJoins) {
+    if (useVirtualColumnFamilies) {
       val info = getStateInfo
       val stateSchemaDir = stateSchemaDirPath()
 
@@ -349,7 +349,7 @@ case class StreamingSymmetricHashJoinExec(
 
     assert(stateInfo.isDefined, "State info not defined")
     val checkpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
-      partitionId, stateInfo.get, useVirtualColumnFamiliesForJoins)
+      partitionId, stateInfo.get, useVirtualColumnFamilies)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -830,7 +830,8 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     def metrics: StateStoreMetrics = {
-      if (useVirtualColumnFamiliesForJoins) {
+      if (useVirtualColumnFamilies) {
+        // Since both sides use the same state store, the metrics are already combined
         leftSideJoiner.getMetrics
       } else {
         StateStoreMetrics.combine(
@@ -840,7 +841,7 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     def commit(): Unit = {
-      if (useVirtualColumnFamiliesForJoins) {
+      if (useVirtualColumnFamilies) {
         // We only have one state store for both sides to commit
         leftSideJoiner.commitState()
       } else {
@@ -851,7 +852,7 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     def getStateStoreCheckpointInfo: StatefulOpStateStoreCheckpointInfo = {
-      if (useVirtualColumnFamiliesForJoins) {
+      if (useVirtualColumnFamilies) {
         // No merging needed, both fields from getLatestCheckpointInfo() should be identical
         val storeCheckpointInfo = leftSideJoiner.getLatestCheckpointInfo().keyToNumValues
         StatefulOpStateStoreCheckpointInfo(
