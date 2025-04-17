@@ -228,7 +228,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  test("SPARK-XXXXX: unload on commit") {
+  test("SPARK-51823: unload on commit") {
     withSparkSession(
       SparkSession.builder()
         .config(sparkConf)

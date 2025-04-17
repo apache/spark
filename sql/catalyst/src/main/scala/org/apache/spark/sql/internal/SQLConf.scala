@@ -2523,8 +2523,10 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.unloadOnCommit")
       .internal()
       .doc("When true, Spark will synchronously run maintenance and then close each StateStore " +
-        "instance on task completion. This reduce overhead involved in keeping every StateStore " +
-        "loaded indefinitely, at the cost of having to reload each StateStore every batch")
+        "instance on task completion. This removes the overhead of keeping every StateStore " +
+        "loaded indefinitely, at the cost of having to reload each StateStore every batch. " +
+        "Stateful applications that are failing due to resource exhaustion or that use " +
+        "dynamic allocation may benefit from enabling this.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
