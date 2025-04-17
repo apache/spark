@@ -39,19 +39,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   override val catalogName: String = "postgresql"
   override val db = new PostgresDatabaseOnDocker
 
-  object ExternalEngineTypeNames {
+  object JdbcClientTypes {
     val INTEGER = "int4"
     val STRING = "text"
   }
 
   override def defaultMetadata(
       dataType: DataType = StringType,
-      externalEngineTypeName: String = ExternalEngineTypeNames.STRING): Metadata =
+      jdbcClientType: String = JdbcClientTypes.STRING): Metadata =
     new MetadataBuilder()
       .putLong("scale", 0)
       .putBoolean("isTimestampNTZ", false)
       .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
-      .putString("externalEngineTypeName", externalEngineTypeName)
+      .putString("jdbcClientType", jdbcClientType)
       .build()
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -209,7 +209,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -238,7 +238,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       s" TBLPROPERTIES('TABLESPACE'='pg_default')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType, ExternalEngineTypeNames.INTEGER))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
