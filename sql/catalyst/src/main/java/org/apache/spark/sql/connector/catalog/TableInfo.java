@@ -38,7 +38,7 @@ public class TableInfo {
    */
   private TableInfo(Builder builder) {
     this.columns = builder.columns;
-    this.properties = Collections.unmodifiableMap(builder.properties);
+    this.properties = builder.properties;
     this.partitions = builder.partitions;
     this.constraints = builder.constraints;
   }
@@ -73,8 +73,7 @@ public class TableInfo {
     }
 
     public Builder withProperties(Map<String, String> properties) {
-      this.properties = Maps.newHashMap();
-      this.properties.putAll(properties);
+      this.properties = properties;
       return this;
     }
 
