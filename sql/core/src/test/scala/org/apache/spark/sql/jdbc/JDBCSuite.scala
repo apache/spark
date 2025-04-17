@@ -78,10 +78,18 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
+  object JdbcClientTypes {
+    val INTEGER = "INTEGER"
+    val STRING = "CHARACTER VARYING"
+  }
+
+  def defaultMetadata(
+      dataType: DataType,
+      jdbcClientType: String): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+    .putString("jdbcClientType", jdbcClientType)
     .build()
 
   override def beforeAll(): Unit = {
@@ -1429,8 +1437,18 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
-    val schema = StructType(Seq(StructField("name", StringType, false, defaultMetadata(StringType)),
-      StructField("theid", IntegerType, false, defaultMetadata(IntegerType))))
+    val schema = StructType(Seq(
+      StructField(
+        "name",
+        StringType,
+        false,
+        defaultMetadata(StringType, JdbcClientTypes.STRING)),
+      StructField(
+        "theid",
+        IntegerType,
+        false,
+        defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
+    ))
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
@@ -1451,8 +1469,17 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
     val structType = CatalystSqlParser.parseTableSchema(customSchema)
+    val sparkToRemoteDataType: Map[DataType, String] = Map(
+      IntegerType -> JdbcClientTypes.INTEGER,
+      StringType -> JdbcClientTypes.STRING,
+      VarcharType(32) -> JdbcClientTypes.STRING)
     val expectedSchema = new StructType(structType.map(
-      f => StructField(f.name, f.dataType, f.nullable, defaultMetadata(f.dataType))).toArray)
+      f => StructField(
+        f.name,
+        f.dataType,
+        f.nullable,
+        defaultMetadata(f.dataType, sparkToRemoteDataType(f.dataType)))
+    ).toArray)
     assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     assert(df.count() === 3)
   }
@@ -1469,8 +1496,17 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         """.stripMargin.replaceAll("\n", " "))
       val df = sql("select * from people_view")
       assert(df.schema.length === 2)
+      val sparkToRemoteDataType: Map[DataType, String] = Map(
+        IntegerType -> JdbcClientTypes.INTEGER,
+        StringType -> JdbcClientTypes.STRING,
+        VarcharType(32) -> JdbcClientTypes.STRING)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
-        .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata(f.dataType))).toArray)
+        .map(f => StructField(
+          f.name,
+          f.dataType,
+          f.nullable,
+          defaultMetadata(f.dataType, sparkToRemoteDataType(f.dataType)))
+        ).toArray)
 
       assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
       assert(df.count() === 3)
@@ -1616,9 +1652,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    var schema = StructType(
-      Seq(StructField("NAME", VarcharType(32), true, defaultMetadata(VarcharType(32))),
-      StructField("THEID", IntegerType, true, defaultMetadata(IntegerType))))
+    var schema = StructType(Seq(
+      StructField(
+        "NAME",
+        VarcharType(32),
+        true,
+        defaultMetadata(VarcharType(32), JdbcClientTypes.STRING)),
+      StructField("THEID",
+        IntegerType,
+        true,
+        defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))))
     schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)

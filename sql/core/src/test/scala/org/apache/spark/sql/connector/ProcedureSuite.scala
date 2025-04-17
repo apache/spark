@@ -19,23 +19,22 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
-import scala.collection.immutable.ArraySeq
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.{IN, INOUT, OUT}
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DataTypes, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
@@ -384,7 +383,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkAnswer(
         // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat", ArraySeq(), null, "xxx") :: Nil)
+        Row("cat", Array(), null, "xxx") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES IN ns"),
@@ -411,8 +410,8 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat2.ns_1.db_1"),
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "foo") ::
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "bar") :: Nil)
 
       // Switch catalog.
       sql("USE cat2")
@@ -425,17 +424,17 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkAnswer(
         // uses default catalog and ns
         sql("SHOW PROCEDURES"),
-        Row("cat2", ArraySeq(), null, "bar") :: Nil)
+        Row("cat2", Array(), null, "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ns_1.db_1"),
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
-          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "foo") ::
+          Row("cat2", Array("ns_1", "db_1"), "db_1", "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM cat2.ns_1.db_1"),
-        Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "foo") ::
-          Row("cat2", ArraySeq("ns_1", "db_1"), "db_1", "bar") :: Nil)
+        Row("cat2", Array("ns_1", "db_1"), "db_1", "foo") ::
+          Row("cat2", Array("ns_1", "db_1"), "db_1", "bar") :: Nil)
 
       checkAnswer(
         sql("SHOW PROCEDURES FROM ``"),
@@ -447,6 +446,81 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       // Switch catalog back to 'cat' before clean up.
       sql("USE cat")
+    }
+  }
+
+  test("default values with expressions") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSumWithDefaultExpr)
+    checkAnswer(sql("CALL cat.ns.sum(5)"), Row(9) :: Nil)
+  }
+
+  test("SPARK-51780: Implement DESC PROCEDURE") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
+    catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
+    catalog.createProcedure(Identifier.of(Array(""), "xyz"), UnboundComplexProcedure)
+    catalog.createProcedure(Identifier.of(Array(), "xxx"), UnboundStructProcedure)
+
+    sql("USE cat")
+    withNamespace("cat2.db_1") {
+      sql("CREATE NAMESPACE cat2.db_1")
+
+      catalog("cat2").createProcedure(Identifier.of(Array("ns_1", "db_1"), "foo"),
+        UnboundVoidProcedure)
+
+      checkError(
+        // check non-existing procedure
+        exception = intercept[AnalysisException](
+          sql("DESC PROCEDURE cat.ns.non_exist")
+        ),
+        sqlState = Some("38000"),
+        condition = "FAILED_TO_LOAD_ROUTINE",
+        parameters = Map("routineName" -> "`cat`.`ns`.`non_exist`")
+      )
+
+      checkAnswer(
+        sql("DESC PROCEDURE cat.ns.foo"),
+        Row("Procedure:   sum") ::
+          Row("Description: sum integers") :: Nil)
+
+      checkAnswer(
+        // use DESCRIBE instead of DESC
+        sql("DESCRIBE PROCEDURE cat.ns.foo"),
+        Row("Procedure:   sum") ::
+          Row("Description: sum integers") :: Nil)
+
+      checkAnswer(
+        // use default catalog
+        sql("DESC PROCEDURE ns.foo"),
+        Row("Procedure:   sum") ::
+          Row("Description: sum integers") :: Nil)
+
+      checkAnswer(
+        // use multi-part namespace
+        sql("DESCRIBE PROCEDURE cat.ns.db.abc"),
+        Row("Procedure:   long_sum") ::
+          Row("Description: sum longs") :: Nil)
+
+      checkAnswer(
+        // use multi-part namespace with default catalog
+        sql("DESCRIBE PROCEDURE ns.db.abc"),
+        Row("Procedure:   long_sum") ::
+          Row("Description: sum longs") :: Nil)
+
+      checkAnswer(
+        sql("DESC PROCEDURE cat.``.xyz"),
+        Row("Procedure:   complex") ::
+          Row("Description: complex procedure") :: Nil)
+
+      checkAnswer(
+        sql("DESC PROCEDURE cat.xxx"),
+        Row("Procedure:   struct_input") ::
+          Row("Description: struct procedure") :: Nil)
+
+      checkAnswer(
+        // check across catalogs
+        sql("DESC PROCEDURE cat2.ns_1.db_1.foo"),
+        Row("Procedure:   void") ::
+          Row("Description: void procedure") :: Nil)
     }
   }
 
@@ -749,13 +823,46 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     }
   }
 
+  object UnboundSumWithDefaultExpr extends UnboundProcedure {
+    override def name: String = "sum"
+    override def description: String = "sum longs"
+    override def bind(inputType: StructType): BoundProcedure = SumWithDefaultExpr
+  }
+
+  object SumWithDefaultExpr extends BoundProcedure {
+    override def name: String = "sum"
+
+    override def description: String = "sum longs"
+
+    override def isDeterministic: Boolean = true
+
+    override def parameters: Array[ProcedureParameter] = Array(
+      ProcedureParameter.in("in1", DataTypes.LongType).build(),
+      ProcedureParameter.in("in2", DataTypes.LongType)
+        .defaultValue(
+          new GeneralScalarExpression(
+            "+",
+            Array[Expression](LiteralValue(1, IntegerType), LiteralValue(3, IntegerType))))
+        .build()
+    )
+
+    def outputType: StructType = new StructType().add("out", DataTypes.LongType)
+
+    override def call(input: InternalRow): java.util.Iterator[Scan] = {
+      val in1 = input.getLong(0)
+      val in2 = input.getLong(1)
+      val result = Result(outputType, Array(InternalRow(in1 + in2)))
+      Collections.singleton[Scan](result).iterator()
+    }
+  }
+
   case class Result(readSchema: StructType, rows: Array[InternalRow]) extends LocalScan
 
   case class CustomParameterImpl(
       mode: Mode,
       name: String,
       dataType: DataType) extends ProcedureParameter {
-    override def defaultValueExpression: String = null
+    override def defaultValue: DefaultValue = null
     override def comment: String = null
   }
 }

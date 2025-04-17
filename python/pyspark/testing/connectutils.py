@@ -158,6 +158,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         # Set a static token for all tests so the parallelism doesn't overwrite each
         # tests' environment variables
         conf.set("spark.connect.authenticate.token", "deadbeef")
+        # Make the max size of ML Cache larger, to avoid CONNECT_ML.CACHE_INVALID issues
+        # in tests.
+        conf.set("spark.connect.session.connectML.mlCache.maxSize", "1g")
         return conf
 
     @classmethod
@@ -184,6 +187,15 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
     def tearDownClass(cls):
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
+
+    def tearDown(self) -> None:
+        # force to clean up the ML cache after each test
+        try:
+            # in some tests (e.g. test_connect_basic),
+            # both connect session (self.connect) and classic session (self.spark) are used.
+            self.spark.client._cleanup_ml()
+        except Exception:
+            pass
 
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote

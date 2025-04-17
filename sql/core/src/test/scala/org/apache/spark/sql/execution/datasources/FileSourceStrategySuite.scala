@@ -722,7 +722,7 @@ object LastArguments {
 }
 
 /** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
-class TestFileFormat extends TextBasedFileFormat {
+case class TestFileFormat() extends TextBasedFileFormat {
 
   override def toString: String = "TestFileFormat"
 

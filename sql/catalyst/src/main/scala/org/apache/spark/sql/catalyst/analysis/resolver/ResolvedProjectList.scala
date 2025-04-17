@@ -25,12 +25,9 @@ import org.apache.spark.sql.catalyst.expressions.NamedExpression
  *                 `resolveExpressionTreeInOperator`.
  *  - hasAggregateExpressions: True if the resolved project list contains any aggregate
  *                             expressions.
- *  - hasAttributes: True if the resolved project list contains any attributes that are not under
- *                   an aggregate expression.
  *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
  */
 case class ResolvedProjectList(
     expressions: Seq[NamedExpression],
     hasAggregateExpressions: Boolean,
-    hasAttributes: Boolean,
     hasLateralColumnAlias: Boolean)

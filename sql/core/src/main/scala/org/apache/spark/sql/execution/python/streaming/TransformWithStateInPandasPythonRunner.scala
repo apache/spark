@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.execution.python.streaming
 
-import java.io.{DataInputStream, DataOutputStream}
-import java.net.ServerSocket
+import java.io.{DataInputStream, DataOutputStream, File}
+import java.net.{InetAddress, InetSocketAddress, StandardProtocolFamily, UnixDomainSocketAddress}
+import java.nio.channels.ServerSocketChannel
+import java.util.UUID
 
 import scala.concurrent.ExecutionContext
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonFunction, PythonRDD, PythonWorkerUtils, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner}
@@ -196,8 +199,13 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
 
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     super.handleMetadataBeforeExec(stream)
-    // Also write the port number for state server
-    stream.writeInt(stateServerSocketPort)
+    // Also write the port/path number for state server
+    if (isUnixDomainSock) {
+      stream.writeInt(-1)
+      PythonWorkerUtils.writeUTF(stateServerSocketPath, stream)
+    } else {
+      stream.writeInt(stateServerSocketPort)
+    }
     PythonRDD.writeUTF(groupingKeySchema.json, stream)
   }
 
@@ -255,14 +263,19 @@ class TransformWithStateInPandasPythonPreInitRunner(
     dataOut = result._1
     dataIn = result._2
 
-    // start state server, update socket port
+    // start state server, update socket port/path
     startStateServer()
     (dataOut, dataIn)
   }
 
   def process(): Unit = {
-    // Also write the port number for state server
-    dataOut.writeInt(stateServerSocketPort)
+    // Also write the port/path number for state server
+    if (isUnixDomainSock) {
+      dataOut.writeInt(-1)
+      PythonWorkerUtils.writeUTF(stateServerSocketPath, dataOut)
+    } else {
+      dataOut.writeInt(stateServerSocketPort)
+    }
     PythonWorkerUtils.writeUTF(groupingKeySchema.json, dataOut)
     dataOut.flush()
 
@@ -307,14 +320,27 @@ class TransformWithStateInPandasPythonPreInitRunner(
  * in a new daemon thread.
  */
 trait TransformWithStateInPandasPythonRunnerUtils extends Logging {
-  protected var stateServerSocketPort: Int = 0
-  protected var stateServerSocket: ServerSocket = null
+  protected val isUnixDomainSock: Boolean = SparkEnv.get.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
+  protected var stateServerSocketPort: Int = -1
+  protected var stateServerSocketPath: String = null
+  protected var stateServerSocket: ServerSocketChannel = null
   protected def initStateServer(): Unit = {
     var failed = false
     try {
-      stateServerSocket = new ServerSocket(/* port = */ 0,
-        /* backlog = */ 1)
-      stateServerSocketPort = stateServerSocket.getLocalPort
+      if (isUnixDomainSock) {
+        val sockPath = new File(
+          SparkEnv.get.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
+            .getOrElse(System.getProperty("java.io.tmpdir")),
+          s".${UUID.randomUUID()}.sock")
+        stateServerSocket = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
+        stateServerSocket.bind(UnixDomainSocketAddress.of(sockPath.getPath), 1)
+        sockPath.deleteOnExit()
+        stateServerSocketPath = sockPath.getPath
+      } else {
+        stateServerSocket = ServerSocketChannel.open()
+          .bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1)
+        stateServerSocketPort = stateServerSocket.socket().getLocalPort
+      }
     } catch {
       case e: Throwable =>
         failed = true
@@ -326,10 +352,13 @@ trait TransformWithStateInPandasPythonRunnerUtils extends Logging {
     }
   }
 
-  protected def closeServerSocketChannelSilently(stateServerSocket: ServerSocket): Unit = {
+  protected def closeServerSocketChannelSilently(stateServerSocket: ServerSocketChannel): Unit = {
     try {
       logInfo(log"closing the state server socket")
       stateServerSocket.close()
+      if (stateServerSocketPath != null) {
+        new File(stateServerSocketPath).delete
+      }
     } catch {
       case e: Exception =>
         logError(log"failed to close state server socket", e)

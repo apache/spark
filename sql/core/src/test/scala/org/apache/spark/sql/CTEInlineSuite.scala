@@ -170,7 +170,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "CTEs with one reference should all be inlined after optimization.")
@@ -255,7 +255,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "Deterministic CTEs should all be inlined after optimization.")

@@ -949,13 +949,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
       }
 
-      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
-        // This is because 30 is executed twice and snapshot does not overwrite in checkpoint v2
-        assert(snapshotVersionsPresent(remoteDir) === (1 to 30) :+ 30 :+ 31)
-      } else {
-        assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
-      }
-
+      assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       for (version <- 1 to 60) {
         db.load(version, versionToUniqueId.get(version), readOnly = true)
@@ -972,20 +966,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
 
-      // Behavior is slightly different when column families are enabled with checkpoint v2
-      // since snapshot version 31 was created previously.
-      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
-        assert(snapshotVersionsPresent(remoteDir) === Seq(31, 60, 60))
-      } else {
-        assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
-      }
+      assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
       if (enableStateStoreCheckpointIds) {
         // recommit version 60 creates another changelog file with different unique id
-        if (colFamiliesEnabled) {
-          assert(changelogVersionsPresent(remoteDir) === (31 to 60) :+ 60)
-        } else {
-          assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
-        }
+        assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
       } else {
         assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       }
@@ -3223,6 +3207,52 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db2.load(2, versionToUniqueId.get(2))
           db1.load(2, versionToUniqueId.get(2))
         }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-51717 - validate that RocksDB file mapping is cleared " +
+      "when we reload version 0 after we have created a snapshot to avoid SST mismatch") {
+    withTempDir { dir =>
+      val conf = dbConf.copy(minDeltasForSnapshot = 2)
+      val hadoopConf = new Configuration()
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+        db.load(0)
+        db.put("a", "1")
+        db.put("b", "1")
+        db.commit()
+
+        db.load(1)
+        db.put("a", "1")
+        db.commit() // we will create a snapshot for v2
+
+        // invalidate the db, so next load will reload from dfs
+        db.rollback()
+
+        // We will replay changelog from 0 -> 2 since the v2 snapshot haven't been uploaded yet.
+        // We had a bug where file mapping is not being cleared when we start from v0 again,
+        // hence files of v2 snapshot were being reused, if v2 snapshot is uploaded
+        // after this load(2) but before v3 snapshot
+        db.load(2)
+        // add a larger row to make sure new sst size is different
+        db.put("b", "1555315569874537247638950872648")
+
+        // now upload v2 snapshot
+        db.doMaintenance()
+
+        // we will create a snapshot for v3. We shouldn't reuse files of v2 snapshot,
+        // given that v3 was not created from v2 snapshot since we replayed changelog from 0 -> 2
+        db.commit()
+
+        db.doMaintenance() // upload v3 snapshot
+
+        // invalidate the db, so next load will reload from dfs
+        db.rollback()
+
+        // loading v3 from dfs should be successful and no SST mismatch error
+        db.load(3)
       }
     }
   }

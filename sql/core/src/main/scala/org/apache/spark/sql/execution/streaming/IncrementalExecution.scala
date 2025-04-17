@@ -71,7 +71,8 @@ class IncrementalExecution(
       MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]](),
     val stateSchemaMetadatas: MutableMap[Long, StateSchemaBroadcast] =
       MutableMap[Long, StateSchemaBroadcast](),
-    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL)
+    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    val isTerminatingTrigger: Boolean = false)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
 
   // Modified planner with stateful operations.

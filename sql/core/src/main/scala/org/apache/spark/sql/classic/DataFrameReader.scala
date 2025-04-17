@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
@@ -336,12 +335,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   override def textFile(paths: String*): Dataset[String] = super.textFile(paths: _*)
 
   /** @inheritdoc */
-  override protected def validateSingleVariantColumn(): Unit = {
-    if (extraOptions.get(DataSourceOptions.SINGLE_VARIANT_COLUMN).isDefined &&
-      userSpecifiedSchema.isDefined) {
-      throw QueryCompilationErrors.invalidSingleVariantColumn()
-    }
-  }
+  override protected def validateSingleVariantColumn(): Unit =
+    DataSourceOptions.validateSingleVariantColumn(extraOptions, userSpecifiedSchema)
 
   override protected def validateJsonSchema(): Unit =
     userSpecifiedSchema.foreach(checkJsonSchema)

@@ -20,6 +20,8 @@ package org.apache.spark.sql.connector.catalog.procedures;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.DefaultValue;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.internal.connector.ProcedureParameterImpl;
 import org.apache.spark.sql.types.DataType;
 
@@ -68,7 +70,7 @@ public interface ProcedureParameter {
    * null if not provided.
    */
   @Nullable
-  String defaultValueExpression();
+  DefaultValue defaultValue();
 
   /**
    * Returns the comment of this parameter or null if not provided.
@@ -89,7 +91,7 @@ public interface ProcedureParameter {
     private final Mode mode;
     private final String name;
     private final DataType dataType;
-    private String defaultValueExpression;
+    private DefaultValue defaultValue;
     private String comment;
 
     private Builder(Mode mode, String name, DataType dataType) {
@@ -99,10 +101,26 @@ public interface ProcedureParameter {
     }
 
     /**
-     * Sets the default value expression of the parameter.
+     * Sets the default value of the parameter using SQL.
      */
-    public Builder defaultValue(String defaultValueExpression) {
-      this.defaultValueExpression = defaultValueExpression;
+    public Builder defaultValue(String sql) {
+      this.defaultValue = new DefaultValue(sql);
+      return this;
+    }
+
+    /**
+     * Sets the default value of the parameter using an expression.
+     */
+    public Builder defaultValue(Expression expression) {
+      this.defaultValue = new DefaultValue(expression);
+      return this;
+    }
+
+    /**
+     * Sets the default value of the parameter.
+     */
+    public Builder defaultValue(DefaultValue defaultValue) {
+      this.defaultValue = defaultValue;
       return this;
     }
 
@@ -118,7 +136,7 @@ public interface ProcedureParameter {
      * Builds the stored procedure parameter.
      */
     public ProcedureParameter build() {
-      return new ProcedureParameterImpl(mode, name, dataType, defaultValueExpression, comment);
+      return new ProcedureParameterImpl(mode, name, dataType, defaultValue, comment);
     }
   }
 }

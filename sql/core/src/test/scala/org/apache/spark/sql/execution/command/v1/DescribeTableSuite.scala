@@ -273,6 +273,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         bucket_columns = Some(List("employee_id")),
         sort_columns = Some(List("employee_name")),
@@ -338,6 +339,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
         sort_columns = Some(Nil),
@@ -402,6 +404,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
         sort_columns = Some(Nil),
@@ -437,7 +440,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
            |  id INT
            |)
            |USING parquet COMMENT 'table_comment'
-           |DEFAULT COLLATION UTF8_BINARY
+           |DEFAULT COLLATION DE
            |""".stripMargin
       spark.sql(tableCreationStr)
 
@@ -455,12 +458,12 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           TableColumn("c1", Type("string", collation = Some("UNICODE_CI"))),
           TableColumn("c2", Type("string", collation = Some("UNICODE_RTRIM"))),
           TableColumn("c3", Type("string", collation = Some("fr"))),
-          TableColumn("c4", Type("string", collation = Some("UTF8_BINARY"))),
+          TableColumn("c4", Type("string", collation = Some("de"))),
           TableColumn("id", Type("int")))),
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
-        collation = Some("UTF8_BINARY"),
+        collation = Some("de"),
         storage_properties = None,
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
@@ -514,6 +517,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         storage_properties = None,
         provider = Some("parquet"),
         bucket_columns = Some(Nil),
@@ -557,27 +561,27 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
               val jsonValue = firstRow.getString(0)
               val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
 
-              val expectedOutput = DescribeTableJson(
-                table_name = Some("view"),
-                catalog_name = if (isTemp) Some("system") else Some("spark_catalog"),
-                namespace = if (isTemp) Some(List("session")) else Some(List("default")),
-                schema_name = if (isTemp) Some("session") else Some("default"),
-                columns = Some(List(
-                  TableColumn("id", Type("int")),
-                  TableColumn("name", Type("string", collation = Some("UTF8_BINARY"))),
-                  TableColumn("created_at", Type("timestamp_ltz"))
-                )),
-                last_access = Some("UNKNOWN"),
-                created_by = Some(s"Spark $SPARK_VERSION"),
-                `type` = Some("VIEW"),
-                view_text = Some("SELECT * FROM spark_catalog.ns.table"),
-                view_original_text =
-                  if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
-                // TODO: this is unexpected and temp view should also use COMPENSATION mode.
-                view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
-                view_catalog_and_namespace = Some("spark_catalog.default"),
-                view_query_output_columns = Some(List("id", "name", "created_at"))
-              )
+          val expectedOutput = DescribeTableJson(
+            table_name = Some("view"),
+            catalog_name = if (isTemp) Some("system") else Some("spark_catalog"),
+            namespace = if (isTemp) Some(List("session")) else Some(List("default")),
+            schema_name = if (isTemp) Some("session") else Some("default"),
+            columns = Some(List(
+              TableColumn("id", Type("int")),
+              TableColumn("name", Type("string", collation = Some("UTF8_BINARY"))),
+              TableColumn("created_at", Type("timestamp_ltz"))
+            )),
+            last_access = Some("UNKNOWN"),
+            created_by = Some(s"Spark $SPARK_VERSION"),
+            `type` = Some("VIEW"),
+            collation = Some("UTF8_BINARY"),
+            view_text = Some("SELECT * FROM spark_catalog.ns.table"),
+            view_original_text = if (isTemp) None else Some("SELECT * FROM spark_catalog.ns.table"),
+            // TODO: this is unexpected and temp view should also use COMPENSATION mode.
+            view_schema_mode = if (isTemp) Some("BINDING") else Some("COMPENSATION"),
+            view_catalog_and_namespace = Some("spark_catalog.default"),
+            view_query_output_columns = Some(List("id", "name", "created_at"))
+          )
 
               assert(iso8601Regex.matches(parsedOutput.created_time.get))
               assert(expectedOutput == parsedOutput.copy(
@@ -763,6 +767,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         last_access = Some("UNKNOWN"),
         created_by = Some(s"Spark $SPARK_VERSION"),
         `type` = Some("MANAGED"),
+        collation = Some("UTF8_BINARY"),
         provider = Some("parquet"),
         comment = Some("A table with nested complex types"),
         table_properties = Some(Map(
