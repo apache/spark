@@ -18,8 +18,6 @@ import unittest
 
 from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixIn,
-    # TODO: need to unblock once we implement transformWithState in Python Spark Connect
-    # TransformWithStateInPySparkTestsMixIn,
 )
 from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -55,7 +53,7 @@ class TransformWithStateInPandasParityTests(
         pass
 
 
-# TODO: Need to copy the parity test when we implement transformWithState in Python Spark Connect
+# TODO(SPARK-51827): Need to copy the parity test when we implement transformWithState in Python Spark Connect
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state import *  # noqa: F401,E501
