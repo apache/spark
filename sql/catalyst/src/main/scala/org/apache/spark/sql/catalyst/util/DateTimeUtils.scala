@@ -769,4 +769,40 @@ object DateTimeUtils extends SparkDateTimeUtils {
       throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
   }
+
+  /**
+   * Converts separate time fields in a long that represents microseconds since the start of
+   * the day
+   * @param hours the hour, from 0 to 23
+   * @param minutes the minute, from 0 to 59
+   * @param secsAndMicros the second, from 0 to 59.999999
+   * @return A time value represented as microseconds since the start of the day
+   */
+  def timeToMicros(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
+    try {
+      val unscaledSecFrac = secsAndMicros.toUnscaledLong
+      val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
+      // The greater than Int.MaxValue check is needed for the case where the full seconds is
+      // outside of the int range. This will overflow when full seconds is converted from
+      // long to int. The overflow could produce an int in the valid seconds range and return a
+      // wrong value. For overflow values outside of the valid seconds range, it would result in a
+      // misleading error message.
+      // The negative check is needed to throw a better error message. In the negative case,
+      // Math.floorDiv gets the next lower negative integer so the full second value in the
+      // original decimal will not match what is in the error message.
+      if (fullSecs > Int.MaxValue || fullSecs < 0) {
+        // Make this error message consistent with what is thrown by LocalTime.of when the
+        // seconds are invalid
+        throw new DateTimeException(
+          s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
+      }
+
+      val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
+      val lt = LocalTime.of(hours, minutes, fullSecs.toInt, nanos.toInt)
+      localTimeToMicros(lt)
+    } catch {
+      case e @ (_: DateTimeException | _: ArithmeticException) =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+    }
+  }
 }
