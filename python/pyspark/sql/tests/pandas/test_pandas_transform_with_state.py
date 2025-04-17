@@ -603,7 +603,7 @@ class TransformWithStateTestsMixin:
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
-                timeMode="eventtime",
+                timeMode=time_mode,
             )
 
         q = (
