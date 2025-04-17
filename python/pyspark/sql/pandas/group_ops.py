@@ -517,7 +517,7 @@ class PandasGroupedOpsMixin:
         elements in the returned value, `Row`. The column labels of all elements in
         returned `Row` must either match the field names in the defined schema.
 
-        The number of `Row` in the iterator in both the input and output can be arbitrary.
+        The number of `Row`s in the iterator in both the input and output can be arbitrary.
 
         .. versionadded:: 4.1.0
 

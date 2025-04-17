@@ -361,8 +361,8 @@ class StatefulProcessor(ABC):
 
     NOTE: The type of input data and return are different by which method is called, following:
 
-    * `transformWithStateInPandas` - :class:`pandas.DataFrame`
-    * `transformWithState` - :class:`pyspark.sql.Row`
+    `transformWithStateInPandas` - :class:`pandas.DataFrame`
+    `transformWithState` - :class:`pyspark.sql.Row`
 
     and the implementation of this class must follow the described type assignment, which implies
     an implementation has to be bound to a method.
@@ -396,9 +396,9 @@ class StatefulProcessor(ABC):
 
         The type of input data and return are different by which method is called.
 
-        - For `transformWithStateInPandas`, it should take parameters
+        For `transformWithStateInPandas`, it should take parameters
         (key, Iterator[`pandas.DataFrame`]) and return another Iterator[`pandas.DataFrame`].
-        - For `transformWithState`, it should take parameters (key, Iterator[`pyspark.sql.Row`])
+        For `transformWithState`, it should take parameters (key, Iterator[`pyspark.sql.Row`])
         and return another Iterator[`pyspark.sql.Row`].
 
         Note that the function should not make a guess of the number of elements in the iterator.
@@ -426,10 +426,10 @@ class StatefulProcessor(ABC):
         Function that will be invoked when a timer is fired for a given key. Users can choose to
         evict state, register new timers and optionally provide output rows.
 
-        The type of return is different by which method is called.
+        Type of return is different by which method is called, such as:
 
-        - For `transformWithStateInPandas`, it should return Iterator[`pandas.DataFrame`].
-        - For `transformWithState`, it should return Iterator[`pyspark.sql.Row`].
+        For `transformWithStateInPandas`, it should return Iterator[`pandas.DataFrame`].
+        For `transformWithState`, it should return Iterator[`pyspark.sql.Row`].
 
         Parameters
         ----------
@@ -457,10 +457,10 @@ class StatefulProcessor(ABC):
         Optional to implement. Will act as no-op if not defined or no initial state input.
         Function that will be invoked only in the first batch for users to process initial states.
 
-        The type of initial state is different by which method is called.
+        Type of initial state is different by which method is called, such as:
 
-        - For `transformWithStateInPandas`, it should take `pandas.DataFrame`.
-        - For `transformWithState`, it should take `pyspark.sql.Row`.
+        For `transformWithStateInPandas`, it should take `pandas.DataFrame`.
+        For `transformWithState`, it should take `pyspark.sql.Row`.
 
         Parameters
         ----------

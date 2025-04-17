@@ -1237,7 +1237,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
     def load_stream(self, stream):
         """
         Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunk, and
-        convert the data into a list of pandas.Series.
+        convert the data into Rows.
 
         Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.
@@ -1249,7 +1249,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+            Deserialize ArrowRecordBatches and return a generator of Rows.
 
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
@@ -1322,7 +1322,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent
              from JVM.
-            This function flatten the columns of input rows and initial state rows and feed them
+            This function flattens the columns of input rows and initial state rows and feed them
              into the data generator.
             """
 
@@ -1399,8 +1399,8 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
 
     def load_stream(self, stream):
         """
-        Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunk, and
-        convert the data into a list of pandas.Series.
+        Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunks,
+        and convert the data into a list of pandas.Series.
 
         Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.

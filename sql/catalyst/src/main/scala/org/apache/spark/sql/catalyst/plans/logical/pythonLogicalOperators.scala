@@ -178,7 +178,7 @@ case class FlatMapGroupsInPandasWithState(
  * @param outputAttrs used to define the output rows
  * @param outputMode defines the output mode for the statefulProcessor
  * @param timeMode the time mode semantics of the stateful processor for timers and TTL.
- * // FIXME: document `userFacingDataType`
+ * @param userFacingDataType the data type of the input and return type in user functions.
  * @param child logical plan of the underlying data
  * @param initialState logical plan of initial state
  * @param initGroupingAttrsLen length of the seq of grouping attributes for initial state dataframe
