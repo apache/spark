@@ -119,3 +119,73 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "try_to_time('11:12:13', 'HH:mm:ss', 'SSSSSS')"
   } ]
 }
+
+
+-- !query
+select make_time(1, 18, 19.87)
+-- !query analysis
+Project [make_time(1, 18, cast(19.87 as decimal(16,6))) AS make_time(1, 18, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(null, 18, 19.87)
+-- !query analysis
+Project [make_time(cast(null as int), 18, cast(19.87 as decimal(16,6))) AS make_time(NULL, 18, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, null, 19.87)
+-- !query analysis
+Project [make_time(1, cast(null as int), cast(19.87 as decimal(16,6))) AS make_time(1, NULL, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, null)
+-- !query analysis
+Project [make_time(1, 18, cast(null as decimal(16,6))) AS make_time(1, 18, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(-1, 18, 19.87)
+-- !query analysis
+Project [make_time(-1, 18, cast(19.87 as decimal(16,6))) AS make_time(-1, 18, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 60, 19.87)
+-- !query analysis
+Project [make_time(1, 60, cast(19.87 as decimal(16,6))) AS make_time(1, 60, 19.87)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, 60.0)
+-- !query analysis
+Project [make_time(1, 18, cast(60.0 as decimal(16,6))) AS make_time(1, 18, 60.0)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, 9999999999.999999)
+-- !query analysis
+Project [make_time(1, 18, 9999999999.999999) AS make_time(1, 18, 9999999999.999999)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, -999999999.999999)
+-- !query analysis
+Project [make_time(1, 18, cast(-999999999.999999 as decimal(16,6))) AS make_time(1, 18, -999999999.999999)#x]
++- OneRowRelation
+
+
+-- !query
+select make_time(1, 18, 4294967297.999999)
+-- !query analysis
+Project [make_time(1, 18, 4294967297.999999) AS make_time(1, 18, 4294967297.999999)#x]
++- OneRowRelation
