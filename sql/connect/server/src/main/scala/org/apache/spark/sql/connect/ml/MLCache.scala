@@ -113,7 +113,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   /**
    * Clear all the caches
    */
-  def clear(): Unit = {
+  def clear(): Int = {
+    val size = cachedModel.size()
     cachedModel.clear()
+    size
   }
 }

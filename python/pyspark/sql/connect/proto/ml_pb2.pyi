@@ -134,6 +134,15 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["obj_refs", b"obj_refs"]
         ) -> None: ...
 
+    class Clean(google.protobuf.message.Message):
+        """Force to clean up all the ML cached objects"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     class Write(google.protobuf.message.Message):
         """Command to write ML operator"""
 
@@ -330,6 +339,7 @@ class MlCommand(google.protobuf.message.Message):
     WRITE_FIELD_NUMBER: builtins.int
     READ_FIELD_NUMBER: builtins.int
     EVALUATE_FIELD_NUMBER: builtins.int
+    CLEAN_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -342,6 +352,8 @@ class MlCommand(google.protobuf.message.Message):
     def read(self) -> global___MlCommand.Read: ...
     @property
     def evaluate(self) -> global___MlCommand.Evaluate: ...
+    @property
+    def clean(self) -> global___MlCommand.Clean: ...
     def __init__(
         self,
         *,
@@ -351,10 +363,13 @@ class MlCommand(google.protobuf.message.Message):
         write: global___MlCommand.Write | None = ...,
         read: global___MlCommand.Read | None = ...,
         evaluate: global___MlCommand.Evaluate | None = ...,
+        clean: global___MlCommand.Clean | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "clean",
+            b"clean",
             "command",
             b"command",
             "delete",
@@ -374,6 +389,8 @@ class MlCommand(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "clean",
+            b"clean",
             "command",
             b"command",
             "delete",
@@ -393,7 +410,8 @@ class MlCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> (
-        typing_extensions.Literal["fit", "fetch", "delete", "write", "read", "evaluate"] | None
+        typing_extensions.Literal["fit", "fetch", "delete", "write", "read", "evaluate", "clean"]
+        | None
     ): ...
 
 global___MlCommand = MlCommand
