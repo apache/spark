@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 

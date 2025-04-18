@@ -25,7 +25,6 @@ import numpy as np
 from pyspark.util import is_remote_only
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import ParamGridBuilder
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import (
