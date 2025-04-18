@@ -668,7 +668,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
       val (newSchema, partitionColumnNames) = if (oldTableDef.schema == EMPTY_DATA_SCHEMA) {
         val restoredOldTable = restoreTableMetadata(oldTableDef)
-        (StructType(EMPTY_DATA_SCHEMA ++ restoreTableMetadata(oldTableDef).partitionSchema),
+        (StructType(EMPTY_DATA_SCHEMA ++ restoredOldTable.partitionSchema),
           restoredOldTable.partitionColumnNames)
       } else {
         (oldTableDef.schema, oldTableDef.partitionColumnNames)
