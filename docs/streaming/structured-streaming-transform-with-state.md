@@ -135,7 +135,7 @@ class DownTimeDetector(StatefulProcessor):
     def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
         latest_from_existing = self.last_seen.get()
         # Calculate downtime duration
-        downtime_duration = timerValues.getCurrentProcessingTimeInMs() - int(time.time() * 1000)
+        downtime_duration = timerValues.getCurrentProcessingTimeInMs() - int(latest_from_existing.timestamp() * 1000)
         # Register a new timer for 10 seconds in the future
         self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
         # Yield a DataFrame with the key and downtime duration
@@ -167,11 +167,8 @@ class DownTimeDetector(StatefulProcessor):
         # Register a new timer for 5 seconds in the future
         self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
 
-        # Get current processing time in milliseconds
-        timestamp_in_millis = str(timerValues.getCurrentProcessingTimeInMs())
-
-        # Yield a DataFrame with the key and current timestamp
-        yield pd.DataFrame({"id": key, "timeValues": timestamp_in_millis})
+        # Yield an empty DataFrame
+        yield pd.DataFrame()
 
     def close(self) -> None:
         # No cleanup needed
