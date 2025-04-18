@@ -2572,7 +2572,6 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
 
 if __name__ == "__main__":
-    import os
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401
 
     try:
