@@ -102,9 +102,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 41,
+    "startIndex" : 32,
     "stopIndex" : 41,
-    "fragment" : "3"
+    "fragment" : "group by 3"
   } ]
 }
 
@@ -125,9 +125,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 45,
+    "startIndex" : 36,
     "stopIndex" : 45,
-    "fragment" : "3"
+    "fragment" : "group by 3"
   } ]
 }
 
@@ -351,9 +351,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 44,
+    "startIndex" : 32,
     "stopIndex" : 45,
-    "fragment" : "-1"
+    "fragment" : "group by a, -1"
   } ]
 }
 
@@ -374,9 +374,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 44,
+    "startIndex" : 32,
     "stopIndex" : 44,
-    "fragment" : "3"
+    "fragment" : "group by a, 3"
   } ]
 }
 
@@ -397,9 +397,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 46,
-    "stopIndex" : 47,
-    "fragment" : "-1"
+    "startIndex" : 32,
+    "stopIndex" : 51,
+    "fragment" : "group by cube(-1, 2)"
   } ]
 }
 
@@ -420,9 +420,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 49,
-    "stopIndex" : 49,
-    "fragment" : "3"
+    "startIndex" : 32,
+    "stopIndex" : 50,
+    "fragment" : "group by cube(1, 3)"
   } ]
 }
 

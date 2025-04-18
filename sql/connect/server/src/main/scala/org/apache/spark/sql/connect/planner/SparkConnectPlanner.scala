@@ -46,7 +46,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -2373,7 +2373,7 @@ class SparkConnectPlanner(
 
   private def transformSortOrder(order: proto.Expression.SortOrder) = {
     expressions.SortOrder(
-      child = transformExpression(order.getChild),
+      child = transformSortOrderAndReplaceOrdinals(order.getChild),
       direction = order.getDirection match {
         case proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING =>
           expressions.Ascending
@@ -2385,6 +2385,19 @@ class SparkConnectPlanner(
         case _ => expressions.NullsLast
       },
       sameOrderExpressions = Seq.empty)
+  }
+
+  /**
+   * Transforms an input protobuf sort order expression into the Catalyst expression and converts
+   * top-level integer [[Literal]]s to [[UnresolvedOrdinal]]s, if `orderByOrdinal` is enabled.
+   */
+  private def transformSortOrderAndReplaceOrdinals(sortItem: proto.Expression) = {
+    val transformedSortItem = transformExpression(sortItem)
+    if (session.sessionState.conf.orderByOrdinal) {
+      replaceIntegerLiteralWithOrdinal(transformedSortItem)
+    } else {
+      transformedSortItem
+    }
   }
 
   private def transformDrop(rel: proto.Drop): LogicalPlan = {
@@ -2439,27 +2452,28 @@ class SparkConnectPlanner(
         input
       }
 
-    val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
+    val groupingExpressionsWithOrdinals = rel.getGroupingExpressionsList.asScala.toSeq
+      .map(transformGroupingExpressionAndReplaceOrdinals)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
       .map(expr => transformExpressionWithTypedReduceExpression(expr, logicalPlan))
-    val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
+    val aliasedAgg = (groupingExpressionsWithOrdinals ++ aggExprs).map(toNamedExpression)
 
     rel.getGroupType match {
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
         logical.Aggregate(
-          groupingExpressions = groupingExprs,
+          groupingExpressions = groupingExpressionsWithOrdinals,
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
       case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
         logical.Aggregate(
-          groupingExpressions = Seq(Rollup(groupingExprs.map(Seq(_)))),
+          groupingExpressions = Seq(Rollup(groupingExpressionsWithOrdinals.map(Seq(_)))),
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
       case proto.Aggregate.GroupType.GROUP_TYPE_CUBE =>
         logical.Aggregate(
-          groupingExpressions = Seq(Cube(groupingExprs.map(Seq(_)))),
+          groupingExpressions = Seq(Cube(groupingExpressionsWithOrdinals.map(Seq(_)))),
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
@@ -2477,25 +2491,41 @@ class SparkConnectPlanner(
             .map(expressions.Literal.apply)
         }
         logical.Pivot(
-          groupByExprsOpt = Some(groupingExprs.map(toNamedExpression)),
+          groupByExprsOpt = Some(groupingExpressionsWithOrdinals.map(toNamedExpression)),
           pivotColumn = pivotExpr,
           pivotValues = valueExprs,
           aggregates = aggExprs,
           child = logicalPlan)
 
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS =>
-        val groupingSetsExprs = rel.getGroupingSetsList.asScala.toSeq.map { getGroupingSets =>
-          getGroupingSets.getGroupingSetList.asScala.toSeq.map(transformExpression)
-        }
+        val groupingSetsExpressionsWithOrdinals =
+          rel.getGroupingSetsList.asScala.toSeq.map { getGroupingSets =>
+            getGroupingSets.getGroupingSetList.asScala.toSeq
+              .map(transformGroupingExpressionAndReplaceOrdinals)
+          }
         logical.Aggregate(
           groupingExpressions = Seq(
             GroupingSets(
-              groupingSets = groupingSetsExprs,
-              userGivenGroupByExprs = groupingExprs)),
+              groupingSets = groupingSetsExpressionsWithOrdinals,
+              userGivenGroupByExprs = groupingExpressionsWithOrdinals)),
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
       case other => throw InvalidPlanInput(s"Unknown Group Type $other")
+    }
+  }
+
+  /**
+   * Transforms an input protobuf grouping expression into the Catalyst expression and converts
+   * top-level integer [[Literal]]s to [[UnresolvedOrdinal]]s, if `groupByOrdinal` is enabled.
+   */
+  private def transformGroupingExpressionAndReplaceOrdinals(
+      groupingExpression: proto.Expression) = {
+    val transformedGroupingExpression = transformExpression(groupingExpression)
+    if (session.sessionState.conf.groupByOrdinal) {
+      replaceIntegerLiteralWithOrdinal(transformedGroupingExpression)
+    } else {
+      transformedGroupingExpression
     }
   }
 
@@ -4071,6 +4101,16 @@ class SparkConnectPlanner(
       withRelations
     }
   }
+
+  /**
+   * Replaces a top-level integer [[Literal]] in a grouping expression with [[UnresolvedOrdinal]]
+   * that has the same index.
+   */
+  private def replaceIntegerLiteralWithOrdinal(groupingExpression: Expression) =
+    groupingExpression match {
+      case Literal(value: Int, IntegerType) => UnresolvedOrdinal(value)
+      case other => other
+    }
 
   private def assertPlan(assertion: Boolean, message: => String = ""): Unit = {
     if (!assertion) throw InvalidPlanInput(message)
