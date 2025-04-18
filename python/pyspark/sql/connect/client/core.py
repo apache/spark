@@ -2013,11 +2013,10 @@ class SparkConnectClient(object):
         if not hasattr(self.thread_local, "ml_caches"):
             self.thread_local.ml_caches = set()
 
-        if len(self.thread_local.ml_caches) > 0:
-            try:
-                command = pb2.Command()
-                command.ml_command.clean.SetInParent()
-                self.execute_command(command)
-                self.thread_local.ml_caches.clear()
-            except Exception:
-                pass
+        try:
+            command = pb2.Command()
+            command.ml_command.clean.SetInParent()
+            self.execute_command(command)
+            self.thread_local.ml_caches.clear()
+        except Exception:
+            pass
