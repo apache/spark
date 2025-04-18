@@ -501,7 +501,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Seq("a").toArray, ty, 0, maxDef)
     val repetitionLevels = Array.fill[Int](inputValues.length)(0)
-    val definitionLevels = inputValues.map(v => if (v == null) 0 else maxDef)
+    val definitionLevels = inputValues.map(v => if (v == null) 0 else 1)
 
     val memPageStore = new MemPageStore(expectedValues.length)
 
