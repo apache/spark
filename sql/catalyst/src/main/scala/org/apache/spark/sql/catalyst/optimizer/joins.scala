@@ -293,19 +293,19 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
+    lazy val buildLeft = if (hintOnly) {
       hintToBroadcastLeft(join.hint)
     } else {
       canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
     }
-    val buildRight = if (hintOnly) {
+    lazy val buildRight = if (hintOnly) {
       hintToBroadcastRight(join.hint)
     } else {
       canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
     }
     getBuildSide(
-      buildLeft && canBuildBroadcastLeft(join.joinType),
-      buildRight && canBuildBroadcastRight(join.joinType),
+      canBuildBroadcastLeft(join.joinType) && buildLeft,
+      canBuildBroadcastRight(join.joinType) && buildRight,
       join.left,
       join.right
     )
@@ -315,7 +315,7 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
+    lazy val buildLeft = if (hintOnly) {
       hintToShuffleHashJoinLeft(join.hint)
     } else {
       hintToPreferShuffleHashJoinLeft(join.hint) ||
@@ -323,7 +323,7 @@ trait JoinSelectionHelper extends Logging {
           muchSmaller(join.left, join.right, conf)) ||
         forceApplyShuffledHashJoin(conf)
     }
-    val buildRight = if (hintOnly) {
+    lazy val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(join.hint)
     } else {
       hintToPreferShuffleHashJoinRight(join.hint) ||
@@ -332,8 +332,8 @@ trait JoinSelectionHelper extends Logging {
         forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
-      buildLeft && canBuildShuffledHashJoinLeft(join.joinType),
-      buildRight && canBuildShuffledHashJoinRight(join.joinType),
+      canBuildShuffledHashJoinLeft(join.joinType) && buildLeft,
+      canBuildShuffledHashJoinRight(join.joinType) && buildRight,
       join.left,
       join.right
     )
