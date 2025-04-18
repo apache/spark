@@ -131,8 +131,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
-  "sqlState" : "42703"
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`c1`, `c2`",
+    "targetString" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 74,
+    "fragment" : "t1.*"
+  } ]
 }
 
 
@@ -466,10 +477,20 @@ SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
-  "sqlState" : "42703"
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`t1`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 66,
+    "fragment" : "t1.c1"
+  } ]
 }
 
 
@@ -478,10 +499,20 @@ SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
-  "sqlState" : "42703"
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 72,
+    "fragment" : "c2"
+  } ]
 }
 
 

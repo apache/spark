@@ -3980,12 +3980,6 @@
     ],
     "sqlState" : "07501"
   },
-  "NESTED_REFERENCES_IN_LATERAL_SUBQUERY" : {
-    "message" : [
-      "Lateral subqueries can only reference attributes from their own scope or their immediate containing query. Invalid external references are not allowed."
-    ],
-    "sqlState" : "42703"
-  },
   "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED" : {
     "message" : [
       "Detected nested outer references <expression> in the subquery. Please set 'spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled' to true to enable this feature."

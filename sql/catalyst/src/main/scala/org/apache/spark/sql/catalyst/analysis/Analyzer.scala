@@ -2421,15 +2421,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case s @ LateralSubquery(sub, _, _, exprId, _, _) if !sub.resolved =>
           val res = resolveSubQuery(s, outer)(LateralSubquery(_, _, Seq.empty, exprId))
           val nestedOuterReferences = getNestedOuterReferences(res, plan)
-          if (nestedOuterReferences.nonEmpty) {
-            // Outer references within lateral subquery can only refer to attributes
-            // in the containing plan of lateral subquery. Nested outer references
-            // are not allowed.
-            throw new AnalysisException(
-              errorClass = "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
-              messageParameters = Map.empty
-            )
-          }
+          assert(nestedOuterReferences.isEmpty)
           res
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
