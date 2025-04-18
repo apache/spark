@@ -2872,11 +2872,27 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * and group by expressions from them.
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
+    def UpdateSubqueryOuterReferences(expression: Expression, aggregate: Aggregate): Expression = {
+      expression.transformUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+        case sub: SubqueryExpression if sub.getNestedOuterAttrs.nonEmpty =>
+          val newNestedOuterAttrs =
+            sub.getNestedOuterAttrs.filter( outerExpr => outerExpr match {
+              case a: AttributeReference => !aggregate.outputSet.contains(a)
+              case _ => true
+            })
+          sub.withNewNestedOuterAttrs(newNestedOuterAttrs)
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(AGGREGATE), ruleId) {
       case UnresolvedHaving(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
-          val newCond = newExprs.head
+          // Update the subquery in having clause as the aggregate output may be changed
+          // after the resolution. Some outer references being marked as nested outer
+          // references might be removed.
+          val headCond = newExprs.head
+          val newCond = UpdateSubqueryOuterReferences(headCond, newChild)
           if (newCond.resolved) {
             Filter(newCond, newChild)
           } else {
@@ -4242,7 +4258,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             // Collect the aliases from output of aggregate.
             // Update the subquery plan to record the OuterReference to point to outer query plan.
             s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
-      }
+        }
     }
   }
 }
