@@ -293,14 +293,14 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    def maybeBuildLeft(): Boolean = {
+    def shouldBuildLeft(): Boolean = {
       if (hintOnly) {
         hintToBroadcastLeft(join.hint)
       } else {
         canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
       }
     }
-    def maybeBuildRight(): Boolean = {
+    def shouldBuildRight(): Boolean = {
       if (hintOnly) {
         hintToBroadcastRight(join.hint)
       } else {
@@ -308,8 +308,8 @@ trait JoinSelectionHelper extends Logging {
       }
     }
     getBuildSide(
-      canBuildBroadcastLeft(join.joinType) && maybeBuildLeft(),
-      canBuildBroadcastRight(join.joinType) && maybeBuildRight(),
+      canBuildBroadcastLeft(join.joinType) && shouldBuildLeft(),
+      canBuildBroadcastRight(join.joinType) && shouldBuildRight(),
       join.left,
       join.right
     )
@@ -319,7 +319,7 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    def maybeBuildLeft(): Boolean = {
+    def shouldBuildLeft(): Boolean = {
       if (hintOnly) {
         hintToShuffleHashJoinLeft(join.hint)
       } else {
@@ -329,7 +329,7 @@ trait JoinSelectionHelper extends Logging {
           forceApplyShuffledHashJoin(conf)
       }
     }
-    def maybeBuildRight(): Boolean = {
+    def shouldBuildRight(): Boolean = {
       if (hintOnly) {
         hintToShuffleHashJoinRight(join.hint)
       } else {
@@ -340,8 +340,8 @@ trait JoinSelectionHelper extends Logging {
       }
     }
     getBuildSide(
-      canBuildShuffledHashJoinLeft(join.joinType) && maybeBuildLeft(),
-      canBuildShuffledHashJoinRight(join.joinType) && maybeBuildRight(),
+      canBuildShuffledHashJoinLeft(join.joinType) && shouldBuildLeft(),
+      canBuildShuffledHashJoinRight(join.joinType) && shouldBuildRight(),
       join.left,
       join.right
     )
