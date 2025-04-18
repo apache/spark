@@ -111,7 +111,7 @@ class StreamStreamJoinStatePartitionReader(
         partition.sourceOptions.stateCheckpointLocation.toString,
         partition.queryId, partition.sourceOptions.operatorId,
         partition.sourceOptions.batchId + 1, -1, None)
-      joinStateManager = new SymmetricHashJoinStateManager(
+      joinStateManager = SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
         joinKeys = DataTypeUtils.toAttributes(keySchema),
