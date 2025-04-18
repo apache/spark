@@ -21,6 +21,7 @@ import java.io.File
 
 import scala.jdk.CollectionConverters.SetHasAsScala
 
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.{Minute, Span}
 
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
@@ -31,8 +32,14 @@ import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.util.Utils
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
+  with BeforeAndAfterEach
   with AlsoTestWithRocksDBFeatures {
   import testImplicits._
+
+  override def afterEach(): Unit = {
+    // stop the state store maintenance thread and unload store providers after each test
+    StateStore.stop()
+  }
 
   testWithColumnFamilies("RocksDBStateStore",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -247,17 +254,15 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           query.processAllAvailable()
 
           // StateStore should be unloaded, so its tmp dir shouldn't exist
-          for (file <- new File(Utils.getLocalDir(sparkConf)).listFiles()) {
-            assert(!file.getName().startsWith("StateStore"))
-          }
+          var tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().contains("StateStore")).isEmpty)
 
           inputData.addData(3, 4)
           inputData.addData(4, 5)
           query.processAllAvailable()
 
-          for (file <- new File(Utils.getLocalDir(sparkConf)).listFiles()) {
-            assert(!file.getName().startsWith("StateStore"))
-          }
+          tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().contains("StateStore")).isEmpty)
         } finally {
           query.stop()
         }
