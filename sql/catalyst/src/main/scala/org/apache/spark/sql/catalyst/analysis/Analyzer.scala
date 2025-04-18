@@ -2323,7 +2323,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       val outerPlanContext = AnalysisContext.get.outerPlans
-      val newSubqueryPlan = if (outerPlanContext.isDefined) {
+      val newSubqueryPlan = if (outerPlanContext.isDefined &&
+        // We don't allow lateral subquery having nested correlation
+        !e.isInstanceOf[LateralSubquery]
+      ) {
         // The previous outerPlanContext contains resolved nested outer plans
         // and unresolved direct outer plan. Append the current outer plan into
         // new outerPlanContext as current outer is guaranteed to be resolved.
