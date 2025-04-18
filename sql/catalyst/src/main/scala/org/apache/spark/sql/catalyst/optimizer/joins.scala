@@ -293,19 +293,23 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    lazy val buildLeft = if (hintOnly) {
-      hintToBroadcastLeft(join.hint)
-    } else {
-      canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
+    def maybeBuildLeft(): Boolean = {
+      if (hintOnly) {
+        hintToBroadcastLeft(join.hint)
+      } else {
+        canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
+      }
     }
-    lazy val buildRight = if (hintOnly) {
-      hintToBroadcastRight(join.hint)
-    } else {
-      canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
+    def maybeBuildRight(): Boolean = {
+      if (hintOnly) {
+        hintToBroadcastRight(join.hint)
+      } else {
+        canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
+      }
     }
     getBuildSide(
-      canBuildBroadcastLeft(join.joinType) && buildLeft,
-      canBuildBroadcastRight(join.joinType) && buildRight,
+      canBuildBroadcastLeft(join.joinType) && maybeBuildLeft(),
+      canBuildBroadcastRight(join.joinType) && maybeBuildRight(),
       join.left,
       join.right
     )
@@ -315,25 +319,29 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    lazy val buildLeft = if (hintOnly) {
-      hintToShuffleHashJoinLeft(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinLeft(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
-          muchSmaller(join.left, join.right, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+    def maybeBuildLeft(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinLeft(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinLeft(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
+            muchSmaller(join.left, join.right, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
-    lazy val buildRight = if (hintOnly) {
-      hintToShuffleHashJoinRight(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinRight(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
-          muchSmaller(join.right, join.left, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+    def maybeBuildRight(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinRight(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinRight(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
+            muchSmaller(join.right, join.left, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
     getBuildSide(
-      canBuildShuffledHashJoinLeft(join.joinType) && buildLeft,
-      canBuildShuffledHashJoinRight(join.joinType) && buildRight,
+      canBuildShuffledHashJoinLeft(join.joinType) && maybeBuildLeft(),
+      canBuildShuffledHashJoinRight(join.joinType) && maybeBuildRight(),
       join.left,
       join.right
     )
