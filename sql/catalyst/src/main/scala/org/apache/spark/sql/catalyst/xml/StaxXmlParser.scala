@@ -202,6 +202,9 @@ class StaxXmlParser(
       case st: StructType => convertObject(parser, st)
       case MapType(StringType, vt, _) => convertMap(parser, vt, attributes)
       case ArrayType(st, _) => convertField(parser, st, startElementName)
+      case VariantType =>
+        val v = StaxXmlParser.convertVariant(parser, attributes, options)
+        new VariantVal(v.getValue, v.getMetadata)
       case _: StringType =>
         convertTo(
           StaxXmlParserUtils.currentStructureAsString(
