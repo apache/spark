@@ -429,7 +429,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       df.select(
         variant_get(col("genre.name"), "$", "string"),
         variant_get(col("price"), "$", "double"),
-        variant_get(col("publish_dates.publish_date[0].month"), "$", "int")
+        variant_get(col("publish_dates.publish_date").getItem(0), "$.month", "int")
       ),
       Seq(Row("Computer", 44.95, 10), Row("Fantasy", 5.95, 12), Row("Fantasy", null, 11))
     )
@@ -582,13 +582,20 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         | """.stripMargin.replaceAll("\\s+", "")
     // Read specific elements in the XML record as variant
     val schemaDDL =
-      "author string, title string, genre variant, price double, publish_dates variant"
+      "author string, title string, " +
+      "genre struct<genreid int, name variant>, " + // Struct with variant
+      "price variant, " + // Scalar as variant
+      "publish_dates struct<publish_date array<variant>>" // Array with variant
     // Verify we can extract fields from the variant type
     checkAnswer(
       spark
         .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as book""".stripMargin)
-        .select(variant_get(col("book.publish_dates"), "$.publish_date.year", "int")),
-      Seq(Row(2000))
+        .select(
+          variant_get(col("book.genre.name"), "$", "string"),
+          variant_get(col("book.price"), "$", "double"),
+          variant_get(col("book.publish_dates.publish_date").getItem(0), "$.month", "int")
+        ),
+      Seq(Row("Computer", 44.95, 10))
     )
   }
 

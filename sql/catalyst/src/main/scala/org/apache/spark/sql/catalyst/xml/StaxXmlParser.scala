@@ -388,7 +388,8 @@ class StaxXmlParser(
                   case st: StructType =>
                     convertObjectWithAttributes(parser, st, field, attributes)
                   case VariantType =>
-                    StaxXmlParser.convertVariant(parser, attributes, options)
+                    val v = StaxXmlParser.convertVariant(parser, attributes, options)
+                    new VariantVal(v.getValue, v.getMetadata)
                   case dt: DataType =>
                     convertField(parser, dt, field)
                 }
