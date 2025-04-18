@@ -53,6 +53,9 @@ class TransformWithStateInPandasParityTests(
         pass
 
 
+# TODO(SPARK-51827): Need to copy the parity test when we implement transformWithState in
+#  Python Spark Connect
+
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state import *  # noqa: F401,E501
 

@@ -468,6 +468,32 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
+   * Applies a grouped python user-defined function to each group of data.
+   * The user-defined function defines a transformation: iterator of `Row` -> iterator of `Row`.
+   * For each group, all elements in the group are passed as an iterator of `Row` along with
+   * corresponding state, and the results for all groups are combined into a new [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def transformWithStateInPySpark(
+      func: Column,
+      outputStructType: StructType,
+      outputModeStr: String,
+      timeModeStr: String,
+      initialState: RelationalGroupedDataset,
+      eventTimeColumnName: String): DataFrame = {
+    _transformWithStateInPySpark(
+      func,
+      outputStructType,
+      outputModeStr,
+      timeModeStr,
+      initialState,
+      eventTimeColumnName,
+      TransformWithStateInPySpark.UserFacingDataType.PYTHON_ROW)
+  }
+
+  /**
    * Applies a grouped vectorized python user-defined function to each group of data.
    * The user-defined function defines a transformation: iterator of `pandas.DataFrame` ->
    * iterator of `pandas.DataFrame`.
@@ -485,6 +511,24 @@ class RelationalGroupedDataset protected[sql](
       timeModeStr: String,
       initialState: RelationalGroupedDataset,
       eventTimeColumnName: String): DataFrame = {
+    _transformWithStateInPySpark(
+      func,
+      outputStructType,
+      outputModeStr,
+      timeModeStr,
+      initialState,
+      eventTimeColumnName,
+      TransformWithStateInPySpark.UserFacingDataType.PANDAS)
+  }
+
+  private def _transformWithStateInPySpark(
+      func: Column,
+      outputStructType: StructType,
+      outputModeStr: String,
+      timeModeStr: String,
+      initialState: RelationalGroupedDataset,
+      eventTimeColumnName: String,
+      userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value): DataFrame = {
     def exprToAttr(expr: Seq[Expression]): Seq[Attribute] = {
       expr.map {
         case ne: NamedExpression => ne
@@ -504,12 +548,13 @@ class RelationalGroupedDataset protected[sql](
       Project(groupingAttrs ++ leftChild.output, leftChild)).analyzed
 
     val plan: LogicalPlan = if (initialState == null) {
-      TransformWithStateInPandas(
+      TransformWithStateInPySpark(
         func.expr,
         groupingAttrs.length,
         outputAttrs,
         outputMode,
         timeMode,
+        userFacingDataType,
         child = left,
         hasInitialState = false,
         /* The followings are dummy variables because hasInitialState is false */
@@ -525,12 +570,13 @@ class RelationalGroupedDataset protected[sql](
       val right = initialState.df.sparkSession.sessionState.executePlan(
         Project(initGroupingAttrs ++ rightChild.output, rightChild)).analyzed
 
-      TransformWithStateInPandas(
+      TransformWithStateInPySpark(
         func.expr,
         groupingAttributesLen = groupingAttrs.length,
         outputAttrs,
         outputMode,
         timeMode,
+        userFacingDataType,
         child = left,
         hasInitialState = true,
         initialState = right,

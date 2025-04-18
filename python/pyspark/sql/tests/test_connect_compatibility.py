@@ -395,7 +395,8 @@ class ConnectCompatibilityTestsMixin:
         """Test Grouping compatibility between classic and connect."""
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
-        expected_missing_connect_methods = set()
+        # TODO(SPARK-51827): Add missing method `transformWithState` to the connect version
+        expected_missing_connect_methods = {"transformWithState"}
         expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicGroupedData,

@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
- * thread spawned by TransformWithStateInPandasStateRunner per task. It opens a dedicated socket
+ * thread spawned by TransformWithStateInPySparkStateRunner per task. It opens a dedicated socket
  * to process/transfer state related info which is shut down when task finishes or there's an error
  * on opening the socket. It processes following state requests and return responses to the
  * Python side:
@@ -53,19 +53,19 @@ import org.apache.spark.util.Utils
  * - Stateful processor requests.
  * - Requests for managing state variables (e.g. valueState).
  */
-class TransformWithStateInPandasStateServer(
+class TransformWithStateInPySparkStateServer(
     stateServerSocket: ServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
-    arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
+    arrowTransformWithStateInPySparkMaxRecordsPerBatch: Int,
     batchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
-    deserializerForTest: TransformWithStateInPandasDeserializer = null,
+    deserializerForTest: TransformWithStateInPySparkDeserializer = null,
     arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
@@ -259,7 +259,7 @@ class TransformWithStateInPandasStateServer(
             Option(statefulProcessorHandle
               .asInstanceOf[StatefulProcessorHandleImpl].getExpiredTimers(expiryTimestamp))
         }
-        // expiryTimestampIter could be None in the TWSPandasServerSuite
+        // expiryTimestampIter could be None in the TWSPySparkServerSuite
         if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
           // iterator is exhausted, signal the end of iterator on python client
           sendResponse(1)
@@ -470,7 +470,7 @@ class TransformWithStateInPandasStateServer(
     val deserializer = if (deserializerForTest != null) {
       deserializerForTest
     } else {
-      new TransformWithStateInPandasDeserializer(listStateInfo.deserializer)
+      new TransformWithStateInPySparkDeserializer(listStateInfo.deserializer)
     }
     message.getMethodCase match {
       case ListStateCall.MethodCase.EXISTS =>
@@ -521,7 +521,7 @@ class TransformWithStateInPandasStateServer(
     // when there are multiple state variables, user tries to access a different state variable
     // while the current state variable is not exhausted yet.
     var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+    while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
       val data = iter.next()
 
       // Serialize the value row as a byte array
@@ -776,21 +776,21 @@ class TransformWithStateInPandasStateServer(
       val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
         errorOnDuplicatedFieldNames, largeVarTypes)
       val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+        s"stdout writer for transformWithStateInPySpark state socket", 0, Long.MaxValue)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
       val writer = new ArrowStreamWriter(root, null, outputStream)
       val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
         arrowStreamWriterForTest
       } else {
         new BaseStreamingArrowWriter(root, writer,
-          arrowTransformWithStateInPandasMaxRecordsPerBatch)
+          arrowTransformWithStateInPySparkMaxRecordsPerBatch)
       }
       // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-      // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
+      // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
       // when there are multiple state variables, user tries to access a different state variable
       // while the current state variable is not exhausted yet.
       var rowCount = 0
-      while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+      while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
         val data = iter.next()
         val internalRow = func(data)
         arrowStreamWriter.writeRow(internalRow)
