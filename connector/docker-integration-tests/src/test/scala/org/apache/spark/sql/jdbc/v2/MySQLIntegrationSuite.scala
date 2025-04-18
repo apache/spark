@@ -270,7 +270,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       assert(rows(0).getString(0) === "tom")
     }
 
-    withClue("minute") {
+    withClue("second") {
       val df = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0 AND month(date1) = 5")
       checkFilterPushed(df, false)
       val rows = df.collect()
