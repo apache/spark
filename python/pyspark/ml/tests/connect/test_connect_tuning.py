@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 
 from pyspark.util import is_remote_only
@@ -41,7 +42,7 @@ if should_test_connect:
 
         @classmethod
         def master(cls):
-            return "local[2]"
+            return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
 
 
 if __name__ == "__main__":

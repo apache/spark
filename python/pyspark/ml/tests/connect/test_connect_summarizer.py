@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -27,7 +28,7 @@ if should_test_connect:
     class SummarizerTestsOnConnect(SummarizerTestsMixin, ReusedConnectTestCase):
         @classmethod
         def master(cls):
-            return "local[2]"
+            return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
 
 
 if __name__ == "__main__":
