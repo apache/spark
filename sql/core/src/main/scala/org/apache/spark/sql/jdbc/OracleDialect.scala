@@ -59,8 +59,14 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     override def visitExtract(extract: Extract): String = {
       val field = extract.field
       field match {
-        case "DAY_OF_YEAR" | "WEEK" | "QUARTER" | "DAY_OF_WEEK" | "YEAR_OF_WEEK" =>
+        // Oracle does not support the following date fields: DAY_OF_YEAR, WEEK, QUARTER,
+        // DAY_OF_WEEK, or YEAR_OF_WEEK.
+        // We can't push down SECOND due to the difference in result types between Spark and
+        // Oracle. Spark returns decimal(8, 6), but Oracle returns integer.
+        case "DAY_OF_YEAR" | "WEEK" | "QUARTER" | "SECOND" | "DAY_OF_WEEK" | "YEAR_OF_WEEK" =>
           visitUnexpectedExpr(extract)
+        // MINUTE, HOUR, DAY, MONTH, YEAR are identical on MySQL and Spark for
+        // both datetime and interval types.
         case _ => super.visitExtract(field, build(extract.source()))
       }
     }

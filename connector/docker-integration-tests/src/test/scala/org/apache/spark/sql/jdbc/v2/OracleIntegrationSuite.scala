@@ -219,7 +219,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows2(0).getString(0) === "amy")
     assert(rows2(1).getString(0) === "alex")
 
-    val df3 = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0 AND month(date1) = 5")
+    val df3 = sql(s"SELECT name FROM $tbl WHERE month(date1) = 5")
     checkFilterPushed(df3)
     val rows3 = df3.collect()
     assert(rows3.length === 2)
@@ -316,6 +316,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       assert(rows(0).getString(0) === "amy")
       assert(rows5(1).getString(0) === "alex")
       assert(rows5(2).getString(0) === "tom")
+    }
+
+    withClue("second") {
+      val df = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0 AND month(date1) = 5")
+      checkFilterPushed(df, false)
+      val rows = df.collect()
+      assert(rows.length === 2)
+      assert(rows(0).getString(0) === "amy")
+      assert(rows(1).getString(0) === "alex")
     }
 
     val df9 = sql(s"SELECT name FROM $tbl WHERE " +
