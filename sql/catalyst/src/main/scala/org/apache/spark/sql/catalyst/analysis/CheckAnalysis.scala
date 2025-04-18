@@ -229,35 +229,62 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   def checkNoNestedOuterReferencesInMainQuery(plan: LogicalPlan): Unit = {
-    def throwUnresolvedColumnErrorForNestedOuterAttrs(
-        plan: LogicalPlan, expr: SubqueryExpression): Unit = {
-      val nestedOuterAttrName = expr.getNestedOuterAttrs.flatMap{
-        o => o.collect {
-          case a: AttributeReference => a.name
+    def hasNestedOuterAttrsInSubqueryExpression(expr: Expression): Boolean = {
+      expr.exists {
+        case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty => true
+        case _ => false
+      }
+    }
+
+    def getNestedOuterAttrsFromSubqueryExpression(
+        plan: LogicalPlan): Seq[(SubqueryExpression, AttributeSet)] = {
+      val res = plan.expressions.flatMap {
+        expr => expr.collect {
+          case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty =>
+            (subExpr, subExpr.getNestedOuterAttrs)
         }
-      }.head
-      val output = plan.inputSet ++ expr.plan.inputSet
-      throw QueryCompilationErrors.unresolvedColumnError(
-        nestedOuterAttrName,
-        proposal = StringUtils.orderSuggestedIdentifiersBySimilarity(
-          nestedOuterAttrName,
-          candidates = output.map(attribute => attribute.qualifier :+ attribute.name).toSeq
+      }
+      res.map {
+        case (subExpr, nestedOuterExprs) =>
+          val attrs = nestedOuterExprs.collect {
+            case a: AttributeReference => a
+          }
+          (subExpr, AttributeSet(attrs))
+      }
+    }
+    def findFirstOccurence(
+        plan: LogicalPlan,
+        nestedOuterAttrs: AttributeSet,
+        operator: LogicalPlan): (LogicalPlan, AttributeSet) = {
+      val firstOccuredOperator = operator
+      plan.foreach {
+        case p if p.expressions.exists(hasNestedOuterAttrsInSubqueryExpression) =>
+          val res = getNestedOuterAttrsFromSubqueryExpression(p)
+          res.find(_._2.intersect(nestedOuterAttrs).nonEmpty) match {
+            case Some((subExpr, nestedOuterAttrsInP)) =>
+              return findFirstOccurence(subExpr.plan,
+                nestedOuterAttrsInP.intersect(nestedOuterAttrs), p)
+            case None => // Do nothing
+          }
+        case _ => // Do nothing
+      }
+      (firstOccuredOperator, nestedOuterAttrs)
+    }
+    def throwUnresolvedColumnErrorForNestedOuterAttrs(plan: LogicalPlan): Unit = {
+      val (subExpr, nestedOuterAttrs) = getNestedOuterAttrsFromSubqueryExpression(plan).head
+      val (operator, missingInput) = findFirstOccurence(subExpr.plan, nestedOuterAttrs, plan)
+      operator.failAnalysis(
+        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+        messageParameters = Map(
+          "missingAttributes" -> missingInput.toSeq.map(attr => toSQLExpr(attr)).mkString(", "),
+          "input" -> operator.inputSet.map(attr => toSQLExpr(attr)).mkString(", "),
+          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
         )
       )
     }
-    plan.expressions.foreach {
-      case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty =>
-        throwUnresolvedColumnErrorForNestedOuterAttrs(plan, subExpr)
-      case expr if expr.containsPattern(PLAN_EXPRESSION) =>
-        expr.collect {
-          case subExpr: SubqueryExpression if subExpr.getNestedOuterAttrs.nonEmpty =>
-            throwUnresolvedColumnErrorForNestedOuterAttrs(plan, subExpr)
-        }
-      case _ =>
-    }
-    plan.children.foreach {
-      case p: LogicalPlan if p.containsPattern(PLAN_EXPRESSION) =>
-        checkNoNestedOuterReferencesInMainQuery(p)
+    plan.foreach {
+      case p: LogicalPlan if p.expressions.exists(hasNestedOuterAttrsInSubqueryExpression) =>
+        throwUnresolvedColumnErrorForNestedOuterAttrs(p)
       case _ =>
     }
   }
