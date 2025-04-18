@@ -204,8 +204,12 @@ class DowntimeDetector(duration: Duration) extends
       timerValues: TimerValues): Iterator[(String, Duration)] = {
     val latestRecordFromNewRows = inputRows.maxBy(_._2.getTime)
 
-    // Use getOrElse to initiate state variable if it doesn't exist
-    val latestTimestampFromExistingRows = _lastSeen.getOption().getOrElse(new Timestamp(0))
+    val latestTimestampFromExistingRows = if (_lastSeen.exists()) {
+      _lastSeen.get()
+    } else {
+      new Timestamp(0)
+    }
+
     val latestTimestampFromNewRows = latestRecordFromNewRows._2
 
     if (latestTimestampFromNewRows.after(latestTimestampFromExistingRows)) {
