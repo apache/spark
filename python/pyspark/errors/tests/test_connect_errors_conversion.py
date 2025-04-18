@@ -17,6 +17,9 @@
 #
 
 import unittest
+
+from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
+from pyspark.testing import should_test_connect, connect_requirement_message
 from pyspark.errors.exceptions.connect import (
     convert_exception,
     EXCEPTION_CLASS_MAPPING,
@@ -24,14 +27,15 @@ from pyspark.errors.exceptions.connect import (
     PythonException,
     AnalysisException,
 )
-from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
-from google.rpc.error_details_pb2 import ErrorInfo
-from grpc import StatusCode
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ConnectErrorsTest(unittest.TestCase):
     def test_convert_exception_known_class(self):
         # Mock ErrorInfo with a known error class
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.sql.AnalysisException",
             "metadata": {
@@ -57,6 +61,9 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_python_exception(self):
         # Mock ErrorInfo for PythonException
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.api.python.PythonException",
             "metadata": {
@@ -77,6 +84,9 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_unknown_class(self):
         # Mock ErrorInfo with an unknown error class
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.UnknownException",
             "metadata": {"classes": '["org.apache.spark.UnknownException"]'},
@@ -105,6 +115,8 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_with_stacktrace(self):
         # Mock FetchErrorDetailsResponse with stacktrace
+        from google.rpc.error_details_pb2 import ErrorInfo
+
         resp = pb2(
             root_error_idx=0,
             errors=[
@@ -157,6 +169,9 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_fallback(self):
         # Mock ErrorInfo with missing class information
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.UnknownReason",
             "metadata": {},
