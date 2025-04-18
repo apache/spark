@@ -42,7 +42,7 @@ Users can read an instance of state store, which is matched to a single stateful
 Note that there could be an exception, e.g. stream-stream join, which leverages multiple state store instances internally. The data source abstracts the internal representation away from users and
 provides a user-friendly approach to read the state. See the section for stream-stream join for more details.
 
-### Creating a state store for batch queries (all defaults)
+### Reading the state store as batch queries (all defaults)
 
 <div class="codetabs">
 
@@ -174,6 +174,24 @@ The following configurations are optional:
   <td>latest commited batchId</td>
   <td>Represents the last batch to read in the read change feed mode. This option requires 'readChangeFeed' to be set to true.</td>
 </tr>
+<tr>
+  <td>stateVarName</td>
+  <td>string</td>
+  <td></td>
+  <td>The state variable name to read as part of this batch query. This is a required option if the transformWithState operator is used. Note that currently this option only applies to the transformWithState operator.</td>
+</tr>
+<tr>
+  <td>readRegisteredTimers</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>If true, the user can read registered timers used within the transformWithState operator. Note that currently this option only applies to the transformWithState operator. This option and the stateVarName option described above are mutually exclusive and only one of them can be used at a time.</td>
+</tr>
+<tr>
+  <td>flattenCollectionTypes</td>
+  <td>boolean</td>
+  <td>true</td>
+  <td>If true, the collection types for state variables such as list state, map state etc are flattened out. If false, the values are provided as Array or Map type in Spark SQL. Note that currently this option only applies to the transformWithState operator.</td>
+</tr>
 </table>
 
 
@@ -184,6 +202,20 @@ These instances logically compose buffers to store the input rows for left and r
 
 Since it is more obvious to users to reason about, the data source provides the option 'joinSide' to read the buffered input for specific side of the join.
 To enable the functionality to read the internal state store instance directly, we also allow specifying the option 'storeName', with restriction that 'storeName' and 'joinSide' cannot be specified together.
+
+### Reading state for transformWithState
+
+TransformWithState is a stateful operator that allows users to maintain arbitrary state across batches. In order to read this state, the user needs to provide some additional options in the state data source reader query.
+This operator allows for multiple state variables to be used within the same query. However, because they could be of different composite types and encoding formats, they need to be read within a batch query one variable at a time.
+In order to allow this, the user needs to specify the `stateVarName` for the state variable they are interested in reading.
+
+Timers can be read by setting the option `readRegisteredTimers` to true. This will return all the registered timer across grouping keys.
+
+We also allow for composite type variables to be read in 2 formats:
+- Flattened: This is the default format where the composite types are flattened out into individual columns.
+- Non-flattened: This is where the composite types are returned as a single column of Array or Map type in Spark SQL.
+
+Depending on your memory requirements, you can choose the format that best suits your use case.
 
 ### Reading state changes over microbatches
 
