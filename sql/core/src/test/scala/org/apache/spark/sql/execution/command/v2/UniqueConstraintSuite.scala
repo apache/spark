@@ -61,6 +61,21 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
     }
   }
 
+  test("Replace table with unique constraint") {
+    validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        val constraintStr = s"CONSTRAINT uk1 UNIQUE (id) $characteristic"
+        sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
+        sql(s"REPLACE TABLE $t (id bigint, data string, $constraintStr) $defaultUsing")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+        assert(table.constraints.length == 1)
+        val constraint = table.constraints.head
+        assert(constraint.name() == "uk1")
+        assert(constraint.toDDL == s"CONSTRAINT uk1 UNIQUE (id) $expectedDDL")
+      }
+    }
+  }
+
   test("Add duplicated unique constraint") {
     withNamespaceAndTable("ns", "tbl", catalog) { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")

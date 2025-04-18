@@ -167,6 +167,20 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("Replace table with check constraint") {
+    getConstraintCharacteristics(true).foreach { case (characteristic, expectedDDL) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        val constraintStr = s"CONSTRAINT c1 CHECK (id > 0) $characteristic"
+        sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
+        sql(s"REPLACE TABLE $t (id bigint, data string, $constraintStr) $defaultUsing")
+        val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+        val constraint = getCheckConstraint(table)
+        assert(constraint.name() == "c1")
+        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
+      }
+    }
+  }
+
   test("Alter table add check constraint") {
     getConstraintCharacteristics(false).foreach { case (characteristic, expectedDDL) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
