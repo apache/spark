@@ -47,6 +47,7 @@ from pyspark.sql.types import (
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow
 from pyspark.testing.utils import (
     _context_diff,
+    assertColumnNonNull,
     assertColumnUnique,
     assertDataFrameEqual,
     assertSchemaEqual,
@@ -1081,6 +1082,51 @@ class UtilsTestsMixin:
 
         self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
         self.assertTrue("ID column must be unique for this operation." in str(cm.exception))
+
+    def test_assert_column_non_null_single_column(self):
+        # Test with a DataFrame that has no null values in a column
+        df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
+        assertColumnNonNull(df, "id")
+
+        # Test with a DataFrame that has null values in a column
+        df_with_nulls = self.spark.createDataFrame([(1, "a"), (2, None), (3, "c")], ["id", "value"])
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_with_nulls, "value")
+
+        self.assertTrue("Column 'value' contains null values" in str(cm.exception))
+        self.assertTrue("value: 1 null value" in str(cm.exception))
+
+    def test_assert_column_non_null_multiple_columns(self):
+        # Test with a DataFrame that has no null values in multiple columns
+        df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
+        assertColumnNonNull(df, ["id", "value"])
+
+        # Test with a DataFrame that has null values in multiple columns
+        df_with_nulls = self.spark.createDataFrame(
+            [(1, "a"), (2, None), (None, "c")], ["id", "value"]
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_with_nulls, ["id", "value"])
+
+        self.assertTrue("Columns ['id', 'value'] contain null values" in str(cm.exception))
+        self.assertTrue("id: 1 null value" in str(cm.exception))
+        self.assertTrue("value: 1 null value" in str(cm.exception))
+
+    def test_assert_column_non_null_with_custom_message(self):
+        # Test with a custom error message
+        df_with_nulls = self.spark.createDataFrame([(1, "a"), (2, None), (3, "c")], ["id", "value"])
+
+        custom_message = "Value column must not contain nulls for this operation."
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnNonNull(df_with_nulls, "value", message=custom_message)
+
+        self.assertTrue("Column 'value' contains null values" in str(cm.exception))
+        self.assertTrue(
+            "Value column must not contain nulls for this operation." in str(cm.exception)
+        )
 
     def test_row_order_ignored(self):
         # test that row order is ignored (not checked) by default

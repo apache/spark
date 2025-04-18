@@ -1162,6 +1162,65 @@ def assertColumnUnique(
         raise AssertionError(error_msg)
 
 
+def assertColumnNonNull(df, columns, message=None):
+    """
+    Assert that the specified column(s) in a DataFrame do not contain any null values.
+
+    Parameters
+    ----------
+    df : :class:`DataFrame`
+        The DataFrame to check.
+    columns : str or list
+        The column name(s) to check for null values.
+    message : str, optional
+        An optional message to include in the exception if the assertion fails.
+
+    Raises
+    ------
+    AssertionError
+        If any of the specified columns contain null values.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([(1, "a"), (2, None), (3, "c")], ["id", "value"])
+    >>> assertColumnNonNull(df, "id")  # This will pass
+    >>> assertColumnNonNull(df, "value")  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    AssertionError: Column 'value' contains null values.
+    >>> assertColumnNonNull(df, ["id", "value"])  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    AssertionError: Columns ['id', 'value'] contain null values.
+
+    """
+    if isinstance(columns, str):
+        columns = [columns]
+
+    # Check each column for null values
+    null_counts = {}
+    for column in columns:
+        # Count null values in the column
+        null_count = df.filter(df[column].isNull()).count()
+        if null_count > 0:
+            null_counts[column] = null_count
+
+    if null_counts:
+        # Create error message
+        column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+
+        error_msg = f"{column_desc} contain{'s' if len(columns) == 1 else ''} null values.\n"
+        error_msg += "Null counts by column:\n"
+        for col, count in null_counts.items():
+            error_msg += f"- {col}: {count} null value{'s' if count != 1 else ''}\n"
+
+        if message:
+            error_msg += f"\n{message}"
+
+        raise AssertionError(error_msg)
+
+
 def _test() -> None:
     import doctest
 
