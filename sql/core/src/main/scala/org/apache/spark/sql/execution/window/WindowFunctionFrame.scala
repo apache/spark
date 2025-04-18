@@ -181,7 +181,7 @@ abstract class OffsetWindowFunctionFrameBase(
   }
 
   /** Indicates whether the default values are Literal values. */
-  protected val onlyLiteralNulls = expressions.forall { e =>
+  protected lazy val onlyLiteralNulls = expressions.forall { e =>
     e.default == null || (e.default.foldable && e.default.eval() == null)
   }
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
