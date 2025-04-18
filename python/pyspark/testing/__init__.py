@@ -19,6 +19,7 @@ import typing
 from pyspark.testing.utils import (
     assertColumnNonNull,
     assertColumnUnique,
+    assertColumnValuesInSet,
     assertDataFrameEqual,
     assertSchemaEqual,
 )
@@ -67,4 +68,10 @@ connect_requirement_message = (
 )
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
-__all__ = ["assertDataFrameEqual", "assertSchemaEqual", "assertColumnUnique", "assertColumnNonNull"]
+__all__ = [
+    "assertDataFrameEqual",
+    "assertSchemaEqual",
+    "assertColumnUnique",
+    "assertColumnNonNull",
+    "assertColumnValuesInSet",
+]

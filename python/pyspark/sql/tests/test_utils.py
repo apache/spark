@@ -49,6 +49,7 @@ from pyspark.testing.utils import (
     _context_diff,
     assertColumnNonNull,
     assertColumnUnique,
+    assertColumnValuesInSet,
     assertDataFrameEqual,
     assertSchemaEqual,
     have_numpy,
@@ -1127,6 +1128,91 @@ class UtilsTestsMixin:
         self.assertTrue(
             "Value column must not contain nulls for this operation." in str(cm.exception)
         )
+
+    def test_assert_column_values_in_set_single_column(self):
+        # Test with a DataFrame that has all values in the accepted set
+        df = self.spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")], ["id", "category"])
+        assertColumnValuesInSet(df, "category", {"A", "B", "C"})
+
+        # Test with a DataFrame that has values not in the accepted set
+        df_with_invalid = self.spark.createDataFrame(
+            [(1, "A"), (2, "B"), (3, "X")], ["id", "category"]
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(df_with_invalid, "category", {"A", "B", "C"})
+
+        self.assertTrue(
+            "Column 'category' contains values not in the accepted set" in str(cm.exception)
+        )
+        self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
+
+    def test_assert_column_values_in_set_multiple_columns_same_values(self):
+        # Test with a DataFrame that has all values in the accepted set for multiple columns
+        df = self.spark.createDataFrame([("A", "B"), ("B", "A"), ("C", "C")], ["col1", "col2"])
+        assertColumnValuesInSet(df, ["col1", "col2"], {"A", "B", "C"})
+
+        # Test with a DataFrame that has values not in the accepted set in multiple columns
+        df_with_invalid = self.spark.createDataFrame(
+            [("A", "B"), ("X", "A"), ("C", "Y")], ["col1", "col2"]
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(df_with_invalid, ["col1", "col2"], {"A", "B", "C"})
+
+        self.assertTrue(
+            "Columns ['col1', 'col2'] contain values not in the accepted set" in str(cm.exception)
+        )
+        self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
+        self.assertTrue("Invalid values found: ['Y']" in str(cm.exception))
+
+    def test_assert_column_values_in_set_multiple_columns_different_values(self):
+        # Test with a DataFrame that has all values in different accepted sets for multiple columns
+        df = self.spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")], ["id", "category"])
+        assertColumnValuesInSet(
+            df, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+        )
+
+        # Test with a DataFrame that has values not in the accepted sets in multiple columns
+        df_with_invalid = self.spark.createDataFrame(
+            [(1, "A"), (4, "B"), (3, "X")], ["id", "category"]
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(
+                df_with_invalid, ["id", "category"], {"id": {1, 2, 3}, "category": {"A", "B", "C"}}
+            )
+
+        self.assertTrue(
+            "Columns ['id', 'category'] contain values not in the accepted set" in str(cm.exception)
+        )
+        self.assertTrue("Invalid values found: [4]" in str(cm.exception))
+        self.assertTrue("Invalid values found: ['X']" in str(cm.exception))
+
+    def test_assert_column_values_in_set_with_null_values(self):
+        # Test with a DataFrame that has null values (nulls are ignored)
+        df_with_nulls = self.spark.createDataFrame(
+            [(1, "A"), (2, None), (3, "C")], ["id", "category"]
+        )
+        assertColumnValuesInSet(df_with_nulls, "category", {"A", "B", "C"})
+
+    def test_assert_column_values_in_set_with_custom_message(self):
+        # Test with a custom error message
+        df_with_invalid = self.spark.createDataFrame(
+            [(1, "A"), (2, "B"), (3, "X")], ["id", "category"]
+        )
+
+        custom_message = "Category must be one of the allowed values: A, B, C."
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnValuesInSet(
+                df_with_invalid, "category", {"A", "B", "C"}, message=custom_message
+            )
+
+        self.assertTrue(
+            "Column 'category' contains values not in the accepted set" in str(cm.exception)
+        )
+        self.assertTrue("Category must be one of the allowed values: A, B, C." in str(cm.exception))
 
     def test_row_order_ignored(self):
         # test that row order is ignored (not checked) by default
