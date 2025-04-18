@@ -156,9 +156,7 @@ private[connect] object MLHandler extends Logging {
                   .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
               .build()
           case a: Array[_] if a.nonEmpty && a.forall(_.isInstanceOf[Model[_]]) =>
-            val ids = a.map { m =>
-              mlCache.register(m.asInstanceOf[Model[_]])
-            }
+            val ids = a.map(m => mlCache.register(m.asInstanceOf[Model[_]]))
             proto.MlCommandResult
               .newBuilder()
               .setOperatorInfo(
@@ -172,18 +170,20 @@ private[connect] object MLHandler extends Logging {
         }
 
       case proto.MlCommand.CommandCase.DELETE =>
-        val deleted = mutable.ArrayBuilder.make[String]
+        val ids = mutable.ArrayBuilder.make[String]
         mlCommand.getDelete.getObjRefsList.asScala.toArray.foreach { objId =>
           if (!objId.getId.contains(".")) {
             if (mlCache.remove(objId.getId)) {
-              deleted += objId.getId
+              ids += objId.getId
             }
           }
         }
-        val result = deleted.result().mkString(",")
         proto.MlCommandResult
           .newBuilder()
-          .setParam(LiteralValueProtoConverter.toLiteralProto(result))
+          .setOperatorInfo(
+            proto.MlCommandResult.MlOperatorInfo
+              .newBuilder()
+              .setObjRef(proto.ObjectRef.newBuilder().setId(ids.result().mkString(","))))
           .build()
 
       case proto.MlCommand.CommandCase.WRITE =>

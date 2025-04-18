@@ -1998,8 +1998,12 @@ class SparkConnectClient(object):
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
                 (_, properties, _) = self.execute_command(command)
+
+                assert properties is not None
+
                 if properties is not None and "ml_command_result" in properties:
-                    deleted = properties["ml_command_result"].param.string.split(",")
+                    ml_command_result = properties["ml_command_result"]
+                    deleted = ml_command_result.operator_info.obj_ref.id.split(",")
                     return cast(List[str], deleted)
             return []
         except Exception:
