@@ -158,10 +158,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *   maintained.
    */
   def getSecondsOfTimeWithFraction(micros: Long, precision: Int): Decimal = {
-    val nanos = micros * NANOS_PER_MICROS
-    val seconds = (nanos / NANOS_PER_SECOND) % SECONDS_PER_MINUTE
+    val seconds = (micros / MICROS_PER_SECOND) % SECONDS_PER_MINUTE
     val scaleFactor = math.pow(10, precision).toLong
-    val scaledFraction = (nanos % NANOS_PER_SECOND) * scaleFactor / NANOS_PER_SECOND
+    val scaledFraction = (micros % MICROS_PER_SECOND) * scaleFactor / MICROS_PER_SECOND
     val fraction = scaledFraction.toDouble / scaleFactor
     Decimal(seconds + fraction, 8, 6)
   }
