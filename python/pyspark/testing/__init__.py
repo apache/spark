@@ -21,6 +21,7 @@ from pyspark.testing.utils import (
     assertColumnUnique,
     assertColumnValuesInSet,
     assertDataFrameEqual,
+    assertReferentialIntegrity,
     assertSchemaEqual,
 )
 
@@ -74,4 +75,5 @@ __all__ = [
     "assertColumnUnique",
     "assertColumnNonNull",
     "assertColumnValuesInSet",
+    "assertReferentialIntegrity",
 ]

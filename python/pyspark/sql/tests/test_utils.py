@@ -2033,6 +2033,92 @@ class UtilsTestsMixin:
         with self.assertRaises(PySparkAssertionError):
             assertSchemaEqual(s1, s2)
 
+    def test_assert_referential_integrity_valid(self):
+        # Create a "customers" DataFrame with customer IDs
+        customers = self.spark.createDataFrame(
+            [(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"]
+        )
+
+        # Create an "orders" DataFrame with customer IDs as foreign keys
+        orders = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, 3), (104, None)], ["order_id", "customer_id"]
+        )
+
+        # This should pass because all non-null customer_ids in orders exist in customers.id
+        from pyspark.testing.utils import assertReferentialIntegrity
+
+        assertReferentialIntegrity(orders, "customer_id", customers, "id")
+
+    def test_assert_referential_integrity_invalid(self):
+        # Create a "customers" DataFrame with customer IDs
+        customers = self.spark.createDataFrame(
+            [(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"]
+        )
+
+        # Create an orders DataFrame with an invalid customer ID
+        orders_invalid = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, 4)], ["order_id", "customer_id"]
+        )
+
+        # This should fail because customer_id 4 doesn't exist in customers.id
+        from pyspark.testing.utils import assertReferentialIntegrity
+
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_invalid, "customer_id", customers, "id")
+
+        # Check that the error message contains information about the missing values
+        error_message = str(cm.exception)
+        self.assertIn("customer_id", error_message)
+        self.assertIn("id", error_message)
+        self.assertIn("4", error_message)
+        self.assertIn("Missing values", error_message)
+
+        # Verify that the total count of missing values is correct
+        self.assertIn("Total missing values: 1", error_message)
+
+    def test_assert_referential_integrity_null_values(self):
+        # Create a "customers" DataFrame with customer IDs
+        customers = self.spark.createDataFrame(
+            [(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"]
+        )
+
+        # Create an orders DataFrame with null values in the foreign key
+        orders_with_nulls = self.spark.createDataFrame(
+            [(101, 1), (102, 2), (103, None), (104, None)], ["order_id", "customer_id"]
+        )
+
+        # This should pass because null values in the foreign key are ignored
+        from pyspark.testing.utils import assertReferentialIntegrity
+
+        assertReferentialIntegrity(orders_with_nulls, "customer_id", customers, "id")
+
+    def test_assert_referential_integrity_multiple_invalid(self):
+        # Create a "customers" DataFrame with customer IDs
+        customers = self.spark.createDataFrame(
+            [(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"]
+        )
+
+        # Create an orders DataFrame with multiple invalid customer IDs
+        orders_multiple_invalid = self.spark.createDataFrame(
+            [(101, 1), (102, 4), (103, 5), (104, 6)], ["order_id", "customer_id"]
+        )
+
+        # This should fail because multiple customer_ids don't exist in customers.id
+        from pyspark.testing.utils import assertReferentialIntegrity
+
+        with self.assertRaises(AssertionError) as cm:
+            assertReferentialIntegrity(orders_multiple_invalid, "customer_id", customers, "id")
+
+        # Check that the error message contains information about the missing values
+        error_message = str(cm.exception)
+        self.assertIn("customer_id", error_message)
+        self.assertIn("id", error_message)
+        # Check that at least one of the invalid values is mentioned
+        self.assertTrue(any(str(val) in error_message for val in [4, 5, 6]))
+
+        # Verify that the total count of missing values is correct (should be 3: values 4, 5, and 6)
+        self.assertIn("Total missing values: 3", error_message)
+
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     pass

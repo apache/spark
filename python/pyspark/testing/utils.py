@@ -1824,6 +1824,305 @@ def assertColumnValuesInSet(
         raise AssertionError(error_msg)
 
 
+def assertReferentialIntegrity(
+    source_df: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame"],
+    source_column: str,
+    target_df: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame"],
+    target_column: str,
+    message: Optional[str] = None,
+) -> None:
+    """
+    Assert that all non-null values in a column of one DataFrame exist in a column of another DataFrame.
+
+    This function checks referential integrity between two DataFrames, similar to a foreign key constraint
+    in a relational database. It verifies that all non-null values in the source column exist in the target column.
+
+    Supports Spark, Spark Connect, pandas, and pandas-on-Spark DataFrames.
+
+    Parameters
+    ----------
+    source_df : DataFrame (Spark, Spark Connect, pandas, or pandas-on-Spark)
+        The DataFrame containing the foreign key column to check.
+    source_column : str
+        The name of the column in source_df to check (foreign key).
+    target_df : DataFrame (Spark, Spark Connect, pandas, or pandas-on-Spark)
+        The DataFrame containing the primary key column to check against.
+    target_column : str
+        The name of the column in target_df to check against (primary key).
+    message : str, optional
+        An optional message to include in the exception if the assertion fails.
+
+    Raises
+    ------
+    AssertionError
+        If any non-null values in the source column do not exist in the target column.
+    PySparkAssertionError
+        If either input DataFrame is not of a supported type or is a streaming DataFrame.
+    ValueError
+        If the column parameters are invalid or if specified columns don't exist in the DataFrames.
+
+    Examples
+    --------
+    >>> # Create a "customers" DataFrame with customer IDs
+    >>> customers = spark.createDataFrame([(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"])
+    >>>
+    >>> # Create an "orders" DataFrame with customer IDs as foreign keys
+    >>> orders = spark.createDataFrame([(101, 1), (102, 2), (103, 3), (104, None)], ["order_id", "customer_id"])
+    >>>
+    >>> # This will pass because all non-null customer_ids in orders exist in customers.id
+    >>> assertReferentialIntegrity(orders, "customer_id", customers, "id")
+    >>>
+    >>> # Create an orders DataFrame with an invalid customer ID
+    >>> orders_invalid = spark.createDataFrame([(101, 1), (102, 2), (103, 4)], ["order_id", "customer_id"])
+    >>>
+    >>> # This will fail because customer_id 4 doesn't exist in customers.id
+    >>> assertReferentialIntegrity(orders_invalid, "customer_id", customers, "id")  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    AssertionError: Column 'customer_id' contains values not found in target column 'id'.
+    Missing values: [4]
+    Total missing values: 1
+    """
+    # Validate source_df
+    if source_df is None:
+        raise PySparkAssertionError(
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
+                "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                "arg_name": "source_df",
+                "actual_type": None,
+            },
+        )
+
+    # Validate target_df
+    if target_df is None:
+        raise PySparkAssertionError(
+            errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+            messageParameters={
+                "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                "arg_name": "target_df",
+                "actual_type": None,
+            },
+        )
+
+    # Validate source_column
+    if not source_column or not isinstance(source_column, str):
+        raise ValueError("The 'source_column' parameter must be a non-empty string.")
+
+    # Validate target_column
+    if not target_column or not isinstance(target_column, str):
+        raise ValueError("The 'target_column' parameter must be a non-empty string.")
+
+    has_pandas = False
+    try:
+        # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
+        import pandas as pd
+
+        has_pandas = True
+    except ImportError:
+        # no pandas, so we won't call pandasutils functions
+        pass
+
+    has_arrow = False
+    try:
+        import pyarrow
+
+        has_arrow = True
+    except ImportError:
+        pass
+
+    # Handle pandas DataFrames
+    if has_pandas and has_arrow:
+        import pyspark.pandas as ps
+
+        # Case 1: Both are pandas DataFrames
+        if isinstance(source_df, pd.DataFrame) and isinstance(target_df, pd.DataFrame):
+            # Validate columns exist
+            if source_column not in source_df.columns:
+                raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
+            if target_column not in target_df.columns:
+                raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
+
+            # Get unique non-null values from source column
+            source_values = source_df[source_column].dropna().unique()
+
+            # Get unique values from target column
+            target_values = set(target_df[target_column].unique())
+
+            # Find values in source that don't exist in target
+            missing_values = [val for val in source_values if val not in target_values]
+
+            if missing_values:
+                # Count occurrences of each missing value
+                missing_counts = {}
+                for val in missing_values:
+                    missing_counts[val] = len(source_df[source_df[source_column] == val])
+
+                # Create error message
+                error_msg = f"Column '{source_column}' contains values not found in target column '{target_column}'.\n"
+                error_msg += f"Missing values: {missing_values[:10]}" + (
+                    " (showing first 10 only)" if len(missing_values) > 10 else ""
+                )
+                error_msg += f"\nTotal missing values: {len(missing_values)}"
+
+                if message:
+                    error_msg += f"\n{message}"
+
+                raise AssertionError(error_msg)
+
+            # If we get here, all values exist in target
+            return
+
+        # Case 2: Both are pandas-on-Spark DataFrames
+        elif isinstance(source_df, ps.DataFrame) and isinstance(target_df, ps.DataFrame):
+            # Validate columns exist
+            if source_column not in source_df.columns:
+                raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
+            if target_column not in target_df.columns:
+                raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
+
+            # Get unique non-null values from source column
+            source_values = source_df[source_column].dropna().unique().to_list()
+
+            # Get unique values from target column
+            target_values = set(target_df[target_column].unique().to_list())
+
+            # Find values in source that don't exist in target
+            missing_values = [val for val in source_values if val not in target_values]
+
+            if missing_values:
+                # Count occurrences of each missing value
+                missing_counts = {}
+                for val in missing_values:
+                    missing_counts[val] = len(source_df[source_df[source_column] == val])
+
+                # Create error message
+                error_msg = f"Column '{source_column}' contains values not found in target column '{target_column}'.\n"
+                error_msg += f"Missing values: {missing_values[:10]}" + (
+                    " (showing first 10 only)" if len(missing_values) > 10 else ""
+                )
+                error_msg += f"\nTotal missing values: {len(missing_values)}"
+
+                if message:
+                    error_msg += f"\n{message}"
+
+                raise AssertionError(error_msg)
+
+            # If we get here, all values exist in target
+            return
+
+        # Case 3: Mixed DataFrame types - convert to Spark DataFrames for comparison
+        # This is handled by the Spark case below
+
+    # Handle Spark DataFrames or mixed types
+    # Ensure source_df is a Spark DataFrame
+    if not isinstance(source_df, DataFrame):
+        if has_pandas and has_arrow:
+            if isinstance(source_df, pd.DataFrame):
+                from pyspark.sql import SparkSession
+
+                spark = SparkSession.builder.getOrCreate()
+                source_df = spark.createDataFrame(source_df)
+            elif isinstance(source_df, ps.DataFrame):
+                source_df = source_df.to_spark()
+            else:
+                raise PySparkAssertionError(
+                    errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+                    messageParameters={
+                        "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                        "arg_name": "source_df",
+                        "actual_type": type(source_df),
+                    },
+                )
+        else:
+            raise PySparkAssertionError(
+                errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+                messageParameters={
+                    "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                    "arg_name": "source_df",
+                    "actual_type": type(source_df),
+                },
+            )
+
+    # Ensure target_df is a Spark DataFrame
+    if not isinstance(target_df, DataFrame):
+        if has_pandas and has_arrow:
+            if isinstance(target_df, pd.DataFrame):
+                from pyspark.sql import SparkSession
+
+                spark = SparkSession.builder.getOrCreate()
+                target_df = spark.createDataFrame(target_df)
+            elif isinstance(target_df, ps.DataFrame):
+                target_df = target_df.to_spark()
+            else:
+                raise PySparkAssertionError(
+                    errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+                    messageParameters={
+                        "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                        "arg_name": "target_df",
+                        "actual_type": type(target_df),
+                    },
+                )
+        else:
+            raise PySparkAssertionError(
+                errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
+                messageParameters={
+                    "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                    "arg_name": "target_df",
+                    "actual_type": type(target_df),
+                },
+            )
+
+    # Check if either DataFrame is streaming
+    if source_df.isStreaming:
+        raise PySparkAssertionError(
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": "assertReferentialIntegrity on streaming DataFrame"},
+        )
+    if target_df.isStreaming:
+        raise PySparkAssertionError(
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": "assertReferentialIntegrity on streaming DataFrame"},
+        )
+
+    # Validate columns exist
+    if source_column not in source_df.columns:
+        raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
+    if target_column not in target_df.columns:
+        raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
+
+    # Get distinct non-null values from source column
+    source_values = (
+        source_df.filter(source_df[source_column].isNotNull()).select(source_column).distinct()
+    )
+
+    # Get distinct values from target column
+    target_values = target_df.select(target_column).distinct()
+
+    # Find values in source that don't exist in target using a left anti join
+    missing_values_df = source_values.join(
+        target_values, source_values[source_column] == target_values[target_column], "left_anti"
+    )
+
+    # If there are missing values, raise an error
+    if missing_values_df.count() > 0:
+        # Get examples of missing values
+        missing_examples = missing_values_df.limit(10).collect()
+        missing_values_list = [row[source_column] for row in missing_examples]
+
+        # Create error message
+        error_msg = f"Column '{source_column}' contains values not found in target column '{target_column}'.\n"
+        error_msg += f"Missing values: {missing_values_list}" + (
+            " (showing first 10 only)" if len(missing_examples) >= 10 else ""
+        )
+        error_msg += f"\nTotal missing values: {missing_values_df.count()}"
+
+        if message:
+            error_msg += f"\n{message}"
+
+        raise AssertionError(error_msg)
+
+
 def _test() -> None:
     import doctest
 
