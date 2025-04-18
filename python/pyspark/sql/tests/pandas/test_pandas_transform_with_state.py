@@ -1608,7 +1608,7 @@ class TransformWithStateTestsMixin:
     not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
     cast(str, pyarrow_requirement_message or "Not supported in no-GIL mode"),
 )
-class TransformWithStateInPySparkTestsMixIn(TransformWithStateTestsMixin):
+class TransformWithStateInPySparkTestsMixin(TransformWithStateTestsMixin):
     @classmethod
     def use_pandas(cls) -> bool:
         return False
@@ -1635,7 +1635,7 @@ class TransformWithStateInPySparkTestsMixIn(TransformWithStateTestsMixin):
         pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
     ),
 )
-class TransformWithStateInPandasTestsMixIn(TransformWithStateTestsMixin):
+class TransformWithStateInPandasTestsMixin(TransformWithStateTestsMixin):
     @classmethod
     def use_pandas(cls) -> bool:
         return True
@@ -1655,11 +1655,11 @@ class TransformWithStateInPandasTestsMixIn(TransformWithStateTestsMixin):
         return cfg
 
 
-class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixIn, ReusedSQLTestCase):
+class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
     pass
 
 
-class TransformWithStateInPySparkTests(TransformWithStateInPySparkTestsMixIn, ReusedSQLTestCase):
+class TransformWithStateInPySparkTests(TransformWithStateInPySparkTestsMixin, ReusedSQLTestCase):
     pass
 
 

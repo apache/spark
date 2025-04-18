@@ -17,14 +17,14 @@
 import unittest
 
 from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
-    TransformWithStateInPandasTestsMixIn,
+    TransformWithStateInPandasTestsMixin,
 )
 from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TransformWithStateInPandasParityTests(
-    TransformWithStateInPandasTestsMixIn, ReusedConnectTestCase
+    TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
 ):
     """
     Spark connect parity tests for TransformWithStateInPandas. Run every test case in
