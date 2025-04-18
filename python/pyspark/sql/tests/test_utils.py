@@ -15,38 +15,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import difflib
+import unittest
 from itertools import zip_longest
 
-from pyspark.errors import QueryContextType
+import pyspark.sql.functions as F
 from pyspark.errors import (
     AnalysisException,
+    IllegalArgumentException,
     ParseException,
     PySparkAssertionError,
-    PySparkValueError,
-    IllegalArgumentException,
-    SparkUpgradeException,
     PySparkTypeError,
+    PySparkValueError,
+    QueryContextType,
+    SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
-import pyspark.sql.functions as F
-from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
+from pyspark.sql.functions import from_unixtime, to_date, unix_timestamp
 from pyspark.sql.types import (
-    StringType,
     ArrayType,
-    LongType,
-    StructType,
-    MapType,
-    FloatType,
-    DoubleType,
-    StructField,
-    IntegerType,
     BooleanType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
 )
-from pyspark.testing.sqlutils import have_pandas, have_pyarrow
+from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow
+from pyspark.testing.utils import (
+    _context_diff,
+    assertColumnUnique,
+    assertDataFrameEqual,
+    assertSchemaEqual,
+    have_numpy,
+)
 
 
 class UtilsTestsMixin:
@@ -751,8 +756,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_equal_exact_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         df1 = pd.DataFrame(
             data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 9)]), columns=["a", "b", "c"]
@@ -769,8 +774,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_approx_equal_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         # test that asserts close enough equality for pandas df
         df1 = pd.DataFrame(
@@ -788,8 +793,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_approx_equal_fail_exact_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         # test that asserts close enough equality for pandas df
         df1 = pd.DataFrame(
@@ -832,8 +837,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_unequal_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         df1 = pd.DataFrame(
             data=np.array([(1, 2, 3), (4, 5, 6), (6, 5, 4)]), columns=["a", "b", "c"]
@@ -875,9 +880,10 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_type_error_pandas_df(self):
-        import pyspark.pandas as ps
-        import pandas as pd
         import numpy as np
+        import pandas as pd
+
+        import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = pd.DataFrame(
@@ -943,8 +949,9 @@ class UtilsTestsMixin:
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
-        import pyspark.pandas as ps
         import pandas as pd
+
+        import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = self.spark.createDataFrame([(10,), (11,), (13,)], ["Numbers"])
@@ -1014,6 +1021,66 @@ class UtilsTestsMixin:
                 "actual_type": type(dict1),
             },
         )
+
+    def test_assert_column_unique_single_column(self):
+        # Test with a DataFrame that has unique values in a column
+        df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
+        assertColumnUnique(df, "id")
+
+        # Test with a DataFrame that has duplicate values in a column
+        df_with_duplicates = self.spark.createDataFrame(
+            [(1, "a"), (1, "b"), (3, "c")], ["id", "value"]
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_with_duplicates, "id")
+
+        self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
+
+    def test_assert_column_unique_multiple_columns(self):
+        # Test with a DataFrame that has unique combinations of values
+        df = self.spark.createDataFrame([(1, "a"), (1, "b"), (2, "a")], ["id", "value"])
+        assertColumnUnique(df, ["id", "value"])
+
+        # Test with a DataFrame that has duplicate combinations of values
+        df_with_duplicates = self.spark.createDataFrame(
+            [(1, "a"), (1, "a"), (2, "b")], ["id", "value"]
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_with_duplicates, ["id", "value"])
+
+        self.assertTrue("Columns ['id', 'value'] contains duplicate values" in str(cm.exception))
+
+    def test_assert_column_unique_with_null_values(self):
+        # Test with a DataFrame that has null values
+        df = self.spark.createDataFrame([(1, "a"), (2, None), (3, "c")], ["id", "value"])
+        assertColumnUnique(df, "id")
+        assertColumnUnique(df, "value")
+
+        # Test with a DataFrame that has duplicate null values
+        df_with_duplicate_nulls = self.spark.createDataFrame(
+            [(1, None), (2, None), (3, "c")], ["id", "value"]
+        )
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_with_duplicate_nulls, "value")
+
+        self.assertTrue("Column 'value' contains duplicate values" in str(cm.exception))
+
+    def test_assert_column_unique_with_custom_message(self):
+        # Test with a custom error message
+        df_with_duplicates = self.spark.createDataFrame(
+            [(1, "a"), (1, "b"), (3, "c")], ["id", "value"]
+        )
+
+        custom_message = "ID column must be unique for this operation."
+
+        with self.assertRaises(AssertionError) as cm:
+            assertColumnUnique(df_with_duplicates, "id", message=custom_message)
+
+        self.assertTrue("Column 'id' contains duplicate values" in str(cm.exception))
+        self.assertTrue("ID column must be unique for this operation." in str(cm.exception))
 
     def test_row_order_ignored(self):
         # test that row order is ignored (not checked) by default
@@ -1805,7 +1872,7 @@ class UtilsTestsMixin:
     def test_assert_schema_equal_with_decimal_types(self):
         """Test assertSchemaEqual with decimal types of different precision and scale
         (SPARK-51062)."""
-        from pyspark.sql.types import StructType, StructField, DecimalType
+        from pyspark.sql.types import DecimalType, StructField, StructType
 
         # Same precision and scale - should pass
         s1 = StructType(
@@ -1841,6 +1908,7 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
 
 if __name__ == "__main__":
     import unittest
+
     from pyspark.sql.tests.test_utils import *  # noqa: F401
 
     try:

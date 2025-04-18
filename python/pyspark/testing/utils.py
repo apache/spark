@@ -15,35 +15,34 @@
 # limitations under the License.
 #
 
+import difflib
+import functools
 import os
+import signal
 import struct
 import sys
 import unittest
-import difflib
-import functools
 from decimal import Decimal
-from time import time, sleep
-import signal
+from itertools import zip_longest
+from time import sleep, time
 from typing import (
     Any,
-    Optional,
-    Union,
+    Callable,
     Dict,
     List,
-    Callable,
+    Optional,
+    Union,
 )
-from itertools import zip_longest
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, StructField, VariantVal
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import col, when
+from pyspark.sql.types import StructField, StructType, VariantVal
 
-
-__all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
+__all__ = ["assertColumnUnique", "assertDataFrameEqual", "assertSchemaEqual"]
 
 
 def have_package(name: str) -> bool:
@@ -368,15 +367,19 @@ class PySparkErrorTestUtils:
                     f"Expected message parameter key '{key}' was not found "
                     "in actual message parameters.",
                 )
-                self.assertRegex(
-                    actual[key],
-                    value,
-                    f"Expected message parameter value '{value}' does not match actual message "
-                    f"parameter value '{actual[key]}'.",
-                ),
+                (
+                    self.assertRegex(
+                        actual[key],
+                        value,
+                        f"Expected message parameter value '{value}' does not match actual message "
+                        f"parameter value '{actual[key]}'.",
+                    ),
+                )
         else:
             self.assertEqual(
-                expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
+                expected,
+                actual,
+                f"Expected message parameters was '{expected}', got '{actual}'",
             )
 
         # Test query context
@@ -386,12 +389,14 @@ class PySparkErrorTestUtils:
             for actual_context in actual_contexts:
                 actual = actual_context.contextType()
                 self.assertEqual(
-                    expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
+                    expected,
+                    actual,
+                    f"Expected QueryContext was '{expected}', got '{actual}'",
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert (
-                        fragment is not None
-                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    assert fragment is not None, (
+                        "`fragment` is required when QueryContextType is DataFrame."
+                    )
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -513,7 +518,10 @@ def assertSchemaEqual(
     if not isinstance(expected, StructType):
         raise PySparkTypeError(
             errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
+            messageParameters={
+                "arg_name": "expected",
+                "arg_type": type(expected).__name__,
+            },
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):
@@ -580,6 +588,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pandas
+
     import pyspark.pandas
 
 
@@ -893,7 +902,12 @@ def assertDataFrameEqual(
             # handle pandas DataFrames
             # assert approximate equality for float data
             return PandasOnSparkTestUtils().assert_eq(
-                actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
+                actual,
+                expected,
+                almost=True,
+                rtol=rtol,
+                atol=atol,
+                check_row_order=checkRowOrder,
             )
 
     if not isinstance(actual, (DataFrame, list)):
@@ -981,7 +995,10 @@ def assertDataFrameEqual(
         return compare_vals(r1, r2)
 
     def assert_rows_equal(
-        rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
+        rows1: List[Row],
+        rows2: List[Row],
+        maxErrors: int = None,
+        showOnlyDiff: bool = False,
     ):
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
@@ -1007,7 +1024,9 @@ def assertDataFrameEqual(
                 rows_str2 += str(r2) + "\n"
 
         generated_diff = _context_diff(
-            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
+            actual=rows_str1.splitlines(),
+            expected=rows_str2.splitlines(),
+            n=len(zipped),
         )
 
         if has_diff_rows:
@@ -1017,7 +1036,9 @@ def assertDataFrameEqual(
             error_msg += "\n" + "\n".join(generated_diff)
             data = diff_rows if includeDiffRows else None
             raise PySparkAssertionError(
-                errorClass="DIFFERENT_ROWS", messageParameters={"error_msg": error_msg}, data=data
+                errorClass="DIFFERENT_ROWS",
+                messageParameters={"error_msg": error_msg},
+                data=data,
             )
 
     # only compare schema if expected is not a List
@@ -1063,10 +1084,89 @@ def assertDataFrameEqual(
     assert_rows_equal(actual_list, expected_list, maxErrors=maxErrors, showOnlyDiff=showOnlyDiff)
 
 
+def assertColumnUnique(
+    df: DataFrame,
+    columns: Union[str, List[str]],
+    message: Optional[str] = None,
+):
+    """Assert that the specified column(s) in a DataFrame contain unique values.
+
+    This function checks if the values in the specified column(s) are unique. If not,
+    it raises a PySparkAssertionError with details about the duplicate values.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    df : DataFrame
+        The DataFrame to check for uniqueness.
+    columns : str or list of str
+        The column name(s) to check for uniqueness. Can be a single column name or a list of column names.
+        If a list is provided, the combination of values across these columns is checked for uniqueness.
+    message : str, optional
+        Custom error message to include if the assertion fails.
+
+    Raises
+    ------
+    AssertionError
+        If the specified column(s) contain duplicate values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, "a"), (2, "b"), (3, "c")], ["id", "value"])
+    >>> assertColumnUnique(df, "id")  # passes, 'id' column has unique values
+
+    >>> df = spark.createDataFrame([(1, "a"), (1, "b"), (3, "c")], ["id", "value"])
+    >>> assertColumnUnique(df, "id")  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    AssertionError: Column 'id' contains duplicate values.
+
+    Check multiple columns for uniqueness (composite key):
+
+    >>> df = spark.createDataFrame([(1, "a"), (1, "b"), (2, "a")], ["id", "value"])
+    >>> assertColumnUnique(df, ["id", "value"])  # passes, combinations are unique
+
+    >>> df = spark.createDataFrame([(1, "a"), (1, "a"), (2, "b")], ["id", "value"])
+    >>> assertColumnUnique(df, ["id", "value"])  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    AssertionError: Columns ['id', 'value'] contains duplicate values.
+
+    """
+    if isinstance(columns, str):
+        columns = [columns]
+
+    # Count occurrences of each value combination in the specified columns
+    counts = df.groupBy(*columns).count()
+
+    # Find rows with count > 1 (duplicates)
+    duplicates = counts.filter("count > 1")
+
+    if duplicates.count() > 0:
+        # Get the first few duplicate values to include in the error message
+        duplicate_examples = duplicates.limit(5).collect()
+
+        # Format duplicate examples for error message
+        examples_str = "\n".join([str(row) for row in duplicate_examples])
+
+        # Create error message
+        column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+
+        error_msg = f"{column_desc} contains duplicate values.\n"
+        error_msg += f"Examples of duplicates:\n{examples_str}"
+
+        if message:
+            error_msg += f"\n{message}"
+
+        raise AssertionError(error_msg)
+
+
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.testing.utils
+    from pyspark.sql import SparkSession
 
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()

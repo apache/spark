@@ -16,8 +16,7 @@
 #
 import typing
 
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
-
+from pyspark.testing.utils import assertColumnUnique, assertDataFrameEqual, assertSchemaEqual
 
 grpc_requirement_message = None
 try:
@@ -54,7 +53,6 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 
-
 connect_requirement_message = (
     pandas_requirement_message
     or pyarrow_requirement_message
@@ -64,4 +62,4 @@ connect_requirement_message = (
 )
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
-__all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
+__all__ = ["assertDataFrameEqual", "assertSchemaEqual", "assertColumnUnique"]
