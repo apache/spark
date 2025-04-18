@@ -579,6 +579,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         |   </nestedVariantField>
         |   <mapField>
         |     <a><b>7</b></a>
+        |     <c>8</c>
         |   </mapField>
         | </ROW>
         | """.stripMargin.replaceAll("\\s+", "")
@@ -601,9 +602,10 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
           variant_get(col("row.structField.c.d"), "$", "int"),
           variant_get(col("row.nestedVariantField"), "$.a", "int"),
           variant_get(col("row.nestedVariantField"), "$.b.c", "int"),
-          variant_get(col("row.mapField.a"), "$.b", "int")
+          variant_get(col("row.mapField.a"), "$.b", "int"),
+          variant_get(col("row.mapField.c"), "$", "int")
         ),
-      Seq(Row("Hello", 1, 2, 3, 4, 5, 6, 7))
+      Seq(Row("Hello", 1, 2, 3, 4, 5, 6, 7, 8))
     )
   }
 

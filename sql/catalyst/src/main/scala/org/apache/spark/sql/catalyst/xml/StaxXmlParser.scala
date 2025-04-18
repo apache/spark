@@ -203,8 +203,7 @@ class StaxXmlParser(
       case MapType(StringType, vt, _) => convertMap(parser, vt, attributes)
       case ArrayType(st, _) => convertField(parser, st, startElementName)
       case VariantType =>
-        val v = StaxXmlParser.convertVariant(parser, attributes, options)
-        new VariantVal(v.getValue, v.getMetadata)
+        StaxXmlParser.convertVariant(parser, attributes, options)
       case _: StringType =>
         convertTo(
           StaxXmlParserUtils.currentStructureAsString(
@@ -234,6 +233,8 @@ class StaxXmlParser(
         value
       case (_: Characters, st: StructType) =>
         convertObject(parser, st)
+      case (_: Characters, VariantType) =>
+        StaxXmlParser.convertVariant(parser, Array.empty, options)
       case (_: Characters, _: StringType) =>
         convertTo(
           StaxXmlParserUtils.currentStructureAsString(
@@ -391,16 +392,14 @@ class StaxXmlParser(
                   case st: StructType =>
                     convertObjectWithAttributes(parser, st, field, attributes)
                   case VariantType =>
-                    val v = StaxXmlParser.convertVariant(parser, attributes, options)
-                    new VariantVal(v.getValue, v.getMetadata)
+                    StaxXmlParser.convertVariant(parser, attributes, options)
                   case dt: DataType =>
                     convertField(parser, dt, field)
                 }
                 row(index) = values :+ newValue
 
               case VariantType =>
-                val v = StaxXmlParser.convertVariant(parser, attributes, options)
-                row(index) = new VariantVal(v.getValue, v.getMetadata)
+                row(index) = StaxXmlParser.convertVariant(parser, attributes, options)
 
               case dt: DataType =>
                 row(index) = convertField(parser, dt, field, attributes)
@@ -927,8 +926,7 @@ object StaxXmlParser {
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
     val parser = StaxXmlParserUtils.filteredReader(xml)
     val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-    val variant = convertVariant(parser, rootAttributes, options)
-    val v = new VariantVal(variant.getValue, variant.getMetadata)
+    val v = convertVariant(parser, rootAttributes, options)
     parser.close()
     v
   }
@@ -944,6 +942,14 @@ object StaxXmlParser {
    * @return A Variant representing the XML element with its attributes and child content
    */
   def convertVariant(
+      parser: XMLEventReader,
+      attributes: Array[Attribute],
+      options: XmlOptions): VariantVal = {
+    val v = convertVariantInternal(parser, attributes, options)
+    new VariantVal(v.getValue, v.getMetadata)
+  }
+
+  private def convertVariantInternal(
       parser: XMLEventReader,
       attributes: Array[Attribute],
       options: XmlOptions): Variant = {
@@ -981,7 +987,7 @@ object StaxXmlParser {
           val attributes = s.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
           val field = StaxXmlParserUtils.getName(s.asStartElement.getName, options)
           val variants = fieldToVariants.getOrElseUpdate(field, new java.util.ArrayList[Variant]())
-          variants.add(convertVariant(parser, attributes, options))
+          variants.add(convertVariantInternal(parser, attributes, options))
 
         case c: Characters if !c.isWhiteSpace =>
           // Treat the character as a value tag field, where we use the [[XMLOptions.valueTag]] as
