@@ -958,7 +958,7 @@ class SparkConnectClient(object):
         # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
         # DataFrame manually with the correct schema.
         if table.num_rows == 0:
-            pdf = pd.DataFrame(columns=schema.names)
+            pdf = pd.DataFrame(columns=schema.names, index=range(0))
         else:
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
@@ -1895,9 +1895,12 @@ class SparkConnectClient(object):
                         status.message,
                         self._fetch_enriched_error(info),
                         self._display_server_stack_trace(),
+                        status.code,
                     ) from None
 
-            raise SparkConnectGrpcException(status.message) from None
+            raise SparkConnectGrpcException(
+                message=status.message, grpc_status_code=status.code
+            ) from None
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
@@ -1982,22 +1985,35 @@ class SparkConnectClient(object):
             self.thread_local.ml_caches = set()
 
         if cache_id in self.thread_local.ml_caches:
-            self._delete_ml_cache(cache_id)
+            deleted = self._delete_ml_cache([cache_id])
+            for obj_id in deleted:
+                self.thread_local.ml_caches.remove(obj_id)
 
-    def _delete_ml_cache(self, cache_id: str) -> None:
+    def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
         # try best to delete the cache
         try:
-            command = pb2.Command()
-            command.ml_command.delete.obj_ref.CopyFrom(pb2.ObjectRef(id=cache_id))
-            self.execute_command(command)
+            if len(cache_ids) > 0:
+                command = pb2.Command()
+                command.ml_command.delete.obj_refs.extend(
+                    [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
+                )
+                (_, properties, _) = self.execute_command(command)
+
+                assert properties is not None
+
+                if properties is not None and "ml_command_result" in properties:
+                    ml_command_result = properties["ml_command_result"]
+                    deleted = ml_command_result.operator_info.obj_ref.id.split(",")
+                    return cast(List[str], deleted)
+            return []
         except Exception:
-            pass
+            return []
 
     def _cleanup_ml(self) -> None:
         if not hasattr(self.thread_local, "ml_caches"):
             self.thread_local.ml_caches = set()
 
         self.disable_reattachable_execute()
-        # Todo add a pattern to delete all model in one command
-        for model_id in self.thread_local.ml_caches:
-            self._delete_ml_cache(model_id)
+        deleted = self._delete_ml_cache(list(self.thread_local.ml_caches))
+        for obj_id in deleted:
+            self.thread_local.ml_caches.remove(obj_id)

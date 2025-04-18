@@ -416,10 +416,15 @@ private[ml] object MLUtils {
     if (operators.isEmpty || !operators.contains(name)) {
       throw MlUnsupportedException(s"Unsupported read for $name")
     }
-    operators(name)
-      .getMethod("load", classOf[String])
-      .invoke(null, path)
-      .asInstanceOf[T]
+    try {
+      operators(name)
+        .getMethod("load", classOf[String])
+        .invoke(null, path)
+        .asInstanceOf[T]
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   /**
@@ -621,8 +626,8 @@ private[ml] object MLUtils {
         "isDistributed",
         "logLikelihood",
         "logPerplexity",
-        "describeTopics")),
-    (classOf[LocalLDAModel], Set("vocabSize")),
+        "describeTopics",
+        "vocabSize")),
     (
       classOf[DistributedLDAModel],
       Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),

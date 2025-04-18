@@ -315,7 +315,7 @@ class FileStreamSource(
         className = fileFormatClassName,
         options = optionsForInnerDataSource)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
-      checkFilesExist = false), isStreaming = true))
+      checkFilesExist = false, readOnly = true), isStreaming = true))
   }
 
   /**

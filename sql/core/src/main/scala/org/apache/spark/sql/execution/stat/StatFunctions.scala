@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.stat
 import java.util.Locale
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
@@ -68,44 +67,35 @@ object StatFunctions extends Logging {
       relativeError: Double): Seq[Seq[Double]] = {
     require(relativeError >= 0,
       s"Relative Error must be non-negative but got $relativeError")
+    require(probabilities.forall(p => p >= 0 && p <= 1.0),
+      "percentile should be in the range [0.0, 1.0]")
     val columns: Seq[Column] = cols.map { colName =>
       val field = df.resolve(colName)
       require(field.dataType.isInstanceOf[NumericType],
         s"Quantile calculation for column $colName with data type ${field.dataType}" +
         " is not supported.")
-      Column(colName).cast(DoubleType)
+      col(colName).cast(DoubleType)
     }
-    val emptySummaries = Array.fill(cols.size)(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
 
-    // Note that it works more or less by accident as `rdd.aggregate` is not a pure function:
-    // this function returns the same array as given in the input (because `aggregate` reuses
-    // the same argument).
-    def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
-      var i = 0
-      while (i < summaries.length) {
-        if (!row.isNullAt(i)) {
-          val v = row.getDouble(i)
-          if (!v.isNaN) summaries(i) = summaries(i).insert(v)
-        }
-        i += 1
+    // approx_percentile needs integer accuracy
+    val accuracy = if (relativeError == 0.0) {
+      Int.MaxValue
+    } else {
+      math.min(Int.MaxValue, (1.0 / relativeError).ceil.toLong).toInt
+    }
+
+    val results = Array.fill(cols.size)(Seq.empty[Double])
+    df.select(posexplode(array(columns: _*)).as(Seq("index", "value")))
+      .where(!isnull(col("value")) && !isnan(col("value")))
+      .groupBy("index")
+      .agg(approx_percentile(col("value"), lit(probabilities), lit(accuracy)))
+      .collect()
+      .foreach { row =>
+        val index = row.getInt(0)
+        val quantiles = row.getSeq[Double](1)
+        results(index) = quantiles
       }
-      summaries
-    }
-
-    def merge(
-        sum1: Array[QuantileSummaries],
-        sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
-      sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
-    }
-    val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
-
-    summaries.map {
-      summary => summary.query(probabilities) match {
-        case Some(q) => q
-        case None => Seq()
-      }
-    }.toImmutableArraySeq
+    results.toImmutableArraySeq
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

@@ -175,7 +175,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         None,
         None,
         None,
-        external = false)
+        external = false,
+        constraints = Seq.empty)
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
         ds.schema.asNullable.map(ColumnDefinition.fromV1Column(_, parser)),

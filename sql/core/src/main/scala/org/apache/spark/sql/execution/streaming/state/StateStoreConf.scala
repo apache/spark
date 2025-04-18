@@ -98,6 +98,12 @@ class StateStoreConf(
     StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
 
   /**
+   * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
+   */
+  val reportSnapshotUploadLag: Boolean =
+    sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.`
    */

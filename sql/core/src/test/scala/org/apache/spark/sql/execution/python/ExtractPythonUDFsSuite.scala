@@ -198,8 +198,8 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
   test("Infers LocalLimit for Python evaluator") {
     val df = Seq(("Hello", 4), ("World", 8)).toDF("a", "b")
 
-    // Check that PushProjectionThroughLimit brings GlobalLimit - LocalLimit to the top (for
-    // CollectLimit) and that LimitPushDown keeps LocalLimit under UDF.
+    // Check that PushProjectionThroughLimitAndOffset brings GlobalLimit - LocalLimit to the top
+    // (for CollectLimit) and that LimitPushDown keeps LocalLimit under UDF.
     val df2 = df.limit(1).select(batchedPythonUDF(col("b")))
     assert(df2.queryExecution.optimizedPlan match {
       case Limit(_, _) => true

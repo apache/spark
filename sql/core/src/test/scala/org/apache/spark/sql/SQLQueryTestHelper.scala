@@ -27,7 +27,7 @@ import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.IntegratedUDFTestUtils.{TestUDF, TestUDTFSet}
-import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, CurrentUser, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTime, CurrentTimestampLike, CurrentUser, Literal}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.fileToString
@@ -59,6 +59,9 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
+      .replaceAll("UnionLoop \\d+", "UnionLoop xxxx")
+      .replaceAll("UnionLoopRef \\d+,", "UnionLoopRef xxxx,")
+      .replaceAll("Loop id: \\d+", "Loop id: xxxx")
       .replaceAll("@\\w*,", s"@xxxxxxxx,")
       .replaceAll("\\*\\(\\d+\\) ", "*")
       .replaceAll(
@@ -96,6 +99,9 @@ trait SQLQueryTestHelper extends Logging {
         deterministic = false
         expr
       case expr: CurrentTimestampLike =>
+        deterministic = false
+        expr
+      case expr: CurrentTime =>
         deterministic = false
         expr
       case expr: CurrentUser =>

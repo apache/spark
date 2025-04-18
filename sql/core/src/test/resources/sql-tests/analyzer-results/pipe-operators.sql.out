@@ -677,6 +677,65 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+from t
+|> select sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SELECT",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 23,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+from t as t_alias
+|> select y, sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SELECT",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 37,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+from t as t_alias
+|> select y, sum(x) group by y
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'group'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 table t
 |> extend 1 as z
 -- !query analysis
@@ -1025,10 +1084,10 @@ Project [a#x, a#x, z2#x]
                   +- PipeOperator
                      +- Filter (z2#x = 0)
                         +- PipeOperator
-                           +- Project [a#x, z2#x, a#x, a#x]
-                              +- Project [a#x, z1#x, (a#x - a#x) AS z2#x, a#x, a#x]
-                                 +- Project [a#x, (a#x + a#x) AS z1#x, a#x, a#x, a#x]
-                                    +- Project [a#x, a#x, a#x, a#x, a#x]
+                           +- Project [a#x, z2#x, a#x]
+                              +- Project [a#x, z1#x, (a#x - a#x) AS z2#x, a#x]
+                                 +- Project [a#x, (a#x + a#x) AS z1#x, a#x]
+                                    +- Project [a#x, a#x]
                                        +- Join Inner, (a#x = a#x)
                                           :- SubqueryAlias lhs
                                           :  +- LocalRelation [a#x]

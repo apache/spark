@@ -154,7 +154,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -186,7 +186,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -202,7 +202,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",

@@ -41,6 +41,11 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  object JdbcClientTypes {
+    val INTEGER = "int"
+    val STRING = "nvarchar"
+  }
+
   def getExternalEngineQuery(executedPlan: SparkPlan): String = {
     getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
   }
@@ -93,18 +98,28 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     ).executeUpdate()
   }
 
+  override def testRenameColumn(tbl: String): Unit = {
+    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
+    val t = spark.table(s"$tbl")
+    val expectedSchema = new StructType()
+      .add("RENAMED", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+      .add("ID1", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+      .add("ID2", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+    assert(t.schema === expectedSchema)
+  }
+
   override def notSupportsTableComment: Boolean = true
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
     expectedSchema = new StructType()
-      .add("ID", StringType, true, defaultMetadata())
+      .add("ID", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"

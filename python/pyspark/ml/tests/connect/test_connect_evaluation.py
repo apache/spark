@@ -18,21 +18,17 @@
 import os
 import unittest
 
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin
 
     @unittest.skip("SPARK-50956: Flaky with RetriesExceeded")
-    class EvaluationTestsOnConnect(EvaluationTestsMixin, unittest.TestCase):
-        def setUp(self) -> None:
-            self.spark = SparkSession.builder.remote(
-                os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
-            ).getOrCreate()
-
-        def tearDown(self) -> None:
-            self.spark.stop()
+    class EvaluationTestsOnConnect(EvaluationTestsMixin, ReusedConnectTestCase):
+        @classmethod
+        def master(cls):
+            return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]")
 
 
 if __name__ == "__main__":
