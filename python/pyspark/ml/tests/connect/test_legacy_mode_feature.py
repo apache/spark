@@ -27,6 +27,7 @@ from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     from pyspark.ml.connect.feature import (
@@ -201,12 +202,8 @@ class FeatureTestsMixin:
     or torch_requirement_message
     or "pyspark-connect cannot test classic Spark",
 )
-class FeatureTests(FeatureTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class FeatureTests(FeatureTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

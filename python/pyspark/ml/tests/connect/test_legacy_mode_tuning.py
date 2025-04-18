@@ -36,6 +36,7 @@ from pyspark.testing.utils import (
     have_torcheval,
     torcheval_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     import pandas as pd
@@ -294,12 +295,8 @@ class CrossValidatorTestsMixin:
     or torcheval_requirement_message
     or "pyspark-connect cannot test classic Spark",
 )
-class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class CrossValidatorTests(CrossValidatorTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
