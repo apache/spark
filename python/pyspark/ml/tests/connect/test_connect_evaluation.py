@@ -25,7 +25,9 @@ if should_test_connect:
 
     @unittest.skip("SPARK-50956: Flaky with RetriesExceeded")
     class EvaluationTestsOnConnect(EvaluationTestsMixin, ReusedConnectTestCase):
-        pass
+        @classmethod
+        def master(cls):
+            return "local[2]"
 
 
 if __name__ == "__main__":

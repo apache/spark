@@ -35,9 +35,13 @@ if should_test_connect:
     class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, ReusedConnectTestCase):
         @classmethod
         def conf(cls):
-            c = super(CrossValidatorTestsOnConnect, cls).conf()
-            c.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
-            return c
+            config = super(CrossValidatorTestsOnConnect, cls).conf()
+            config.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
+            return config
+
+        @classmethod
+        def master(cls):
+            return "local[2]"
 
 
 if __name__ == "__main__":

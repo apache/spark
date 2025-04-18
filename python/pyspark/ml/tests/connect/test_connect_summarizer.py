@@ -25,7 +25,9 @@ if should_test_connect:
 
     @unittest.skipIf(not should_test_connect, connect_requirement_message)
     class SummarizerTestsOnConnect(SummarizerTestsMixin, ReusedConnectTestCase):
-        pass
+        @classmethod
+        def master(cls):
+            return "local[2]"
 
 
 if __name__ == "__main__":

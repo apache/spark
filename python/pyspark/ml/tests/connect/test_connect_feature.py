@@ -29,7 +29,9 @@ if should_test_connect:
         connect_requirement_message or sklearn_requirement_message,
     )
     class FeatureTestsOnConnect(FeatureTestsMixin, ReusedConnectTestCase):
-        pass
+        @classmethod
+        def master(cls):
+            return "local[2]"
 
 
 if __name__ == "__main__":
