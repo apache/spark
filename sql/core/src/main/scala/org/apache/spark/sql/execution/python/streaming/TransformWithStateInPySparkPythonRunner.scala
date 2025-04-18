@@ -221,7 +221,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     executionContext.execute(
       new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandle,
         groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
-        sqlConf.arrowTransformWithStateInPySparkMaxRecordsPerBatch,
+        sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
         batchTimestampMs, eventTimeWatermarkForEviction))
 
     context.addTaskCompletionListener[Unit] { _ =>
@@ -301,7 +301,7 @@ class TransformWithStateInPySparkPythonPreInitRunner(
           new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandleImpl,
             groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames = true,
             largeVarTypes = sqlConf.arrowUseLargeVarTypes,
-            sqlConf.arrowTransformWithStateInPySparkMaxRecordsPerBatch).run()
+            sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch).run()
         } catch {
           case e: Exception =>
             throw new SparkException("TransformWithStateInPySpark state server " +

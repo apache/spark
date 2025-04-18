@@ -3583,8 +3583,8 @@ object SQLConf {
           "than zero and less than INT_MAX.")
       .createWithDefaultString("256MB")
 
-  val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_RECORDS_PER_BATCH =
-    buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxRecordsPerBatch")
+  val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
       .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
         "the maximum number of state records that can be written to a single ArrowRecordBatch " +
         "in memory.")
@@ -6593,8 +6593,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
-  def arrowTransformWithStateInPySparkMaxRecordsPerBatch: Int =
-    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_RECORDS_PER_BATCH)
+  def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 
