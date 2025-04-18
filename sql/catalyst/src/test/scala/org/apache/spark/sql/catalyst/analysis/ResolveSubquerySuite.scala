@@ -125,8 +125,8 @@ class ResolveSubquerySuite extends AnalysisTest {
     // TODO: support accessing columns from outer outer query.
     assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
-      "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`")
+      "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
+      Map.empty
     )
   }
 
@@ -146,14 +146,14 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
-      "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`t1`.`a`")
+      "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
+      Map.empty
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorCondition(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
-      "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`")
+      "NESTED_REFERENCES_IN_LATERAL_SUBQUERY",
+      Map.empty
     )
   }
 
