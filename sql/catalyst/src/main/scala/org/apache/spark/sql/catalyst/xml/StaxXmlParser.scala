@@ -387,6 +387,8 @@ class StaxXmlParser(
                 val newValue = dt match {
                   case st: StructType =>
                     convertObjectWithAttributes(parser, st, field, attributes)
+                  case VariantType =>
+                    StaxXmlParser.convertVariant(parser, attributes, options)
                   case dt: DataType =>
                     convertField(parser, dt, field)
                 }

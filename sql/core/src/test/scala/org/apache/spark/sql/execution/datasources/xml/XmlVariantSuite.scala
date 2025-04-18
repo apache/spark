@@ -418,14 +418,20 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     val df = createDSLDataFrame(
       fileName = "books-complicated.xml",
       schemaDDL = Some(
-        "_id string, author string, title string, genre variant, price double, " +
-        "publish_dates variant"
+        "_id string, author string, title string, " +
+        "genre struct<genreid int, name variant>, " + // Struct with variant
+        "price variant, " + // Scalar as variant
+        "publish_dates struct<publish_date array<variant>>" // Array with variant
       ),
       extraOptions = Map("rowTag" -> "book")
     )
     checkAnswer(
-      df.select(variant_get(col("genre"), "$.name", "string")),
-      Seq(Row("Computer"), Row("Fantasy"), Row("Fantasy"))
+      df.select(
+        variant_get(col("genre.name"), "$", "string"),
+        variant_get(col("price"), "$", "double"),
+        variant_get(col("publish_dates.publish_date[0].month"), "$", "int")
+      ),
+      Seq(Row("Computer", 44.95, 10), Row("Fantasy", 5.95, 12), Row("Fantasy", null, 11))
     )
   }
 
