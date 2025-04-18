@@ -295,7 +295,9 @@ class CrossValidatorTestsMixin:
     or "pyspark-connect cannot test classic Spark",
 )
 class CrossValidatorTests(CrossValidatorTestsMixin, ReusedSQLTestCase):
-    pass
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":

@@ -176,7 +176,9 @@ class PipelineTestsMixin:
     or "pyspark-connect cannot test classic Spark",
 )
 class PipelineTests(PipelineTestsMixin, ReusedSQLTestCase):
-    pass
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":

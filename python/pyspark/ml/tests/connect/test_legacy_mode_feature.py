@@ -202,7 +202,9 @@ class FeatureTestsMixin:
     or "pyspark-connect cannot test classic Spark",
 )
 class FeatureTests(FeatureTestsMixin, ReusedSQLTestCase):
-    pass
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":
