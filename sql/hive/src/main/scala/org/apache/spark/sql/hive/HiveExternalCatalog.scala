@@ -666,11 +666,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val newTableProps =
         propsFromOldTable ++ tableDefinition.properties + partitionProviderProp ++ newFormatIfExists
 
+      val (newSchema, partitionColumnNames) = if (oldTableDef.schema == EMPTY_DATA_SCHEMA) {
+        val restoredOldTable = restoreTableMetadata(oldTableDef)
+        (StructType(EMPTY_DATA_SCHEMA ++ restoreTableMetadata(oldTableDef).partitionSchema),
+          restoredOldTable.partitionColumnNames)
+      } else {
+        (oldTableDef.schema, oldTableDef.partitionColumnNames)
+      }
       // // Add old table's owner if we need to restore
       val owner = Option(tableDefinition.owner).filter(_.nonEmpty).getOrElse(oldTableDef.owner)
       val newDef = tableDefinition.copy(
         storage = newStorage,
-        schema = oldTableDef.schema,
+        schema = newSchema,
+        partitionColumnNames = partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
         properties = newTableProps,
         owner = owner)
