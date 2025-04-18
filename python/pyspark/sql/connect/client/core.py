@@ -2010,13 +2010,11 @@ class SparkConnectClient(object):
             return []
 
     def _cleanup_ml(self) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
-
-        try:
-            command = pb2.Command()
-            command.ml_command.clean.SetInParent()
-            self.execute_command(command)
-            self.thread_local.ml_caches.clear()
-        except Exception:
-            pass
+        if hasattr(self.thread_local, "ml_caches") and len(self.thread_local.ml_caches) > 0:
+            try:
+                command = pb2.Command()
+                command.ml_command.clean.SetInParent()
+                self.execute_command(command)
+                self.thread_local.ml_caches.clear()
+            except Exception:
+                pass
