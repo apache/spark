@@ -2010,10 +2010,11 @@ class SparkConnectClient(object):
             return []
 
     def _cleanup_ml(self) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
-
-        self.disable_reattachable_execute()
-        deleted = self._delete_ml_cache(list(self.thread_local.ml_caches))
-        for obj_id in deleted:
-            self.thread_local.ml_caches.remove(obj_id)
+        if hasattr(self.thread_local, "ml_caches") and len(self.thread_local.ml_caches) > 0:
+            try:
+                command = pb2.Command()
+                command.ml_command.clean.SetInParent()
+                self.execute_command(command)
+                self.thread_local.ml_caches.clear()
+            except Exception:
+                pass
