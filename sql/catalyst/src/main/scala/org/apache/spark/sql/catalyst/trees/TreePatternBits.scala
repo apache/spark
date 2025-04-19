@@ -22,7 +22,7 @@ import org.apache.spark.util.collection.BitSet
 
 // A wrapper of BitSet for pattern enums.
 trait TreePatternBits {
-  protected val treePatternBits: BitSet
+  protected def treePatternBits: BitSet
 
   /**
    * @param t, the tree pattern enum to be tested.
