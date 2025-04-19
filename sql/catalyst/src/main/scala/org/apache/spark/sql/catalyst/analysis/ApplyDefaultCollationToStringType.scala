@@ -33,47 +33,48 @@ import org.apache.spark.sql.types.{DataType, StringType}
 object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     fetchDefaultCollation(plan) match {
-      case Some(newType) =>
-        transform(plan, newType)
+      case Some(collation) =>
+        transform(plan, StringType(collation))
       case None => plan
     }
   }
 
-  /** Returns the string type that should be used in a given plan */
-  private def fetchDefaultCollation(plan: LogicalPlan): Option[StringType] = {
+  /** Returns the default collation that should be applied to the plan
+   * if specified; otherwise, returns None.
+   */
+  private def fetchDefaultCollation(plan: LogicalPlan): Option[String] = {
     plan match {
       case createTable: CreateTable =>
-        createTable.tableSpec.collation.map(StringType(_))
+        createTable.tableSpec.collation
 
       // CreateView also handles CREATE OR REPLACE VIEW
       // Unlike for tables, CreateView also handles CREATE OR REPLACE VIEW
       case createView: CreateView =>
-        createView.collation.map(StringType(_))
+        createView.collation
 
       case replaceTable: ReplaceTable =>
-        replaceTable.tableSpec.collation.map(StringType(_))
+        replaceTable.tableSpec.collation
 
       case alterTable: AlterTableCommand if alterTable.table.resolved =>
         alterTable.table match {
           case resolvedTbl: ResolvedTable
             if resolvedTbl.table.properties.containsKey(TableCatalog.PROP_COLLATION ) =>
-              val collation = resolvedTbl.table.properties.get(TableCatalog.PROP_COLLATION)
-              Some(StringType(collation))
+              Some(resolvedTbl.table.properties.get(TableCatalog.PROP_COLLATION))
           case _ => None
         }
 
       case alterViewAs: AlterViewAs =>
         alterViewAs.child match {
           case resolvedPersistentView: ResolvedPersistentView =>
-            resolvedPersistentView.metadata.collation.map(StringType(_))
+            resolvedPersistentView.metadata.collation
           case resolvedTempView: ResolvedTempView =>
-            resolvedTempView.metadata.collation.map(StringType(_))
+            resolvedTempView.metadata.collation
           case _ => None
         }
 
       // Check if view has default collation
       case _ if AnalysisContext.get.collation.isDefined =>
-        AnalysisContext.get.collation.map(StringType(_))
+        AnalysisContext.get.collation
 
       case _ => None
     }
