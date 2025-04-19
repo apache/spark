@@ -537,7 +537,8 @@ class DataSourceReader(ABC):
         Side effects
         ------------
         This method is allowed to modify `self`. The object must remain picklable.
-        Modifications to `self` are visible to the `partitions()` and `read()` methods.
+        Modifications to `self` are visible to the `partitions()`, `pruneColumns()` and
+        `read()` methods.
 
         Examples
         --------
@@ -564,6 +565,58 @@ class DataSourceReader(ABC):
         ...             yield filter
         """
         return filters
+
+    def pruneColumns(self, requiredSchema: StructType) -> Optional[StructType]:
+        """
+        Returns the actual schema after pruning. :meth:`DataSourceReader.read` must return data
+        following this schema.
+
+        The returned schema must be a superset of the required schema and a subset of the full
+        schema.
+
+        This method is called once during query planning. By default, it returns None,
+        not performing any pruning. Subclasses can override this to implement column pruning.
+
+        Implementation should try its best to prune the unnecessary columns or nested fields, but
+        it's also OK to do the pruning partially, e.g., a data source may not be able to prune
+        nested fields, and only prune top-level columns.
+
+        Parameters
+        ----------
+        requiredSchema : :class:`StructType`
+            The schema of the data source that is required by the query.
+
+            This is a subset of the full schema.
+            All fields that are not in this schema are unnecessary and can be pruned.
+
+        Returns
+        -------
+        :class:`StructType` or None
+            The pruned schema, or None if pruning is not supported.
+
+        Side effects
+        ------------
+        This method is allowed to modify `self`. The object must remain picklable.
+        Modifications to `self` are visible to the `partitions()` and `read()` methods.
+
+        Examples
+        --------
+        Implement pushFilters to support top-level column pruning, and save all required
+        columns in `self.required` for later use:
+
+        >>> def pruneColumns(self, requiredSchema):
+        ...     self.required = requiredSchema.fieldNames()
+        ...     required = set(requiredSchema.fieldNames())
+        ...     schema = StructType([f for f in self.schema.fields if f.name in required])
+        ...     return schema
+
+        Implement pushFilters to support nested column pruning:
+
+        >>> def pruneColumns(self, requiredSchema):
+        ...     self.schema = requiredSchema
+        ...     return self.schema
+        """
+        return None
 
     def partitions(self) -> Sequence[InputPartition]:
         """

@@ -189,6 +189,11 @@
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_COLUMN_PRUNING_DISABLED": {
+    "message": [
+      "<type> implements pruneColumns() but column pruning is disabled because configuration '<conf>' is false. Set it to true to enable column pruning."
+    ]
+  },
   "DATA_SOURCE_EXTRANEOUS_FILTERS": {
     "message": [
       "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
@@ -197,6 +202,24 @@
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
     "message": [
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
+    ]
+  },
+  "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUBSET": {
+    "message": [
+      "<type>.pruneColumns() returned a schema that's incompatible at column '<path>'. Make sure it's a subset of the original schema.",
+      "Actual schema:",
+      "<subset>",
+      "Original schema:",
+      "<superset>"
+    ]
+  },
+  "DATA_SOURCE_PRUNED_SCHEMA_INCOMPATIBLE_SUPERSET": {
+    "message": [
+      "<type>.pruneColumns() returned a schema that's incompatible at column '<path>'. Make sure it's a superset of the required schema.",
+      "Actual schema:",
+      "<superset>",
+      "Required schema:",
+      "<subset>"
     ]
   },
   "DATA_SOURCE_PUSHDOWN_DISABLED": {
