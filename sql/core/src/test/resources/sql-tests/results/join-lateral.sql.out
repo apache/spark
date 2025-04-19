@@ -541,19 +541,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "objectName" : "`t1`.`c1`",
-    "proposal" : "`t2`.`c1`, `t2`.`c2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 74,
-    "stopIndex" : 78,
-    "fragment" : "t1.c1"
-  } ]
+    "expression" : "spark_catalog.default.t1.c1"
+  }
 }
 
 

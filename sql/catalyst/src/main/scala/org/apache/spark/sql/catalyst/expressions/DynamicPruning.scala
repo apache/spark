@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
@@ -47,7 +48,7 @@ case class DynamicPruningSubquery(
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
-  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), Seq.empty, exprId, Seq.empty, hint)
   with DynamicPruning
   with Unevaluable
   with UnaryLike[Expression] {
@@ -64,6 +65,17 @@ case class DynamicPruningSubquery(
     // Updating outer attrs of DynamicPruningSubquery is unsupported; assert that they match
     // pruningKey and return a copy without any changes.
     assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
+    copy()
+  }
+
+  override def withNewNestedOuterAttrs(
+    nestedOuterAttrs: Seq[Expression]
+  ): DynamicPruningSubquery = {
+    // DynamicPruningSubquery should not have nested outer attrs
+    if (nestedOuterAttrs.nonEmpty) {
+      throw SparkException.internalError(
+        "DynamicPruningSubquery should not have nested outer attributes.")
+    }
     copy()
   }
 

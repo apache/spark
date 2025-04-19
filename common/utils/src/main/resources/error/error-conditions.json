@@ -4064,6 +4064,12 @@
     ],
     "sqlState" : "07501"
   },
+  "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED" : {
+    "message" : [
+      "Detected nested outer references <expression> in the subquery. Please set 'spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled' to true to enable this feature."
+    ],
+    "sqlState" : "0A000"
+  },
   "NONEXISTENT_FIELD_NAME_IN_LIST" : {
     "message" : [
       "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
