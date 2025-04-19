@@ -4934,6 +4934,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkAnswer(df, Row("a"))
   }
+
+  test("SPARK-51796: SortOrder expressions are not allowed under non-Sort operators") {
+    val df = sql("SELECT 1 AS name")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(desc("name"))
+      },
+      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      parameters = Map("invalidExprSqls" -> "\"name DESC NULLS LAST\""),
+    )
+  }
 }
 
 case class Foo(bar: Option[String])
