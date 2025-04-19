@@ -471,6 +471,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}cte.sql")) {
         CTETestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(
+        s"$inputFilePath${File.separator}subquery${File.separator}nestedcorrelation"
+      )) {
+        AnalyzerTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
