@@ -25,6 +25,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.TaskFailureListener
 
 package object state {
 
@@ -109,8 +110,9 @@ package object state {
       val cleanedF = dataRDD.sparkContext.clean(storeReadFn)
       val wrappedF = (store: ReadStateStore, iter: Iterator[T]) => {
         // Clean up the state store.
-        TaskContext.get().addTaskCompletionListener[Unit](_ => {
-          store.abort()
+        TaskContext.get().addTaskFailureListener(new TaskFailureListener {
+          override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+            store.abort()
         })
         cleanedF(store, iter)
       }
