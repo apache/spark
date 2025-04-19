@@ -236,7 +236,7 @@ Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#8 ASC NULLS FIRST], f
 (6) Scan parquet spark_catalog.default.store_returns
 Output [3]: [sr_item_sk#16, sr_ticket_number#17, sr_returned_date_sk#18]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_returns]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
@@ -272,7 +272,7 @@ Input [14]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_ad
 (14) Scan parquet spark_catalog.default.catalog_sales
 Output [4]: [cs_item_sk#19, cs_order_number#20, cs_ext_list_price#21, cs_sold_date_sk#22]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/catalog_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_order_number)]
 ReadSchema: struct<cs_item_sk:int,cs_order_number:int,cs_ext_list_price:decimal(7,2)>
 
@@ -298,7 +298,7 @@ Arguments: [cs_item_sk#19 ASC NULLS FIRST, cs_order_number#20 ASC NULLS FIRST], 
 (20) Scan parquet spark_catalog.default.catalog_returns
 Output [6]: [cr_item_sk#23, cr_order_number#24, cr_refunded_cash#25, cr_reversed_charge#26, cr_store_credit#27, cr_returned_date_sk#28]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/catalog_returns]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_refunded_cash:decimal(7,2),cr_reversed_charge:decimal(7,2),cr_store_credit:decimal(7,2)>
 

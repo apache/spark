@@ -44,7 +44,7 @@ TakeOrderedAndProject (40)
 (1) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_item_sk#1, ss_store_sk#2, ss_net_profit#3, ss_sold_date_sk#4]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4)]
 ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
 
