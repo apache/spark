@@ -45,7 +45,46 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF")
+
+  // See https://dev.mysql.com/doc/refman/8.4/en/built-in-function-reference.html
+  // The functions listed here have the same signature and similar semantics,
+  // and can be supported with existing mechanism.
+  private val supportedConditionalFunctions = Set ("COALESCE")
+  private val supportedDateAndTimestampFunctions = Set("DATE_ADD", "DATE_DIFF")
+  private val supportedEncryptionFunctions = Set("SHA1", "SHA2", "MD5", "CONCAT")
+  private val supportedMathmaticalFunctions = Set (
+    "ABS",
+    "ACOS",
+    "ASIN",
+    "ATAN",
+    "ATAN2",
+    "COS",
+    "COT",
+    "CRC32",
+    "DEGREES",
+    "EXP",
+    "GREATEST",
+    "LEAST",
+    "LN",
+    "LOG10",
+    "LOG2",
+    "POWER",
+    "RADIANS",
+    "RAND",
+    "SIGN",
+    "SQRT",
+    "SIN",
+    "TAN")
+  private val supportedStringFunctions =
+    Set("BIT_LENGTH", "CHAR_LENGTH", "LOWER", "SUBSTRING", "UPPER")
+
+  private val supportedFunctions =
+    supportedAggregateFunctions ++
+      supportedConditionalFunctions ++
+      supportedDateAndTimestampFunctions ++
+      supportedEncryptionFunctions ++
+      supportedMathmaticalFunctions ++
+      supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
