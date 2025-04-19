@@ -418,14 +418,20 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     val df = createDSLDataFrame(
       fileName = "books-complicated.xml",
       schemaDDL = Some(
-        "_id string, author string, title string, genre variant, price double, " +
-        "publish_dates variant"
+        "_id string, author string, title string, " +
+        "genre struct<genreid int, name variant>, " + // Struct with variant
+        "price variant, " + // Scalar as variant
+        "publish_dates struct<publish_date array<variant>>" // Array with variant
       ),
       extraOptions = Map("rowTag" -> "book")
     )
     checkAnswer(
-      df.select(variant_get(col("genre"), "$.name", "string")),
-      Seq(Row("Computer"), Row("Fantasy"), Row("Fantasy"))
+      df.select(
+        variant_get(col("genre.name"), "$", "string"),
+        variant_get(col("price"), "$", "double"),
+        variant_get(col("publish_dates.publish_date").getItem(0), "$.month", "int")
+      ),
+      Seq(Row("Computer", 44.95, 10), Row("Fantasy", 5.95, 12), Row("Fantasy", null, 11))
     )
   }
 
@@ -557,32 +563,49 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("SQL: read partial XML record as variant using from_xml with a defined schema") {
     val xmlStr =
       """
-        |<book>
-        |   <author>Gambardella</author>
-        |   <title>Hello</title>
-        |   <genre>
-        |     <genreid>1</genreid>
-        |     <name>Computer</name>
-        |   </genre>
-        |   <price>44.95</price>
-        |   <publish_dates>
-        |     <publish_date>
-        |       <day>1</day>
-        |       <month>10</month>
-        |       <year>2000</year>
-        |     </publish_date>
-        |   </publish_dates>
-        | </book>
+        |<ROW>
+        |   <scalar>Hello</scalar>
+        |   <arrayField><a>1</a></arrayField>
+        |   <arrayField><a>2</a></arrayField>
+        |   <structField>
+        |     <a><b>3</b></a>
+        |     <c><d>4</d></c>
+        |   </structField>
+        |   <nestedVariantField>
+        |     <a>5</a>
+        |     <b>
+        |        <c>6</c>
+        |     </b>
+        |   </nestedVariantField>
+        |   <mapField>
+        |     <a><b>7</b></a>
+        |     <c>8</c>
+        |   </mapField>
+        | </ROW>
         | """.stripMargin.replaceAll("\\s+", "")
     // Read specific elements in the XML record as variant
     val schemaDDL =
-      "author string, title string, genre variant, price double, publish_dates variant"
+      "scalar variant, " +
+      "arrayField array<variant>, " + // Array with variants
+      "structField struct<a variant, c struct<d variant>>, " + // Struct with variants
+      "nestedVariantField variant, " +
+      "mapField map<string, variant>"
     // Verify we can extract fields from the variant type
     checkAnswer(
       spark
-        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as book""".stripMargin)
-        .select(variant_get(col("book.publish_dates"), "$.publish_date.year", "int")),
-      Seq(Row(2000))
+        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as row""".stripMargin)
+        .select(
+          variant_get(col("row.scalar"), "$", "string"),
+          variant_get(col("row.arrayField").getItem(0), "$.a", "int"),
+          variant_get(col("row.arrayField").getItem(1), "$.a", "int"),
+          variant_get(col("row.structField.a"), "$.b", "int"),
+          variant_get(col("row.structField.c.d"), "$", "int"),
+          variant_get(col("row.nestedVariantField"), "$.a", "int"),
+          variant_get(col("row.nestedVariantField"), "$.b.c", "int"),
+          variant_get(col("row.mapField.a"), "$.b", "int"),
+          variant_get(col("row.mapField.c"), "$", "int")
+        ),
+      Seq(Row("Hello", 1, 2, 3, 4, 5, 6, 7, 8))
     )
   }
 
