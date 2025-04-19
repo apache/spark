@@ -2976,7 +2976,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         (``axis=1``).
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
             to the whole input series. pandas-on-Spark internally splits the input series into
@@ -3302,7 +3302,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         and that has the same length as its input.
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: this API executes the function once to infer the type which is
              potentially expensive, for instance, when the dataset is created after
