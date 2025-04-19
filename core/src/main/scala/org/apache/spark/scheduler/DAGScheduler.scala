@@ -1554,6 +1554,12 @@ private[spark] class DAGScheduler(
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
         mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
         sms.shuffleDep.newShuffleMergeState()
+      case rs: ResultStage if rs.isIndeterminate &&
+        rs.findMissingPartitions().length != rs.partitions.length =>
+        abortStage(rs, "Re-submit of a partially completed indeterminate result stage is not " +
+          "supported", None)
+        runningStages -= stage
+        return
       case _ =>
     }
 
