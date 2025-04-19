@@ -458,7 +458,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    null.asInstanceOf[ValueState[T]]
+    new InvalidHandleValueState[T](stateName)
   }
 
   override def getListState[T](
@@ -492,7 +492,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName,
       keyExprEnc.schema
     )
-    null.asInstanceOf[ListState[T]]
+    new InvalidHandleListState[T](stateName)
   }
 
   override def getMapState[K, V](
@@ -522,7 +522,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     val stateVariableInfo = TransformWithStateVariableUtils.
       getMapState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[MapState[K, V]]
+    new InvalidHandleMapState[K, V](stateName)
   }
 
   /**
@@ -654,4 +654,44 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists", PRE_INIT)
   }
+}
+
+private[sql] trait InvalidHandleState {
+  protected val stateName: String
+
+  protected def throwInitPhaseError(operation: String): Nothing = {
+    throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(
+      s"$stateName.$operation", PRE_INIT.toString)
+  }
+}
+
+private[sql] class InvalidHandleValueState[S](override val stateName: String)
+  extends ValueState[S] with InvalidHandleState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def get(): S = throwInitPhaseError("get")
+  override def update(newState: S): Unit = throwInitPhaseError("update")
+  override def clear(): Unit = throwInitPhaseError("clear")
+}
+
+private[sql] class InvalidHandleListState[S](override val stateName: String)
+  extends ListState[S] with InvalidHandleState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def get(): Iterator[S] = throwInitPhaseError("get")
+  override def put(newState: Array[S]): Unit = throwInitPhaseError("put")
+  override def appendValue(newState: S): Unit = throwInitPhaseError("appendValue")
+  override def appendList(newState: Array[S]): Unit = throwInitPhaseError("appendList")
+  override def clear(): Unit = throwInitPhaseError("clear")
+}
+
+private[sql] class InvalidHandleMapState[K, V](override val stateName: String)
+  extends MapState[K, V] with InvalidHandleState {
+  override def exists(): Boolean = throwInitPhaseError("exists")
+  override def getValue(key: K): V = throwInitPhaseError("getValue")
+  override def containsKey(key: K): Boolean = throwInitPhaseError("containsKey")
+  override def updateValue(key: K, value: V): Unit = throwInitPhaseError("updateValue")
+  override def iterator(): Iterator[(K, V)] = throwInitPhaseError("iterator")
+  override def keys(): Iterator[K] = throwInitPhaseError("keys")
+  override def values(): Iterator[V] = throwInitPhaseError("values")
+  override def removeKey(key: K): Unit = throwInitPhaseError("removeKey")
+  override def clear(): Unit = throwInitPhaseError("clear")
 }
