@@ -357,7 +357,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // just to make sure some of the tasks and their deserialization take a noticeable
     // amount of time
     val slowDeserializable = new SlowDeserializable
-    val w = { i: Int =>
+    val w = { (i: Int) =>
       if (i == 0) {
         Thread.sleep(100)
         slowDeserializable.use()

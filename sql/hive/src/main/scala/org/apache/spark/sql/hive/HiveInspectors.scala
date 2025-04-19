@@ -536,7 +536,7 @@ private[hive] trait HiveInspectors {
       case pi: PrimitiveObjectInspector => pi match {
         // We think HiveVarchar/HiveChar is also a String
         case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               UTF8String.fromString(hvoi.getPrimitiveWritableObject(data).getHiveVarchar.getValue)
             } else {
@@ -544,7 +544,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case hvoi: HiveVarcharObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
             } else {
@@ -552,7 +552,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case hvoi: HiveCharObjectInspector if hvoi.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               UTF8String.fromString(hvoi.getPrimitiveWritableObject(data).getHiveChar.getValue)
             } else {
@@ -560,7 +560,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case hvoi: HiveCharObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
             } else {
@@ -568,7 +568,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case x: StringObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               // Text is in UTF-8 already. No need to convert again via fromString. Copy bytes
               val wObj = x.getPrimitiveWritableObject(data)
@@ -579,7 +579,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case x: StringObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               UTF8String.fromString(x.getPrimitiveJavaObject(data))
             } else {
@@ -587,35 +587,35 @@ private[hive] trait HiveInspectors {
             }
           }
         case x: IntObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) x.get(data) else null
           }
         case x: BooleanObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) x.get(data) else null
           }
         case x: FloatObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) x.get(data) else null
           }
         case x: DoubleObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) x.get(data) else null
           }
         case x: LongObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) x.get(data) else null
           }
         case x: ShortObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) x.get(data) else null
           }
         case x: ByteObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) x.get(data) else null
           }
         case x: HiveDecimalObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               HiveShim.toCatalystDecimal(x, data)
             } else {
@@ -623,7 +623,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case x: BinaryObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               x.getPrimitiveWritableObject(data).copyBytes()
             } else {
@@ -631,7 +631,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case x: DateObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               new DaysWritable(x.getPrimitiveWritableObject(data)).gregorianDays
             } else {
@@ -639,7 +639,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case x: DateObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               DateTimeUtils.fromJavaDate(x.getPrimitiveJavaObject(data))
             } else {
@@ -647,7 +647,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case x: TimestampObjectInspector if x.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               DateTimeUtils.fromJavaTimestamp(x.getPrimitiveWritableObject(data).getTimestamp)
             } else {
@@ -655,7 +655,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case ti: TimestampObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               DateTimeUtils.fromJavaTimestamp(ti.getPrimitiveJavaObject(data))
             } else {
@@ -663,7 +663,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case dt: HiveIntervalDayTimeObjectInspector if dt.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               val dayTime = dt.getPrimitiveWritableObject(data).getHiveIntervalDayTime
               IntervalUtils.durationToMicros(
@@ -673,7 +673,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case dt: HiveIntervalDayTimeObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               val dayTime = dt.getPrimitiveJavaObject(data)
               IntervalUtils.durationToMicros(
@@ -683,7 +683,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case ym: HiveIntervalYearMonthObjectInspector if ym.preferWritable() =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               ym.getPrimitiveWritableObject(data).getHiveIntervalYearMonth.getTotalMonths
             } else {
@@ -691,7 +691,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case ym: HiveIntervalYearMonthObjectInspector =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               ym.getPrimitiveJavaObject(data).getTotalMonths
             } else {
@@ -699,7 +699,7 @@ private[hive] trait HiveInspectors {
             }
           }
         case _ =>
-          data: Any => {
+          (data: Any) => {
             if (data != null) {
               pi.getPrimitiveJavaObject(data)
             } else {
@@ -709,7 +709,7 @@ private[hive] trait HiveInspectors {
       }
       case li: ListObjectInspector =>
         val unwrapper = unwrapperFor(li.getListElementObjectInspector)
-        data: Any => {
+        (data: Any) => {
           if (data != null) {
             Option(li.getList(data))
               .map { l =>
@@ -724,7 +724,7 @@ private[hive] trait HiveInspectors {
       case mi: MapObjectInspector =>
         val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector)
         val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector)
-        data: Any => {
+        (data: Any) => {
           if (data != null) {
             val map = mi.getMap(data)
             if (map == null) {
@@ -741,9 +741,9 @@ private[hive] trait HiveInspectors {
         val fields = si.getAllStructFieldRefs.asScala
         val unwrappers = fields.map { field =>
           val unwrapper = unwrapperFor(field.getFieldObjectInspector)
-          data: Any => unwrapper(si.getStructFieldData(data, field))
+          (data: Any) => unwrapper(si.getStructFieldData(data, field))
         }
-        data: Any => {
+        (data: Any) => {
           if (data != null) {
             new GenericInternalRow(unwrappers.map(_(data)).toArray)
           } else {

@@ -210,12 +210,12 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ))
     }
 
-    testExpr(XPathBoolean)
-    testExpr(XPathShort)
-    testExpr(XPathInt)
-    testExpr(XPathLong)
-    testExpr(XPathFloat)
-    testExpr(XPathDouble)
-    testExpr(XPathString)
+    testExpr(XPathBoolean(_, _))
+    testExpr(XPathShort(_, _))
+    testExpr(XPathInt(_, _))
+    testExpr(XPathLong(_, _))
+    testExpr(XPathFloat(_, _))
+    testExpr(XPathDouble(_, _))
+    testExpr(XPathString(_, _))
   }
 }

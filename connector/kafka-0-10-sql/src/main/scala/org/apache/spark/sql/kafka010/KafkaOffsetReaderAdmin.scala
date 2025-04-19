@@ -336,7 +336,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
         //    admin has a much bigger chance to hit KAFKA-7703 like issues.
         var incorrectOffsets: Seq[(TopicPartition, Long, Long)] = Nil
         var attempt = 0
-        do {
+        while ({
           partitionOffsets = listOffsets(admin, listOffsetsParams)
           attempt += 1
 
@@ -349,7 +349,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
               Thread.sleep(offsetFetchAttemptIntervalMs)
             }
           }
-        } while (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts)
+          incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts
+        }) ()
 
         logDebug(s"Got latest offsets for partitions: $partitionOffsets")
         partitionOffsets

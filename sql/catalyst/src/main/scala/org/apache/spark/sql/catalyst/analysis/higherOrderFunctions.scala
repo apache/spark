@@ -45,10 +45,10 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
   private def canonicalizer = {
     if (!conf.caseSensitiveAnalysis) {
       // scalastyle:off caselocale
-      s: String => s.toLowerCase
+      (s: String) => s.toLowerCase
       // scalastyle:on caselocale
     } else {
-      s: String => s
+      (s: String) => s
     }
   }
 

@@ -176,10 +176,11 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
 
   private def findNonExistentStreamName(): String = {
     var testStreamName: String = null
-    do {
+    while ({
       Thread.sleep(TimeUnit.SECONDS.toMillis(describeStreamPollTimeSeconds))
       testStreamName = s"KinesisTestUtils-${math.abs(Random.nextLong())}"
-    } while (describeStream(testStreamName).nonEmpty)
+      describeStream(testStreamName).nonEmpty
+    }) ()
     testStreamName
   }
 

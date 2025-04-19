@@ -64,9 +64,9 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         case (_, _) => Cross
       }
       val join = Join(left, right, innerJoinType,
-        joinConditions.reduceLeftOption(And), JoinHint.NONE)
+        joinConditions.reduceLeftOption(And(_, _)), JoinHint.NONE)
       if (others.nonEmpty) {
-        Filter(others.reduceLeft(And), join)
+        Filter(others.reduceLeft(And(_, _)), join)
       } else {
         join
       }
@@ -88,7 +88,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (joinConditions, others) = conditions.partition(
         e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
       val joined = Join(left, right, innerJoinType,
-        joinConditions.reduceLeftOption(And), JoinHint.NONE)
+        joinConditions.reduceLeftOption(And(_, _)), JoinHint.NONE)
 
       // should not have reference to same logical plan
       createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others)
@@ -270,11 +270,11 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
           log" it will be moved out and the join plan will be turned to cross join.")
         None
       } else {
-        Some(rest.reduceLeft(And))
+        Some(rest.reduceLeft(And(_, _)))
       }
       val newJoin = j.copy(condition = newCondition)
       joinType match {
-        case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
+        case _: InnerLike => Filter(udf.reduceLeft(And(_, _)), newJoin)
         case _ =>
           throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(joinType)
       }

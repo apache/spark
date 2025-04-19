@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import scala.util.Random
 
 import breeze.linalg.{axpy => brzAxpy, norm => brzNorm, Vector => BV}
+import breeze.linalg.InjectNumericOps
 import breeze.numerics.{sqrt => brzSqrt}
 import org.apache.hadoop.fs.Path
 

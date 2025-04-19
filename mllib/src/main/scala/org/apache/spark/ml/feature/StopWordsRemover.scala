@@ -139,7 +139,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     val outputSchema = transformSchema(dataset.schema)
     val t = if ($(caseSensitive)) {
       val stopWordsSet = $(stopWords).toSet
-      udf { terms: Seq[String] =>
+      udf { (terms: Seq[String]) =>
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
@@ -148,7 +148,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
       val toLower = (s: String) => if (s != null) s.toLowerCase(lc) else s
       // scalastyle:on caselocale
       val lowerStopWords = $(stopWords).map(toLower(_)).toSet
-      udf { terms: Seq[String] =>
+      udf { (terms: Seq[String]) =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
       }
     }

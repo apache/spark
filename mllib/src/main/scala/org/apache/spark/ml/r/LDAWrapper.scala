@@ -56,7 +56,7 @@ private[r] class LDAWrapper private (
     new PipelineModel(s"${Identifiable.randomUID(pipeline.uid)}", pipeline.stages.dropRight(1))
 
   def transform(data: Dataset[_]): DataFrame = {
-    val vec2ary = udf { vec: Vector => vec.toArray }
+    val vec2ary = udf { (vec: Vector) => vec.toArray }
     val outputCol = lda.getTopicDistributionCol
     val tempCol = s"${Identifiable.randomUID(outputCol)}"
     val preprocessed = preprocessor.transform(data)
@@ -74,7 +74,7 @@ private[r] class LDAWrapper private (
     if (vocabulary.isEmpty || vocabulary.length < vocabSize) {
       topicIndices
     } else {
-      val index2term = udf { indices: mutable.ArraySeq[Int] => indices.map(i => vocabulary(i)) }
+      val index2term = udf { (indices: mutable.ArraySeq[Int]) => indices.map(i => vocabulary(i)) }
       topicIndices
         .select(col("topic"), index2term(col("termIndices")).as("term"), col("termWeights"))
     }

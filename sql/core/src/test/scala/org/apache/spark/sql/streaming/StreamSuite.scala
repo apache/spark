@@ -1256,12 +1256,12 @@ class StreamSuite extends StreamTest {
       DateTimeUtils.millisToMicros(lastTimestamp), ZoneId.systemDefault)
     testStream(df) (
       AddData(input, 1),
-      CheckLastBatch { rows: Seq[Row] =>
+      CheckLastBatch { (rows: Seq[Row]) =>
         lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 1)
       },
       Execute { _ => Thread.sleep(1000) },
       AddData(input, 2),
-      CheckLastBatch { rows: Seq[Row] =>
+      CheckLastBatch { (rows: Seq[Row]) =>
         lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 2)
       }
     )

@@ -38,9 +38,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * @param partitionSpecs  The partition specs that defines the arrangement, requires at least one
  *                        partition.
  */
-case class AQEShuffleReadExec private(
+case class AQEShuffleReadExec private[adaptive] (
     child: SparkPlan,
-    partitionSpecs: Seq[ShufflePartitionSpec]) extends UnaryExecNode {
+    partitionSpecs: Seq[ShufflePartitionSpec]
+) extends UnaryExecNode {
   assert(partitionSpecs.nonEmpty, s"${getClass.getSimpleName} requires at least one partition")
 
   // If this is to read shuffle files locally, then all partition specs should be

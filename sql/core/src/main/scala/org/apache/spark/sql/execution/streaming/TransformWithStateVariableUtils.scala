@@ -25,6 +25,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
+import org.json4s.jvalue2extractable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession

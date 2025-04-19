@@ -94,12 +94,12 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("AFTSurvivalRegression validate input dataset") {
-    testInvalidRegressionLabels { df: DataFrame =>
+    testInvalidRegressionLabels { (df: DataFrame) =>
       val dfWithCensors = df.withColumn("censor", lit(1.0))
       new AFTSurvivalRegression().fit(dfWithCensors)
     }
 
-    testInvalidVectors { df: DataFrame =>
+    testInvalidVectors { (df: DataFrame) =>
       val dfWithCensors = df.withColumn("censor", lit(1.0))
       new AFTSurvivalRegression().fit(dfWithCensors)
     }

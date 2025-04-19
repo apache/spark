@@ -74,7 +74,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
     val featureEncoders = getFeatureEncoders(inputFeatures.toImmutableArraySeq)
     val featureAttrs = getFeatureAttrs(inputFeatures.toImmutableArraySeq)
 
-    def interactFunc = udf { row: Row =>
+    def interactFunc = udf { (row: Row) =>
       var indices = ArrayBuilder.make[Int]
       var values = ArrayBuilder.make[Double]
       var size = 1

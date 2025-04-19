@@ -132,7 +132,7 @@ object StaxXmlParserUtils {
       options: XmlOptions): String = {
     val xmlString = new StringBuilder()
     var indent = 0
-    do {
+    while ({
       parser.nextEvent match {
         case e: StartElement =>
           xmlString.append('<').append(e.getName)
@@ -153,12 +153,13 @@ object StaxXmlParserUtils {
           xmlString.append(c.getData)
         case _: XMLEvent => // do nothing
       }
-    } while (parser.peek() match {
-      case _: EndElement =>
-        // until the unclosed end element for the whole parent is found
-        indent > 0
-      case _ => true
-    })
+      parser.peek() match {
+        case _: EndElement =>
+          // until the unclosed end element for the whole parent is found
+          indent > 0
+        case _ => true
+      }
+    }) ()
     skipNextEndElement(parser, startElementName, options)
     xmlString.toString()
   }

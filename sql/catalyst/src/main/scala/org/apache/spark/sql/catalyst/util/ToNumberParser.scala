@@ -133,9 +133,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       char match {
         case ZERO_DIGIT =>
           val prevI = i
-          do {
+          while ({
             i += 1
-          } while (i < len && (numberFormat(i) == ZERO_DIGIT || numberFormat(i) == NINE_DIGIT))
+            i < len && (numberFormat(i) == ZERO_DIGIT || numberFormat(i) == NINE_DIGIT)
+          }) ()
           if (reachedDecimalPoint) {
             tokens.append(AtMostAsManyDigits(i - prevI))
           } else {
@@ -143,9 +144,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           }
         case NINE_DIGIT =>
           val prevI = i
-          do {
+          while ({
             i += 1
-          } while (i < len && (numberFormat(i) == ZERO_DIGIT || numberFormat(i) == NINE_DIGIT))
+            i < len && (numberFormat(i) == ZERO_DIGIT || numberFormat(i) == NINE_DIGIT)
+          }) ()
           tokens.append(AtMostAsManyDigits(i - prevI))
         case POINT_SIGN | POINT_LETTER =>
           tokens.append(DecimalPoint())

@@ -134,7 +134,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     val numBuckets = bucketSpec.numBuckets
 
     val normalizedFiltersAndExpr = normalizedFilters
-      .reduce(expressions.And)
+      .reduce(expressions.And(_, _))
     val matchedBuckets = getExpressionBuckets(normalizedFiltersAndExpr, bucketColumnName,
       numBuckets)
 
@@ -353,7 +353,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       }.getOrElse(scan)
 
       // bottom-most filters are put in the left of the list.
-      val finalFilters = afterScanFilters.toSeq.reduceOption(expressions.And).toSeq ++ stayUpFilters
+      val finalFilters =
+        afterScanFilters.toSeq.reduceOption(expressions.And(_, _)).toSeq ++ stayUpFilters
       val withFilter = finalFilters.foldLeft(withMetadataProjections)((plan, cond) => {
         execution.FilterExec(cond, plan)
       })

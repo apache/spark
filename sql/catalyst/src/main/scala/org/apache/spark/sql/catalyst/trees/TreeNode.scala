@@ -564,7 +564,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     val afterRuleOnChildren =
       mapChildren(_.transformUpWithBeforeAndAfterRuleOnChildren(cond, ruleId)(rule))
     val newNode = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse((this, afterRuleOnChildren), { t: (BaseType, BaseType) => t._2 })
+      rule.applyOrElse((this, afterRuleOnChildren), (t: (BaseType, BaseType)) => t._2)
     }
     if (this eq newNode) {
       this.markRuleAsIneffective(ruleId)

@@ -86,37 +86,37 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("inject analyzer rule") {
-    withSession(Seq(_.injectResolutionRule(MyRule))) { session =>
+    withSession(Seq(_.injectResolutionRule(MyRule(_)))) { session =>
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
     }
   }
 
   test("inject post hoc resolution analyzer rule") {
-    withSession(Seq(_.injectPostHocResolutionRule(MyRule))) { session =>
+    withSession(Seq(_.injectPostHocResolutionRule(MyRule(_)))) { session =>
       assert(session.sessionState.analyzer.postHocResolutionRules.contains(MyRule(session)))
     }
   }
 
   test("inject check analysis rule") {
-    withSession(Seq(_.injectCheckRule(MyCheckRule))) { session =>
+    withSession(Seq(_.injectCheckRule(MyCheckRule(_)))) { session =>
       assert(session.sessionState.analyzer.extendedCheckRules.contains(MyCheckRule(session)))
     }
   }
 
   test("inject optimizer rule") {
-    withSession(Seq(_.injectOptimizerRule(MyRule))) { session =>
+    withSession(Seq(_.injectOptimizerRule(MyRule(_)))) { session =>
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
     }
   }
 
   test("SPARK-33621: inject a pre CBO rule") {
-    withSession(Seq(_.injectPreCBORule(MyRule))) { session =>
+    withSession(Seq(_.injectPreCBORule(MyRule(_)))) { session =>
       assert(session.sessionState.optimizer.preCBORules.contains(MyRule(session)))
     }
   }
 
   test("inject spark planner strategy") {
-    withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
+    withSession(Seq(_.injectPlannerStrategy(MySparkStrategy(_)))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
     }
   }
@@ -131,8 +131,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("inject multiple rules") {
-    withSession(Seq(_.injectOptimizerRule(MyRule),
-        _.injectPlannerStrategy(MySparkStrategy))) { session =>
+    withSession(Seq(_.injectOptimizerRule(MyRule(_)),
+        _.injectPlannerStrategy(MySparkStrategy(_)))) { session =>
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
     }
@@ -141,8 +141,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("inject stacked parsers") {
     val extension = create { extensions =>
       extensions.injectParser((_: SparkSession, _: ParserInterface) => CatalystSqlParser)
-      extensions.injectParser(MyParser)
-      extensions.injectParser(MyParser)
+      extensions.injectParser(MyParser(_, _))
+      extensions.injectParser(MyParser(_, _))
     }
     withSession(extension) { session =>
       val parser = MyParser(session, MyParser(session, CatalystSqlParser))
@@ -171,7 +171,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("inject custom hint rule") {
-    withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(MyHintRule(_)))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
@@ -460,7 +460,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("SPARK-35673: user-defined hint and unrecognized hint in subquery") {
-    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule(_)))) { session =>
       // unrecognized hint
       QueryTest.checkAnswer(
         session.sql(
@@ -559,8 +559,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("custom aggregate hint") {
     // The custom hint allows us to replace the aggregate (without grouping keys) with just
     // Literal.
-    withSession(Seq(_.injectHintResolutionRule(CustomAggregateHintResolutionRule),
-      _.injectOptimizerRule(CustomAggregateRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(CustomAggregateHintResolutionRule(_)),
+      _.injectOptimizerRule(CustomAggregateRule(_)))) { session =>
       val res = session.range(10).agg(max("id")).as("max_id")
         .hint("MAX_VALUE", "id", 10)
         .queryExecution.optimizedPlan
@@ -572,8 +572,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
 
   test("custom sort hint") {
     // The custom hint allows us to replace the sort with its input
-    withSession(Seq(_.injectHintResolutionRule(CustomSortHintResolutionRule),
-      _.injectOptimizerRule(CustomSortRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(CustomSortHintResolutionRule(_)),
+      _.injectOptimizerRule(CustomSortRule(_)))) { session =>
       val res = session.range(10).sort("id")
         .hint("INPUT_SORTED")
         .queryExecution.optimizedPlan
@@ -592,7 +592,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       }
     }
 
-    withSession(Seq(_.injectHintResolutionRule(UnresolvedRelationRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(UnresolvedRelationRule(_)))) { session =>
       withTable(session, "my_table") {
         session.sql("CREATE TABLE IF NOT EXISTS my_table (col1 INT)")
         ruleApplied = false
@@ -1134,12 +1134,12 @@ case class MyColumnarRule(pre: Rule[SparkPlan], post: Rule[SparkPlan]) extends C
 
 class MyExtensions extends (SparkSessionExtensions => Unit) {
   def apply(e: SparkSessionExtensions): Unit = {
-    e.injectPlannerStrategy(MySparkStrategy)
-    e.injectResolutionRule(MyRule)
-    e.injectPostHocResolutionRule(MyRule)
-    e.injectCheckRule(MyCheckRule)
-    e.injectOptimizerRule(MyRule)
-    e.injectParser(MyParser)
+    e.injectPlannerStrategy(MySparkStrategy(_))
+    e.injectResolutionRule(MyRule(_))
+    e.injectPostHocResolutionRule(MyRule(_))
+    e.injectCheckRule(MyCheckRule(_))
+    e.injectOptimizerRule(MyRule(_))
+    e.injectParser(MyParser(_, _))
     e.injectFunction(MyExtensions.myFunction)
     e.injectColumnar(session => MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
   }
@@ -1206,11 +1206,11 @@ object MyExtensions2 {
 
 class MyExtensions2 extends (SparkSessionExtensions => Unit) {
   def apply(e: SparkSessionExtensions): Unit = {
-    e.injectPlannerStrategy(MySparkStrategy2)
-    e.injectResolutionRule(MyRule2)
-    e.injectPostHocResolutionRule(MyRule2)
-    e.injectCheckRule(MyCheckRule2)
-    e.injectOptimizerRule(MyRule2)
+    e.injectPlannerStrategy(MySparkStrategy2(_))
+    e.injectResolutionRule(MyRule2(_))
+    e.injectPostHocResolutionRule(MyRule2(_))
+    e.injectCheckRule(MyCheckRule2(_))
+    e.injectOptimizerRule(MyRule2(_))
     e.injectParser((_: SparkSession, _: ParserInterface) => CatalystSqlParser)
     e.injectFunction(MyExtensions2.myFunction)
   }

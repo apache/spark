@@ -83,19 +83,19 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     notTrueTable.foreach { case (v, answer) =>
       checkEvaluation(Not(NonFoldableLiteral.create(v, BooleanType)), answer)
     }
-    checkConsistencyBetweenInterpretedAndCodegen(Not, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(Not(_), BooleanType)
   }
 
   test("AND, OR, EqualTo, EqualNullSafe consistency check") {
-    checkConsistencyBetweenInterpretedAndCodegen(And, BooleanType, BooleanType)
-    checkConsistencyBetweenInterpretedAndCodegen(Or, BooleanType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(And(_, _), BooleanType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(Or(_, _), BooleanType, BooleanType)
     DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(EqualTo, dt, dt)
-      checkConsistencyBetweenInterpretedAndCodegen(EqualNullSafe, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(EqualTo(_, _), dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(EqualNullSafe(_, _), dt, dt)
     }
   }
 
-  booleanLogicTest("AND", And,
+  booleanLogicTest("AND", And(_, _),
     (true, true, true) ::
       (true, false, false) ::
       (true, null, null) ::
@@ -106,7 +106,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, false, false) ::
       (null, null, null) :: Nil)
 
-  booleanLogicTest("OR", Or,
+  booleanLogicTest("OR", Or(_, _),
     (true, true, true) ::
       (true, false, true) ::
       (true, null, true) ::
@@ -117,7 +117,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, false, null) ::
       (null, null, null) :: Nil)
 
-  booleanLogicTest("=", EqualTo,
+  booleanLogicTest("=", EqualTo(_, _),
     (true, true, true) ::
       (true, false, false) ::
       (true, null, null) ::
@@ -395,10 +395,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("BinaryComparison consistency check") {
     DataTypeTestUtils.ordered.foreach { dt =>
-      checkConsistencyBetweenInterpretedAndCodegen(LessThan, dt, dt)
-      checkConsistencyBetweenInterpretedAndCodegen(LessThanOrEqual, dt, dt)
-      checkConsistencyBetweenInterpretedAndCodegen(GreaterThan, dt, dt)
-      checkConsistencyBetweenInterpretedAndCodegen(GreaterThanOrEqual, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(LessThan(_, _), dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(LessThanOrEqual(_, _), dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThan(_, _), dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThanOrEqual(_, _), dt, dt)
     }
   }
 
@@ -463,11 +463,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(op(nullNullType, nullNullType), null)
     }
 
-    nullTest(LessThan)
-    nullTest(LessThanOrEqual)
-    nullTest(GreaterThan)
-    nullTest(GreaterThanOrEqual)
-    nullTest(EqualTo)
+    nullTest(LessThan(_, _))
+    nullTest(LessThanOrEqual(_, _))
+    nullTest(GreaterThan(_, _))
+    nullTest(GreaterThanOrEqual(_, _))
+    nullTest(EqualTo(_, _))
 
     checkEvaluation(EqualNullSafe(normalInt, nullInt), false)
     checkEvaluation(EqualNullSafe(nullInt, normalInt), false)
@@ -605,12 +605,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         exprBuilder(createSafeFloatArray(left), createSafeFloatArray(right)), expected)
     }
 
-    checkExpr(EqualTo, Double.NaN, Double.NaN, true)
-    checkExpr(EqualTo, Double.NaN, Double.PositiveInfinity, false)
-    checkExpr(EqualTo, 0.0, -0.0, true)
-    checkExpr(GreaterThan, Double.NaN, Double.PositiveInfinity, true)
-    checkExpr(GreaterThan, Double.NaN, Double.NaN, false)
-    checkExpr(GreaterThan, 0.0, -0.0, false)
+    checkExpr(EqualTo(_, _), Double.NaN, Double.NaN, true)
+    checkExpr(EqualTo(_, _), Double.NaN, Double.PositiveInfinity, false)
+    checkExpr(EqualTo(_, _), 0.0, -0.0, true)
+    checkExpr(GreaterThan(_, _), Double.NaN, Double.PositiveInfinity, true)
+    checkExpr(GreaterThan(_, _), Double.NaN, Double.NaN, false)
+    checkExpr(GreaterThan(_, _), 0.0, -0.0, false)
   }
 
   test("SPARK-32110: compare special double/float values in struct") {
@@ -653,12 +653,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         exprBuilder(createSafeFloatRow(left), createSafeFloatRow(right)), expected)
     }
 
-    checkExpr(EqualTo, Double.NaN, Double.NaN, true)
-    checkExpr(EqualTo, Double.NaN, Double.PositiveInfinity, false)
-    checkExpr(EqualTo, 0.0, -0.0, true)
-    checkExpr(GreaterThan, Double.NaN, Double.PositiveInfinity, true)
-    checkExpr(GreaterThan, Double.NaN, Double.NaN, false)
-    checkExpr(GreaterThan, 0.0, -0.0, false)
+    checkExpr(EqualTo(_, _), Double.NaN, Double.NaN, true)
+    checkExpr(EqualTo(_, _), Double.NaN, Double.PositiveInfinity, false)
+    checkExpr(EqualTo(_, _), 0.0, -0.0, true)
+    checkExpr(GreaterThan(_, _), Double.NaN, Double.PositiveInfinity, true)
+    checkExpr(GreaterThan(_, _), Double.NaN, Double.NaN, false)
+    checkExpr(GreaterThan(_, _), 0.0, -0.0, false)
   }
 
   test("SPARK-36792: InSet should handle Double.NaN and Float.NaN") {

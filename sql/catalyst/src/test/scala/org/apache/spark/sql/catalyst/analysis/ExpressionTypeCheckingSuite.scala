@@ -688,7 +688,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
   }
 
   test("check types for Greatest/Least") {
-    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+    for (operator <- Seq(Greatest(_), Least(_))) {
       val expr1 = operator(Seq($"booleanField"))
       assertErrorForWrongNumParameters(
         expr = expr1,

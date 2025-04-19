@@ -93,7 +93,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
     val filterCondition: Option[Expression] =
-      prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
+      prunePushedDownFilters(filterPredicates).reduceLeftOption(And(_, _))
 
     // Right now we still use a projection even if the only evaluation is applying an alias
     // to a column.  Since this is a no-op, it could be avoided. However, using this

@@ -543,13 +543,13 @@ class NaiveBayesModel private[ml] (
   @transient private lazy val predictRawFunc = {
     $(modelType) match {
       case Multinomial =>
-        features: Vector => multinomialCalculation(features)
+        (features: Vector) => multinomialCalculation(features)
       case Complement =>
-        features: Vector => complementCalculation(features)
+        (features: Vector) => complementCalculation(features)
       case Bernoulli =>
-        features: Vector => bernoulliCalculation(features)
+        (features: Vector) => bernoulliCalculation(features)
       case Gaussian =>
-        features: Vector => gaussianCalculation(features)
+        (features: Vector) => gaussianCalculation(features)
     }
   }
 

@@ -163,7 +163,7 @@ object SortPrefixUtils {
         }
       }
     } else {
-      _: InternalRow => emptyPrefix
+      (_: InternalRow) => emptyPrefix
     }
   }
 }

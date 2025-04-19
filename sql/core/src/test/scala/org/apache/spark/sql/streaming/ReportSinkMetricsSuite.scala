@@ -93,72 +93,70 @@ class ReportSinkMetricsSuite extends StreamTest {
   }
 }
 
-  case class TestSinkRelation(override val sqlContext: SQLContext, data: DataFrame)
-    extends BaseRelation {
-    override def schema: StructType = data.schema
+case class TestSinkRelation(override val sqlContext: SQLContext, data: DataFrame)
+  extends BaseRelation {
+  override def schema: StructType = data.schema
+}
+
+class TestSinkProvider extends SimpleTableProvider
+  with DataSourceRegister
+  with CreatableRelationProvider with Logging {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    val useCommitCoordinator = options.getBoolean("useCommitCoordinator", false)
+    new TestSinkTable(useCommitCoordinator)
   }
 
-  class TestSinkProvider extends SimpleTableProvider
-    with DataSourceRegister
-    with CreatableRelationProvider with Logging {
+  def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
 
-    override def getTable(options: CaseInsensitiveStringMap): Table = {
-      val useCommitCoordinator = options.getBoolean("useCommitCoordinator", false)
-      new TestSinkTable(useCommitCoordinator)
-    }
-
-    def createRelation(
-        sqlContext: SQLContext,
-        mode: SaveMode,
-        parameters: Map[String, String],
-        data: DataFrame): BaseRelation = {
-
-      TestSinkRelation(sqlContext, data)
-    }
-
-    def shortName(): String = "test"
+    TestSinkRelation(sqlContext, data)
   }
 
-  class TestSinkTable(useCommitCoordinator: Boolean)
-    extends Table with SupportsWrite with ReportsSinkMetrics with Logging {
+  def shortName(): String = "test"
+}
 
-    override def name(): String = "test"
+class TestSinkTable(useCommitCoordinator: Boolean)
+  extends Table with SupportsWrite with ReportsSinkMetrics with Logging {
 
-    override def schema(): StructType = StructType(Nil)
+  override def name(): String = "test"
 
-    override def capabilities(): java.util.Set[TableCapability] = {
-      java.util.EnumSet.of(TableCapability.STREAMING_WRITE)
-    }
+  override def schema(): StructType = StructType(Nil)
 
-    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-      new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
+  override def capabilities(): java.util.Set[TableCapability] = {
+    java.util.EnumSet.of(TableCapability.STREAMING_WRITE)
+  }
 
-        override def truncate(): WriteBuilder = this
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
 
-        override def build(): Write = {
-          new Write {
-            override def toStreaming: StreamingWrite = {
-              new TestSinkWrite(useCommitCoordinator)
-            }
+      override def truncate(): WriteBuilder = this
+
+      override def build(): Write = {
+        new Write {
+          override def toStreaming: StreamingWrite = {
+            new TestSinkWrite(useCommitCoordinator)
           }
         }
       }
     }
-
-    override def metrics(): java.util.Map[String, String] = {
-      Map("metrics-1" -> "value-1", "metrics-2" -> "value-2").asJava
-    }
   }
 
-  class TestSinkWrite(useCommitCoordinator: Boolean)
-    extends StreamingWrite with Logging with Serializable {
-
-    def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
-      PackedRowWriterFactory
-
-    override def useCommitCoordinator(): Boolean = useCommitCoordinator
-
-    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-
-    def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def metrics(): java.util.Map[String, String] = {
+    Map("metrics-1" -> "value-1", "metrics-2" -> "value-2").asJava
   }
+}
+
+class TestSinkWrite(override val useCommitCoordinator: Boolean)
+  extends StreamingWrite with Logging with Serializable {
+
+  def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
+    PackedRowWriterFactory
+
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+
+  def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+}

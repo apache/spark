@@ -312,7 +312,7 @@ private[feature] object SelectorModel {
       outputCol: String,
       featuresCol: String): DataFrame = {
     val newSize = selectedFeatures.length
-    val func = { vector: Vector =>
+    val func = { (vector: Vector) =>
       vector match {
         case SparseVector(_, indices, values) =>
           val (newIndices, newValues) =

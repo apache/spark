@@ -208,12 +208,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
             .resources()
             .forEach { podResource =>
-              podResource.edit({ p: Pod =>
+              podResource.edit((p: Pod) =>
                 new PodBuilder(p).editOrNewMetadata()
                   .addToLabels(label,
                     conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse(""))
                   .endMetadata()
-                  .build()})
+                  .build()
+              )
           }
         }
       }
@@ -316,10 +317,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
             kubernetesClient.pods()
               .inNamespace(namespace)
               .withName(x.podName)
-              .edit({p: Pod => new PodBuilder(p).editMetadata()
-                .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId)
-                .endMetadata()
-                .build()})
+              .edit((p: Pod) =>
+                new PodBuilder(p).editMetadata()
+                  .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId)
+                  .endMetadata()
+                  .build()
+              )
           }
         }
         executorService.execute(labelTask)

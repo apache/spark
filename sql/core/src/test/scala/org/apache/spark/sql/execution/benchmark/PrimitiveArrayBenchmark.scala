@@ -56,7 +56,7 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
     val primitiveIntArray = Array.fill[Int](count)(65535)
     val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS()
     dsInt.count()  // force to build dataset
-    val intArray = { i: Int =>
+    val intArray = { (i: Int) =>
       var n = 0
       var len = 0
       while (n < iters) {
@@ -67,7 +67,7 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
     val primitiveDoubleArray = Array.fill[Double](count)(65535.0)
     val dsDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDS()
     dsDouble.count()  // force to build dataset
-    val doubleArray = { i: Int =>
+    val doubleArray = { (i: Int) =>
       var n = 0
       var len = 0
       while (n < iters) {

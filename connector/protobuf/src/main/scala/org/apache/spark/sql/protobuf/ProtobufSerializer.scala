@@ -322,7 +322,7 @@ private[sql] class ProtobufSerializer(
       .unzip
 
     val numFields = catalystStruct.length
-    row: InternalRow =>
+    (row: InternalRow) =>
       val result = DynamicMessage.newBuilder(descriptor)
       var i = 0
       while (i < numFields) {

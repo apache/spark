@@ -58,7 +58,7 @@ object ByteArrayBenchmark extends BenchmarkBase {
     val dataLargeSlow = Seq.fill(count)(
       Array.tabulate(512) {i => if (i < 511) 0.toByte else 1.toByte}).toArray
 
-    def compareBinary(data: Array[Array[Byte]]) = { _: Int =>
+    def compareBinary(data: Array[Array[Byte]]) = { (_: Int) =>
       var sum = 0L
       for (_ <- 0L until iters) {
         var i = 0
@@ -80,7 +80,7 @@ object ByteArrayBenchmark extends BenchmarkBase {
   }
 
   def byteArrayEquals(iters: Long): Unit = {
-    def binaryEquals(inputs: Array[BinaryEqualInfo]) = { _: Int =>
+    def binaryEquals(inputs: Array[BinaryEqualInfo]) = { (_: Int) =>
       var res = false
       for (_ <- 0L until iters) {
         inputs.foreach { input =>

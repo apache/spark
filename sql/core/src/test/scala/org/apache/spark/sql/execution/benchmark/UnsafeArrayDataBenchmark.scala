@@ -51,7 +51,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val intArrayToRow = intEncoder.createSerializer()
     val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt() }
     val intUnsafeArray = intArrayToRow(intPrimitiveArray).getArray(0)
-    val readIntArray = { i: Int =>
+    val readIntArray = { (i: Int) =>
       var n = 0
       while (n < iters) {
         val len = intUnsafeArray.numElements()
@@ -68,7 +68,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble() }
     val doubleArrayToRow = doubleEncoder.createSerializer()
     val doubleUnsafeArray = doubleArrayToRow(doublePrimitiveArray).getArray(0)
-    val readDoubleArray = { i: Int =>
+    val readDoubleArray = { (i: Int) =>
       var n = 0
       while (n < iters) {
         val len = doubleUnsafeArray.numElements()
@@ -95,7 +95,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     var intTotalLength: Int = 0
     val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt() }
     val intArrayToRow = intEncoder.createSerializer()
-    val writeIntArray = { i: Int =>
+    val writeIntArray = { (i: Int) =>
       var len = 0
       var n = 0
       while (n < iters) {
@@ -108,7 +108,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     var doubleTotalLength: Int = 0
     val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble() }
     val doubleArrayToRow = doubleEncoder.createSerializer()
-    val writeDoubleArray = { i: Int =>
+    val writeDoubleArray = { (i: Int) =>
       var len = 0
       var n = 0
       while (n < iters) {
@@ -132,7 +132,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt() }
     val intArrayToRow = intEncoder.createSerializer()
     val intUnsafeArray = intArrayToRow(intPrimitiveArray).getArray(0)
-    val readIntArray = { i: Int =>
+    val readIntArray = { (i: Int) =>
       var len = 0
       var n = 0
       while (n < iters) {
@@ -146,7 +146,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble() }
     val doubleArrayToRow = doubleEncoder.createSerializer()
     val doubleUnsafeArray = doubleArrayToRow(doublePrimitiveArray).getArray(0)
-    val readDoubleArray = { i: Int =>
+    val readDoubleArray = { (i: Int) =>
       var len = 0
       var n = 0
       while (n < iters) {
@@ -169,7 +169,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
 
     var intTotalLen: Int = 0
     val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt() }
-    val createIntArray = { i: Int =>
+    val createIntArray = { (i: Int) =>
       var len = 0
       var n = 0
       while (n < iters) {
@@ -181,7 +181,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
 
     var doubleTotalLen: Int = 0
     val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble() }
-    val createDoubleArray = { i: Int =>
+    val createDoubleArray = { (i: Int) =>
       var len = 0
       var n = 0
       while (n < iters) {

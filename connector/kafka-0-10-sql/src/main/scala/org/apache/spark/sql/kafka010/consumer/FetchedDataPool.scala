@@ -151,7 +151,7 @@ private[consumer] class FetchedDataPool(
   private def removeIdleFetchedData(): Unit = synchronized {
     val now = clock.getTimeMillis()
     val maxAllowedReleasedTimestamp = now - minEvictableIdleTimeMillis
-    cache.values.foreach { p: CachedFetchedDataList =>
+    cache.values.foreach { (p: CachedFetchedDataList) =>
       val expired = p.filter { q =>
         !q.inUse && q.lastReleasedTimestamp < maxAllowedReleasedTimestamp
       }

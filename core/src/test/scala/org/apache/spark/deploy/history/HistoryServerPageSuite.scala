@@ -23,6 +23,7 @@ import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jvalue2extractable
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}

@@ -136,7 +136,7 @@ class DatasetCacheSuite extends QueryTest
   }
 
   test("cache UDF result correctly") {
-    val expensiveUDF = udf({x: Int => Thread.sleep(2000); x})
+    val expensiveUDF = udf { (x: Int) => Thread.sleep(2000); x }
     val df = spark.range(0, 2).toDF("a").repartition(1).withColumn("b", expensiveUDF($"a"))
     val df2 = df.agg(sum(df("b")))
 
@@ -154,7 +154,7 @@ class DatasetCacheSuite extends QueryTest
   }
 
   test("SPARK-24613 Cache with UDF could not be matched with subsequent dependent caches") {
-    val udf1 = udf({x: Int => x + 1})
+    val udf1 = udf { (x: Int) => x + 1 }
     val df = spark.range(0, 10).toDF("a").withColumn("b", udf1($"a"))
     val df2 = df.agg(sum(df("b")))
 
@@ -184,7 +184,7 @@ class DatasetCacheSuite extends QueryTest
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation - verify cached data reuse") {
-    val expensiveUDF = udf({ x: Int => Thread.sleep(5000); x })
+    val expensiveUDF = udf { (x: Int) => Thread.sleep(5000); x }
     val df = spark.range(0, 5).toDF("a")
     val df1 = df.withColumn("b", expensiveUDF($"a"))
     val df2 = df1.groupBy($"a").agg(sum($"b"))

@@ -124,7 +124,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
             .otherwise(lit(0.0))
 
         case _: VectorUDT if td >= 0 =>
-          udf { vector: Vector =>
+          udf { (vector: Vector) =>
             val indices = ArrayBuilder.make[Int]
             val values = ArrayBuilder.make[Double]
             vector.foreachNonZero { (index, value) =>
@@ -144,7 +144,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           logWarning(log"Binarization operations on sparse dataset with negative threshold " +
             log"${MDC(LogKeys.THRESHOLD, td)} will build a dense output, so take care when " +
             log"applying to sparse input.")
-          udf { vector: Vector =>
+          udf { (vector: Vector) =>
             val values = Array.fill(vector.size)(1.0)
             var nnz = vector.size
             vector.foreachNonZero { (index, value) =>

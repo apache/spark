@@ -126,7 +126,7 @@ object NormalizePlan extends PredicateHelper {
           splitConjunctivePredicates(condition)
             .map(rewriteBinaryComparison)
             .sortBy(_.hashCode())
-            .reduce(And),
+            .reduce(And(_, _)),
           child
         )
       case sample: Sample =>
@@ -143,7 +143,7 @@ object NormalizePlan extends PredicateHelper {
           splitConjunctivePredicates(condition.get)
             .map(rewriteBinaryComparison)
             .sortBy(_.hashCode())
-            .reduce(And)
+            .reduce(And(_, _))
         Join(left, right, newJoinType, Some(newCondition), hint)
       case project: Project
           if project
@@ -184,8 +184,8 @@ object NormalizePlan extends PredicateHelper {
    * 3. (a > b), (b < a)
    */
   private def rewriteBinaryComparison(condition: Expression): Expression = condition match {
-    case EqualTo(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
-    case EqualNullSafe(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
+    case EqualTo(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo(_, _))
+    case EqualNullSafe(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe(_, _))
     case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
     case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)

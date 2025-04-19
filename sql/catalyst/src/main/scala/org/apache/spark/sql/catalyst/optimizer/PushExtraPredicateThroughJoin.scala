@@ -60,9 +60,9 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
         j
       } else {
         lazy val newLeft =
-          leftExtraCondition.reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+          leftExtraCondition.reduceLeftOption(And(_, _)).map(Filter(_, left)).getOrElse(left)
         lazy val newRight =
-          rightExtraCondition.reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          rightExtraCondition.reduceLeftOption(And(_, _)).map(Filter(_, right)).getOrElse(right)
 
         val newJoin = joinType match {
           case _: InnerLike | LeftSemi =>

@@ -48,7 +48,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     val count = 8 * 1000
 
     // Accessing a java array.
-    val javaArray = { i: Int =>
+    val javaArray = { (i: Int) =>
       val data = new Array[Int](count)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -66,7 +66,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Accessing ByteBuffers
-    val byteBufferUnsafe = { i: Int =>
+    val byteBufferUnsafe = { (i: Int) =>
       val data = ByteBuffer.allocate(count * 4)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -84,7 +84,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Accessing offheap byte buffers
-    val directByteBuffer = { i: Int =>
+    val directByteBuffer = { (i: Int) =>
       val data = ByteBuffer.allocateDirect(count * 4).asIntBuffer()
       var sum = 0L
       for (n <- 0L until iters) {
@@ -104,7 +104,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Accessing ByteBuffer using the typed APIs
-    val byteBufferApi = { i: Int =>
+    val byteBufferApi = { (i: Int) =>
       val data = ByteBuffer.allocate(count * 4)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -124,7 +124,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Using unsafe memory
-    val unsafeBuffer = { i: Int =>
+    val unsafeBuffer = { (i: Int) =>
       val data: Long = Platform.allocateMemory(count * 4)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -146,7 +146,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Access through the column API with on heap memory
-    val columnOnHeap = { i: Int =>
+    val columnOnHeap = { (i: Int) =>
       val col = new OnHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -165,7 +165,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Access through the column API with off heap memory
-    def columnOffHeap = { i: Int => {
+    def columnOffHeap = { (i: Int) => {
       val col = new OffHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -184,7 +184,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }}
 
     // Access by directly getting the buffer backing the column.
-    val columnOffheapDirect = { i: Int =>
+    val columnOffheapDirect = { (i: Int) =>
       val col = new OffHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -207,7 +207,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Access by going through a batch of unsafe rows.
-    val unsafeRowOnheap = { i: Int =>
+    val unsafeRowOnheap = { (i: Int) =>
       val buffer = new Array[Byte](count * 16)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -228,7 +228,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Access by going through a batch of unsafe rows.
-    val unsafeRowOffheap = { i: Int =>
+    val unsafeRowOffheap = { (i: Int) =>
       val buffer = Platform.allocateMemory(count * 16)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -250,7 +250,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     }
 
     // Adding values by appending, instead of putting.
-    val onHeapAppend = { i: Int =>
+    val onHeapAppend = { (i: Int) =>
       val col = new OnHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -287,7 +287,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
   def booleanAccess(iters: Int): Unit = {
     val count = 8 * 1024
     val benchmark = new Benchmark("Boolean Read/Write", iters * count.toLong, output = output)
-    benchmark.addCase("Bitset") { i: Int => {
+    benchmark.addCase("Bitset") { (i: Int) => {
       val b = new BitSet(count)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -304,7 +304,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
       }
     }}
 
-    benchmark.addCase("Byte Array") { i: Int => {
+    benchmark.addCase("Byte Array") { (i: Int) => {
       val b = new Array[Byte](count)
       var sum = 0L
       for (n <- 0L until iters) {
@@ -345,7 +345,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     val data = Seq.fill(count)(randomString(minString, maxString))
       .map(_.getBytes(StandardCharsets.UTF_8)).toArray
 
-    def column(memoryMode: MemoryMode) = { i: Int =>
+    def column(memoryMode: MemoryMode) = { (i: Int) =>
       val column = if (memoryMode == MemoryMode.OFF_HEAP) {
         new OffHeapColumnVector(count, BinaryType)
       } else {

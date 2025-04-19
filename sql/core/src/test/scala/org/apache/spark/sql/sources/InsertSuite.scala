@@ -1936,11 +1936,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             None),
           Config(
             Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"))))
-    ).foreach { testCase: TestCase =>
-      testCase.configs.foreach { config: Config =>
+    ).foreach { (testCase: TestCase) =>
+      testCase.configs.foreach { (config: Config) =>
         // Run the test twice, once using SQL for the INSERT operations and again using DataFrames.
         for (useDataFrames <- Seq(false, true)) {
-          config.sqlConf.map { kv: (String, String) =>
+          config.sqlConf.map { (kv: (String, String)) =>
             withSQLConf(kv) {
               // Run the test with the pair of custom SQLConf values.
               runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))

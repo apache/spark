@@ -286,7 +286,7 @@ private[sql] class AvroSerializer(
     val numFields = catalystStruct.length
     val avroFields = avroStruct.getFields()
     val isSchemaNullable = avroFields.asScala.map(_.schema().isNullable)
-    row: InternalRow =>
+    (row: InternalRow) =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
@@ -340,7 +340,7 @@ private[sql] class AvroSerializer(
     }.toArray
 
     val numBranches = catalystStruct.length
-    row: InternalRow => {
+    (row: InternalRow) => {
       var idx = 0
       var retVal: Any = null
       while (idx < numBranches && retVal == null) {

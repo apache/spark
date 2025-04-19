@@ -109,7 +109,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     receivedBlockTracker.getBlocksOfBatch(1) shouldEqual Map(streamId -> blockInfos)
     receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
 
-    val expectedWrittenData1 = blockInfos.map(BlockAdditionEvent) :+
+    val expectedWrittenData1 = blockInfos.map(BlockAdditionEvent(_)) :+
       BatchAllocationEvent(1, AllocatedBlocks(Map(streamId -> blockInfos)))
     getWrittenLogData() shouldEqual expectedWrittenData1
     getWriteAheadLogFiles() should have size 1
@@ -216,7 +216,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     tracker1.getUnallocatedBlocks(streamId).toList shouldEqual blockInfos1
 
     // Verify whether write ahead log has correct contents
-    val expectedWrittenData1 = blockInfos1.map(BlockAdditionEvent)
+    val expectedWrittenData1 = blockInfos1.map(BlockAdditionEvent(_))
     getWrittenLogData() shouldEqual expectedWrittenData1
     getWriteAheadLogFiles() should have size 1
     tracker1.stop()
@@ -255,7 +255,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     // Verify whether log has correct contents
     val expectedWrittenData2 = expectedWrittenData1 ++
       Seq(createBatchAllocation(batchTime1, blockInfos1)) ++
-      blockInfos2.map(BlockAdditionEvent) ++
+      blockInfos2.map(BlockAdditionEvent(_)) ++
       Seq(createBatchAllocation(batchTime2, blockInfos2))
     getWrittenLogData() shouldEqual expectedWrittenData2
 
@@ -319,14 +319,14 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     // If we face any issue during recovery, because these old files exist, then we need to make
     // deletion more robust rather than a parallelized operation where we fire and forget
     val batch1Allocation = createBatchAllocation(t(1), batch1)
-    writeEventsManually(getLogFileName(t(1)), batch1.map(BlockAdditionEvent) :+ batch1Allocation)
+    writeEventsManually(getLogFileName(t(1)), batch1.map(BlockAdditionEvent(_)) :+ batch1Allocation)
 
     writeEventsManually(getLogFileName(t(2)), Seq(createBatchCleanup(t(1))))
 
     val batch2Allocation = createBatchAllocation(t(3), batch2)
-    writeEventsManually(getLogFileName(t(3)), batch2.map(BlockAdditionEvent) :+ batch2Allocation)
+    writeEventsManually(getLogFileName(t(3)), batch2.map(BlockAdditionEvent(_)) :+ batch2Allocation)
 
-    writeEventsManually(getLogFileName(t(4)), batch3.map(BlockAdditionEvent))
+    writeEventsManually(getLogFileName(t(4)), batch3.map(BlockAdditionEvent(_)))
 
     // We should have 5 different log files as we called `writeEventsManually` with 5 different
     // timestamps
@@ -360,7 +360,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     compareTrackers(tracker, tracker3)
 
     // rewrite second file
-    writeEventsManually(getLogFileName(t(1)), batch1.map(BlockAdditionEvent) :+ batch1Allocation)
+    writeEventsManually(getLogFileName(t(1)), batch1.map(BlockAdditionEvent(_)) :+ batch1Allocation)
     assert(getWriteAheadLogFiles().length === 5)
     // make sure trackers are consistent
     val tracker4 = createTracker(recoverFromWriteAheadLog = true, clock = new ManualClock(t(4)))
