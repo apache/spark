@@ -2363,8 +2363,23 @@ class AdaptiveQueryExecSuite
             }
             val smj2 = findTopLevelSortMergeJoin(adaptive2)
             assert(smj2.size == 1 && smj2.head.isSkewJoin)
+
+
           }
         }
+
+        // check extra shuffle in child
+        val (_, adaptive3) =
+          runAdaptiveAndVerifyResult(s"SELECT  key1 FROM skewData1 " +
+            s"JOIN (select key2 from skewData2 group by key2) t2 ON key1 = key2")
+        val shuffles3 = collect(adaptive3) {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(shuffles3.size == 3)
+        // shuffles1.head is the top-level shuffle under the Aggregate operator
+        assert(shuffles3.head.shuffleOrigin == ENSURE_REQUIREMENTS)
+        val smj3 = findTopLevelSortMergeJoin(adaptive3)
+        assert(smj3.size == 1 && smj3.head.isSkewJoin)
       }
     }
   }
