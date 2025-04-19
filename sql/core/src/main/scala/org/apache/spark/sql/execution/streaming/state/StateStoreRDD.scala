@@ -136,6 +136,13 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
       stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey)
+
+    if (storeConf.unloadOnCommit) {
+      ctxt.addTaskCompletionListener[Unit](_ => {
+        StateStore.doMaintenanceAndUnload(storeProviderId)
+      })
+    }
+
     storeUpdateFunction(store, inputIter)
   }
 }

@@ -21,6 +21,7 @@ import java.io.File
 
 import scala.jdk.CollectionConverters.SetHasAsScala
 
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.{Minute, Span}
 
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
@@ -31,8 +32,14 @@ import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.util.Utils
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
+  with BeforeAndAfterEach
   with AlsoTestWithRocksDBFeatures {
   import testImplicits._
+
+  override def afterEach(): Unit = {
+    // stop the state store maintenance thread and unload store providers after each test
+    StateStore.stop()
+  }
 
   testWithColumnFamilies("RocksDBStateStore",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -216,6 +223,46 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             val stateOperatorMetrics = nextProgress.stateOperators(0)
             assert(stateOperatorMetrics.numRowsTotal === 0)
           }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  testWithColumnFamilies("SPARK-51823: unload state stores on commit",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key -> "1"),
+        (SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key -> "true")) {
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select($"value")
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+        try {
+          inputData.addData(1, 2)
+          inputData.addData(2, 3)
+          query.processAllAvailable()
+
+          // StateStore should be unloaded, so its tmp dir shouldn't exist
+          var tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().contains("StateStore")).isEmpty)
+
+          inputData.addData(3, 4)
+          inputData.addData(4, 5)
+          query.processAllAvailable()
+
+          tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().contains("StateStore")).isEmpty)
         } finally {
           query.stop()
         }

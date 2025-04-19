@@ -103,6 +103,9 @@ class StateStoreConf(
   val reportSnapshotUploadLag: Boolean =
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
+  /** Whether to unload the store on task completion. */
+  val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
+
   /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.`
