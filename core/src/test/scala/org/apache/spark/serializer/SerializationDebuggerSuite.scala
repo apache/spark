@@ -21,7 +21,7 @@ import java.io._
 
 import scala.annotation.meta.param
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 
 class SerializationDebuggerSuite extends SparkFunSuite {
 
@@ -180,6 +180,15 @@ class SerializationDebuggerSuite extends SparkFunSuite {
     assert(e.getMessage.contains("SerializableClass2"))  // found debug trace should be present
   }
 
+  test("SPARK-51691 improveException swallow underlying exception") {
+    val e = SerializationDebugger.improveException(
+      new SerializableClassWithStringException(new NotSerializable),
+      new NotSerializableException("someClass"))
+    assert(e.getMessage.contains("exception in toString"))
+    assert(e.getMessage.contains("someClass"))
+    assert(e.getMessage.contains("SerializableClassWithStringException"))
+  }
+
   test("improveException with error in debugger") {
     // Object that throws exception in the SerializationDebugger
     val o = new SerializableClass1 {
@@ -205,6 +214,14 @@ class SerializableClass1 extends Serializable
 
 class SerializableClass2(val objectField: Object) extends Serializable
 
+class SerializableClassWithStringException(val objectField: Object) extends Serializable {
+  override def toString: String = {
+    // simulate the behavior of TreeNode#toString that SQLConf.get may throw exception
+    throw new SparkRuntimeException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> "this is an internal error"),
+      cause = null)
+  }
+}
 
 class SerializableArray(val arrayField: Array[Object]) extends Serializable
 
