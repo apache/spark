@@ -25,7 +25,6 @@ import numpy as np
 from pyspark.util import is_remote_only
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import ParamGridBuilder
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import (
@@ -36,6 +35,7 @@ from pyspark.testing.utils import (
     have_torcheval,
     torcheval_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     import pandas as pd
@@ -294,12 +294,10 @@ class CrossValidatorTestsMixin:
     or torcheval_requirement_message
     or "pyspark-connect cannot test classic Spark",
 )
-class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class CrossValidatorTests(CrossValidatorTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":
