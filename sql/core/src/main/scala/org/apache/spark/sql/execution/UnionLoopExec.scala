@@ -22,9 +22,9 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LogicalPlan, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.LogicalRDD.rewriteStatsAndConstraints
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -107,9 +107,16 @@ case class UnionLoopExec(
       plan
     }
     val df = Dataset.ofRows(session, planWithLimit)
-    val materializedDF = df.repartition()
-    val count = materializedDF.queryExecution.toRdd.count()
-    (materializedDF, count)
+    df.queryExecution.optimizedPlan match {
+      case l: LocalRelation =>
+        (df, l.data.length.toLong)
+      case Project(_, _: OneRowRelation) =>
+        (df, 1.toLong)
+      case _ =>
+        val materializedDF = df.repartition()
+        val count = materializedDF.queryExecution.toRdd.count()
+        (materializedDF, count)
+    }
   }
 
   /**
@@ -134,7 +141,7 @@ case class UnionLoopExec(
     // condition of while loop down (limit.isEmpty will be true).
     var currentLimit = limit.getOrElse(-1)
 
-    val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
+    val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
 
@@ -149,6 +156,36 @@ case class UnionLoopExec(
     val numPartitions = prevDF.queryExecution.toRdd.partitions.length
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
+      var prevPlan: LogicalPlan = null
+      // the current plan is created by substituting UnionLoopRef node with the project node of
+      // the previous plan.
+      // This way we support only UNION ALL case. Additional case should be added for UNION case.
+      // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
+      val newRecursion = recursion.transform {
+        case r: UnionLoopRef if r.loopId == loopId =>
+          prevDF.queryExecution.optimizedPlan match {
+            case _: LocalRelation =>
+              prevPlan = prevDF.queryExecution.optimizedPlan
+              val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
+                case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
+              }
+              Project(prevPlanToRefMapping, prevPlan)
+            case p @ Project(projectList, _: OneRowRelation) =>
+              prevPlan = prevDF.queryExecution.optimizedPlan
+              val prevPlanToRefMapping = projectList.zip(r.output).map {
+                case (fa: Alias, ta) => Alias(fa.child, ta.name)(ta.exprId)
+              }
+              p.copy(projectList = prevPlanToRefMapping)
+            case _ =>
+              val logicalRDD = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
+                  prevDF.isStreaming).newInstance()
+              prevPlan = logicalRDD
+              val logicalPlan = prevDF.logicalPlan
+              val optimizedPlan = prevDF.queryExecution.optimizedPlan
+              val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
+              logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
+          }
+      }
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(
@@ -157,9 +194,6 @@ case class UnionLoopExec(
           cause = null)
       }
 
-      // Inherit stats and constraints from the dataset of the previous iteration.
-      val prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
-        .newInstance()
       unionChildren += prevPlan
 
       currentNumRows += prevCount.toInt
@@ -183,17 +217,6 @@ case class UnionLoopExec(
       numIterations += 1
 
       if (!limitReached) {
-        // the current plan is created by substituting UnionLoopRef node with the project node of
-        // the previous plan.
-        // This way we support only UNION ALL case. Additional case should be added for UNION case.
-        // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
-        val newRecursion = recursion.transform {
-          case r: UnionLoopRef if r.loopId == loopId =>
-            val logicalPlan = prevDF.logicalPlan
-            val optimizedPlan = prevDF.queryExecution.optimizedPlan
-            val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
-            prevPlan.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
-        }
 
         val (df, count) = executeAndCacheAndCount(newRecursion, currentLimit)
         prevDF = df
