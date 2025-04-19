@@ -29,6 +29,7 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.WebUrlUtils
 
 private[connect] class SparkConnectAnalyzeHandler(
     responseObserver: StreamObserver[proto.AnalyzePlanResponse])
@@ -146,6 +147,14 @@ private[connect] class SparkConnectAnalyzeHandler(
             .newBuilder()
             .setVersion(session.version)
             .build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_WEB_URL =>
+        val webUrl = WebUrlUtils.getSparkWebUrl(session.sparkContext)
+        val sparkWebUrlBuilder = proto.AnalyzePlanResponse.SparkWebUrl.newBuilder()
+        if (webUrl.isDefined) {
+          sparkWebUrlBuilder.setWebUrl(webUrl.get)
+        }
+        builder.setSparkWebUrl(sparkWebUrlBuilder.build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.DDL_PARSE =>
         val schema = planner.parseDatatypeString(request.getDdlParse.getDdlString)
