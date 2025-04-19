@@ -395,9 +395,9 @@ class PySparkErrorTestUtils:
                     f"Expected QueryContext was '{expected}', got '{actual}'",
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert fragment is not None, (
-                        "`fragment` is required when QueryContextType is DataFrame."
-                    )
+                    assert (
+                        fragment is not None
+                    ), "`fragment` is required when QueryContextType is DataFrame."
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -1170,11 +1170,12 @@ def assertColumnUnique(
         # no pandas, so we won't call pandasutils functions
         pass
 
+    # Check if pyarrow is available
     has_arrow = False
     try:
-        import pyarrow
+        import importlib.util
 
-        has_arrow = True
+        has_arrow = importlib.util.find_spec("pyarrow") is not None
     except ImportError:
         pass
 
@@ -1393,11 +1394,12 @@ def assertColumnNonNull(
         # no pandas, so we won't call pandasutils functions
         pass
 
+    # Check if pyarrow is available
     has_arrow = False
     try:
-        import pyarrow
+        import importlib.util
 
-        has_arrow = True
+        has_arrow = importlib.util.find_spec("pyarrow") is not None
     except ImportError:
         pass
 
@@ -1639,11 +1641,12 @@ def assertColumnValuesInSet(
         # no pandas, so we won't call pandasutils functions
         pass
 
+    # Check if pyarrow is available
     has_arrow = False
     try:
-        import pyarrow
+        import importlib.util
 
-        has_arrow = True
+        has_arrow = importlib.util.find_spec("pyarrow") is not None
     except ImportError:
         pass
 
@@ -1832,10 +1835,12 @@ def assertReferentialIntegrity(
     message: Optional[str] = None,
 ) -> None:
     """
-    Assert that all non-null values in a column of one DataFrame exist in a column of another DataFrame.
+    Assert that all non-null values in a column of one DataFrame exist in a column of
+    another DataFrame.
 
-    This function checks referential integrity between two DataFrames, similar to a foreign key constraint
-    in a relational database. It verifies that all non-null values in the source column exist in the target column.
+    This function checks referential integrity between two DataFrames, similar to a foreign
+    key constraint in a relational database. It verifies that all non-null values in the
+    source column exist in the target column.
 
     Supports Spark, Spark Connect, pandas, and pandas-on-Spark DataFrames.
 
@@ -1888,7 +1893,7 @@ def assertReferentialIntegrity(
         raise PySparkAssertionError(
             errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
             messageParameters={
-                "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                "expected_type": ("Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"),
                 "arg_name": "source_df",
                 "actual_type": None,
             },
@@ -1899,7 +1904,7 @@ def assertReferentialIntegrity(
         raise PySparkAssertionError(
             errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
             messageParameters={
-                "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                "expected_type": ("Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"),
                 "arg_name": "target_df",
                 "actual_type": None,
             },
@@ -1923,11 +1928,12 @@ def assertReferentialIntegrity(
         # no pandas, so we won't call pandasutils functions
         pass
 
+    # Check if pyarrow is available
     has_arrow = False
     try:
-        import pyarrow
+        import importlib.util
 
-        has_arrow = True
+        has_arrow = importlib.util.find_spec("pyarrow") is not None
     except ImportError:
         pass
 
@@ -1959,7 +1965,10 @@ def assertReferentialIntegrity(
                     missing_counts[val] = len(source_df[source_df[source_column] == val])
 
                 # Create error message
-                error_msg = f"Column '{source_column}' contains values not found in target column '{target_column}'.\n"
+                error_msg = (
+                    f"Column '{source_column}' contains values not found in "
+                    f"target column '{target_column}'.\n"
+                )
                 error_msg += f"Missing values: {missing_values[:10]}" + (
                     " (showing first 10 only)" if len(missing_values) > 10 else ""
                 )
@@ -1997,7 +2006,10 @@ def assertReferentialIntegrity(
                     missing_counts[val] = len(source_df[source_df[source_column] == val])
 
                 # Create error message
-                error_msg = f"Column '{source_column}' contains values not found in target column '{target_column}'.\n"
+                error_msg = (
+                    f"Column '{source_column}' contains values not found in "
+                    f"target column '{target_column}'.\n"
+                )
                 error_msg += f"Missing values: {missing_values[:10]}" + (
                     " (showing first 10 only)" if len(missing_values) > 10 else ""
                 )
@@ -2029,7 +2041,9 @@ def assertReferentialIntegrity(
                 raise PySparkAssertionError(
                     errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
                     messageParameters={
-                        "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                        "expected_type": (
+                            "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"
+                        ),
                         "arg_name": "source_df",
                         "actual_type": type(source_df),
                     },
@@ -2038,7 +2052,9 @@ def assertReferentialIntegrity(
             raise PySparkAssertionError(
                 errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
                 messageParameters={
-                    "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                    "expected_type": (
+                        "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"
+                    ),
                     "arg_name": "source_df",
                     "actual_type": type(source_df),
                 },
@@ -2058,7 +2074,9 @@ def assertReferentialIntegrity(
                 raise PySparkAssertionError(
                     errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
                     messageParameters={
-                        "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                        "expected_type": (
+                            "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"
+                        ),
                         "arg_name": "target_df",
                         "actual_type": type(target_df),
                     },
@@ -2067,7 +2085,9 @@ def assertReferentialIntegrity(
             raise PySparkAssertionError(
                 errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
                 messageParameters={
-                    "expected_type": "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]",
+                    "expected_type": (
+                        "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"
+                    ),
                     "arg_name": "target_df",
                     "actual_type": type(target_df),
                 },
@@ -2111,7 +2131,10 @@ def assertReferentialIntegrity(
         missing_values_list = [row[source_column] for row in missing_examples]
 
         # Create error message
-        error_msg = f"Column '{source_column}' contains values not found in target column '{target_column}'.\n"
+        error_msg = (
+            f"Column '{source_column}' contains values not found in "
+            f"target column '{target_column}'.\n"
+        )
         error_msg += f"Missing values: {missing_values_list}" + (
             " (showing first 10 only)" if len(missing_examples) >= 10 else ""
         )
@@ -2132,7 +2155,7 @@ def _test() -> None:
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    (failure_count, _) = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
