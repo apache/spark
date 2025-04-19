@@ -432,6 +432,10 @@ private[spark] class AppStatusListener(
       missingStages.map(_.numTasks).sum
     }
 
+    val totalTasks = {
+      event.stageInfos.map(_.numTasks).sum
+    }
+
     val lastStageInfo = event.stageInfos.sortBy(_.stageId).lastOption
     val jobName = lastStageInfo.map(_.name).getOrElse("")
     val description = Option(event.properties)
@@ -457,6 +461,7 @@ private[spark] class AppStatusListener(
       jobGroup,
       jobTags,
       numTasks,
+      totalTasks,
       sqlExecutionId)
     liveJobs.put(event.jobId, job)
     liveUpdate(job, now)
@@ -496,23 +501,26 @@ private[spark] class AppStatusListener(
       val now = System.nanoTime()
 
       // Check if there are any pending stages that match this job; mark those as skipped.
-      val it = liveStages.entrySet.iterator()
-      while (it.hasNext()) {
-        val e = it.next()
-        if (job.stageIds.contains(e.getKey()._1)) {
-          val stage = e.getValue()
+      liveStages.forEach { (key, stage) =>
+        val stageId = key._1
+        if (job.stageIds.contains(stageId)) {
           if (v1.StageStatus.PENDING.equals(stage.status)) {
-            stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks
 
-            pools.get(stage.schedulingPool).foreach { pool =>
-              pool.stageIds = pool.stageIds - stage.info.stageId
-              update(pool, now)
-            }
+            // Change stage status and remove from livestages only if
+            // all jobs that depend on this stage have ended.
+            if (!liveJobs.exists { case (jobId, _) => stage.jobIds.contains(jobId) }) {
+              stage.status = v1.StageStatus.SKIPPED
 
-            it.remove()
-            update(stage, now, last = true)
+              pools.get(stage.schedulingPool).foreach { pool =>
+                pool.stageIds = pool.stageIds - stage.info.stageId
+                update(pool, now)
+              }
+
+              liveStages.remove(key)
+              update(stage, now, last = true)
+            }
           }
         }
       }

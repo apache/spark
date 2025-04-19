@@ -5,6 +5,7 @@
   "jobTags" : [ ],
   "status" : "SUCCEEDED",
   "numTasks" : 8,
+  "totalTasks" : 8,
   "numActiveTasks" : 0,
   "numCompletedTasks" : 8,
   "numSkippedTasks" : 0,
