@@ -45,9 +45,7 @@ try:
     from google.rpc import error_details_pb2
 except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
-have_googleapis_common_protos = (
-    googleapis_common_protos_requirement_message is None
-)
+have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
 
 graphviz_requirement_message = None
 try:
@@ -69,9 +67,7 @@ connect_requirement_message = (
     or googleapis_common_protos_requirement_message
     or grpc_status_requirement_message
 )
-should_test_connect: str = typing.cast(
-    str, connect_requirement_message is None
-)
+should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 __all__ = [
     "assertDataFrameEqual",
