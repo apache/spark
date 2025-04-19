@@ -47,7 +47,7 @@ public class TableSchema {
   }
 
   public TableSchema(List<FieldSchema> fieldSchemas) {
-    int pos = 1;
+    int pos = 0;
     for (FieldSchema field : fieldSchemas) {
       columns.add(new ColumnDescriptor(field.getName(), field.getComment(),
           new TypeDescriptor(field.getType()), pos++));
