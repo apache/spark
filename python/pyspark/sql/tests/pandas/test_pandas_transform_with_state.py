@@ -1291,12 +1291,12 @@ class TransformWithStateTestsMixin:
                         assert state_var["stateName"] == "$procTimers_keyToTimestamp"
                         assert state_var["stateVariableType"] == "TimerState"
 
-                # check for state data source and readChangeFeed
+                # check for state data source and readChangeLog
                 value_state_df = (
                     batch_df.sparkSession.read.format("statestore")
                     .option("path", checkpoint_path)
                     .option("stateVarName", "numViolations")
-                    .option("readChangeFeed", True)
+                    .option("readChangeLog", True)
                     .option("changeStartBatchId", 0)
                     .load()
                 ).selectExpr(
