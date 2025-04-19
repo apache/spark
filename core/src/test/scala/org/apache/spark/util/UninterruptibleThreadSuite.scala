@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.nio.channels.spi.AbstractInterruptibleChannel
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.util.Random
@@ -113,6 +114,51 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     t.join()
     assert(hasInterruptedException === false)
     assert(interruptStatusBeforeExit)
+  }
+
+  test("no runUninterruptibly") {
+    @volatile var hasInterruptedException = false
+    val t = new UninterruptibleThread("test") {
+      override def run(): Unit = {
+        if (sleep(0)) {
+          hasInterruptedException = true
+        }
+      }
+    }
+    t.interrupt()
+    t.start()
+    t.join()
+    assert(hasInterruptedException === true)
+  }
+
+  private class InterruptibleChannel(latch: CountDownLatch, lock: Object, thread: Thread)
+    extends AbstractInterruptibleChannel {
+    begin()
+    latch.countDown()
+    close()
+    override def implCloseChannel(): Unit = {
+      try {
+        Thread.sleep(Long.MaxValue)
+      } catch {
+        case _: InterruptedException => thread.interrupt()
+      }
+    }
+  }
+
+  test("uninterruptibleLock deadlock") {
+    val lock = new Object
+    val latch = new CountDownLatch(1)
+    val task = new UninterruptibleThread("task thread") {
+      override def run(): Unit = {
+        new InterruptibleChannel(latch, lock, Thread.currentThread())
+      }
+    }
+    task.start()
+    lock.synchronized {
+      assert(latch.await(100, TimeUnit.SECONDS), "await timeout")
+      task.interrupt()
+    }
+    task.join()
   }
 
   test("stress test") {

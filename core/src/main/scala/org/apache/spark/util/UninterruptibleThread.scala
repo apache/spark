@@ -52,6 +52,12 @@ private[spark] class UninterruptibleThread(
   private var shouldInterruptThread = false
 
   /**
+   * Indicates that we should wait for interrupt() call before proceeding.
+   */
+  @GuardedBy("uninterruptibleLock")
+  private var awaitInterruptThread = false
+
+  /**
    * Run `f` uninterruptibly in `this` thread. The thread won't be interrupted before returning
    * from `f`.
    *
@@ -69,10 +75,22 @@ private[spark] class UninterruptibleThread(
     }
 
     uninterruptibleLock.synchronized {
-      // Clear the interrupted status if it's set.
-      shouldInterruptThread = Thread.interrupted() || shouldInterruptThread
       uninterruptible = true
     }
+
+    while (uninterruptibleLock.synchronized {
+      // Clear the interrupted status if it's set.
+      shouldInterruptThread = Thread.interrupted() || shouldInterruptThread
+      // wait for super.interrupt() to be called
+      !shouldInterruptThread && awaitInterruptThread }) {
+      try {
+        Thread.sleep(100)
+      } catch {
+        case _: InterruptedException =>
+          uninterruptibleLock.synchronized { shouldInterruptThread = true }
+      }
+    }
+
     try {
       f
     } finally {
@@ -92,11 +110,17 @@ private[spark] class UninterruptibleThread(
    * interrupted until it enters into the interruptible status.
    */
   override def interrupt(): Unit = {
-    uninterruptibleLock.synchronized {
-      if (uninterruptible) {
-        shouldInterruptThread = true
-      } else {
+    if (uninterruptibleLock.synchronized {
+      shouldInterruptThread = uninterruptible
+      awaitInterruptThread = !shouldInterruptThread
+      awaitInterruptThread
+    }) {
+      try {
         super.interrupt()
+      } finally {
+        uninterruptibleLock.synchronized {
+          awaitInterruptThread = false
+        }
       }
     }
   }
