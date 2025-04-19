@@ -20,14 +20,21 @@ package test.org.apache.spark.sql;
 import java.io.File;
 import java.util.HashMap;
 
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.sql.DataFrameWriter;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.Utils;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
 public class JavaDataFrameReaderWriterSuite {
   private SparkSession spark = new TestSparkSession();
@@ -151,5 +158,17 @@ public class JavaDataFrameReaderWriterSuite {
     spark.read().schema(schema).orc(input, input, input);
     spark.read().schema(schema).orc(new String[]{input, input})
         .write().orc(output);
+  }
+
+  @Test
+  @DisplayName("[SPARK-51182]: DataFrameWriter should throw dataPathNotSpecifiedError when path " +
+      "is not specified")
+  public void testPathNotSpecified() {
+    DataFrameWriter<Long> dataFrameWriter = spark.range(0).write();
+    SparkIllegalArgumentException e = assertThrowsExactly(
+        SparkIllegalArgumentException.class,
+        () -> dataFrameWriter.save(),
+        "Expected save() to throw SparkIllegalArgumentException when path is not specified");
+    assertEquals("'path' is not specified.", e.getMessage());
   }
 }
