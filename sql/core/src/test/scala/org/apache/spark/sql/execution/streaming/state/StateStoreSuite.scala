@@ -122,6 +122,38 @@ private object FakeStateStoreProviderWithMaintenanceError {
   val errorOnMaintenance = new AtomicBoolean(false)
 }
 
+class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
+  import FakeStateStoreProviderTracksCloseThread._
+  private var id: StateStoreId = null
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
+    id = stateStoreId
+  }
+
+  override def stateStoreId: StateStoreId = id
+
+  override def close(): Unit = {
+    closeThreadNames = Thread.currentThread.getName :: closeThreadNames
+  }
+
+  override def getStore(version: Long, uniqueId: Option[String]): StateStore = null
+
+  override def doMaintenance(): Unit = {}
+}
+
+private object FakeStateStoreProviderTracksCloseThread {
+  var closeThreadNames: List[String] = Nil
+}
+
 @ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
@@ -563,8 +595,11 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           StateStore.get(storeProviderId2, keySchema, valueSchema,
             NoPrefixKeyStateEncoderSpec(keySchema),
             0, None, None, useColumnFamilies = false, storeConf, hadoopConf)
-          assert(!StateStore.isLoaded(storeProviderId1))
-          assert(StateStore.isLoaded(storeProviderId2))
+          // Close runs asynchronously, so we need to call eventually with a small timeout
+          eventually(timeout(5.seconds)) {
+            assert(!StateStore.isLoaded(storeProviderId1))
+            assert(StateStore.isLoaded(storeProviderId2))
+          }
         }
       }
 
@@ -1082,7 +1117,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 }
 
 abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
-  extends StateStoreCodecsTest with PrivateMethodTester {
+  extends StateStoreCodecsTest with PrivateMethodTester with BeforeAndAfter {
   import StateStoreTestsHelper._
 
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
@@ -1716,6 +1751,60 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
     val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("SPARK-51596: unloading only occurs on maintenance thread but occurs promptly") {
+    // Reset closeThreadNames
+    FakeStateStoreProviderTracksCloseThread.closeThreadNames = Nil
+
+    val sqlConf = getDefaultSQLConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
+    )
+    // Make maintenance interval very large (30s) so that task thread runs before maintenance.
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 30000L)
+    // Use the `FakeStateStoreProviderTracksCloseThread` to run the test
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS,
+      classOf[FakeStateStoreProviderTracksCloseThread].getName
+    )
+
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withCoordinatorRef(sc) { coordinatorRef =>
+        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-51596"
+        val providerId =
+          StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
+        val providerId2 =
+          StateStoreProviderId(StateStoreId(rootLocation, 0, 1), UUID.randomUUID)
+
+        // Create provider to start the maintenance task + pool
+        StateStore.get(
+          providerId,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, None, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
+
+        // Report instance active on another executor
+        coordinatorRef.reportActiveInstance(providerId, "otherhost", "otherexec", Seq.empty)
+
+        // Load another provider to trigger task unload
+        StateStore.get(
+          providerId2,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, None, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
+
+        // Wait for close to occur. Timeout is less than maintenance interval,
+        // so should only close by task triggering.
+        eventually(timeout(5.seconds)) {
+          assert(FakeStateStoreProviderTracksCloseThread.closeThreadNames.size == 1)
+          FakeStateStoreProviderTracksCloseThread.closeThreadNames.foreach { name =>
+            assert(name.contains("state-store-maintenance-thread"))}
+        }
+      }
+    }
   }
 
   /** Return a new provider with a random id */
