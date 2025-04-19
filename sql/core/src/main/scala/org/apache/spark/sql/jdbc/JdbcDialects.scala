@@ -40,7 +40,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
@@ -411,6 +411,14 @@ abstract class JdbcDialect extends Serializable with Logging {
       s"CAST($expr AS $databaseTypeDefinition)"
     }
 
+    override def visitExtract(extract: Extract): String = {
+      if (isSupportedExtract(extract)) {
+        super.visitExtract(extract)
+      } else {
+        visitUnexpectedExpr(extract)
+      }
+    }
+
     override def visitSQLFunction(funcName: String, inputs: Array[Expression]): String = {
       if (isSupportedFunction(funcName)) {
         super.visitSQLFunction(funcName, inputs)
@@ -498,6 +506,14 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("3.3.0")
   def isSupportedFunction(funcName: String): Boolean = false
+
+  /**
+   * Returns whether the database supports extract.
+   * @param extract The V2 Extract to be converted.
+   * @return True if the database supports extract.
+   */
+  @Since("4.1.0")
+  def isSupportedExtract(extract: Extract): Boolean = false
 
   /**
    * Converts V2 expression to String representing a SQL expression.
