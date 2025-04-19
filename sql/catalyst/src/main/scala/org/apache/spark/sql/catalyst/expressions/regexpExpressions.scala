@@ -44,6 +44,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class StringRegexExpression extends BinaryExpression
   with ImplicitCastInputTypes with Predicate {
+  override protected[spark] val _expectedCost = 100
   override def nullIntolerant: Boolean = true
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean

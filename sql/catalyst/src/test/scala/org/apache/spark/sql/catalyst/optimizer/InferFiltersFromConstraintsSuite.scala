@@ -30,14 +30,16 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("InferAndPushDownFilters", FixedPoint(100),
-        PushPredicateThroughJoin,
-        PushPredicateThroughNonJoin,
+      Batch("PushDownFilters", FixedPoint(100),
+        PushDownPredicates) ::
+      Batch("InferFilters", Once,
         InferFiltersFromConstraints,
         CombineFilters,
         SimplifyBinaryComparison,
         BooleanSimplification,
-        PruneFilters) :: Nil
+        PruneFilters) ::
+      Batch("PushDownFilters", FixedPoint(100),
+        PushDownPredicates) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)

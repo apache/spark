@@ -149,8 +149,14 @@ object CommonExpressionId {
 
 /**
  * A wrapper of common expression to carry the id.
+ *
+ * @param originalAttribute only used for push down predicates to make it idempotent. If it
+ *                    is not none, we should propagate this attribute
  */
-case class CommonExpressionDef(child: Expression, id: CommonExpressionId = new CommonExpressionId())
+case class CommonExpressionDef(
+    child: Expression,
+    id: CommonExpressionId = new CommonExpressionId(),
+    originalAttribute: Option[Attribute] = None)
   extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =

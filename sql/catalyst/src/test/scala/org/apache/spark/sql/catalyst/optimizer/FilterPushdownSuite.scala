@@ -41,8 +41,7 @@ class FilterPushdownSuite extends PlanTest {
         CombineFilters,
         PushPredicateThroughNonJoin,
         BooleanSimplification,
-        PushPredicateThroughJoin,
-        CollapseProject) ::
+        PushPredicateThroughJoin) ::
       Batch("Push extra predicate through join", FixedPoint(10),
         PushExtraPredicateThroughJoin,
         PushDownPredicates) :: Nil
@@ -780,7 +779,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = testRelation
       .where($"a" + 1 < 3)
-      .select($"a", $"b")
+      .select($"a", $"b", ($"a" + 1) as "aa")
       .groupBy($"a")(($"a" + 1) as "aa", count($"b") as "c")
       .where($"c" === 2L || $"aa" > 4)
       .analyze
@@ -1538,5 +1537,34 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)) && $"x.c" > 1)
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
+  }
+
+  test("SPARK-50589: avoid extra expensive expression duplication when push filter") {
+    // through project
+    val originalQuery1 = testRelation
+      .select($"a" + $"b" as "add", $"a".rlike("magic") as "rlike")
+      .where($"add" < 10 && $"rlike")
+    val correctAnswer1 = testRelation
+      .where($"a" + $"b" < 10)
+      .select($"a", $"b", $"c", $"a".rlike("magic") as "rlike")
+      .where($"rlike")
+      .select($"a" + $"b" as "add", $"rlike")
+      .analyze
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    comparePlans(optimized1, correctAnswer1)
+
+    // through aggregate
+    val originalQuery2 = testRelation
+      .groupBy($"a")($"a", $"a" + $"a" as "add", $"a".rlike("magic") as "rlike", count(1) as "ct")
+      .where($"add" < 10 && $"rlike")
+    val optimized2 = Optimize.execute(originalQuery2.analyze)
+    val correctAnswer2 = testRelation
+      .where($"a" + $"a" < 10)
+      .select($"a", $"b", $"c", $"a".rlike("magic") as "rlike")
+      .where($"rlike")
+      .select($"a", $"b", $"c", $"a" + $"a" as "add", $"rlike")
+      .groupBy($"a")($"a", $"a" + $"a" as "add", $"a".rlike("magic") as "rlike", count(1) as "ct")
+      .analyze
+    comparePlans(optimized2, correctAnswer2)
   }
 }
