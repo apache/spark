@@ -65,11 +65,11 @@ object ExpressionSet {
  * invariant that:
  * 1. Every expr `e` in `baseSet` satisfies `e.deterministic && e.canonicalized == e`
  * 2. Every deterministic expr `e` in `originals` satisfies that `e.canonicalized` is already
- *    accessed.
+ * accessed.
  */
 class ExpressionSet protected(
-    private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-    private var originals: mutable.Buffer[Expression] = new ArrayBuffer)
+    protected val baseSet: mutable.Set[Expression] = new mutable.HashSet(),
+    protected val originals: mutable.Buffer[Expression] = new ArrayBuffer)
   extends scala.collection.Set[Expression]
     with scala.collection.SetOps[Expression, scala.collection.Set, ExpressionSet] {
 
@@ -79,60 +79,67 @@ class ExpressionSet protected(
     set
   }
 
+  override def empty: ExpressionSet = new ExpressionSet()
+
   override protected def newSpecificBuilder: mutable.Builder[Expression, ExpressionSet] =
     new mutable.Builder[Expression, ExpressionSet] {
       var expr_set: ExpressionSet = new ExpressionSet()
+
       def clear(): Unit = expr_set = new ExpressionSet()
+
       def result(): ExpressionSet = expr_set
+
       def addOne(expr: Expression): this.type = {
         expr_set.add(expr)
         this
       }
     }
 
-  override def empty: ExpressionSet = new ExpressionSet()
-
-  override def diff(that: scala.collection.Set[Expression]): ExpressionSet = this -- that
-
-  protected def add(e: Expression): Unit = {
-    if (!e.deterministic) {
+  protected def add(e: Expression): Unit = if (!e.deterministic) {
       originals += e
-    } else if (!baseSet.contains(e.canonicalized)) {
+    } else if (!this.contains(e)) {
       baseSet.add(e.canonicalized)
       originals += e
     }
-  }
 
-  protected def remove(e: Expression): Unit = {
-    if (e.deterministic) {
-      baseSet.remove(e.canonicalized)
-      originals = originals.filter(!_.semanticEquals(e))
+  protected def remove(e: Expression): Unit = if (e.deterministic) {
+      baseSet --= baseSet.filter(_ == e.canonicalized)
+      originals --= originals.filter(_.canonicalized == e.canonicalized)
     }
-  }
 
-  override def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
+  def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
 
   override def filter(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filter(e => p(e))
-    val newOriginals = originals.filter(e => p(e.canonicalized))
-    new ExpressionSet(newBaseSet, newOriginals)
+    val newOriginals = originals.filter(e => p(e))
+    this.constructNew(newBaseSet, newOriginals)
   }
 
   override def filterNot(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filterNot(e => p(e))
-    val newOriginals = originals.filterNot(e => p(e.canonicalized))
-    new ExpressionSet(newBaseSet, newOriginals)
+    val newOriginals = originals.filterNot(e => p(e))
+    this.constructNew(newBaseSet, newOriginals)
   }
+
+  def constructNew(newBaseSet: mutable.Set[Expression] = new mutable.HashSet,
+    newOriginals: mutable.Buffer[Expression] = new ArrayBuffer): ExpressionSet =
+    new ExpressionSet(newBaseSet, newOriginals)
 
   override def +(elem: Expression): ExpressionSet = {
     val newSet = clone()
-    newSet.add(elem)
+    newSet.add(this.convertToCanonicalizedIfRequired(elem))
     newSet
   }
 
   override def -(elem: Expression): ExpressionSet = {
     val newSet = clone()
-    newSet.remove(elem)
+    newSet.remove(this.convertToCanonicalizedIfRequired(elem))
+    newSet
+  }
+
+  override def --(elems: IterableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    elems.iterator.foreach(ele => newSet.remove(this.convertToCanonicalizedIfRequired(ele)))
     newSet
   }
 
@@ -142,34 +149,68 @@ class ExpressionSet protected(
     newSet
   }
 
-  override def --(that: IterableOnce[Expression]): ExpressionSet = {
-    val newSet = clone()
-    that.iterator.foreach(newSet.remove)
-    newSet
-  }
-
-  def map(f: Expression => Expression): ExpressionSet = {
-    val newSet = new ExpressionSet()
-    this.iterator.foreach(elem => newSet.add(f(elem)))
-    newSet
-  }
-
-  def flatMap(f: Expression => Iterable[Expression]): ExpressionSet = {
-    val newSet = new ExpressionSet()
-    this.iterator.foreach(f(_).foreach(newSet.add))
-    newSet
-  }
+  override def diff(that: scala.collection.Set[Expression]): ExpressionSet = this -- that
 
   override def iterator: Iterator[Expression] = originals.iterator
 
   override def equals(obj: Any): Boolean = obj match {
     case other: ExpressionSet => this.baseSet == other.baseSet
+
     case _ => false
   }
 
   override def hashCode(): Int = baseSet.hashCode()
 
   override def clone(): ExpressionSet = new ExpressionSet(baseSet.clone(), originals.clone())
+
+
+  def map(f: Expression => Expression): ExpressionSet = {
+    val newSet = this.constructNew()
+    this.iterator.foreach(elem => newSet.add(this.convertToCanonicalizedIfRequired(f(elem))))
+    newSet
+  }
+
+  def flatMap(f: Expression => Iterable[Expression]): ExpressionSet = {
+    val newSet = this.constructNew()
+    this.iterator.foreach(f(_).foreach(e => newSet.add(this.convertToCanonicalizedIfRequired(e))))
+    newSet
+  }
+
+  def unionExpressionSet(that: ExpressionSet): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.add)
+    newSet
+  }
+
+
+  def convertToCanonicalizedIfRequired(ele: Expression): Expression = ele
+
+  def getConstraintsSubsetOfAttributes(expressionsOfInterest: Iterable[Expression]):
+  Seq[Expression] = Seq.empty
+
+  def updateConstraints(
+      outputAttribs: Seq[Attribute],
+      inputAttribs: Seq[Attribute], projectList: Seq[NamedExpression],
+      oldAliasedConstraintsCreator: Option[Seq[NamedExpression] => ExpressionSet]): ExpressionSet =
+    oldAliasedConstraintsCreator.map(aliasCreator =>
+      this.unionExpressionSet(aliasCreator(projectList))).getOrElse(this)
+
+  def attributesRewrite(mapping: AttributeMap[Attribute]): ExpressionSet =
+    ExpressionSet(this.map(_ transform {
+      case a: Attribute => mapping(a)
+    }))
+
+  def withNewConstraints(filters: ExpressionSet,
+    attribEquiv: Seq[mutable.Buffer[Attribute]]): ExpressionSet = ExpressionSet(filters)
+
+  def rewriteUsingAlias(expr: Expression): Expression = expr
+
+  def getConstraintsWithDecanonicalizedNullIntolerant: ExpressionSet = this
+
+  def getAttribEquivalenceList: Seq[mutable.Buffer[Attribute]] =
+    Seq.empty[mutable.Buffer[Attribute]]
+
+  def getCanonicalizedFilters: Set[Expression] = this.baseSet.toSet
 
   /**
    * Returns a string containing both the post [[Expression#canonicalized]] expressions
@@ -188,4 +229,3 @@ class ExpressionSet protected(
       seq = originals.toSeq, start = "Set(", sep = ", ", end = ")", maxFields, Some(customToString))
   }
 }
-

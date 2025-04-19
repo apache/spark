@@ -105,7 +105,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   }
 
   override lazy val validConstraints: ExpressionSet =
-    getAllValidConstraints(projectList)
+    child.constraints.updateConstraints(this.output, child.output, this.projectList,
+      Option(getAllValidConstraints))
 
   override def metadataOutput: Seq[Attribute] =
     getTagValue(Project.hiddenOutputTag).getOrElse(child.metadataOutput)
@@ -346,10 +347,21 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
-  override protected lazy val validConstraints: ExpressionSet = {
-    val predicates = splitConjunctivePredicates(condition)
-      .filterNot(SubqueryExpression.hasCorrelatedSubquery)
-    child.constraints.union(ExpressionSet(predicates))
+  override lazy val validConstraints: ExpressionSet = {
+    val predicates = splitConjunctivePredicates(condition).filterNot(
+      SubqueryExpression.hasCorrelatedSubquery)
+    // remove useless nullsafe filter if any for EqualTo predicates which are present
+    val nullSafePredsToRemove = predicates.flatMap[Expression] {
+        case EqualTo(l: Attribute, r: Attribute) => Seq(EqualNullSafe(l, r))
+
+        case EqualTo(l@Cast(_: Attribute, _, _, _), r: Attribute) => Seq(EqualNullSafe(l, r))
+
+        case EqualTo(l: Attribute, r@Cast(_: Attribute, _, _, _)) => Seq(EqualNullSafe(l, r))
+
+        case _ => Seq.empty
+      }.toSet
+    val netPreds = predicates.filterNot(nullSafePredsToRemove.contains)
+    child.constraints.unionExpressionSet(ExpressionSet(netPreds))
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Filter =
@@ -365,9 +377,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
   protected def rightConstraints: ExpressionSet = {
     require(left.output.size == right.output.size)
     val attributeRewrites = AttributeMap(right.output.zip(left.output))
-    right.constraints.map(_ transform {
-      case a: Attribute => attributeRewrites(a)
-    })
+    right.constraints.attributesRewrite(attributeRewrites)
   }
 
   override lazy val resolved: Boolean =
@@ -401,8 +411,8 @@ case class Intersect(
 
   override def metadataOutput: Seq[Attribute] = Nil
 
-  override protected lazy val validConstraints: ExpressionSet =
-    leftConstraints.union(rightConstraints)
+  override lazy val validConstraints: ExpressionSet =
+    leftConstraints.unionExpressionSet(rightConstraints)
 
   override def maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
@@ -447,7 +457,7 @@ case class Except(
 
   final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
-  override protected lazy val validConstraints: ExpressionSet = leftConstraints
+  override lazy val validConstraints: ExpressionSet = leftConstraints
 
   override def maxRows: Option[Long] = left.maxRows
 
@@ -614,6 +624,50 @@ case class Union(
     children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
   }
 
+  private lazy val lazyOutput: Seq[Attribute] = computeOutput()
+
+  private def computeOutput(): Seq[Attribute] = Union.mergeChildOutputs(children.map(_.output))
+
+  /**
+   * Maps the constraints containing a given (original) sequence of attributes to those with a
+   * given (reference) sequence of attributes. Given the nature of union, we expect that the
+   * mapping between the original and reference sequences are symmetric.
+   */
+  private def rewriteConstraints(
+    reference: Seq[Attribute],
+    original: Seq[Attribute],
+    constraints: ExpressionSet): ExpressionSet = {
+    require(reference.size == original.size)
+    val attributeRewrites = AttributeMap(original.zip(reference))
+    constraints.attributesRewrite(attributeRewrites)
+  }
+
+  private def merge(a: ExpressionSet, b: ExpressionSet): ExpressionSet = {
+    val common = a.intersect(b)
+    // The constraint with only one reference could be easily inferred as predicate
+    // Grouping the constraints by it's references so we can combine the constraints with same
+    // reference together
+    val othera = a.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
+    val others = (othera.keySet intersect otherb.keySet).map { attr =>
+      Or(othera(attr).reduceLeft(And), otherb(attr).reduceLeft(And))
+    }
+    common ++ others
+  }
+
+  override lazy val validConstraints: ExpressionSet =
+    if (conf.constraintPropagationEnabled) {
+      val head = children.head
+      val headOutput = head.output
+      val remaining = children.slice(1, children.length)
+      remaining.foldLeft(head.constraints.asInstanceOf[ConstraintSet])((constraint, node) =>
+        ConstraintSet.unionWith(constraint, node, headOutput))
+    } else {
+      children.map(child =>
+        rewriteConstraints(children.head.output, child.output, child.constraints)).reduce(merge)
+    }
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
     copy(children = newChildren)
 }
@@ -689,19 +743,19 @@ case class Join(
     }
   }
 
-  override protected lazy val validConstraints: ExpressionSet = {
+  override lazy val validConstraints: ExpressionSet = {
     joinType match {
       case _: InnerLike if condition.isDefined =>
         left.constraints
-          .union(right.constraints)
-          .union(ExpressionSet(splitConjunctivePredicates(condition.get)))
+          .unionExpressionSet(right.constraints)
+          .unionExpressionSet(ExpressionSet(splitConjunctivePredicates(condition.get)))
       case LeftSemi if condition.isDefined =>
         left.constraints
-          .union(ExpressionSet(splitConjunctivePredicates(condition.get)))
+          .unionExpressionSet(ExpressionSet(splitConjunctivePredicates(condition.get)))
       case j: ExistenceJoin =>
         left.constraints
       case _: InnerLike =>
-        left.constraints.union(right.constraints)
+        left.constraints.unionExpressionSet(right.constraints)
       case LeftExistence(_) =>
         left.constraints
       case LeftOuter | LeftSingle =>
@@ -709,7 +763,11 @@ case class Join(
       case RightOuter =>
         right.constraints
       case _ =>
-        ExpressionSet()
+        if (conf.constraintPropagationEnabled) {
+          new ConstraintSet()
+        } else {
+          ExpressionSet()
+        }
     }
   }
 
@@ -1180,7 +1238,8 @@ case class Aggregate(
 
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(!_.exists(_.isInstanceOf[AggregateExpression]))
-    getAllValidConstraints(nonAgg)
+    child.constraints.updateConstraints(this.output, child.output, nonAgg,
+      Option(getAllValidConstraints))
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
@@ -1388,7 +1447,10 @@ case class Expand(
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
-  override protected lazy val validConstraints: ExpressionSet = ExpressionSet()
+  override lazy val validConstraints: ExpressionSet =
+      if (conf.constraintPropagationEnabled) {
+        new ConstraintSet()
+      } else ExpressionSet(Set.empty)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Expand =
     copy(child = newChild)
