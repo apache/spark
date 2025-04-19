@@ -1,4 +1,5 @@
 -- Create some temporary test data.
+drop table if exists t;
 create table t as
   select named_struct('u', named_struct('member0', member0, 'member1', member1)) as s
   from values (1, null), (null,  'a') tab(member0, member1);

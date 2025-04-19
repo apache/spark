@@ -484,6 +484,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           case _: UDAFTestCase =>
             // Skip creating analyzer test cases for UDAF tests as they are hard to update locally.
             Seq(test)
+          case _: AnalyzerTest =>
+            Seq(test)
           case _ =>
             Seq(
               test,
