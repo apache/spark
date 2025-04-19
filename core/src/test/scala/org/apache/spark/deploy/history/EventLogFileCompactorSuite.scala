@@ -161,7 +161,7 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
         val lines = Source.fromInputStream(is)(Codec.UTF8).getLines().toList
         assert(lines.length === 2, "Compacted file should have only two events being accepted")
         lines.foreach { line =>
-          val event = JsonProtocol.sparkEventFromJson(line)
+          val event = new JsonProtocol(new SparkConf()).sparkEventFromJson(line)
           assert(!event.isInstanceOf[SparkListenerJobStart] &&
             !event.isInstanceOf[SparkListenerJobEnd])
         }
