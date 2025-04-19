@@ -18,8 +18,10 @@
 """
 Read data file users.parquet in local Spark distro:
 
+NOTE: **DO NOT** Use parquet-avro versions under `1.15.1` due to CVE: https://nvd.nist.gov/vuln/detail/CVE-2025-30065
+
 $ cd $SPARK_HOME
-$ export AVRO_PARQUET_JARS=/path/to/parquet-avro-1.5.0.jar
+$ export AVRO_PARQUET_JARS=/path/to/parquet-avro-1.15.1.jar
 $ ./bin/spark-submit --driver-class-path /path/to/example/jar \\
         --jars $AVRO_PARQUET_JARS \\
         ./examples/src/main/python/parquet_inputformat.py \\
