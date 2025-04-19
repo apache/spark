@@ -36,7 +36,11 @@ from typing import (
 )
 
 from pyspark import SparkConf
-from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
+from pyspark.errors import (
+    PySparkAssertionError,
+    PySparkException,
+    PySparkTypeError,
+)
 from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.sql import Row
 from pyspark.sql.dataframe import DataFrame
@@ -59,37 +63,57 @@ have_scipy = have_package("scipy")
 scipy_requirement_message = None if have_scipy else "No module named 'scipy'"
 
 have_sklearn = have_package("sklearn")
-sklearn_requirement_message = None if have_sklearn else "No module named 'sklearn'"
+sklearn_requirement_message = (
+    None if have_sklearn else "No module named 'sklearn'"
+)
 
 have_torch = have_package("torch")
 torch_requirement_message = None if have_torch else "No module named 'torch'"
 
 have_torcheval = have_package("torcheval")
-torcheval_requirement_message = None if have_torcheval else "No module named 'torcheval'"
+torcheval_requirement_message = (
+    None if have_torcheval else "No module named 'torcheval'"
+)
 
 have_deepspeed = have_package("deepspeed")
-deepspeed_requirement_message = None if have_deepspeed else "No module named 'deepspeed'"
+deepspeed_requirement_message = (
+    None if have_deepspeed else "No module named 'deepspeed'"
+)
 
 have_plotly = have_package("plotly")
-plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
+plotly_requirement_message = (
+    None if have_plotly else "No module named 'plotly'"
+)
 
 have_matplotlib = have_package("matplotlib")
-matplotlib_requirement_message = None if have_matplotlib else "No module named 'matplotlib'"
+matplotlib_requirement_message = (
+    None if have_matplotlib else "No module named 'matplotlib'"
+)
 
 have_tabulate = have_package("tabulate")
-tabulate_requirement_message = None if have_tabulate else "No module named 'tabulate'"
+tabulate_requirement_message = (
+    None if have_tabulate else "No module named 'tabulate'"
+)
 
 have_graphviz = have_package("graphviz")
-graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
+graphviz_requirement_message = (
+    None if have_graphviz else "No module named 'graphviz'"
+)
 
 have_flameprof = have_package("flameprof")
-flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
+flameprof_requirement_message = (
+    None if have_flameprof else "No module named 'flameprof'"
+)
 
 have_jinja2 = have_package("jinja2")
-jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
+jinja2_requirement_message = (
+    None if have_jinja2 else "No module named 'jinja2'"
+)
 
 have_openpyxl = have_package("openpyxl")
-openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+openpyxl_requirement_message = (
+    None if have_openpyxl else "No module named 'openpyxl'"
+)
 
 pandas_requirement_message = None
 try:
@@ -126,7 +150,9 @@ def write_int(i):
 def timeout(seconds):
     def decorator(func):
         def handler(signum, frame):
-            raise TimeoutError(f"Function {func.__name__} timed out after {seconds} seconds")
+            raise TimeoutError(
+                f"Function {func.__name__} timed out after {seconds} seconds"
+            )
 
         def wrapper(*args, **kwargs):
             signal.alarm(0)
@@ -295,7 +321,9 @@ def _context_diff(actual: List[str], expected: List[str], n: int = 3):
         return red_color + str(s) + no_color
 
     prefix = dict(insert="+ ", delete="- ", replace="! ", equal="  ")
-    for group in difflib.SequenceMatcher(None, actual, expected).get_grouped_opcodes(n):
+    for group in difflib.SequenceMatcher(
+        None, actual, expected
+    ).get_grouped_opcodes(n):
         yield "*** actual ***"
         if any(tag in {"replace", "delete"} for tag, _, _, _, _ in group):
             for tag, i1, i2, _, _ in group:
@@ -348,7 +376,9 @@ class PySparkErrorTestUtils:
         expected = errorClass
         actual = exception.getCondition()
         self.assertEqual(
-            expected, actual, f"Expected error class was '{expected}', got '{actual}'."
+            expected,
+            actual,
+            f"Expected error class was '{expected}', got '{actual}'.",
         )
 
         # Test message parameters
@@ -395,9 +425,9 @@ class PySparkErrorTestUtils:
                     f"Expected QueryContext was '{expected}', got '{actual}'",
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert (
-                        fragment is not None
-                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    assert fragment is not None, (
+                        "`fragment` is required when QueryContextType is DataFrame."
+                    )
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -514,7 +544,10 @@ def assertSchemaEqual(
     if not isinstance(actual, StructType):
         raise PySparkTypeError(
             errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
+            messageParameters={
+                "arg_name": "actual",
+                "arg_type": type(actual).__name__,
+            },
         )
     if not isinstance(expected, StructType):
         raise PySparkTypeError(
@@ -534,7 +567,9 @@ def assertSchemaEqual(
                 return False
         return True
 
-    def compare_structfields_ignore_nullable(actualSF: StructField, expectedSF: StructField):
+    def compare_structfields_ignore_nullable(
+        actualSF: StructField, expectedSF: StructField
+    ):
         if actualSF is None and expectedSF is None:
             return True
         elif actualSF is None or expectedSF is None:
@@ -542,16 +577,22 @@ def assertSchemaEqual(
         if actualSF.name != expectedSF.name:
             return False
         else:
-            return compare_datatypes_ignore_nullable(actualSF.dataType, expectedSF.dataType)
+            return compare_datatypes_ignore_nullable(
+                actualSF.dataType, expectedSF.dataType
+            )
 
     def compare_datatypes_ignore_nullable(dt1: Any, dt2: Any):
         # checks datatype equality, using recursion to ignore nullable
         if dt1.typeName() == dt2.typeName():
             if dt1.typeName() == "array":
-                return compare_datatypes_ignore_nullable(dt1.elementType, dt2.elementType)
+                return compare_datatypes_ignore_nullable(
+                    dt1.elementType, dt2.elementType
+                )
             elif dt1.typeName() == "decimal":
                 # Fix for SPARK-51062: Compare precision and scale for decimal types
-                return dt1.precision == dt2.precision and dt1.scale == dt2.scale
+                return (
+                    dt1.precision == dt2.precision and dt1.scale == dt2.scale
+                )
             elif dt1.typeName() == "struct":
                 return compare_schemas_ignore_nullable(dt1, dt2)
             else:
@@ -565,7 +606,10 @@ def assertSchemaEqual(
 
     if ignoreColumnName:
         actual = StructType(
-            [StructField(str(i), field.dataType, field.nullable) for i, field in enumerate(actual)]
+            [
+                StructField(str(i), field.dataType, field.nullable)
+                for i, field in enumerate(actual)
+            ]
         )
         expected = StructType(
             [
@@ -574,10 +618,13 @@ def assertSchemaEqual(
             ]
         )
 
-    if (ignoreNullable and not compare_schemas_ignore_nullable(actual, expected)) or (
-        not ignoreNullable and actual != expected
-    ):
-        generated_diff = difflib.ndiff(str(actual).splitlines(), str(expected).splitlines())
+    if (
+        ignoreNullable
+        and not compare_schemas_ignore_nullable(actual, expected)
+    ) or (not ignoreNullable and actual != expected):
+        generated_diff = difflib.ndiff(
+            str(actual).splitlines(), str(expected).splitlines()
+        )
         error_msg = "\n".join(generated_diff)
         raise PySparkAssertionError(
             errorClass="DIFFERENT_SCHEMA",
@@ -594,8 +641,12 @@ if TYPE_CHECKING:
 
 
 def assertDataFrameEqual(
-    actual: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame", List[Row]],
-    expected: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame", List[Row]],
+    actual: Union[
+        DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame", List[Row]
+    ],
+    expected: Union[
+        DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame", List[Row]
+    ],
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
@@ -951,7 +1002,10 @@ def assertDataFrameEqual(
                 col_name,
                 when(
                     (col(col_name).cast("float").isNotNull())
-                    & (col(col_name).cast("float") == col(col_name).cast("int")),
+                    & (
+                        col(col_name).cast("float")
+                        == col(col_name).cast("int")
+                    ),
                     col(col_name).cast("int").cast("string"),
                 ).otherwise(col(col_name).cast("string")),
             )
@@ -973,13 +1027,17 @@ def assertDataFrameEqual(
                 return (
                     len(val1.keys()) == len(val2.keys())
                     and val1.keys() == val2.keys()
-                    and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
+                    and all(
+                        compare_vals(val1[k], val2[k]) for k in val1.keys()
+                    )
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):
                     return False
             elif isinstance(val1, Decimal) and isinstance(val2, Decimal):
-                if abs(val1 - val2) > (Decimal(atol) + Decimal(rtol) * abs(val2)):
+                if abs(val1 - val2) > (
+                    Decimal(atol) + Decimal(rtol) * abs(val2)
+                ):
                     return False
             elif isinstance(val1, VariantVal) and isinstance(val2, VariantVal):
                 return compare_vals(val1.toPython(), val2.toPython())
@@ -1048,7 +1106,8 @@ def assertDataFrameEqual(
             assertSchemaEqual(actual.schema, expected.schema)
         elif actual.schema != expected.schema:
             generated_diff = difflib.ndiff(
-                str(actual.schema).splitlines(), str(expected.schema).splitlines()
+                str(actual.schema).splitlines(),
+                str(expected.schema).splitlines(),
             )
             error_msg = "\n".join(generated_diff)
 
@@ -1061,7 +1120,9 @@ def assertDataFrameEqual(
         if actual.isStreaming:
             raise PySparkAssertionError(
                 errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+                messageParameters={
+                    "operation": "assertDataFrameEqual on streaming DataFrame"
+                },
             )
         actual_list = actual.collect()
     else:
@@ -1071,7 +1132,9 @@ def assertDataFrameEqual(
         if expected.isStreaming:
             raise PySparkAssertionError(
                 errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+                messageParameters={
+                    "operation": "assertDataFrameEqual on streaming DataFrame"
+                },
             )
         expected_list = expected.collect()
     else:
@@ -1082,7 +1145,12 @@ def assertDataFrameEqual(
         actual_list = sorted(actual_list, key=lambda x: str(x))
         expected_list = sorted(expected_list, key=lambda x: str(x))
 
-    assert_rows_equal(actual_list, expected_list, maxErrors=maxErrors, showOnlyDiff=showOnlyDiff)
+    assert_rows_equal(
+        actual_list,
+        expected_list,
+        maxErrors=maxErrors,
+        showOnlyDiff=showOnlyDiff,
+    )
 
 
 def assertColumnUnique(
@@ -1104,8 +1172,9 @@ def assertColumnUnique(
     df : DataFrame (Spark, Spark Connect, pandas, or pandas-on-Spark)
         The DataFrame to check for uniqueness.
     columns : str or list of str
-        The column name(s) to check for uniqueness. Can be a single column name or a list of column names.
-        If a list is provided, the combination of values across these columns is checked for uniqueness.
+        The column name(s) to check for uniqueness. Can be a single column name or a list
+        of column names. If a list is provided, the combination of values across these
+        columns is checked for uniqueness.
     message : str, optional
         Custom error message to include if the assertion fails.
 
@@ -1116,7 +1185,8 @@ def assertColumnUnique(
     PySparkAssertionError
         If the input DataFrame is not of a supported type or is a streaming DataFrame.
     ValueError
-        If the columns parameter is invalid or if specified columns don't exist in the DataFrame.
+        If the columns parameter is invalid or if specified columns don't exist in the
+        DataFrame.
 
     Examples
     --------
@@ -1158,7 +1228,9 @@ def assertColumnUnique(
     if isinstance(columns, str):
         columns = [columns]
     elif not isinstance(columns, list):
-        raise ValueError("The 'columns' parameter must be a string or a list of strings.")
+        raise ValueError(
+            "The 'columns' parameter must be a string or a list of strings."
+        )
 
     has_pandas = False
     try:
@@ -1198,10 +1270,14 @@ def assertColumnUnique(
                 if not duplicates.empty:
                     # Get examples of duplicates
                     duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
+                    examples_str = "\n".join(
+                        [str(row) for _, row in duplicate_examples.iterrows()]
+                    )
 
                     # Create error message
-                    error_msg = f"Column '{columns[0]}' contains duplicate values.\n"
+                    error_msg = (
+                        f"Column '{columns[0]}' contains duplicate values.\n"
+                    )
                     error_msg += f"Examples of duplicates:\n{examples_str}"
 
                     if message:
@@ -1214,10 +1290,14 @@ def assertColumnUnique(
                 if not duplicates.empty:
                     # Get examples of duplicates
                     duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
+                    examples_str = "\n".join(
+                        [str(row) for _, row in duplicate_examples.iterrows()]
+                    )
 
                     # Create error message
-                    error_msg = f"Columns {columns} contain duplicate values.\n"
+                    error_msg = (
+                        f"Columns {columns} contain duplicate values.\n"
+                    )
                     error_msg += f"Examples of duplicates:\n{examples_str}"
 
                     if message:
@@ -1243,10 +1323,14 @@ def assertColumnUnique(
                 if len(duplicates) > 0:
                     # Get examples of duplicates
                     duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
+                    examples_str = "\n".join(
+                        [str(row) for _, row in duplicate_examples.iterrows()]
+                    )
 
                     # Create error message
-                    error_msg = f"Column '{columns[0]}' contains duplicate values.\n"
+                    error_msg = (
+                        f"Column '{columns[0]}' contains duplicate values.\n"
+                    )
                     error_msg += f"Examples of duplicates:\n{examples_str}"
 
                     if message:
@@ -1259,10 +1343,14 @@ def assertColumnUnique(
                 if len(duplicates) > 0:
                     # Get examples of duplicates
                     duplicate_examples = duplicates.head(5)
-                    examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
+                    examples_str = "\n".join(
+                        [str(row) for _, row in duplicate_examples.iterrows()]
+                    )
 
                     # Create error message
-                    error_msg = f"Columns {columns} contain duplicate values.\n"
+                    error_msg = (
+                        f"Columns {columns} contain duplicate values.\n"
+                    )
                     error_msg += f"Examples of duplicates:\n{examples_str}"
 
                     if message:
@@ -1288,14 +1376,18 @@ def assertColumnUnique(
     if df.isStreaming:
         raise PySparkAssertionError(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={"operation": "assertColumnUnique on streaming DataFrame"},
+            messageParameters={
+                "operation": "assertColumnUnique on streaming DataFrame"
+            },
         )
 
     # Validate that all columns exist in the DataFrame
     df_columns = set(df.columns)
     missing_columns = [col for col in columns if col not in df_columns]
     if missing_columns:
-        raise ValueError(f"The following columns do not exist in the DataFrame: {missing_columns}")
+        raise ValueError(
+            f"The following columns do not exist in the DataFrame: {missing_columns}"
+        )
 
     # Count occurrences of each value combination in the specified columns
     counts = df.groupBy(*columns).count()
@@ -1311,7 +1403,11 @@ def assertColumnUnique(
         examples_str = "\n".join([str(row) for row in duplicate_examples])
 
         # Create error message
-        column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+        column_desc = (
+            f"Column '{columns[0]}'"
+            if len(columns) == 1
+            else f"Columns {columns}"
+        )
 
         error_msg = f"{column_desc} contains duplicate values.\n"
         error_msg += f"Examples of duplicates:\n{examples_str}"
@@ -1382,7 +1478,9 @@ def assertColumnNonNull(
     if isinstance(columns, str):
         columns = [columns]
     elif not isinstance(columns, list):
-        raise ValueError("The 'columns' parameter must be a string or a list of strings.")
+        raise ValueError(
+            "The 'columns' parameter must be a string or a list of strings."
+        )
 
     has_pandas = False
     try:
@@ -1426,15 +1524,15 @@ def assertColumnNonNull(
             if null_counts:
                 # Create error message
                 column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+                    f"Column '{columns[0]}'"
+                    if len(columns) == 1
+                    else f"Columns {columns}"
                 )
 
-                error_msg = (
-                    f"{column_desc} contain{'s' if len(columns) == 1 else ''} null values.\n"
-                )
+                error_msg = f"{column_desc} contain{'s' if len(columns) == 1 else ''} null values.\n"
                 error_msg += "Null counts by column:\n"
-                for col, count in null_counts.items():
-                    error_msg += f"- {col}: {count} null value{'s' if count != 1 else ''}\n"
+                for col_name, count in null_counts.items():
+                    error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
 
                 if message:
                     error_msg += f"\n{message}"
@@ -1463,15 +1561,15 @@ def assertColumnNonNull(
             if null_counts:
                 # Create error message
                 column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+                    f"Column '{columns[0]}'"
+                    if len(columns) == 1
+                    else f"Columns {columns}"
                 )
 
-                error_msg = (
-                    f"{column_desc} contain{'s' if len(columns) == 1 else ''} null values.\n"
-                )
+                error_msg = f"{column_desc} contain{'s' if len(columns) == 1 else ''} null values.\n"
                 error_msg += "Null counts by column:\n"
-                for col, count in null_counts.items():
-                    error_msg += f"- {col}: {count} null value{'s' if count != 1 else ''}\n"
+                for col_name, count in null_counts.items():
+                    error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
 
                 if message:
                     error_msg += f"\n{message}"
@@ -1496,14 +1594,18 @@ def assertColumnNonNull(
     if df.isStreaming:
         raise PySparkAssertionError(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={"operation": "assertColumnNonNull on streaming DataFrame"},
+            messageParameters={
+                "operation": "assertColumnNonNull on streaming DataFrame"
+            },
         )
 
     # Validate that all columns exist in the DataFrame
     df_columns = set(df.columns)
     missing_columns = [col for col in columns if col not in df_columns]
     if missing_columns:
-        raise ValueError(f"The following columns do not exist in the DataFrame: {missing_columns}")
+        raise ValueError(
+            f"The following columns do not exist in the DataFrame: {missing_columns}"
+        )
 
     # Check each column for null values
     null_counts = {}
@@ -1515,12 +1617,16 @@ def assertColumnNonNull(
 
     if null_counts:
         # Create error message
-        column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+        column_desc = (
+            f"Column '{columns[0]}'"
+            if len(columns) == 1
+            else f"Columns {columns}"
+        )
 
         error_msg = f"{column_desc} contain{'s' if len(columns) == 1 else ''} null values.\n"
         error_msg += "Null counts by column:\n"
-        for col, count in null_counts.items():
-            error_msg += f"- {col}: {count} null value{'s' if count != 1 else ''}\n"
+        for col_name, count in null_counts.items():
+            error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
 
         if message:
             error_msg += f"\n{message}"
@@ -1535,7 +1641,8 @@ def assertColumnValuesInSet(
     message: Optional[str] = None,
 ) -> None:
     """
-    Assert that all values in the specified column(s) of a DataFrame are within a given set of accepted values.
+    Assert that all values in the specified column(s) of a DataFrame are within a given set of
+    accepted values.
 
     Supports Spark, Spark Connect, pandas, and pandas-on-Spark DataFrames.
 
@@ -1546,10 +1653,11 @@ def assertColumnValuesInSet(
     columns : str or list
         The column name(s) to check for values.
     accepted_values : set or list or tuple or dict
-        The set of accepted values for the column(s). If columns is a list and accepted_values is a dict,
-        the keys in the dict should correspond to the column names, and the values should be the sets of
-        accepted values for each column. If columns is a list and accepted_values is not a dict,
-        the same set of accepted values will be used for all columns.
+        The set of accepted values for the column(s). If columns is a list and accepted_values
+        is a dict, the keys in the dict should correspond to the column names, and the values
+        should be the sets of accepted values for each column. If columns is a list and
+        accepted_values is not a dict, the same set of accepted values will be used for all
+        columns.
     message : str, optional
         An optional message to include in the exception if the assertion fails.
 
@@ -1560,8 +1668,8 @@ def assertColumnValuesInSet(
     PySparkAssertionError
         If the input DataFrame is not of a supported type or is a streaming DataFrame.
     ValueError
-        If the columns parameter is invalid, if specified columns don't exist in the DataFrame,
-        or if the accepted_values parameter is invalid.
+        If the columns parameter is invalid, if specified columns don't exist in the
+        DataFrame, or if the accepted_values parameter is invalid.
 
     Examples
     --------
@@ -1605,7 +1713,9 @@ def assertColumnValuesInSet(
     if isinstance(columns, str):
         columns = [columns]
     elif not isinstance(columns, list):
-        raise ValueError("The 'columns' parameter must be a string or a list of strings.")
+        raise ValueError(
+            "The 'columns' parameter must be a string or a list of strings."
+        )
 
     # Validate accepted_values parameter
     if accepted_values is None:
@@ -1670,7 +1780,10 @@ def assertColumnValuesInSet(
                 column_accepted_values = accepted_values[column]
 
                 # Find values that are not in the accepted set and not null
-                invalid_mask = ~df[column].isin(list(column_accepted_values)) & ~df[column].isna()
+                invalid_mask = (
+                    ~df[column].isin(list(column_accepted_values))
+                    & ~df[column].isna()
+                )
                 invalid_values_df = df[invalid_mask]
 
                 # Count invalid values
@@ -1678,7 +1791,12 @@ def assertColumnValuesInSet(
 
                 if invalid_count > 0:
                     # Get examples of invalid values (limit to 10 for readability)
-                    invalid_examples = invalid_values_df[column].drop_duplicates().head(10).tolist()
+                    invalid_examples = (
+                        invalid_values_df[column]
+                        .drop_duplicates()
+                        .head(10)
+                        .tolist()
+                    )
 
                     invalid_columns[column] = {
                         "count": invalid_count,
@@ -1689,15 +1807,24 @@ def assertColumnValuesInSet(
             if invalid_columns:
                 # Create error message
                 column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+                    f"Column '{columns[0]}'"
+                    if len(columns) == 1
+                    else f"Columns {columns}"
                 )
-                error_msg = f"{column_desc} contain{'s' if len(columns) == 1 else ''} values not in the accepted set.\n"
+                error_msg = (
+                    f"{column_desc} contain{'s' if len(columns) == 1 else ''} "
+                    f"values not in the accepted set.\n"
+                )
 
                 for column, details in invalid_columns.items():
                     error_msg += f"\nColumn '{column}':\n"
                     error_msg += f"  Accepted values: {details['accepted']}\n"
-                    error_msg += f"  Invalid values found: {details['examples']}\n"
-                    error_msg += f"  Total invalid values: {details['count']}\n"
+                    error_msg += (
+                        f"  Invalid values found: {details['examples']}\n"
+                    )
+                    error_msg += (
+                        f"  Total invalid values: {details['count']}\n"
+                    )
 
                 if message:
                     error_msg += f"\n{message}"
@@ -1723,7 +1850,10 @@ def assertColumnValuesInSet(
                 column_accepted_values = accepted_values[column]
 
                 # Find values that are not in the accepted set and not null
-                invalid_mask = ~df[column].isin(list(column_accepted_values)) & ~df[column].isna()
+                invalid_mask = (
+                    ~df[column].isin(list(column_accepted_values))
+                    & ~df[column].isna()
+                )
                 invalid_values_df = df[invalid_mask]
 
                 # Count invalid values
@@ -1731,7 +1861,12 @@ def assertColumnValuesInSet(
 
                 if invalid_count > 0:
                     # Get examples of invalid values (limit to 10 for readability)
-                    invalid_examples = invalid_values_df[column].drop_duplicates().head(10).tolist()
+                    invalid_examples = (
+                        invalid_values_df[column]
+                        .drop_duplicates()
+                        .head(10)
+                        .tolist()
+                    )
 
                     invalid_columns[column] = {
                         "count": invalid_count,
@@ -1742,15 +1877,24 @@ def assertColumnValuesInSet(
             if invalid_columns:
                 # Create error message
                 column_desc = (
-                    f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+                    f"Column '{columns[0]}'"
+                    if len(columns) == 1
+                    else f"Columns {columns}"
                 )
-                error_msg = f"{column_desc} contain{'s' if len(columns) == 1 else ''} values not in the accepted set.\n"
+                error_msg = (
+                    f"{column_desc} contain{'s' if len(columns) == 1 else ''} "
+                    f"values not in the accepted set.\n"
+                )
 
                 for column, details in invalid_columns.items():
                     error_msg += f"\nColumn '{column}':\n"
                     error_msg += f"  Accepted values: {details['accepted']}\n"
-                    error_msg += f"  Invalid values found: {details['examples']}\n"
-                    error_msg += f"  Total invalid values: {details['count']}\n"
+                    error_msg += (
+                        f"  Invalid values found: {details['examples']}\n"
+                    )
+                    error_msg += (
+                        f"  Total invalid values: {details['count']}\n"
+                    )
 
                 if message:
                     error_msg += f"\n{message}"
@@ -1760,7 +1904,7 @@ def assertColumnValuesInSet(
             # If we get here, all values are in the accepted sets
             return
 
-    # If we get here, we're dealing with a Spark DataFrame or the pandas dependencies are not available
+    # If we get here, we're dealing with a Spark DataFrame or pandas dependencies are not available
     if not isinstance(df, DataFrame):
         raise PySparkAssertionError(
             errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
@@ -1775,14 +1919,18 @@ def assertColumnValuesInSet(
     if df.isStreaming:
         raise PySparkAssertionError(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={"operation": "assertColumnValuesInSet on streaming DataFrame"},
+            messageParameters={
+                "operation": "assertColumnValuesInSet on streaming DataFrame"
+            },
         )
 
     # Validate that all columns exist in the DataFrame
     df_columns = set(df.columns)
     missing_columns = [col for col in columns if col not in df_columns]
     if missing_columns:
-        raise ValueError(f"The following columns do not exist in the DataFrame: {missing_columns}")
+        raise ValueError(
+            f"The following columns do not exist in the DataFrame: {missing_columns}"
+        )
 
     # Check each column for invalid values
     invalid_columns = {}
@@ -1793,7 +1941,8 @@ def assertColumnValuesInSet(
 
         # Find values that are not in the accepted set
         invalid_values_df = df.filter(
-            ~df[column].isin(list(column_accepted_values)) & df[column].isNotNull()
+            ~df[column].isin(list(column_accepted_values))
+            & df[column].isNotNull()
         )
 
         # Count invalid values
@@ -1801,7 +1950,9 @@ def assertColumnValuesInSet(
 
         if invalid_count > 0:
             # Get examples of invalid values (limit to 10 for readability)
-            invalid_examples = invalid_values_df.select(column).distinct().limit(10).collect()
+            invalid_examples = (
+                invalid_values_df.select(column).distinct().limit(10).collect()
+            )
             invalid_values = [row[column] for row in invalid_examples]
 
             invalid_columns[column] = {
@@ -1812,8 +1963,15 @@ def assertColumnValuesInSet(
 
     if invalid_columns:
         # Create error message
-        column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
-        error_msg = f"{column_desc} contain{'s' if len(columns) == 1 else ''} values not in the accepted set.\n"
+        column_desc = (
+            f"Column '{columns[0]}'"
+            if len(columns) == 1
+            else f"Columns {columns}"
+        )
+        error_msg = (
+            f"{column_desc} contain{'s' if len(columns) == 1 else ''} "
+            f"values not in the accepted set.\n"
+        )
 
         for column, details in invalid_columns.items():
             error_msg += f"\nColumn '{column}':\n"
@@ -1828,9 +1986,13 @@ def assertColumnValuesInSet(
 
 
 def assertReferentialIntegrity(
-    source_df: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame"],
+    source_df: Union[
+        DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame"
+    ],
     source_column: str,
-    target_df: Union[DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame"],
+    target_df: Union[
+        DataFrame, "pandas.DataFrame", "pyspark.pandas.DataFrame"
+    ],
     target_column: str,
     message: Optional[str] = None,
 ) -> None:
@@ -1864,7 +2026,8 @@ def assertReferentialIntegrity(
     PySparkAssertionError
         If either input DataFrame is not of a supported type or is a streaming DataFrame.
     ValueError
-        If the column parameters are invalid or if specified columns don't exist in the DataFrames.
+        If the column parameters are invalid or if specified columns don't exist in the
+        DataFrames.
 
     Examples
     --------
@@ -1893,7 +2056,9 @@ def assertReferentialIntegrity(
         raise PySparkAssertionError(
             errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
             messageParameters={
-                "expected_type": ("Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"),
+                "expected_type": (
+                    "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"
+                ),
                 "arg_name": "source_df",
                 "actual_type": None,
             },
@@ -1904,7 +2069,9 @@ def assertReferentialIntegrity(
         raise PySparkAssertionError(
             errorClass="INVALID_TYPE_DF_EQUALITY_ARG",
             messageParameters={
-                "expected_type": ("Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"),
+                "expected_type": (
+                    "Union[DataFrame, pandas.DataFrame, pyspark.pandas.DataFrame]"
+                ),
                 "arg_name": "target_df",
                 "actual_type": None,
             },
@@ -1912,11 +2079,15 @@ def assertReferentialIntegrity(
 
     # Validate source_column
     if not source_column or not isinstance(source_column, str):
-        raise ValueError("The 'source_column' parameter must be a non-empty string.")
+        raise ValueError(
+            "The 'source_column' parameter must be a non-empty string."
+        )
 
     # Validate target_column
     if not target_column or not isinstance(target_column, str):
-        raise ValueError("The 'target_column' parameter must be a non-empty string.")
+        raise ValueError(
+            "The 'target_column' parameter must be a non-empty string."
+        )
 
     has_pandas = False
     try:
@@ -1942,12 +2113,18 @@ def assertReferentialIntegrity(
         import pyspark.pandas as ps
 
         # Case 1: Both are pandas DataFrames
-        if isinstance(source_df, pd.DataFrame) and isinstance(target_df, pd.DataFrame):
+        if isinstance(source_df, pd.DataFrame) and isinstance(
+            target_df, pd.DataFrame
+        ):
             # Validate columns exist
             if source_column not in source_df.columns:
-                raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
+                raise ValueError(
+                    f"Column '{source_column}' does not exist in source DataFrame."
+                )
             if target_column not in target_df.columns:
-                raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
+                raise ValueError(
+                    f"Column '{target_column}' does not exist in target DataFrame."
+                )
 
             # Get unique non-null values from source column
             source_values = source_df[source_column].dropna().unique()
@@ -1956,13 +2133,17 @@ def assertReferentialIntegrity(
             target_values = set(target_df[target_column].unique())
 
             # Find values in source that don't exist in target
-            missing_values = [val for val in source_values if val not in target_values]
+            missing_values = [
+                val for val in source_values if val not in target_values
+            ]
 
             if missing_values:
                 # Count occurrences of each missing value
                 missing_counts = {}
                 for val in missing_values:
-                    missing_counts[val] = len(source_df[source_df[source_column] == val])
+                    missing_counts[val] = len(
+                        source_df[source_df[source_column] == val]
+                    )
 
                 # Create error message
                 error_msg = (
@@ -1970,7 +2151,9 @@ def assertReferentialIntegrity(
                     f"target column '{target_column}'.\n"
                 )
                 error_msg += f"Missing values: {missing_values[:10]}" + (
-                    " (showing first 10 only)" if len(missing_values) > 10 else ""
+                    " (showing first 10 only)"
+                    if len(missing_values) > 10
+                    else ""
                 )
                 error_msg += f"\nTotal missing values: {len(missing_values)}"
 
@@ -1983,27 +2166,39 @@ def assertReferentialIntegrity(
             return
 
         # Case 2: Both are pandas-on-Spark DataFrames
-        elif isinstance(source_df, ps.DataFrame) and isinstance(target_df, ps.DataFrame):
+        elif isinstance(source_df, ps.DataFrame) and isinstance(
+            target_df, ps.DataFrame
+        ):
             # Validate columns exist
             if source_column not in source_df.columns:
-                raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
+                raise ValueError(
+                    f"Column '{source_column}' does not exist in source DataFrame."
+                )
             if target_column not in target_df.columns:
-                raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
+                raise ValueError(
+                    f"Column '{target_column}' does not exist in target DataFrame."
+                )
 
             # Get unique non-null values from source column
-            source_values = source_df[source_column].dropna().unique().to_list()
+            source_values = (
+                source_df[source_column].dropna().unique().to_list()
+            )
 
             # Get unique values from target column
             target_values = set(target_df[target_column].unique().to_list())
 
             # Find values in source that don't exist in target
-            missing_values = [val for val in source_values if val not in target_values]
+            missing_values = [
+                val for val in source_values if val not in target_values
+            ]
 
             if missing_values:
                 # Count occurrences of each missing value
                 missing_counts = {}
                 for val in missing_values:
-                    missing_counts[val] = len(source_df[source_df[source_column] == val])
+                    missing_counts[val] = len(
+                        source_df[source_df[source_column] == val]
+                    )
 
                 # Create error message
                 error_msg = (
@@ -2011,7 +2206,9 @@ def assertReferentialIntegrity(
                     f"target column '{target_column}'.\n"
                 )
                 error_msg += f"Missing values: {missing_values[:10]}" + (
-                    " (showing first 10 only)" if len(missing_values) > 10 else ""
+                    " (showing first 10 only)"
+                    if len(missing_values) > 10
+                    else ""
                 )
                 error_msg += f"\nTotal missing values: {len(missing_values)}"
 
@@ -2097,23 +2294,33 @@ def assertReferentialIntegrity(
     if source_df.isStreaming:
         raise PySparkAssertionError(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={"operation": "assertReferentialIntegrity on streaming DataFrame"},
+            messageParameters={
+                "operation": "assertReferentialIntegrity on streaming DataFrame"
+            },
         )
     if target_df.isStreaming:
         raise PySparkAssertionError(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={"operation": "assertReferentialIntegrity on streaming DataFrame"},
+            messageParameters={
+                "operation": "assertReferentialIntegrity on streaming DataFrame"
+            },
         )
 
     # Validate columns exist
     if source_column not in source_df.columns:
-        raise ValueError(f"Column '{source_column}' does not exist in source DataFrame.")
+        raise ValueError(
+            f"Column '{source_column}' does not exist in source DataFrame."
+        )
     if target_column not in target_df.columns:
-        raise ValueError(f"Column '{target_column}' does not exist in target DataFrame.")
+        raise ValueError(
+            f"Column '{target_column}' does not exist in target DataFrame."
+        )
 
     # Get distinct non-null values from source column
     source_values = (
-        source_df.filter(source_df[source_column].isNotNull()).select(source_column).distinct()
+        source_df.filter(source_df[source_column].isNotNull())
+        .select(source_column)
+        .distinct()
     )
 
     # Get distinct values from target column
@@ -2121,7 +2328,9 @@ def assertReferentialIntegrity(
 
     # Find values in source that don't exist in target using a left anti join
     missing_values_df = source_values.join(
-        target_values, source_values[source_column] == target_values[target_column], "left_anti"
+        target_values,
+        source_values[source_column] == target_values[target_column],
+        "left_anti",
     )
 
     # If there are missing values, raise an error
@@ -2153,7 +2362,11 @@ def _test() -> None:
     from pyspark.sql import SparkSession
 
     globs = pyspark.testing.utils.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("testing.utils tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
     (failure_count, _) = doctest.testmod(
         pyspark.testing.utils,
