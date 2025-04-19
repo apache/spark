@@ -250,7 +250,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   override def onStop(): Unit = {
     if (timeoutCheckingTask != null) {
-      timeoutCheckingTask.cancel(true)
+      timeoutCheckingTask.cancel(false)
     }
     eventLoopThread.shutdownNow()
     killExecutorThread.shutdownNow()
