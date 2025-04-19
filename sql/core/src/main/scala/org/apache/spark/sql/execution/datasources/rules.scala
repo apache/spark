@@ -684,7 +684,7 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
 object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case View(metaData, false, viewQuery)
+      case View(metaData, false, viewQuery, _)
         if (metaData.viewSchemaMode == SchemaTypeEvolution ||
           metaData.viewSchemaMode == SchemaEvolution) =>
         val viewSchemaMode = metaData.viewSchemaMode
