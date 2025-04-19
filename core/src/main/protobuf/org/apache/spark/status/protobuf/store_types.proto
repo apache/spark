@@ -407,6 +407,7 @@ message SQLPlanMetric {
   optional string name = 1;
   int64 accumulator_id = 2;
   optional string metric_type = 3;
+  int64 init_value = 4;
 }
 
 message SQLExecutionUIData {

@@ -847,7 +847,8 @@ case class AdaptiveSparkPlanExec(
   private def onUpdatePlan(executionId: Long, newSubPlans: Seq[SparkPlan]): Unit = {
     if (!shouldUpdatePlan) {
       val newMetrics = newSubPlans.flatMap { p =>
-        p.flatMap(_.metrics.values.map(m => SQLPlanMetric(m.name.get, m.id, m.metricType)))
+        p.flatMap(_.metrics.values.map(m =>
+          SQLPlanMetric(m.name.get, m.id, m.metricType, m.initValue)))
       }
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
         executionId, newMetrics))

@@ -42,17 +42,17 @@ object SqlResourceSuite {
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
   val filterNode = new SparkPlanGraphNode(1, FILTER, "",
-    metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
+    metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "", 0L)))
   val nodes: Seq[SparkPlanGraphNode] = Seq(
     new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, "",
       nodes = ArrayBuffer(filterNode),
-      metrics = Seq(SQLPlanMetric(DURATION, 0, ""))),
+      metrics = Seq(SQLPlanMetric(DURATION, 0, "", 0L))),
     new SparkPlanGraphNode(2, SCAN_TEXT, "",
       metrics = Seq(
-      SQLPlanMetric(METADATA_TIME, 2, ""),
-      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
-      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
-      SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))))
+      SQLPlanMetric(METADATA_TIME, 2, "", 0L),
+      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, "", 0L),
+      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, "", 0L),
+      SQLPlanMetric(SIZE_OF_FILES_READ, 5, "", 0L))))
 
   val edges: Seq[SparkPlanGraphEdge] = Seq(SparkPlanGraphEdge(3, 2))
 
@@ -60,12 +60,12 @@ object SqlResourceSuite {
     SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
 
   val metrics: Seq[SQLPlanMetric] = {
-    Seq(SQLPlanMetric(DURATION, 0, ""),
-      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, ""),
-      SQLPlanMetric(METADATA_TIME, 2, ""),
-      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
-      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
-      SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))
+    Seq(SQLPlanMetric(DURATION, 0, "", 0L),
+      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "", 0L),
+      SQLPlanMetric(METADATA_TIME, 2, "", 0L),
+      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, "", 0L),
+      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, "", 0L),
+      SQLPlanMetric(SIZE_OF_FILES_READ, 5, "", 0L))
   }
 
   private def getMetricValues() = {
