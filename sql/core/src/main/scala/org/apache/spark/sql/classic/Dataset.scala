@@ -49,11 +49,12 @@ import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.Dataset.{DATASET_ID_KEY, DATASET_ID_TAG}
 import org.apache.spark.sql.classic.TypedAggUtils.withInputType
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
@@ -74,9 +75,9 @@ import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
-  val DATASET_ID_KEY = "__dataset_id"
-  val COL_POS_KEY = "__col_position"
-  val DATASET_ID_TAG = TreeNodeTag[HashSet[Long]]("dataset_id")
+  val DATASET_ID_KEY = LogicalPlan.DATASET_ID_KEY
+  val COL_POS_KEY = LogicalPlan.COL_POS_KEY
+  val DATASET_ID_TAG = LogicalPlan.DATASET_ID_TAG
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val encoder = implicitly[Encoder[T]]
@@ -275,11 +276,9 @@ class Dataset[T] private[sql](
       queryExecution.logical
     } else {
       val plan = queryExecution.commandExecuted
-      if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
-        val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
-        dsIds.add(id)
-        plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
-      }
+      val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
+      dsIds.add(id)
+      plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
       plan
     }
   }
@@ -662,9 +661,8 @@ class Dataset[T] private[sql](
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
     val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan,
-        JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE))
-      .queryExecution.analyzed.asInstanceOf[Join]
+      tryAmbiguityResolution(right, joinExprs, joinType)
+    ).queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
     if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
@@ -683,6 +681,36 @@ class Dataset[T] private[sql](
     // resolved and become AttributeReference.
 
     JoinWith.resolveSelfJoinCondition(sparkSession.sessionState.analyzer.resolver, plan)
+  }
+
+  private def tryAmbiguityResolution(
+      right: Dataset[_],
+      joinExprs: Option[Column],
+      joinType: String) = {
+    val planPart1 = withPlan(
+      Join(logicalPlan, right.logicalPlan,
+        JoinType(joinType), None, JoinHint.NONE)).queryExecution.analyzed.asInstanceOf[Join]
+
+    val leftTagIdMap = planPart1.left.getTagValue(DATASET_ID_TAG)
+    val rightTagIdMap = planPart1.right.getTagValue(DATASET_ID_TAG)
+
+    val joinExprsRectified = joinExprs.map(_.expr transformUp {
+      case attr: AttributeReference if attr.metadata.contains(DATASET_ID_KEY) =>
+        // For attribute to remain attribute and not to UnResolved, only one leg should be tru
+        val leftLegWrong = isIncorrectlyResolved(attr, planPart1.left.outputSet,
+          leftTagIdMap.getOrElse(HashSet.empty[Long]))
+        val rightLegWrong = isIncorrectlyResolved(attr, planPart1.right.outputSet,
+          rightTagIdMap.getOrElse(HashSet.empty[Long]))
+        if (!planPart1.outputSet.contains(attr) || leftLegWrong || rightLegWrong) {
+          val ua = UnresolvedAttribute(Seq(attr.name))
+          ua.copyTagsFrom(attr)
+          ua.setTagValue(LogicalPlan.UNRESOLVED_ATTRIBUTE_MD_TAG, attr)
+          ua
+        } else {
+          attr
+        }
+    })
+    Join(planPart1.left, planPart1.right, JoinType(joinType), joinExprsRectified, JoinHint.NONE)
   }
 
   /** @inheritdoc */
@@ -787,11 +815,23 @@ class Dataset[T] private[sql](
       case a: AttributeReference if logicalPlan.outputSet.contains(a) =>
         val index = logicalPlan.output.indexWhere(_.exprId == a.exprId)
         joined.left.output(index)
+
+      case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
+        val ua = UnresolvedAttribute(Seq(a.name))
+        ua.copyTagsFrom(a)
+        ua.setTagValue(LogicalPlan.UNRESOLVED_ATTRIBUTE_MD_TAG, a)
+        ua
     }
     val rightAsOfExpr = rightAsOf.expr.transformUp {
       case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
         val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
         joined.right.output(index)
+
+      case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
+        val ua = UnresolvedAttribute(Seq(a.name))
+        ua.copyTagsFrom(a)
+        ua.setTagValue(LogicalPlan.UNRESOLVED_ATTRIBUTE_MD_TAG, a)
+        ua
     }
     withPlan {
       AsOfJoin(
@@ -841,8 +881,7 @@ class Dataset[T] private[sql](
   // `DetectAmbiguousSelfJoin` will remove it.
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
-      case a: AttributeReference
-        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
+      case a: AttributeReference =>
         val metadata = new MetadataBuilder()
           .withMetadata(a.metadata)
           .putLong(Dataset.DATASET_ID_KEY, id)
@@ -891,7 +930,22 @@ class Dataset[T] private[sql](
 
       case other => other
     }
-    Project(untypedCols.map(_.named), logicalPlan)
+    val inputForProjOpt = if (this.queryExecution.isLazyAnalysis) {
+      None
+    } else {
+      Some(logicalPlan.outputSet)
+    }
+    val namedExprs = untypedCols.map(ne => (ne.named transformUp {
+      case attr: AttributeReference if inputForProjOpt.isDefined &&
+        attr.metadata.contains(DATASET_ID_KEY) &&
+        (!inputForProjOpt.get.contains(attr) ||
+          isIncorrectlyResolved(attr, inputForProjOpt.get, HashSet(id))) =>
+        val ua = UnresolvedAttribute(Seq(attr.name))
+        ua.copyTagsFrom(attr)
+        ua.setTagValue(LogicalPlan.UNRESOLVED_ATTRIBUTE_MD_TAG, attr)
+        ua
+    }).asInstanceOf[NamedExpression])
+    Project(namedExprs, logicalPlan)
   }
 
   /** @inheritdoc */
@@ -1722,6 +1776,31 @@ class Dataset[T] private[sql](
   @DeveloperApi
   def semanticHash(): Int = {
     queryExecution.analyzed.semanticHash()
+  }
+
+  private def isIncorrectlyResolved(
+      attr: AttributeReference,
+      input: AttributeSet,
+      dataSetIdOfInput: HashSet[Long]): Boolean = {
+    val attrDatasetIdOpt = if (attr.metadata.contains(DATASET_ID_KEY)) {
+      Option(attr.metadata.getLong(DATASET_ID_KEY))
+    } else {
+      None
+    }
+    attrDatasetIdOpt.forall(attrId => {
+      val matchingInputset = input.filter(_.canonicalized == attr.canonicalized)
+      if (matchingInputset.isEmpty) {
+        true
+      } else {
+        matchingInputset.forall(x => {
+          if (x.metadata.contains(DATASET_ID_KEY)) {
+            attrId != x.metadata.getLong(DATASET_ID_KEY)
+          } else {
+            !dataSetIdOfInput.contains(attrId)
+          }
+        })
+      }
+    })
   }
 
   ////////////////////////////////////////////////////////////////////////////
