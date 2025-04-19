@@ -86,6 +86,11 @@ object UserDefinedFunction {
   // The default Hive Metastore SQL schema length for function resource uri.
   private val HIVE_FUNCTION_RESOURCE_URI_LENGTH_THRESHOLD: Int = 4000
 
+  def parseRoutineParam(text: String, parser: ParserInterface): StructType = {
+    val parsed = parser.parseRoutineParam(text)
+    CharVarcharUtils.failIfHasCharVarchar(parsed).asInstanceOf[StructType]
+  }
+
   def parseTableSchema(text: String, parser: ParserInterface): StructType = {
     val parsed = parser.parseTableSchema(text)
     CharVarcharUtils.failIfHasCharVarchar(parsed).asInstanceOf[StructType]

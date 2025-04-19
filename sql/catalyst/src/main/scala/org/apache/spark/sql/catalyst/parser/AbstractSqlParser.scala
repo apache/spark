@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CompoundPlanStatement, Logic
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 /**
  * Base class for all ANTLR4 [[ParserInterface]] implementations.
@@ -99,6 +100,13 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
           val position = Origin(None, None)
           throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
       }
+    }
+  }
+
+  override def parseRoutineParam(sqlText: String): StructType = parse(sqlText) { parser =>
+    val ctx = parser.singleRoutineParamList()
+    withErrorHandling(ctx, Some(sqlText)) {
+      astBuilder.visitSingleRoutineParamList(ctx)
     }
   }
 

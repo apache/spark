@@ -1635,7 +1635,7 @@ class SessionCatalog(
         val qualifier = Seq(funcName)
         val paddedInput = input ++
           param.takeRight(paramSize - input.size).map { p =>
-            val defaultExpr = p.getDefault()
+            val defaultExpr = p.getParameterDefault()
             if (defaultExpr.isDefined) {
               Cast(parseDefault(defaultExpr.get, parser), p.dataType)
             } else {
@@ -1723,7 +1723,7 @@ class SessionCatalog(
       val qualifier = Seq(funcName)
       val paddedInput = input ++
         param.takeRight(paramSize - input.size).map { p =>
-          val defaultExpr = p.getDefault()
+          val defaultExpr = p.getParameterDefault()
           if (defaultExpr.isDefined) {
             parseDefault(defaultExpr.get, parser)
           } else {
@@ -1879,7 +1879,7 @@ class SessionCatalog(
     val paramNames: Seq[InputParameter] =
       if (inputParams.isDefined) {
         inputParams.get.map {
-          p => p.getDefault() match {
+          p => p.getParameterDefault() match {
             case Some(defaultExpr) =>
               // This cast is needed to ensure the default value is of the target data type.
               InputParameter(p.name, Some(Cast(parseDefault(defaultExpr, parser), p.dataType)))

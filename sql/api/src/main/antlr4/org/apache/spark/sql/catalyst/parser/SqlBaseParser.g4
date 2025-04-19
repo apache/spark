@@ -177,6 +177,10 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singleRoutineParamList
+    : colDefinitionList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | executeImmediate                                                 #visitExecuteImmediate

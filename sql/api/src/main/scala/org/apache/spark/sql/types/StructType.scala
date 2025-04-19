@@ -521,6 +521,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
  */
 @Stable
 object StructType extends AbstractDataType {
+  private[sql] val SQL_FUNCTION_DEFAULT_METADATA_KEY = "default"
 
   override private[sql] def defaultConcreteType: DataType = new StructType
 
