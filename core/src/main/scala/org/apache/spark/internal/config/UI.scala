@@ -220,6 +220,18 @@ private[spark] object UI {
     .stringConf
     .createOptional
 
+  val CUSTOM_DRIVER_LOG_URL = ConfigBuilder("spark.ui.custom.driver.log.url")
+    .doc("Specifies custom Spark driver log url for supporting external log service instead of " +
+      "using cluster managers' application log urls in the Spark UI. Spark will support " +
+      "some path variables via patterns which can vary on cluster manager. Please check the " +
+      "documentation for your cluster manager to see which patterns are supported, if any. " +
+      "This configuration replaces original log urls in event log, which will be also effective " +
+      "when accessing the application on history server. The new log urls must be permanent, " +
+      "otherwise you might have dead link for executor log urls.")
+    .version("4.0.0")
+    .stringConf
+    .createOptional
+
   val CUSTOM_EXECUTOR_LOG_URL = ConfigBuilder("spark.ui.custom.executor.log.url")
     .doc("Specifies custom spark executor log url for supporting external log service instead of " +
       "using cluster managers' application log urls in the Spark UI. Spark will support " +
