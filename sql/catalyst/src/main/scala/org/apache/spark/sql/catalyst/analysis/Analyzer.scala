@@ -371,7 +371,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
-      ResolveCollationName ::
+      ResolveCollationName ++
+      typeCoercionRules() ++
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -421,8 +422,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new SubstituteExecuteImmediate(
         catalogManager,
         resolveChild = executeSameContext,
-        checkAnalysis = checkAnalysis) ::
-      typeCoercionRules() ++
+        checkAnalysis = checkAnalysis) ++
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
