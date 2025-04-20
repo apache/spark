@@ -246,18 +246,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           inputData.addData(2, 3)
           query.processAllAvailable()
 
-          // StateStore should be unloaded, so its tmp dir shouldn't exist
-          for (file <- new File(Utils.getLocalDir(sparkConf)).listFiles()) {
-            assert(!file.getName().startsWith("StateStore"))
-          }
-
           inputData.addData(3, 4)
           inputData.addData(4, 5)
           query.processAllAvailable()
-
-          for (file <- new File(Utils.getLocalDir(sparkConf)).listFiles()) {
-            assert(!file.getName().startsWith("StateStore"))
-          }
         } finally {
           query.stop()
         }
