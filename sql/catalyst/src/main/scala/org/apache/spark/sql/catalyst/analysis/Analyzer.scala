@@ -364,67 +364,65 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
-      Seq(
-        new ResolveCatalogs(catalogManager) ::
-        ResolveInsertInto ::
-        ResolveRelations ::
-        ResolvePartitionSpec ::
-        ResolveFieldNameAndPosition ::
-        AddMetadataColumns ::
-        DeduplicateRelations ::
-        ResolveCollationName) ++
-      typeCoercionRules() ++
-      Seq(
-        new ResolveReferences(catalogManager) ::
-        // Please do not insert any other rules in between. See the TODO comments in rule
-        // ResolveLateralColumnAliasReference for more details.
-        ResolveLateralColumnAliasReference ::
-        ResolveExpressionsWithNamePlaceholders ::
-        ResolveDeserializer ::
-        ResolveNewInstance ::
-        ResolveUpCast ::
-        ResolveGroupingAnalytics ::
-        ResolvePivot ::
-        ResolveUnpivot ::
-        ResolveOrdinalInOrderByAndGroupBy ::
-        ExtractGenerator ::
-        ResolveGenerate ::
-        ResolveFunctions ::
-        ResolveProcedures ::
-        BindProcedures ::
-        ResolveTableSpec ::
-        ValidateAndStripPipeExpressions ::
-        ResolveSQLFunctions ::
-        ResolveSQLTableFunctions ::
-        ResolveAliases ::
-        ResolveSubquery ::
-        ResolveSubqueryColumnAliases ::
-        ResolveWindowOrder ::
-        ResolveWindowFrame ::
-        ResolveNaturalAndUsingJoin ::
-        ResolveOutputRelation ::
-        new ResolveDataFrameDropColumns(catalogManager) ::
-        new ResolveSetVariable(catalogManager) ::
-        ExtractWindowExpressions ::
-        GlobalAggregates ::
-        ResolveAggregateFunctions ::
-        TimeWindowing ::
-        SessionWindowing ::
-        ResolveWindowTime ::
-        ResolveInlineTables ::
-        ResolveLambdaVariables ::
-        ResolveTimeZone ::
-        ResolveRandomSeed ::
-        ResolveBinaryArithmetic ::
-        new ResolveIdentifierClause(earlyBatches) ::
-        ResolveUnion ::
-        ResolveRowLevelCommandAssignments ::
-        MoveParameterizedQueriesDown ::
-        BindParameters ::
-        new SubstituteExecuteImmediate(
-          catalogManager,
-          resolveChild = executeSameContext,
-          checkAnalysis = checkAnalysis)) ++
+      new ResolveCatalogs(catalogManager) ::
+      ResolveInsertInto ::
+      ResolveRelations ::
+      ResolvePartitionSpec ::
+      ResolveFieldNameAndPosition ::
+      AddMetadataColumns ::
+      DeduplicateRelations ::
+      ResolveCollationName ::
+      typeCoercionRules() ::
+      new ResolveReferences(catalogManager) ::
+      // Please do not insert any other rules in between. See the TODO comments in rule
+      // ResolveLateralColumnAliasReference for more details.
+      ResolveLateralColumnAliasReference ::
+      ResolveExpressionsWithNamePlaceholders ::
+      ResolveDeserializer ::
+      ResolveNewInstance ::
+      ResolveUpCast ::
+      ResolveGroupingAnalytics ::
+      ResolvePivot ::
+      ResolveUnpivot ::
+      ResolveOrdinalInOrderByAndGroupBy ::
+      ExtractGenerator ::
+      ResolveGenerate ::
+      ResolveFunctions ::
+      ResolveProcedures ::
+      BindProcedures ::
+      ResolveTableSpec ::
+      ValidateAndStripPipeExpressions ::
+      ResolveSQLFunctions ::
+      ResolveSQLTableFunctions ::
+      ResolveAliases ::
+      ResolveSubquery ::
+      ResolveSubqueryColumnAliases ::
+      ResolveWindowOrder ::
+      ResolveWindowFrame ::
+      ResolveNaturalAndUsingJoin ::
+      ResolveOutputRelation ::
+      new ResolveDataFrameDropColumns(catalogManager) ::
+      new ResolveSetVariable(catalogManager) ::
+      ExtractWindowExpressions ::
+      GlobalAggregates ::
+      ResolveAggregateFunctions ::
+      TimeWindowing ::
+      SessionWindowing ::
+      ResolveWindowTime ::
+      ResolveInlineTables ::
+      ResolveLambdaVariables ::
+      ResolveTimeZone ::
+      ResolveRandomSeed ::
+      ResolveBinaryArithmetic ::
+      new ResolveIdentifierClause(earlyBatches) ::
+      ResolveUnion ::
+      ResolveRowLevelCommandAssignments ::
+      MoveParameterizedQueriesDown ::
+      BindParameters ::
+      new SubstituteExecuteImmediate(
+        catalogManager,
+        resolveChild = executeSameContext,
+        checkAnalysis = checkAnalysis) ++
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
