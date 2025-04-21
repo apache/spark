@@ -89,7 +89,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
     if (_elementsRead > numElementsForceSpillThreshold
       || currentMemory > maxSizeForceSpillThreshold) {
       shouldSpill = true
-    } else if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
+    } else if (_elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
       val granted = acquireMemory(amountToRequest)
@@ -101,7 +101,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
     // Actually spill
     if (shouldSpill) {
       _spillCount += 1
-      logSpillage(currentMemory, elementsRead)
+      logSpillage(currentMemory, _elementsRead)
       spill(collection)
       _elementsRead = 0
       _memoryBytesSpilled += currentMemory
