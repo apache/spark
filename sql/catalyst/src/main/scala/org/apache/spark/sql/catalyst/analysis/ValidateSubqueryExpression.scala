@@ -112,9 +112,13 @@ object ValidateSubqueryExpression
       case f: Filter =>
         if (hasOuterReferences(expr.plan)) {
           expr.plan.expressions.foreach(_.foreachUp {
-            case o: OuterReference =>
+            case o@OuterReference(a) =>
               p.children.foreach(e =>
-                if (!e.output.exists(_.exprId == o.exprId)) {
+                if (!e.output.exists(_.exprId == o.exprId) &&
+                  !expr.getNestedOuterAttrs.contains(a)) {
+                  // If the outer reference is not found in the children plan,
+                  // it should be a nested outer reference. Otherwise, it is
+                  // invalid.
                   o.failAnalysis(
                     errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
                       "CORRELATED_COLUMN_NOT_FOUND",
