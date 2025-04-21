@@ -46,6 +46,10 @@ import org.apache.spark.sql.types.DataType
  *             relation or as a more complex logical plan in the event of a table subquery.
  * @param outerAttrs outer references of this subquery plan, generally empty since these table
  *                   arguments do not allow correlated references currently
+ * @param nestedOuterAttrs outer references of the subquery plan that cannot be resolved by the
+ *                         direct containing query of the subquery. They have to be the subset of
+ *                         outerAttrs and are generally empty since these table arguments do not
+ *                         allow correlated references currently
  * @param exprId expression ID of this subquery expression, generally generated afresh each time
  * @param partitionByExpressions if non-empty, the TABLE argument included the PARTITION BY clause
  *                               to indicate that the input relation should be repartitioned by the
@@ -74,7 +78,13 @@ case class FunctionTableSubqueryArgumentExpression(
     orderByExpressions: Seq[SortOrder] = Seq.empty,
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
   extends SubqueryExpression(
-    plan, outerAttrs, nestedOuterAttrs, exprId, Seq.empty, None) with Unevaluable {
+      plan,
+      outerAttrs,
+      nestedOuterAttrs,
+      exprId,
+      Seq.empty,
+      None
+    ) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
     "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
@@ -91,11 +101,10 @@ case class FunctionTableSubqueryArgumentExpression(
   override def withNewNestedOuterAttrs(
     nestedOuterAttrs: Seq[Expression]
   ): FunctionTableSubqueryArgumentExpression = {
-    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"nestedOuterAttrs must be a subset of outerAttrs, " +
-        s"but got ${nestedOuterAttrs.mkString(", ")}")
+    validateNestedOuterAttrs()
     copy(nestedOuterAttrs = nestedOuterAttrs)
   }
+
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     FunctionTableSubqueryArgumentExpression(

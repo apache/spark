@@ -89,6 +89,11 @@ abstract class SubqueryExpression(
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
   def withNewOuterAttrs(outerAttrs: Seq[Expression]): SubqueryExpression
   def withNewNestedOuterAttrs(nestedOuterAttrs: Seq[Expression]): SubqueryExpression
+  def validateNestedOuterAttrs(): Unit = {
+    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
+      s"nestedOuterAttrs must be a subset of outerAttrs, " +
+        s"but got ${nestedOuterAttrs.mkString(", ")}")
+  }
   def getNestedOuterAttrs: Seq[Expression] = nestedOuterAttrs
   def getOuterAttrs: Seq[Expression] = outerAttrs
   def getJoinCond: Seq[Expression] = joinCond
@@ -424,9 +429,7 @@ case class ScalarSubquery(
   override def withNewNestedOuterAttrs(
       nestedOuterAttrs: Seq[Expression]
   ): ScalarSubquery = {
-    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"nestedOuterAttrs must be a subset of outerAttrs, " +
-        s"but got ${nestedOuterAttrs.mkString(", ")}")
+    validateNestedOuterAttrs()
     copy(nestedOuterAttrs = nestedOuterAttrs)
   }
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
@@ -507,9 +510,7 @@ case class LateralSubquery(
   override def withNewNestedOuterAttrs(
     nestedOuterAttrs: Seq[Expression]
   ): LateralSubquery = {
-    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"nestedOuterAttrs must be a subset of outerAttrs, " +
-        s"but got ${nestedOuterAttrs.mkString(", ")}")
+    validateNestedOuterAttrs()
     copy(nestedOuterAttrs = nestedOuterAttrs)
   }
 
@@ -577,9 +578,7 @@ case class ListQuery(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery = copy(
     outerAttrs = outerAttrs)
   override def withNewNestedOuterAttrs(nestedOuterAttrs: Seq[Expression]): ListQuery = {
-    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"nestedOuterAttrs must be a subset of outerAttrs, " +
-        s"but got ${nestedOuterAttrs.mkString(", ")}")
+    validateNestedOuterAttrs()
     copy(nestedOuterAttrs = nestedOuterAttrs)
   }
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
@@ -643,9 +642,7 @@ case class Exists(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists = copy(
     outerAttrs = outerAttrs)
   override def withNewNestedOuterAttrs(nestedOuterAttrs: Seq[Expression]): Exists = {
-    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"nestedOuterAttrs must be a subset of outerAttrs, " +
-        s"but got ${nestedOuterAttrs.mkString(", ")}")
+    validateNestedOuterAttrs()
     copy(nestedOuterAttrs = nestedOuterAttrs)
   }
   override def withNewHint(hint: Option[HintInfo]): Exists = copy(hint = hint)
