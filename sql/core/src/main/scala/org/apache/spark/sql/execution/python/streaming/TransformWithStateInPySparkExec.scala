@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime
+import org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
@@ -46,7 +47,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
 
 /**
  * Physical operator for executing
- * [[org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPandas]]
+ * [[org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark]]
  *
  * @param functionExpr function called on each group
  * @param groupingAttributes used to group the data
@@ -57,6 +58,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * @param batchTimestampMs processing timestamp of the current batch.
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
+ * @param userFacingDataType the user facing data type of the function (both param and return type)
  * @param child the physical plan for the underlying data
  * @param isStreaming defines whether the query is streaming or batch
  * @param hasInitialState defines whether the query has initial state
@@ -64,7 +66,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * @param initialStateGroupingAttrs grouping attributes for initial state
  * @param initialStateSchema schema for initial state
  */
-case class TransformWithStateInPandasExec(
+case class TransformWithStateInPySparkExec(
     functionExpr: Expression,
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
@@ -74,6 +76,7 @@ case class TransformWithStateInPandasExec(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
+    userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value,
     child: SparkPlan,
     isStreaming: Boolean = true,
     hasInitialState: Boolean,
@@ -85,7 +88,15 @@ case class TransformWithStateInPandasExec(
   with WatermarkSupport
   with TransformWithStateMetadataUtils {
 
-  override def shortName: String = "transformWithStateInPandasExec"
+  // NOTE: This is needed to comply with existing release of transformWithStateInPandas.
+  override def shortName: String = if (
+    userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS
+  ) {
+    "transformWithStateInPandasExec"
+  } else {
+    "transformWithStateInPySparkExec"
+  }
+
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
   private val chainedFunc =
@@ -116,8 +127,7 @@ case class TransformWithStateInPandasExec(
   override def operatorStateMetadataVersion: Int = 2
 
   override def getColFamilySchemas(
-      shouldBeNullable: Boolean
-  ): Map[String, StateStoreColFamilySchema] = {
+      shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
     // For Python, the user can explicitly set nullability on schema, so
     // we need to throw an error if the schema is nullable
     driverProcessorHandle.getColumnFamilySchemas(
@@ -172,7 +182,7 @@ case class TransformWithStateInPandasExec(
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     // Start a python runner on driver, and execute pre-init UDF on the runner
-    val runner = new TransformWithStateInPandasPythonPreInitRunner(
+    val runner = new TransformWithStateInPySparkPythonPreInitRunner(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
       sessionLocalTimeZone,
@@ -186,7 +196,7 @@ case class TransformWithStateInPandasExec(
       runner.process()
     } catch {
       case e: Throwable =>
-        throw new SparkException("TransformWithStateInPandas driver worker " +
+        throw new SparkException("TransformWithStateInPySpark driver worker " +
           "exited unexpectedly (crashed)", e)
     }
     runner.stop()
@@ -332,7 +342,7 @@ case class TransformWithStateInPandasExec(
   private def initNewStateStoreAndProcessData(
       partitionId: Int,
       hadoopConfBroadcast: Broadcast[SerializableConfiguration])
-    (f: StateStore => Iterator[InternalRow]): Iterator[InternalRow] = {
+      (f: StateStore => Iterator[InternalRow]): Iterator[InternalRow] = {
 
     val providerId = {
       val tempDirPath = Utils.createTempDir().getAbsolutePath
@@ -382,7 +392,7 @@ case class TransformWithStateInPandasExec(
 
     // If timeout is based on event time, then filter late data based on watermark
     val filteredIter = watermarkPredicateForDataForLateEvents match {
-      case Some(predicate) =>
+      case Some(predicate) if timeMode == TimeMode.EventTime() =>
         applyRemovingRowsOlderThanWatermark(dataIterator, predicate)
       case _ =>
         dataIterator
@@ -393,10 +403,18 @@ case class TransformWithStateInPandasExec(
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
       groupingKeyExprEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
 
+    val evalType = {
+      if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
+      } else {
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
+      }
+    }
+
     val outputIterator = if (!hasInitialState) {
-      val runner = new TransformWithStateInPandasPythonRunner(
+      val runner = new TransformWithStateInPySparkPythonRunner(
         chainedFunc,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+        evalType,
         Array(argOffsets),
         DataTypeUtils.fromAttributes(dedupAttributes),
         processorHandle,
@@ -420,9 +438,17 @@ case class TransformWithStateInPandasExec(
       val groupedData: Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] =
         new CoGroupedIterator(data, initData, groupingAttributes)
 
-      val runner = new TransformWithStateInPandasPythonInitialStateRunner(
+      val evalType = {
+        if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
+          PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
+        } else {
+          PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
+        }
+      }
+
+      val runner = new TransformWithStateInPySparkPythonInitialStateRunner(
         chainedFunc,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+        evalType,
         Array(argOffsets ++ initArgOffsets),
         DataTypeUtils.fromAttributes(dedupAttributes),
         DataTypeUtils.fromAttributes(initDedupAttributes),
@@ -459,7 +485,7 @@ case class TransformWithStateInPandasExec(
   }
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateInPandasExec =
+      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateInPySparkExec =
     if (hasInitialState) {
       copy(child = newLeft, initialState = newRight)
     } else {
@@ -472,15 +498,16 @@ case class TransformWithStateInPandasExec(
 }
 
 // scalastyle:off argcount
-object TransformWithStateInPandasExec {
+object TransformWithStateInPySparkExec {
 
-  // Plan logical transformWithStateInPandas for batch queries
+  // Plan logical transformWithStateInPySpark for batch queries
   def generateSparkPlanForBatchQueries(
       functionExpr: Expression,
       groupingAttributes: Seq[Attribute],
       output: Seq[Attribute],
       outputMode: OutputMode,
       timeMode: TimeMode,
+      userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value,
       child: SparkPlan,
       hasInitialState: Boolean = false,
       initialState: SparkPlan,
@@ -496,7 +523,7 @@ object TransformWithStateInPandasExec {
       stateStoreCkptIds = None
     )
 
-    new TransformWithStateInPandasExec(
+    new TransformWithStateInPySparkExec(
       functionExpr,
       groupingAttributes,
       output,
@@ -506,6 +533,7 @@ object TransformWithStateInPandasExec {
       Some(System.currentTimeMillis),
       None,
       None,
+      userFacingDataType,
       child,
       isStreaming = false,
       hasInitialState,

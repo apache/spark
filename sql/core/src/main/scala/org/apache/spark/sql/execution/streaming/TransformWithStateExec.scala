@@ -381,7 +381,7 @@ case class TransformWithStateExec(
 
     // If timeout is based on event time, then filter late data based on watermark
     val filteredIter = watermarkPredicateForDataForLateEvents match {
-      case Some(predicate) =>
+      case Some(predicate) if timeMode == TimeMode.EventTime() =>
         applyRemovingRowsOlderThanWatermark(iter, predicate)
       case _ =>
         iter

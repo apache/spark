@@ -111,6 +111,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     while os.path.isdir(tmp_dir):
         tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
     os.mkdir(tmp_dir)
+    sock_dir = os.getenv('TMPDIR') or os.getenv('TEMP') or os.getenv('TMP') or '/tmp'
     env["TMPDIR"] = tmp_dir
     metastore_dir = os.path.join(tmp_dir, str(uuid.uuid4()))
     while os.path.isdir(metastore_dir):
@@ -124,6 +125,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
+        "--conf", "spark.python.unix.domain.socket.dir={0}".format(sock_dir),
         "pyspark-shell",
     ]
 

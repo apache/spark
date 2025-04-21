@@ -26,7 +26,6 @@ import datetime
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -38,11 +37,10 @@ from pyspark.sql.types import (
     Row,
 )
 from pyspark.testing.utils import eventually
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
-    ReusedConnectTestCase,
+    ReusedMixedTestCase,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.errors.exceptions.connect import (
@@ -63,20 +61,13 @@ if should_test_connect:
     not should_test_connect or is_remote_only(),
     connect_requirement_message or "Requires JVM access",
 )
-class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
+class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
     @classmethod
     def setUpClass(cls):
         super(SparkConnectSQLTestCase, cls).setUpClass()
-        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
-        # PySpark libraries.
-        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
-
-        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
-        cls.spark = PySparkSession._instantiatedSession
-        assert cls.spark is not None
 
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.testDataStr = [Row(key=str(i)) for i in range(100)]
@@ -98,9 +89,6 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
     def tearDownClass(cls):
         try:
             cls.spark_connect_clean_up_test_data()
-            # Stopping Spark Connect closes the session in JVM at the server.
-            cls.spark = cls.connect
-            del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
         finally:
             super(SparkConnectSQLTestCase, cls).tearDownClass()
 

@@ -18,11 +18,12 @@
 from contextlib import redirect_stdout
 import datetime
 from enum import Enum
-from inspect import getmembers, isfunction
+from inspect import getmembers, isfunction, isclass
 import io
 from itertools import chain
 import math
 import re
+import sys
 import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
@@ -88,6 +89,78 @@ class FunctionsTestsMixin:
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
+        )
+
+    @unittest.skipIf(sys.version_info < (3, 11), "Only works with Python 3.11+")
+    def test_wildcard_import(self):
+        all_set = set(F.__all__)
+
+        # {
+        #     "abs",
+        #     "acos",
+        #     "acosh",
+        #     "add_months",
+        #     "aes_decrypt",
+        #     "aes_encrypt",
+        #     ...,
+        # }
+        fn_set = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
+
+        expected_fn_all_diff = {
+            "approxCountDistinct",  # deprecated
+            "bitwiseNOT",  # deprecated
+            "cast",  # typing
+            "countDistinct",  # deprecated
+            "overload",  # typing
+            "quote",  # new function in 4.1
+            "shiftLeft",  # deprecated
+            "shiftRight",  # deprecated
+            "shiftRightUnsigned",  # deprecated
+            "sumDistinct",  # deprecated
+            "toDegrees",  # deprecated
+            "toRadians",  # deprecated
+        }
+
+        self.assertEqual(
+            expected_fn_all_diff,
+            fn_set - all_set,
+            "some functions are not registered in __all__",
+        )
+
+        # {
+        #     "AnalyzeArgument",
+        #     "AnalyzeResult",
+        #     ...,
+        #     "UserDefinedFunction",
+        #     "UserDefinedTableFunction",
+        # }
+        clz_set = {name for (name, value) in getmembers(F, isclass) if name[0] != "_"}
+
+        expected_clz_all_diff = {
+            "Any",  # typing
+            "ArrayType",  # should be imported from pyspark.sql.types
+            "ByteType",  # should be imported from pyspark.sql.types
+            "Column",  # should be imported from pyspark.sql
+            "DataType",  # should be imported from pyspark.sql.types
+            "NumericType",  # should be imported from pyspark.sql.types
+            "ParentDataFrame",  # internal class
+            "PySparkTypeError",  # should be imported from pyspark.errors
+            "PySparkValueError",  # should be imported from pyspark.errors
+            "StringType",  # should be imported from pyspark.sql.types
+            "StructType",  # should be imported from pyspark.sql.types
+        }
+
+        self.assertEqual(
+            expected_clz_all_diff,
+            clz_set - all_set,
+            "some classes are not registered in __all__",
+        )
+
+        unknonw_set = all_set - (fn_set | clz_set)
+        self.assertEqual(
+            unknonw_set,
+            set(),
+            "some unknown items are registered in __all__",
         )
 
     def test_explode(self):

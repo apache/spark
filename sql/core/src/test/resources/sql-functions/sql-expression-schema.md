@@ -206,6 +206,7 @@
 | org.apache.spark.sql.catalyst.expressions.MakeDTInterval | make_dt_interval | SELECT make_dt_interval(1, 12, 30, 01.001001) | struct<make_dt_interval(1, 12, 30, 1.001001):interval day to second> |
 | org.apache.spark.sql.catalyst.expressions.MakeDate | make_date | SELECT make_date(2013, 7, 15) | struct<make_date(2013, 7, 15):date> |
 | org.apache.spark.sql.catalyst.expressions.MakeInterval | make_interval | SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001) | struct<make_interval(100, 11, 1, 1, 12, 30, 1.001001):interval> |
+| org.apache.spark.sql.catalyst.expressions.MakeTime | make_time | SELECT make_time(6, 30, 45.887) | struct<make_time(6, 30, 45.887):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.MakeTimestamp | make_timestamp | SELECT make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MakeTimestampLTZExpressionBuilder | make_timestamp_ltz | SELECT make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MakeTimestampNTZExpressionBuilder | make_timestamp_ntz | SELECT make_timestamp_ntz(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp_ntz(2014, 12, 28, 6, 30, 45.887):timestamp_ntz> |

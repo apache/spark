@@ -7433,7 +7433,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @_try_remote_functions
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     """Returns the exact percentile(s) of numeric column `expr` at the given percentage(s)
@@ -7493,7 +7493,7 @@ def percentile(
 @_try_remote_functions
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
@@ -7564,7 +7564,7 @@ def percentile_approx(
 @_try_remote_functions
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     """Returns the approximate `percentile` of the numeric column `col` which is the smallest value

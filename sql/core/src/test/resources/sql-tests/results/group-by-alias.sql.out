@@ -278,6 +278,56 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT MAX(col1), 3 as abc FROM VALUES(1),(2),(3),(4) GROUP BY col1 % abc
+-- !query schema
+struct<max(col1):int,abc:int>
+-- !query output
+2	3
+3	3
+4	3
+
+
+-- !query
+SELECT 1 AS a FROM testData GROUP BY `a`
+-- !query schema
+struct<a:int>
+-- !query output
+1
+1
+1
+1
+
+
+-- !query
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  subq1
+-- !query schema
+struct<subq1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT (
+  SELECT a FROM testData LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  subq1
+-- !query schema
+struct<subq1:int>
+-- !query output
+1
+
+
+-- !query
 set spark.sql.groupByAliases=false
 -- !query schema
 struct<key:string,value:string>

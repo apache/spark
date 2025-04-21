@@ -1195,4 +1195,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
+
+  override def visitDescribeProcedure(
+      ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx.identifierReference(), procIdentifier =>
+      DescribeProcedureCommand(UnresolvedIdentifier(procIdentifier)))
+  }
 }

@@ -23,6 +23,7 @@ import java.util.Collections
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -57,6 +58,14 @@ class CatalogSuite extends SparkFunSuite {
   private val testIdentNew = Identifier.of(testNs, "test_table_new")
   private val testIdentNewQuoted = testIdentNew.asMultipartIdentifier
     .map(part => quoteIdentifier(part)).mkString(".")
+
+  private val constraints: Array[Constraint] = Array(
+    Constraint.primaryKey("pk", Array(FieldReference.column("id"))).build(),
+    Constraint.check("chk").predicateSql("id > 0").build(),
+    Constraint.unique("uk", Array(FieldReference.column("data"))).build(),
+    Constraint.foreignKey("fk", Array(FieldReference.column("data")), testIdentNew,
+      Array(FieldReference.column("id"))).build()
+  )
 
   test("Catalogs can load the catalog") {
     val catalog = newCatalog()
@@ -174,13 +183,6 @@ class CatalogSuite extends SparkFunSuite {
     val columns = Array(
       Column.create("id", IntegerType, false),
       Column.create("data", StringType))
-    val constraints: Array[Constraint] = Array(
-      Constraint.primaryKey("pk", Array(FieldReference.column("id"))).build(),
-      Constraint.check("chk").predicateSql("id > 0").build(),
-      Constraint.unique("uk", Array(FieldReference.column("data"))).build(),
-      Constraint.foreignKey("fk", Array(FieldReference.column("data")), testIdentNew,
-        Array(FieldReference.column("id"))).build()
-    )
     val tableInfo = new TableInfo.Builder()
       .withColumns(columns)
       .withPartitions(emptyTrans)
@@ -843,6 +845,109 @@ class CatalogSuite extends SparkFunSuite {
     }
 
     checkErrorTableNotFound(exc, testIdentQuoted)
+  }
+
+  test("alterTable: add constraint") {
+    val catalog = newCatalog()
+
+    val tableColumns = Array(
+      Column.create("id", IntegerType, false),
+      Column.create("data", StringType))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(tableColumns)
+      .build()
+    val table = catalog.createTable(testIdent, tableInfo)
+
+    assert(table.constraints.isEmpty)
+
+    for ((constraint, index) <- constraints.zipWithIndex) {
+      val updated = catalog.alterTable(testIdent, TableChange.addConstraint(constraint, null))
+      assert(updated.constraints.length === index + 1)
+      assert(updated.constraints.apply(index) === constraint)
+    }
+  }
+
+  test("alterTable: add existing constraint should fail") {
+    val catalog = newCatalog()
+
+    val tableColumns = Array(
+      Column.create("id", IntegerType, false),
+      Column.create("data", StringType))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(tableColumns)
+      .withConstraints(constraints)
+      .build()
+    val table = catalog.createTable(testIdent, tableInfo)
+
+    assert(table.constraints.length === constraints.length)
+
+    for (constraint <- constraints) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          catalog.alterTable(testIdent, TableChange.addConstraint(constraint, null))
+        },
+        condition = "CONSTRAINT_ALREADY_EXISTS",
+        parameters = Map("constraintName" -> constraint.name, "oldConstraint" -> constraint.toDDL))
+    }
+  }
+
+  test("alterTable: drop constraint") {
+    val catalog = newCatalog()
+
+    val tableColumns = Array(
+      Column.create("id", IntegerType, false),
+      Column.create("data", StringType))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(tableColumns)
+      .withConstraints(constraints)
+      .build()
+    val table = catalog.createTable(testIdent, tableInfo)
+
+    assert(table.constraints.length === constraints.length)
+
+    for ((constraint, index) <- constraints.zipWithIndex) {
+      val updated =
+        catalog.alterTable(testIdent, TableChange.dropConstraint(constraint.name(), false, false))
+      assert(updated.constraints.length === constraints.length - index -1)
+    }
+  }
+
+  test("alterTable: drop non-existing constraint") {
+    val catalog = newCatalog()
+
+    val tableColumns = Array(
+      Column.create("id", IntegerType, false),
+      Column.create("data", StringType))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(tableColumns)
+      .withConstraints(constraints)
+      .build()
+    val table = catalog.createTable(testIdent, tableInfo)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        catalog.alterTable(testIdent,
+          TableChange.dropConstraint("missing_constraint", false, false))
+      },
+      condition = "CONSTRAINT_DOES_NOT_EXIST",
+      parameters = Map("constraintName" -> "missing_constraint",
+        "tableName" -> table.name()))
+  }
+
+  test("alterTable: drop non-existing constraint if exists") {
+    val catalog = newCatalog()
+
+    val tableColumns = Array(
+      Column.create("id", IntegerType, false),
+      Column.create("data", StringType))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(tableColumns)
+      .withConstraints(constraints)
+      .build()
+    catalog.createTable(testIdent, tableInfo)
+    val updated = catalog.alterTable(testIdent,
+      TableChange.dropConstraint("missing_constraint", true, false))
+    assert(updated.constraints.length === constraints.length)
   }
 
   test("dropTable") {
