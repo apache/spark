@@ -847,10 +847,17 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
-    - name: Scala structured logging check
+    - name: Scala structured logging check for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: |
         if [ -f ./dev/structured_logging_style.py ]; then
             python3.9 ./dev/structured_logging_style.py
+        fi
+    - name: Scala structured logging check
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: |
+        if [ -f ./dev/structured_logging_style.py ]; then
+            python3.11 ./dev/structured_logging_style.py
         fi
     - name: Java linter
       run: ./dev/lint-java
