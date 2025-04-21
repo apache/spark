@@ -540,9 +540,9 @@ class ALSModel private[ml] (
     }
   }
 
-  override def estimatedSize: Long = {
+  override def estimatedSavedSize: Long = {
     val userCount = userFactors.count()
-    val itemCount = userFactors.count()
+    val itemCount = itemFactors.count()
     (userCount + itemCount) * rank * 2
   }
 }
