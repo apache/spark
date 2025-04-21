@@ -231,6 +231,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
         (SQLConf.SHUFFLE_PARTITIONS.key -> "1"),
         (SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key -> "true")) {
+        // Make sure we start with a fresh without any stale state store entries
+        Utils.clearLocalRootDirs()
+
         val inputData = MemoryStream[Int]
 
         val query = inputData.toDS().toDF("value")
@@ -246,9 +249,16 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           inputData.addData(2, 3)
           query.processAllAvailable()
 
+          // StateStore should be unloaded, so its tmp dir shouldn't exist
+          var tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().startsWith("StateStore")).isEmpty)
+
           inputData.addData(3, 4)
           inputData.addData(4, 5)
           query.processAllAvailable()
+
+          tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().startsWith("StateStore")).isEmpty)
         } finally {
           query.stop()
         }
