@@ -23,7 +23,6 @@ import io
 from itertools import chain
 import math
 import re
-import sys
 import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
@@ -91,7 +90,6 @@ class FunctionsTestsMixin:
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
         )
 
-    @unittest.skipIf(sys.version_info < (3, 11), "Only works with Python 3.11+")
     def test_wildcard_import(self):
         all_set = set(F.__all__)
 
