@@ -102,4 +102,13 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   private[spark] def estimateModelSize(dataset: Dataset[_]): Long = {
     throw new UnsupportedOperationException
   }
+
+  /**
+   * For ml connect only.
+   * Estimate an upper-bound size of the model saving size to be fitted in bytes,
+   * based on the parameters and the dataset
+   */
+  private[spark] def estimateSavedModelSize(dataset: Dataset[_]): Long = {
+    throw new UnsupportedOperationException
+  }
 }

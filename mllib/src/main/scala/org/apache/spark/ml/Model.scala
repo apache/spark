@@ -58,4 +58,15 @@ abstract class Model[M <: Model[M]] extends Transformer { self =>
    * this method and return a proper size.
    */
   private[spark] def estimatedSize: Long = SizeEstimator.estimate(self)
+
+  /**
+   * For ml connect only.
+   * Estimate the saved model size in bytes.
+   * This is an approximation, the real size might be different.
+   * For most cases, `estimatedSavedSize` is equal to `estimatedSize`,
+   * but for models those contain distributed Spark DataFrames as weights,
+   * `estimatedSavedSize` includes the involved Spark DataFrame size but
+   * `estimatedSize` does not include them.
+   */
+  private[spark] def estimatedSavedSize: Long = self.estimatedSize
 }
