@@ -84,8 +84,8 @@ trait AlsoTestWithVirtualColumnFamilyJoins extends SQLTestUtils {
 }
 
 abstract class StreamingJoinSuite
-    extends StreamTest with StateStoreMetricsTest with BeforeAndAfter
-    with AlsoTestWithVirtualColumnFamilyJoins {
+  extends StreamTest with StateStoreMetricsTest with BeforeAndAfter
+  with AlsoTestWithVirtualColumnFamilyJoins {
 
   import testImplicits._
 
@@ -757,7 +757,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
   }
 
   test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
-    "changing the join condition (key schema) should fail the query") {
+   "changing the join condition (key schema) should fail the query") {
     // NOTE: We are also changing the schema of input compared to the checkpoint.
     // In the checkpoint we define the input schema as (Int, Long), which does not have name
     // in both left and right.
