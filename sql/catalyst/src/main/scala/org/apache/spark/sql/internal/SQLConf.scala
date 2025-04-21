@@ -2570,7 +2570,7 @@ object SQLConf {
       .doc("State format version used by streaming join operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
         "be modified after running. Version 3 uses a single state store with virtual column " +
-        "families instead of four stores.")
+        "families instead of four stores and is only supported with RocksDB.")
       .version("3.0.0")
       .intConf
       .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")

@@ -696,6 +696,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       })
   }
 
+  // This does not need to be run with virtual column family joins as it restores the state store
+  // provider to HDFS and join version to 1, effectively disabling the virtual column family join.
   testWithoutVirtualColumnFamilyJoins(
     "SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
@@ -754,8 +756,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  testWithoutVirtualColumnFamilyJoins(
-    "SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
     "changing the join condition (key schema) should fail the query") {
     // NOTE: We are also changing the schema of input compared to the checkpoint.
     // In the checkpoint we define the input schema as (Int, Long), which does not have name
@@ -825,8 +826,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  testWithoutVirtualColumnFamilyJoins(
-    "SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
    "changing the value schema should fail the query") {
     // NOTE: We are also changing the schema of input compared to the checkpoint.
     // In the checkpoint we define the input schema as (Int, Long), which does not have name
@@ -988,6 +988,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
+  // Only ran with virtual column family joins as the previous join version uses different schemas
   testWithVirtualColumnFamilyJoins(
     "SPARK-51779 Verify StateSchemaV3 writes correct key and value schemas for join operator") {
     withTempDir { checkpointDir =>
@@ -1097,11 +1098,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
           // Number of internal column family keys should be nonzero for this join implementation
           assert(numInternalKeys.longValue() > 0)
         },
-        StopStream
-      )
-
-      // Restart the query
-      testStream(joined)(
+        StopStream,
+        // Retart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         AddData(input1, 2, 10), // Should join with previous run's data
         CheckNewAnswer((10, 20, 30)),
@@ -1163,33 +1161,36 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
       val joined = df1.join(df2, "key")
 
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(input1, 1, 2),
-        CheckAnswer(),
-        AddData(input2, 1, 10),
-        CheckNewAnswer((1, 2, 3)),
-        Execute { query =>
-          val numInternalKeys =
-            query.lastProgress
-              .stateOperators(0)
-              .customMetrics
-              .get("rocksdbNumInternalColFamiliesKeys")
-          // Number of internal column family keys should be nonzero for this join implementation
-          assert(numInternalKeys.longValue() > 0)
-        },
-        StopStream
-      )
-      // Disable the virtual column family join implementation and switch versions
-      spark.conf.set(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key, "2")
+      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3") {
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1, 2),
+          CheckAnswer(),
+          AddData(input2, 1, 10),
+          CheckNewAnswer((1, 2, 3)),
+          Execute { query =>
+            val numInternalKeys =
+              query.lastProgress
+                .stateOperators(0)
+                .customMetrics
+                .get("rocksdbNumInternalColFamiliesKeys")
+            // Number of internal column family keys should be nonzero for this join implementation
+            assert(numInternalKeys.longValue() > 0)
+          },
+          StopStream
+        )
+      }
 
-      // Restart the query from the original checkpoint
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(input1, 2, 10),
-        CheckAnswer((10, 20, 30)),
-        StopStream
-      )
+      // Switch join versions to disable the virtual column family join implementation
+      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "2") {
+        // Restart the query from the original checkpoint
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 2, 10),
+          CheckAnswer((10, 20, 30)),
+          StopStream
+        )
+      }
     }
   }
 
@@ -1210,20 +1211,25 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   import org.apache.spark.sql.functions._
 
   test("left outer early state exclusion on left") {
-    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_outer")
+    withTempDir { checkpointDir =>
+      val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_outer")
 
-    testStream(joined)(
-      MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
-      // The left rows with leftValue <= 4 should generate their outer join row now and
-      // not get added to the state.
-      CheckNewAnswer(Row(3, 10, 6, "9"), Row(1, 10, 2, null), Row(2, 10, 4, null)),
-      assertNumStateRows(total = 4, updated = 4),
-      // We shouldn't get more outer join rows when the watermark advances.
-      MultiAddData(leftInput, 20)(rightInput, 21),
-      CheckNewAnswer(),
-      AddData(rightInput, 20),
-      CheckNewAnswer((20, 30, 40, "60"))
-    )
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
+        // The left rows with leftValue <= 4 should generate their outer join row now and
+        // not get added to the state.
+        CheckNewAnswer(Row(3, 10, 6, "9"), Row(1, 10, 2, null), Row(2, 10, 4, null)),
+        assertNumStateRows(total = 4, updated = 4),
+        // We shouldn't get more outer join rows when the watermark advances.
+        MultiAddData(leftInput, 20)(rightInput, 21),
+        CheckNewAnswer(),
+        StopStream,
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(rightInput, 20),
+        CheckNewAnswer((20, 30, 40, "60"))
+      )
+    }
   }
 
   test("left outer early state exclusion on right") {
@@ -1517,6 +1523,8 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     )
   }
 
+  // This does not need to be run with virtual column family joins as it restores the state store
+  // provider to HDFS and join version to 1, effectively disabling the virtual column family join.
   testWithoutVirtualColumnFamilyJoins(
     "SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
@@ -1844,6 +1852,8 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     }
   }
 
+  // This test is currently marked to run without virtual column family joins because it requires
+  // inferSchema from StateDataSource, which is not supported for this version of joins yet.
   testWithoutVirtualColumnFamilyJoins(
     "SPARK-49829 left-outer join, input being unmatched is between WM for late event and " +
     "WM for eviction") {
@@ -1904,85 +1914,67 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
       }
     }
   }
-
-  test("SPARK-51779 - " +
-    "Restart streaming outer join query (left outer early state exclusion on left)") {
-    withTempDir { checkpointDir =>
-      val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_outer")
-
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
-        // The left rows with leftValue <= 4 should generate their outer join row now and
-        // not get added to the state.
-        CheckNewAnswer(Row(3, 10, 6, "9"), Row(1, 10, 2, null), Row(2, 10, 4, null)),
-        assertNumStateRows(total = 4, updated = 4),
-        // We shouldn't get more outer join rows when the watermark advances.
-        MultiAddData(leftInput, 20)(rightInput, 21),
-        CheckNewAnswer()
-      )
-
-      // Restart query from the same checkpoint
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(rightInput, 3, 20),
-        // Should still not get the other outer join rows as watermark advanced earlier,
-        // but this should join with the last set of data added in the previous run.
-        CheckNewAnswer((20, 30, 40, "60"))
-      )
-    }
-  }
 }
 
 @SlowSQLTest
 class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
 
   test("windowed full outer join") {
-    val (leftInput, rightInput, joined) = setupWindowedJoin("full_outer")
+    withTempDir { checkpointDir =>
+      val (leftInput, rightInput, joined) = setupWindowedJoin("full_outer")
 
-    testStream(joined)(
-      MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
-      CheckNewAnswer(Row(3, 10, 6, 9), Row(4, 10, 8, 12), Row(5, 10, 10, 15)),
-      // states
-      // left: 1, 2, 3, 4 ,5
-      // right: 3, 4, 5, 6, 7
-      assertNumStateRows(total = 10, updated = 10),
-      MultiAddData(leftInput, 21)(rightInput, 22),
-      // Watermark = 11, should remove rows having window=[0,10].
-      CheckNewAnswer(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(6, 10, null, 18),
-        Row(7, 10, null, 21)),
-      // states
-      // left: 21
-      // right: 22
-      //
-      // states evicted
-      // left: 1, 2, 3, 4 ,5 (below watermark)
-      // right: 3, 4, 5, 6, 7 (below watermark)
-      assertNumStateRows(total = 2, updated = 2),
-      AddData(leftInput, 22),
-      CheckNewAnswer(Row(22, 30, 44, 66)),
-      // states
-      // left: 21, 22
-      // right: 22
-      assertNumStateRows(total = 3, updated = 1),
-      StopStream,
-      StartStream(),
-
-      AddData(leftInput, 1),
-      // Row not add as 1 < state key watermark = 12.
-      CheckNewAnswer(),
-      // states
-      // left: 21, 22
-      // right: 22
-      assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1),
-      AddData(rightInput, 5),
-      // Row not add as 5 < state key watermark = 12.
-      CheckNewAnswer(),
-      // states
-      // left: 21, 22
-      // right: 22
-      assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1)
-    )
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+        CheckNewAnswer(Row(3, 10, 6, 9), Row(4, 10, 8, 12), Row(5, 10, 10, 15)),
+        // states
+        // left: 1, 2, 3, 4 ,5
+        // right: 3, 4, 5, 6, 7
+        assertNumStateRows(total = 10, updated = 10),
+        StopStream,
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 21)(rightInput, 22),
+        // Watermark = 11, should remove rows having window=[0,10].
+        CheckNewAnswer(
+          Row(1, 10, 2, null),
+          Row(2, 10, 4, null),
+          Row(6, 10, null, 18),
+          Row(7, 10, null, 21)
+        ),
+        // states
+        // left: 21
+        // right: 22
+        //
+        // states evicted
+        // left: 1, 2, 3, 4 ,5 (below watermark)
+        // right: 3, 4, 5, 6, 7 (below watermark)
+        assertNumStateRows(total = 2, updated = 2),
+        StopStream,
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 22),
+        CheckNewAnswer(Row(22, 30, 44, 66)),
+        // states
+        // left: 21, 22
+        // right: 22
+        assertNumStateRows(total = 3, updated = 1),
+        StopStream,
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 1),
+        // Row not add as 1 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21, 22
+        // right: 22
+        assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1),
+        AddData(rightInput, 5),
+        // Row not add as 5 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21, 22
+        // right: 22
+        assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1)
+      )
+    }
   }
 
   test("full outer early state exclusion on left") {
@@ -2136,69 +2128,6 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
       assertNumStateRows(total = 15, updated = 7)
     )
   }
-
-  test("SPARK-51779 - Restart streaming outer join query (windowed full outer join)") {
-    withTempDir { checkpointDir =>
-      val (leftInput, rightInput, joined) = setupWindowedJoin("full_outer")
-
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
-        CheckNewAnswer(Row(3, 10, 6, 9), Row(4, 10, 8, 12), Row(5, 10, 10, 15)),
-        // states
-        // left: 1, 2, 3, 4 ,5
-        // right: 3, 4, 5, 6, 7
-        assertNumStateRows(total = 10, updated = 10)
-      )
-      // Restart join query from the same checkpoint
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        MultiAddData(leftInput, 21)(rightInput, 22),
-        // Watermark = 11, should remove rows having window=[0,10].
-        CheckNewAnswer(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(6, 10, null, 18),
-          Row(7, 10, null, 21)),
-        // states
-        // left: 21
-        // right: 22
-        //
-        // states evicted
-        // left: 1, 2, 3, 4 ,5 (below watermark)
-        // right: 3, 4, 5, 6, 7 (below watermark)
-        assertNumStateRows(total = 2, updated = 2)
-      )
-
-      // Restart join query from the same checkpoint
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(leftInput, 22),
-        CheckNewAnswer(Row(22, 30, 44, 66)),
-        // states
-        // left: 21, 22
-        // right: 22
-        assertNumStateRows(total = 3, updated = 1),
-        StopStream
-      )
-
-      // Restart join query from the same checkpoint again
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(leftInput, 1),
-        // Row not add as 1 < state key watermark = 12.
-        CheckNewAnswer(),
-        // states
-        // left: 21, 22
-        // right: 22
-        assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1),
-        AddData(rightInput, 5),
-        // Row not add as 5 < state key watermark = 12.
-        CheckNewAnswer(),
-        // states
-        // left: 21, 22
-        // right: 22
-        assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1)
-      )
-    }
-  }
 }
 
 @SlowSQLTest
@@ -2207,53 +2136,58 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
   import testImplicits._
 
   test("windowed left semi join") {
-    val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
+    withTempDir { checkpointDir =>
+      val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
 
-    testStream(joined)(
-      MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
-      CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
-      // states
-      // left: 1, 2, 3, 4 ,5
-      // right: 3, 4, 5, 6, 7
-      assertNumStateRows(total = 10, updated = 10),
-      MultiAddData(leftInput, 21)(rightInput, 22),
-      // Watermark = 11, should remove rows having window=[0,10].
-      CheckNewAnswer(),
-      // states
-      // left: 21
-      // right: 22
-      //
-      // states evicted
-      // left: 1, 2, 3, 4 ,5 (below watermark)
-      // right: 3, 4, 5, 6, 7 (below watermark)
-      assertNumStateRows(total = 2, updated = 2),
-      AddData(leftInput, 22),
-      CheckNewAnswer(Row(22, 30, 44)),
-      // Unlike inner/outer joins, given left input row matches with right input row,
-      // we don't buffer the matched left input row to the state store.
-      //
-      // states
-      // left: 21
-      // right: 22
-      assertNumStateRows(total = 2, updated = 0),
-      StopStream,
-      StartStream(),
-
-      AddData(leftInput, 1),
-      // Row not add as 1 < state key watermark = 12.
-      CheckNewAnswer(),
-      // states
-      // left: 21
-      // right: 22
-      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1),
-      AddData(rightInput, 5),
-      // Row not add as 5 < state key watermark = 12.
-      CheckNewAnswer(),
-      // states
-      // left: 21
-      // right: 22
-      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
-    )
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+        CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
+        // states
+        // left: 1, 2, 3, 4 ,5
+        // right: 3, 4, 5, 6, 7
+        assertNumStateRows(total = 10, updated = 10),
+        MultiAddData(leftInput, 21)(rightInput, 22),
+        // Watermark = 11, should remove rows having window=[0,10].
+        CheckNewAnswer(),
+        // states
+        // left: 21
+        // right: 22
+        //
+        // states evicted
+        // left: 1, 2, 3, 4 ,5 (below watermark)
+        // right: 3, 4, 5, 6, 7 (below watermark)
+        assertNumStateRows(total = 2, updated = 2),
+        StopStream,
+        // Restart join query from the same checkpoint
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 22),
+        CheckNewAnswer(Row(22, 30, 44)),
+        // Unlike inner/outer joins, given left input row matches with right input row,
+        // we don't buffer the matched left input row to the state store.
+        //
+        // states
+        // left: 21
+        // right: 22
+        assertNumStateRows(total = 2, updated = 0),
+        StopStream,
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 1),
+        // Row not add as 1 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21
+        // right: 22
+        assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1),
+        AddData(rightInput, 5),
+        // Row not add as 5 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21
+        // right: 22
+        assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
+      )
+    }
   }
 
   test("left semi early state exclusion on left") {
@@ -2403,6 +2337,8 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
+  // This test is currently marked to run without virtual column family joins because it requires
+  // inferSchema from StateDataSource, which is not supported for this version of joins yet.
   testWithoutVirtualColumnFamilyJoins(
     "SPARK-49829 two chained stream-stream left outer joins among three input streams") {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
@@ -2525,67 +2461,6 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
         Row(Timestamp.valueOf("2024-02-10 10:24:00"), 5, 5, 5),
       )
        */
-    }
-  }
-
-  test("SPARK-51779 - Restart streaming semi join query (windowed left semi join)") {
-    withTempDir { checkpointDir =>
-      val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
-
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
-        CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
-        // states
-        // left: 1, 2, 3, 4 ,5
-        // right: 3, 4, 5, 6, 7
-        assertNumStateRows(total = 10, updated = 10),
-        MultiAddData(leftInput, 21)(rightInput, 22),
-        // Watermark = 11, should remove rows having window=[0,10].
-        CheckNewAnswer(),
-        // states
-        // left: 21
-        // right: 22
-        //
-        // states evicted
-        // left: 1, 2, 3, 4 ,5 (below watermark)
-        // right: 3, 4, 5, 6, 7 (below watermark)
-        assertNumStateRows(total = 2, updated = 2)
-      )
-
-      // Restart join query from the same checkpoint
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(leftInput, 22),
-        CheckNewAnswer(Row(22, 30, 44)),
-        // Unlike inner/outer joins, given left input row matches with right input row,
-        // we don't buffer the matched left input row to the state store.
-        //
-        // states
-        // left: 21
-        // right: 22
-        assertNumStateRows(total = 2, updated = 0),
-        StopStream
-      )
-
-      // Restart join query from the same checkpoint again
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(leftInput, 1),
-        // Row not add as 1 < state key watermark = 12.
-        CheckNewAnswer(),
-        // states
-        // left: 21
-        // right: 22
-        assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1),
-        AddData(rightInput, 5),
-        // Row not add as 5 < state key watermark = 12.
-        CheckNewAnswer(),
-        // states
-        // left: 21
-        // right: 22
-        assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
-      )
     }
   }
 }

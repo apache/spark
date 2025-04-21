@@ -58,6 +58,9 @@ import org.apache.spark.util.NextIterator
  *                                  store providers being used in this class. If true, Spark will
  *                                  take care of management for state store providers, e.g. running
  *                                  maintenance task for these providers.
+ * @param joinStoreGenerator    The generator to create state store instances, re-using the same
+ *                              instance when the join implementation uses virtual column families
+ *                              for join version 3.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
@@ -91,7 +94,8 @@ abstract class SymmetricHashJoinStateManager(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None) extends Logging {
+    snapshotStartVersion: Option[Long] = None,
+    joinStoreGenerator: JoinStateManagerStoreGenerator) extends Logging {
   import SymmetricHashJoinStateManager._
 
   protected val keySchema = StructType(
@@ -494,10 +498,10 @@ abstract class SymmetricHashJoinStateManager(
       val store = if (useStateStoreCoordinator) {
         assert(snapshotStartVersion.isEmpty, "Should not use state store coordinator " +
           "when reading state as data source.")
-        StateStore.get(
+        joinStoreGenerator.getStore(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          stateInfo.get.storeVersion, stateStoreCkptId, None,
-          useColumnFamilies = useVirtualColumnFamilies, storeConf, hadoopConf)
+          stateInfo.get.storeVersion, stateStoreCkptId, None, useVirtualColumnFamilies,
+          storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
         stateStoreProvider = StateStoreProvider.createAndInit(
@@ -843,10 +847,12 @@ class SymmetricHashJoinStateManagerV1(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None) extends SymmetricHashJoinStateManager(
+    snapshotStartVersion: Option[Long] = None,
+    joinStoreGenerator: JoinStateManagerStoreGenerator) extends SymmetricHashJoinStateManager(
   joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
   partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion) {
+  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+  joinStoreGenerator) {
 
   /** Commit all the changes to all the state stores */
   override def commit(): Unit = {
@@ -863,6 +869,9 @@ class SymmetricHashJoinStateManagerV1(
   /**
    * Get state store checkpoint information of the two state stores for this joiner, after
    * they finished data processing.
+   *
+   * For [[SymmetricHashJoinStateManagerV1]], this returns the information of the two stores
+   * used for this joiner.
    */
   override def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
     val keyToNumValuesCkptInfo = keyToNumValues.getLatestCheckpointInfo()
@@ -917,10 +926,12 @@ class SymmetricHashJoinStateManagerV2(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None) extends SymmetricHashJoinStateManager(
+    snapshotStartVersion: Option[Long] = None,
+    joinStoreGenerator: JoinStateManagerStoreGenerator) extends SymmetricHashJoinStateManager(
   joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
   partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion) {
+  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+  joinStoreGenerator) {
 
   /** Commit all the changes to the state store */
   override def commit(): Unit = {
@@ -937,6 +948,10 @@ class SymmetricHashJoinStateManagerV2(
   /**
    * Get state store checkpoint information of the state store used for this joiner, after
    * they finished data processing.
+   *
+   * For [[SymmetricHashJoinStateManagerV2]], this returns the information of the single store
+   * used for the entire joiner operator. Both fields of JoinerStateStoreCkptInfo will
+   * be identical.
    */
   override def getLatestCheckpointInfo(): JoinerStateStoreCkptInfo = {
     // Note that both keyToNumValues and keyWithIndexToValue are using the same state store,
@@ -953,6 +968,50 @@ class SymmetricHashJoinStateManagerV2(
 
   /** Get the state store metrics from the state store manager */
   override def metrics: StateStoreMetrics = keyToNumValues.metrics
+}
+
+/** Class used to handle state store creation in SymmetricHashJoinStateManager V1 and V2 */
+class JoinStateManagerStoreGenerator() extends Logging {
+
+  // Store internally the store used for the manager if virtual column families are enabled
+  private var _store: Option[StateStore] = None
+
+  /**
+   * Creates the state store used for join operations, or returns the existing instance
+   * if it has been previously created and virtual column families are enabled.
+   */
+  def getStore(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      version: Long,
+      stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
+      useColumnFamilies: Boolean,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): StateStore = {
+    if (useColumnFamilies) {
+      // Get the store if we haven't created it yet, otherwise use the one we just created
+      if (_store.isEmpty) {
+        _store = Some(
+          StateStore.get(
+            storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, version,
+            stateStoreCkptId, stateSchemaBroadcast, useColumnFamilies = useColumnFamilies,
+            storeConf, hadoopConf
+          )
+        )
+      }
+      _store.get
+    } else {
+      // Do not use the store saved internally, as we need to create the four distinct stores
+      StateStore.get(
+        storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, version,
+        stateStoreCkptId, stateSchemaBroadcast, useColumnFamilies = useColumnFamilies,
+        storeConf, hadoopConf
+      )
+    }
+  }
 }
 
 object SymmetricHashJoinStateManager {
@@ -974,18 +1033,21 @@ object SymmetricHashJoinStateManager {
       stateFormatVersion: Int,
       skippedNullValueCount: Option[SQLMetric] = None,
       useStateStoreCoordinator: Boolean = true,
-      snapshotStartVersion: Option[Long] = None): SymmetricHashJoinStateManager = {
+      snapshotStartVersion: Option[Long] = None,
+      joinStoreGenerator: JoinStateManagerStoreGenerator): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion
+        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+        joinStoreGenerator
       )
     } else {
       new SymmetricHashJoinStateManagerV1(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion
+        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+        joinStoreGenerator
       )
     }
   }

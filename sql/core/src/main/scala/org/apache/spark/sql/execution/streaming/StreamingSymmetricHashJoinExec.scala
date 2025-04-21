@@ -354,18 +354,20 @@ case class StreamingSymmetricHashJoinExec(
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
       Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
-    // Create left and right side hash joiners and store in the joiner manager
+    // Create left and right side hash joiners and store in the joiner manager.
+    // Both sides should use the same store generator if we are re-using the same store instance.
+    val joinStateManagerStoreGenerator = new JoinStateManagerStoreGenerator()
     val joinerManager = OneSideHashJoinerManager(
       new OneSideHashJoiner(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.valueToNumKeys,
-        skippedNullValueCount),
+        skippedNullValueCount, joinStateManagerStoreGenerator),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.valueToNumKeys,
-        skippedNullValueCount))
+        skippedNullValueCount, joinStateManagerStoreGenerator))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -598,6 +600,11 @@ case class StreamingSymmetricHashJoinExec(
    *                                state watermarks.
    * @param oneSideStateInfo  Reconstructed state info for this side
    * @param partitionId A partition ID of source RDD.
+   * @param joinStateManagerStoreGenerator The state store generator responsible for getting the
+   *                                       state store for this join side. The generator will
+   *                                       re-use the same store for both sides when the join
+   *                                       implementation uses virtual column families for join
+   *                                       version 3.
    */
   private class OneSideHashJoiner(
       joinSide: JoinSide,
@@ -610,7 +617,8 @@ case class StreamingSymmetricHashJoinExec(
       partitionId: Int,
       keyToNumValuesStateStoreCkptId: Option[String],
       keyWithIndexToValueStateStoreCkptId: Option[String],
-      skippedNullValueCount: Option[SQLMetric]) {
+      skippedNullValueCount: Option[SQLMetric],
+      joinStateManagerStoreGenerator: JoinStateManagerStoreGenerator) {
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
@@ -627,7 +635,8 @@ case class StreamingSymmetricHashJoinExec(
       keyToNumValuesStateStoreCkptId = keyToNumValuesStateStoreCkptId,
       keyWithIndexToValueStateStoreCkptId = keyWithIndexToValueStateStoreCkptId,
       stateFormatVersion = stateFormatVersion,
-      skippedNullValueCount = skippedNullValueCount)
+      skippedNullValueCount = skippedNullValueCount,
+      joinStoreGenerator = joinStateManagerStoreGenerator)
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 

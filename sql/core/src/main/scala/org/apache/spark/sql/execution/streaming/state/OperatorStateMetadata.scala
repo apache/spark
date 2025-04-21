@@ -466,6 +466,11 @@ class OperatorStateMetadataV2FileManager(
   }
 }
 
+/**
+ * Case class used to store additional properties for join operation.
+ * This is only used for unit tests, which verify that the properties in
+ * the corresponding OperatorStateMetadataV2 result are non-empty.
+ */
 case class StreamingJoinOperatorProperties(useVirtualColumnFamilies: Boolean) {
   def json: String = {
     val json =
