@@ -186,6 +186,19 @@ private[connect] object MLHandler extends Logging {
               .setObjRef(proto.ObjectRef.newBuilder().setId(ids.result().mkString(","))))
           .build()
 
+      case proto.MlCommand.CommandCase.CLEAN_CACHE =>
+        val size = mlCache.clear()
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(size))
+          .build()
+
+      case proto.MlCommand.CommandCase.GET_CACHE_INFO =>
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(mlCache.getInfo()))
+          .build()
+
       case proto.MlCommand.CommandCase.WRITE =>
         mlCommand.getWrite.getTypeCase match {
           case proto.MlCommand.Write.TypeCase.OBJ_REF => // save a model

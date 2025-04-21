@@ -134,6 +134,24 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["obj_refs", b"obj_refs"]
         ) -> None: ...
 
+    class CleanCache(google.protobuf.message.Message):
+        """Force to clean up all the ML cached objects"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class GetCacheInfo(google.protobuf.message.Message):
+        """Get the information of all the ML cached objects"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     class Write(google.protobuf.message.Message):
         """Command to write ML operator"""
 
@@ -330,6 +348,8 @@ class MlCommand(google.protobuf.message.Message):
     WRITE_FIELD_NUMBER: builtins.int
     READ_FIELD_NUMBER: builtins.int
     EVALUATE_FIELD_NUMBER: builtins.int
+    CLEAN_CACHE_FIELD_NUMBER: builtins.int
+    GET_CACHE_INFO_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -342,6 +362,10 @@ class MlCommand(google.protobuf.message.Message):
     def read(self) -> global___MlCommand.Read: ...
     @property
     def evaluate(self) -> global___MlCommand.Evaluate: ...
+    @property
+    def clean_cache(self) -> global___MlCommand.CleanCache: ...
+    @property
+    def get_cache_info(self) -> global___MlCommand.GetCacheInfo: ...
     def __init__(
         self,
         *,
@@ -351,10 +375,14 @@ class MlCommand(google.protobuf.message.Message):
         write: global___MlCommand.Write | None = ...,
         read: global___MlCommand.Read | None = ...,
         evaluate: global___MlCommand.Evaluate | None = ...,
+        clean_cache: global___MlCommand.CleanCache | None = ...,
+        get_cache_info: global___MlCommand.GetCacheInfo | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "clean_cache",
+            b"clean_cache",
             "command",
             b"command",
             "delete",
@@ -365,6 +393,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fetch",
             "fit",
             b"fit",
+            "get_cache_info",
+            b"get_cache_info",
             "read",
             b"read",
             "write",
@@ -374,6 +404,8 @@ class MlCommand(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "clean_cache",
+            b"clean_cache",
             "command",
             b"command",
             "delete",
@@ -384,6 +416,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fetch",
             "fit",
             b"fit",
+            "get_cache_info",
+            b"get_cache_info",
             "read",
             b"read",
             "write",
@@ -393,7 +427,10 @@ class MlCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> (
-        typing_extensions.Literal["fit", "fetch", "delete", "write", "read", "evaluate"] | None
+        typing_extensions.Literal[
+            "fit", "fetch", "delete", "write", "read", "evaluate", "clean_cache", "get_cache_info"
+        ]
+        | None
     ): ...
 
 global___MlCommand = MlCommand
