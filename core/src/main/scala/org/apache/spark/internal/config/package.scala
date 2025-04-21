@@ -1604,6 +1604,7 @@ package object config {
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(Long.MaxValue)
 
   private[spark] val SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD =

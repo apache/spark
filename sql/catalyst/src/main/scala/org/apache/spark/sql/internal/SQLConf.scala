@@ -3361,8 +3361,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for size of rows to be spilled by window operator")
       .version("4.0.0")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val WINDOW_GROUP_LIMIT_THRESHOLD =
     buildConf("spark.sql.optimizer.windowGroupLimitThreshold")
@@ -3391,8 +3390,7 @@ object SQLConf {
       .doc("Threshold for size of rows to be spilled by window operator. Note that " +
         "the buffer is used only for the query Spark cannot apply aggregations on determining " +
         "session window.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val SESSION_WINDOW_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
@@ -3442,8 +3440,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for size of rows to be spilled by sort merge join operator")
       .version("4.0.0")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
@@ -3467,8 +3464,7 @@ object SQLConf {
       .internal()
       .doc("Threshold for size of rows to be spilled by cartesian product operator")
       .version("4.0.0")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD.defaultValue.get)
+      .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
