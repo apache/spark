@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.DataType
  *             relation or as a more complex logical plan in the event of a table subquery.
  * @param outerAttrs outer references of this subquery plan, generally empty since these table
  *                   arguments do not allow correlated references currently
- * @param nestedOuterAttrs outer references of the subquery plan that cannot be resolved by the
+ * @param outerScopeAttrs outer references of the subquery plan that cannot be resolved by the
  *                         direct containing query of the subquery. They have to be the subset of
  *                         outerAttrs and are generally empty since these table arguments do not
  *                         allow correlated references currently
@@ -71,7 +71,7 @@ import org.apache.spark.sql.types.DataType
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
-    nestedOuterAttrs: Seq[Expression] = Seq.empty,
+    outerScopeAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     partitionByExpressions: Seq[Expression] = Seq.empty,
     withSinglePartition: Boolean = false,
@@ -80,7 +80,7 @@ case class FunctionTableSubqueryArgumentExpression(
   extends SubqueryExpression(
       plan,
       outerAttrs,
-      nestedOuterAttrs,
+      outerScopeAttrs,
       exprId,
       Seq.empty,
       None
@@ -98,11 +98,11 @@ case class FunctionTableSubqueryArgumentExpression(
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
-  override def withNewNestedOuterAttrs(
-    nestedOuterAttrs: Seq[Expression]
+  override def withNewOuterScopeAttrs(
+    outerScopeAttrs: Seq[Expression]
   ): FunctionTableSubqueryArgumentExpression = {
-    validateNestedOuterAttrs()
-    copy(nestedOuterAttrs = nestedOuterAttrs)
+    validateOuterScopeAttrs()
+    copy(outerScopeAttrs = outerScopeAttrs)
   }
 
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
@@ -110,7 +110,7 @@ case class FunctionTableSubqueryArgumentExpression(
     FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
-      nestedOuterAttrs.map(_.canonicalized),
+      outerScopeAttrs.map(_.canonicalized),
       ExprId(0),
       partitionByExpressions,
       withSinglePartition,

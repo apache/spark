@@ -31,7 +31,7 @@ trait DynamicPruning extends Predicate
  * join with a filter from the other side of the join. It is inserted in cases where partition
  * pruning can be applied.
  * The DynamicPruningSubquery expression should only have a single outer
- * attribute which is the pruning key and should not have any nested outer attributes.
+ * attribute which is the pruning key and should not have any outer scope attributes.
  *
  * @param pruningKey the filtering key of the plan to be pruned.
  * @param buildQuery the build side of the join.
@@ -70,13 +70,13 @@ case class DynamicPruningSubquery(
     copy()
   }
 
-  override def withNewNestedOuterAttrs(
-    nestedOuterAttrs: Seq[Expression]
+  override def withNewOuterScopeAttrs(
+    outerScopeAttrs: Seq[Expression]
   ): DynamicPruningSubquery = {
-    // DynamicPruningSubquery should not have nested outer attrs
-    if (nestedOuterAttrs.nonEmpty) {
+    // DynamicPruningSubquery should not have outer scope attrs
+    if (outerScopeAttrs.nonEmpty) {
       throw SparkException.internalError(
-        "DynamicPruningSubquery should not have nested outer attributes.")
+        "DynamicPruningSubquery should not have outer scope attributes.")
     }
     copy()
   }
