@@ -110,7 +110,15 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // VARIANT type
     "variant/named-function-arguments.sql",
     // SPARK-51516: Support the TIME data type by Thrift Server
-    "time.sql"
+    "time.sql",
+    // SPARK-50983: Currently nested correlations tests are using
+    // analyzer results as results. The expected segment sizes are different
+    // from other testcases.
+    "subquery/nestedcorrelation/combined-subquery.sql",
+    "subquery/nestedcorrelation/exists-subquery.sql",
+    "subquery/nestedcorrelation/lateral-subquery.sql",
+    "subquery/nestedcorrelation/scalar-subquery.sql",
+    "subquery/nestedcorrelation/subquery-not-supported.sql"
   )
 
   override def runQueries(
