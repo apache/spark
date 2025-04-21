@@ -47,11 +47,18 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         # model is cached in python side
         self.assertEqual(len(spark.client.thread_local.ml_caches), 1)
 
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 1)
+        self.assertTrue(
+            "obj: class org.apache.spark.ml.classification.LinearSVCModel" in cache_info[0],
+            cache_info,
+        )
+
         # explicitly delete the model
         del model
 
         # model is removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
+        self.assertFalse(hasattr(spark.client.thread_local, "ml_caches"))
 
     def test_cleanup_ml(self):
         spark = self.spark
@@ -80,16 +87,30 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         # all 3 models are cached in python side
         self.assertEqual(len(spark.client.thread_local.ml_caches), 3)
 
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 3)
+        self.assertTrue(
+            all(
+                "obj: class org.apache.spark.ml.classification.LinearSVCModel" in c
+                for c in cache_info
+            ),
+            cache_info,
+        )
+
         # explicitly delete the model1
         del model1
 
         # model1 is removed in python side
         self.assertEqual(len(spark.client.thread_local.ml_caches), 2)
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 2)
 
         spark.client._cleanup_ml()
 
         # All models are removed in python side
-        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
+        self.assertFalse(hasattr(spark.client.thread_local, "ml_caches"))
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 0)
 
 
 if __name__ == "__main__":

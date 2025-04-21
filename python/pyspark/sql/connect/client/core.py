@@ -1981,13 +1981,14 @@ class SparkConnectClient(object):
         self.thread_local.ml_caches.add(cache_id)
 
     def remove_ml_cache(self, cache_id: str) -> None:
-        if not hasattr(self.thread_local, "ml_caches"):
-            self.thread_local.ml_caches = set()
+        if hasattr(self.thread_local, "ml_caches"):
+            if cache_id in self.thread_local.ml_caches:
+                deleted = self._delete_ml_cache([cache_id])
+                for obj_id in deleted:
+                    self.thread_local.ml_caches.remove(obj_id)
 
-        if cache_id in self.thread_local.ml_caches:
-            deleted = self._delete_ml_cache([cache_id])
-            for obj_id in deleted:
-                self.thread_local.ml_caches.remove(obj_id)
+            if len(self.thread_local.ml_caches) == 0:
+                del self.thread_local.ml_caches
 
     def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
         # try best to delete the cache
@@ -2010,11 +2011,25 @@ class SparkConnectClient(object):
             return []
 
     def _cleanup_ml(self) -> None:
-        if hasattr(self.thread_local, "ml_caches") and len(self.thread_local.ml_caches) > 0:
+        if hasattr(self.thread_local, "ml_caches"):
             try:
                 command = pb2.Command()
-                command.ml_command.clean.SetInParent()
+                command.ml_command.clean_cache.SetInParent()
                 self.execute_command(command)
                 self.thread_local.ml_caches.clear()
+                del self.thread_local.ml_caches
             except Exception:
                 pass
+
+    def _get_ml_cache_info(self) -> List[str]:
+        if hasattr(self.thread_local, "ml_caches"):
+            command = pb2.Command()
+            command.ml_command.get_cache_info.SetInParent()
+            (_, properties, _) = self.execute_command(command)
+
+            assert properties is not None
+
+            if properties is not None and "ml_command_result" in properties:
+                ml_command_result = properties["ml_command_result"]
+                return [item.string for item in ml_command_result.param.array.elements]
+        return []

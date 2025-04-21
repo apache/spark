@@ -20,6 +20,8 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable
+
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
 
 import org.apache.spark.internal.Logging
@@ -117,5 +119,13 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     val size = cachedModel.size()
     cachedModel.clear()
     size
+  }
+
+  def getInfo(): Array[String] = {
+    val info = mutable.ArrayBuilder.make[String]
+    cachedModel.forEach { case (key, value) =>
+      info += s"id: $key, obj: ${value.obj.getClass}, size: ${value.sizeBytes}"
+    }
+    info.result()
   }
 }
