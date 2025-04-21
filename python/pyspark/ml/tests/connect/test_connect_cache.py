@@ -46,7 +46,6 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
         # model is cached in python side
         self.assertEqual(len(spark.client.thread_local.ml_caches), 1)
-
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
         self.assertTrue(
@@ -58,7 +57,9 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         del model
 
         # model is removed in python side
-        self.assertFalse(hasattr(spark.client.thread_local, "ml_caches"))
+        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
+        cache_info = spark.client._get_ml_cache_info()
+        self.assertEqual(len(cache_info), 0)
 
     def test_cleanup_ml(self):
         spark = self.spark
@@ -86,7 +87,6 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
         # all 3 models are cached in python side
         self.assertEqual(len(spark.client.thread_local.ml_caches), 3)
-
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 3)
         self.assertTrue(
@@ -108,7 +108,7 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         spark.client._cleanup_ml()
 
         # All models are removed in python side
-        self.assertFalse(hasattr(spark.client.thread_local, "ml_caches"))
+        self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 0)
 

@@ -1987,9 +1987,6 @@ class SparkConnectClient(object):
                 for obj_id in deleted:
                     self.thread_local.ml_caches.remove(obj_id)
 
-            if len(self.thread_local.ml_caches) == 0:
-                del self.thread_local.ml_caches
-
     def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
         # try best to delete the cache
         try:
@@ -2017,7 +2014,6 @@ class SparkConnectClient(object):
                 command.ml_command.clean_cache.SetInParent()
                 self.execute_command(command)
                 self.thread_local.ml_caches.clear()
-                del self.thread_local.ml_caches
             except Exception:
                 pass
 
