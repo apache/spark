@@ -44,8 +44,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
-import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
@@ -1144,7 +1144,7 @@ class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     assert(als.estimateModelSize(df) === estimatedDFSize)
 
     val model = als.fit(df)
-    assert(model.estimatedSize == SizeEstimator.estimate(model) + estimatedDFSize)
+    assert(model.estimatedSize == estimatedDFSize)
   }
 }
 
