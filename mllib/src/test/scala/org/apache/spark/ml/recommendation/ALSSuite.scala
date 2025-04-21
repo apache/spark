@@ -44,8 +44,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
+import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
@@ -1133,7 +1133,7 @@ class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     import testImplicits._
 
     val als = new ALS().setMaxIter(1).setRank(8)
-    val estimatedSavedModelSize = (3 + 2) * (8 + 1) * 4
+    val estimatedDFSize = (3 + 2) * (8 + 1) * 4
     val df = sc.parallelize(Seq(
       (123, 1, 0.5),
       (123, 2, 0.7),
@@ -1141,10 +1141,10 @@ class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       (111, 2, 1.0),
       (111, 1, 0.1)
     )).toDF("item", "user", "rating")
-    assert(als.estimateSavedModelSize(df) === estimatedSavedModelSize)
+    assert(als.estimateModelSize(df) === estimatedDFSize)
 
     val model = als.fit(df)
-    assert(model.estimatedSavedSize == estimatedSavedModelSize)
+    assert(model.estimatedSize == SizeEstimator.estimate(model) + estimatedDFSize)
   }
 }
 
