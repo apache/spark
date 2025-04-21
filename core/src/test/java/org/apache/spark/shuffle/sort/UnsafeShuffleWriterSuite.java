@@ -175,18 +175,19 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       File file = (File) invocationOnMock.getArguments()[0];
       return Utils.tempFileWith(file);
     });
-    resetDependency(false);
+    resetDependency();
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
   }
 
-  private void resetDependency(boolean rowbasedChecksumEnabled) {
+  private void resetDependency() {
     when(shuffleDep.serializer()).thenReturn(serializer);
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
-    final int checksumSize = rowbasedChecksumEnabled ? NUM_PARTITIONS : 0;
+    final int checksumSize =
+        (boolean) conf.get(package$.MODULE$.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED()) ? NUM_PARTITIONS : 0;
     final String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
     final RowBasedChecksum[] rowBasedChecksums =
-            RowBasedChecksum.createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm);
+        RowBasedChecksum.createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm);
     when(shuffleDep.rowBasedChecksums()).thenReturn(rowBasedChecksums);
   }
 
@@ -624,6 +625,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   @Test
   public void testRowBasedChecksum() throws IOException, SparkException {
+    conf.set(package$.MODULE$.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED(), true);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     for (int i = 0; i < NUM_PARTITIONS; i++) {
       for (int j = 0; j < 5; j++) {
@@ -634,7 +636,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     long[] checksumValues = new long[0];
     long aggregatedChecksumValue = 0;
     for (int i = 0; i < 100; i++) {
-      resetDependency(true);
+      resetDependency();
       final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
       Collections.shuffle(dataToWrite);
       writer.write(dataToWrite.iterator());

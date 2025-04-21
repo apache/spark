@@ -40,9 +40,8 @@ trait ShuffleChecksumTestHelper {
       "checksum must be consistent at both write and read sides")
   }
 
-  def getRowBasedChecksumValues(
-      rowBasedChecksums: Array[RowBasedChecksum] = Array.empty): Array[Long] = {
-    if (rowBasedChecksums.nonEmpty) {
+  def getRowBasedChecksumValues(rowBasedChecksums: Array[RowBasedChecksum]): Array[Long] = {
+    if (rowBasedChecksums.isEmpty) {
       Array.empty
     } else {
       rowBasedChecksums.map(_.getValue)

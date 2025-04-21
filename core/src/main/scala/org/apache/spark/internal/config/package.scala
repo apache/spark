@@ -1622,6 +1622,21 @@ package object config {
         s"The buffer size must be greater than 0 and less than or equal to ${Int.MaxValue}.")
       .createWithDefault(4096)
 
+  private[spark] val SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.shuffle.orderIndependentChecksum.enabled")
+      .doc("Whether to calculate order independent checksum for the shuffle data or not. If " +
+        "enabled, Spark will calculate a checksum that is independent of the input row order for " +
+        "each mapper and returns the checksums from executors to driver. Different from the above" +
+        "checksum, the order independent remains the same even if the shuffle row order changes. " +
+        "While the above checksum is sensitive to shuffle data ordering to detect file " +
+        "corruption. This checksum is used to detect whether different task attempts of the same " +
+        "partition produce different output data or not (same set of keyValue pairs). In case " +
+        "the output data has changed across retries, Spark will need to retry all tasks of the " +
+        "consumer stages to avoid correctness issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SHUFFLE_CHECKSUM_ENABLED =
     ConfigBuilder("spark.shuffle.checksum.enabled")
       .doc("Whether to calculate the checksum of shuffle data. If enabled, Spark will calculate " +

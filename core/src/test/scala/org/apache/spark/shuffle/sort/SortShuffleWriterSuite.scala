@@ -79,13 +79,14 @@ class SortShuffleWriterSuite
     }
   }
 
-  private def resetDependency(rowbasedChecksumEnabled : Boolean = false): Unit = {
+  private def resetDependency(): Unit = {
     reset(dependency);
     when(dependency.partitioner).thenReturn(partitioner)
     when(dependency.serializer).thenReturn(serializer)
     when(dependency.aggregator).thenReturn(None)
     when(dependency.keyOrdering).thenReturn(None)
-    val checksumSize = if (rowbasedChecksumEnabled) numMaps else 0
+    val checksumSize =
+      if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
     val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
     val rowBasedChecksums = RowBasedChecksum.createPartitionRowBasedChecksums(
       checksumSize, checksumAlgorithm)
@@ -128,6 +129,7 @@ class SortShuffleWriterSuite
   }
 
   test("Row-based checksums are independent of input row order") {
+    conf.set("spark.shuffle.orderIndependentChecksum.enabled", true.toString)
     // FIXME: this can affect other tests (if any) after this set of tests
     // since `sc` is global.
     sc.stop()
@@ -144,7 +146,7 @@ class SortShuffleWriterSuite
     var checksumValues : Array[Long] = Array[Long]()
     var aggregatedChecksumValue = 0L
     for (i <- 1 to 100) {
-      resetDependency(true)
+      resetDependency()
       val writer = new SortShuffleWriter[Int, Int, Int](
         shuffleHandle,
         mapId = 2,
@@ -197,9 +199,11 @@ class SortShuffleWriterSuite
         when(dependency.serializer).thenReturn(serializer)
         when(dependency.aggregator).thenReturn(aggregator)
         when(dependency.keyOrdering).thenReturn(order)
+        val checksumSize =
+          if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
         val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
         val rowBasedChecksums: Array[RowBasedChecksum] =
-          RowBasedChecksum.createPartitionRowBasedChecksums(0, checksumAlgorithm)
+          RowBasedChecksum.createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
         when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
         new BaseShuffleHandle[Int, Int, Int](shuffleId, dependency)
       }
