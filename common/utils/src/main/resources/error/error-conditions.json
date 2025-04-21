@@ -4066,7 +4066,7 @@
   },
   "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED" : {
     "message" : [
-      "Detected nested outer references <expression> in the subquery.This is not supported in the current version."
+      "Detected outer scope references <expression> in the subquery.This is not supported in the current version."
     ],
     "sqlState" : "0A000"
   },

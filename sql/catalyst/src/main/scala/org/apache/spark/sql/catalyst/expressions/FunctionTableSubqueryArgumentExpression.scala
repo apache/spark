@@ -67,14 +67,14 @@ import org.apache.spark.sql.types.DataType
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
-    nestedOuterAttrs: Seq[Expression] = Seq.empty,
+    outerScopeAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     partitionByExpressions: Seq[Expression] = Seq.empty,
     withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty,
     selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
   extends SubqueryExpression(
-    plan, outerAttrs, nestedOuterAttrs, exprId, Seq.empty, None) with Unevaluable {
+    plan, outerAttrs, outerScopeAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
     "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
@@ -88,20 +88,20 @@ case class FunctionTableSubqueryArgumentExpression(
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
-  override def withNewNestedOuterAttrs(
-    nestedOuterAttrs: Seq[Expression]
+  override def withNewOuterScopeAttrs(
+    outerScopeAttrs: Seq[Expression]
   ): FunctionTableSubqueryArgumentExpression = {
-    assert(nestedOuterAttrs.toSet.subsetOf(outerAttrs.toSet),
-      s"nestedOuterAttrs must be a subset of outerAttrs, " +
-        s"but got ${nestedOuterAttrs.mkString(", ")}")
-    copy(nestedOuterAttrs = nestedOuterAttrs)
+    assert(outerScopeAttrs.toSet.subsetOf(outerAttrs.toSet),
+      s"outerScopeAttrs must be a subset of outerAttrs, " +
+        s"but got ${outerScopeAttrs.mkString(", ")}")
+    copy(outerScopeAttrs = outerScopeAttrs)
   }
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
     FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
-      nestedOuterAttrs.map(_.canonicalized),
+      outerScopeAttrs.map(_.canonicalized),
       ExprId(0),
       partitionByExpressions,
       withSinglePartition,

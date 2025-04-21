@@ -115,9 +115,9 @@ object ValidateSubqueryExpression
             case o@OuterReference(a) =>
               p.children.foreach(e =>
                 if (!e.output.exists(_.exprId == o.exprId) &&
-                  !expr.getNestedOuterAttrs.contains(a)) {
+                  !expr.getOuterScopeAttrs.contains(a)) {
                   // If the outer reference is not found in the children plan,
-                  // it should be a nested outer reference. Otherwise, it is
+                  // it should be a outer scope reference. Otherwise, it is
                   // invalid.
                   o.failAnalysis(
                     errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
@@ -131,12 +131,12 @@ object ValidateSubqueryExpression
     }
 
     def checkNestedOuterReferences(expr: SubqueryExpression): Unit = {
-      if (expr.getNestedOuterAttrs.nonEmpty) {
+      if (expr.getOuterScopeAttrs.nonEmpty) {
         if (!SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) {
           throw new AnalysisException(
             errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
             messageParameters = Map(
-              "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+              "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
           )
         }
         expr match {
@@ -146,7 +146,7 @@ object ValidateSubqueryExpression
             throw new AnalysisException(
               errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
               messageParameters = Map(
-                "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+                "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
             )
           case _: ListQuery if
             !SQLConf.get.getConf(
@@ -154,7 +154,7 @@ object ValidateSubqueryExpression
             throw new AnalysisException(
               errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
               messageParameters = Map(
-                "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+                "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
             )
           case _: Exists if
             !SQLConf.get.getConf(
@@ -162,7 +162,7 @@ object ValidateSubqueryExpression
             throw new AnalysisException(
               errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
               messageParameters = Map(
-                "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+                "expression" -> expr.getOuterScopeAttrs.map(_.sql).mkString(","))
             )
           case _ => // Do nothing
         }

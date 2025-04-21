@@ -68,13 +68,13 @@ case class DynamicPruningSubquery(
     copy()
   }
 
-  override def withNewNestedOuterAttrs(
-    nestedOuterAttrs: Seq[Expression]
+  override def withNewOuterScopeAttrs(
+    outerScopeAttrs: Seq[Expression]
   ): DynamicPruningSubquery = {
-    // DynamicPruningSubquery should not have nested outer attrs
-    if (nestedOuterAttrs.nonEmpty) {
+    // DynamicPruningSubquery should not have outer scope attrs
+    if (outerScopeAttrs.nonEmpty) {
       throw SparkException.internalError(
-        "DynamicPruningSubquery should not have nested outer attributes.")
+        "DynamicPruningSubquery should not have outer scope attributes.")
     }
     copy()
   }
