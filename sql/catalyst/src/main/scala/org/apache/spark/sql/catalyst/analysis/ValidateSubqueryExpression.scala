@@ -131,13 +131,41 @@ object ValidateSubqueryExpression
     }
 
     def checkNestedOuterReferences(expr: SubqueryExpression): Unit = {
-      if ((!SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) &&
-        expr.getNestedOuterAttrs.nonEmpty) {
-        throw new AnalysisException(
-          errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
-          messageParameters = Map(
-            "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
-        )
+      if (expr.getNestedOuterAttrs.nonEmpty) {
+        if (!SQLConf.get.getConf(SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES)) {
+          throw new AnalysisException(
+            errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+            messageParameters = Map(
+              "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+          )
+        }
+        expr match {
+          case _: ScalarSubquery if
+            !SQLConf.get.getConf(
+              SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_SCALARSUBQUERIES) =>
+            throw new AnalysisException(
+              errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+              messageParameters = Map(
+                "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+            )
+          case _: ListQuery if
+            !SQLConf.get.getConf(
+              SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_INSUBQUERIES) =>
+            throw new AnalysisException(
+              errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+              messageParameters = Map(
+                "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+            )
+          case _: Exists if
+            !SQLConf.get.getConf(
+              SQLConf.SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_EXISTSSUBQUERIES) =>
+            throw new AnalysisException(
+              errorClass = "NESTED_REFERENCES_IN_SUBQUERY_NOT_SUPPORTED",
+              messageParameters = Map(
+                "expression" -> expr.getNestedOuterAttrs.map(_.sql).mkString(","))
+            )
+          case _ => // Do nothing
+        }
       }
     }
 

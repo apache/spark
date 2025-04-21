@@ -6,6 +6,24 @@ SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled,Some(t
 
 
 -- !query
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled,Some(true))
+
+
+-- !query
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled,Some(true))
+
+
+-- !query
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled,Some(true))
+
+
+-- !query
 SELECT 1 FROM (SELECT 1) t0(c0) WHERE (SELECT (SELECT c0)) = 1
 -- !query analysis
 Project [1 AS 1#x]

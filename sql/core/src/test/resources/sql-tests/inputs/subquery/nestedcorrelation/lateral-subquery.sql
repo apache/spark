@@ -1,6 +1,8 @@
 --ONLY_IF spark
-
 set spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true;
 
 DROP TABLE IF EXISTS t;
 CREATE TABLE t(ps_supplycost INT, n_name INT);

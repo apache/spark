@@ -6,6 +6,24 @@ SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled,Some(t
 
 
 -- !query
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled,Some(true))
+
+
+-- !query
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled,Some(true))
+
+
+-- !query
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled,Some(true))
+
+
+-- !query
 DROP TABLE IF EXISTS tbl
 -- !query analysis
 DropTable true, false

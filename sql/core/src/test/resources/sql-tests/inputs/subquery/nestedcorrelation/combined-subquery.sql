@@ -1,6 +1,8 @@
 --ONLY_IF spark
-
 set spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true;
 
 DROP TABLE IF EXISTS tbl;
 CREATE TABLE tbl(a TINYINT, b SMALLINT, c INTEGER, d BIGINT, e VARCHAR(1), f DATE, g TIMESTAMP);

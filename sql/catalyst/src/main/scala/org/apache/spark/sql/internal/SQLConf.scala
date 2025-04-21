@@ -4237,10 +4237,47 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  // TODO: remove this flag when the nested correlations handling is stable.
   val SUPPORT_NESTED_CORRELATED_SUBQUERIES =
     buildConf("spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled")
       .internal()
-      .doc("If enabled, support nested correlated subqueries")
+      .doc("If enabled, support nested correlated subqueries. This is a temporary flag " +
+        "to enable the new implementation of nested correlated subqueries." +
+        "This flag should be set to true when the new implementation is stable " +
+        "in both analyzer and optimizer. Otherwise, it should be set to false by default.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_SCALARSUBQUERIES =
+    buildConf("spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled")
+      .internal()
+      .doc("If enabled, support nested correlated scalar subqueries. This is a temporary flag " +
+        "to enable the new implementation of nested correlated subqueries." +
+        "This flag should be set to true when the new implementation is stable " +
+        "in both analyzer and optimizer. Otherwise, it should be set to false by default.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_INSUBQUERIES =
+    buildConf("spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled")
+      .internal()
+      .doc("If enabled, support nested correlated IN subqueries. This is a temporary flag " +
+        "to enable the new implementation of nested correlated subqueries." +
+        "This flag should be set to true when the new implementation is stable " +
+        "in both analyzer and optimizer. Otherwise, it should be set to false by default.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SUPPORT_NESTED_CORRELATED_SUBQUERIES_FOR_EXISTSSUBQUERIES =
+    buildConf("spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled")
+      .internal()
+      .doc("If enabled, support nested correlated EXISTS subqueries. This is a temporary flag " +
+        "to enable the new implementation of nested correlated subqueries." +
+        "This flag should be set to true when the new implementation is stable " +
+        "in both analyzer and optimizer. Otherwise, it should be set to false by default.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)

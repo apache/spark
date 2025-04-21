@@ -1,5 +1,8 @@
 --ONLY_IF spark
 set spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true;
 
 SELECT 1 FROM (SELECT 1) t0(c0) WHERE (SELECT (SELECT c0)) = 1;
 

@@ -1,3 +1,9 @@
+--ONLY_IF spark
+set spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true;
+set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true;
+
 DROP TABLE IF EXISTS table_integers;
 CREATE TABLE table_integers(i INTEGER);
 INSERT INTO table_integers VALUES (1), (2), (3), (NULL);
