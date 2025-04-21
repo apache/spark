@@ -96,7 +96,7 @@ Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
 -- !query
 select *, (select count(*) from y where x1 = y1 and y2 = x1 + 1 group by y2) from x
 -- !query analysis
-Project [x1#x, x2#x, scalar-subquery#x [x1#x && x1#x] AS scalarsubquery(x1, x1)#xL]
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
 :  +- Aggregate [y2#x], [count(1) AS count(1)#xL]
 :     +- Filter ((outer(x1#x) = y1#x) AND (y2#x = (outer(x1#x) + 1)))
 :        +- SubqueryAlias y
@@ -113,7 +113,7 @@ Project [x1#x, x2#x, scalar-subquery#x [x1#x && x1#x] AS scalarsubquery(x1, x1)#
 select *, (select count(*) from y where x1 = y1 and cast(y2 as double) = x1 + 1
            group by cast(y2 as double)) from x
 -- !query analysis
-Project [x1#x, x2#x, scalar-subquery#x [x1#x && x1#x] AS scalarsubquery(x1, x1)#xL]
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
 :  +- Aggregate [cast(y2#x as double)], [count(1) AS count(1)#xL]
 :     +- Filter ((outer(x1#x) = y1#x) AND (cast(y2#x as double) = cast((outer(x1#x) + 1) as double)))
 :        +- SubqueryAlias y
@@ -250,7 +250,7 @@ Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
 -- !query
 select *, (select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2) from x
 -- !query analysis
-Project [x1#x, x2#x, scalar-subquery#x [x1#x && x1#x] AS scalarsubquery(x1, x1)#xL]
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
 :  +- Aggregate [y2#x], [count(1) AS count(1)#xL]
 :     +- Filter ((outer(x1#x) = y1#x) AND ((y2#x + 10) = (outer(x1#x) + 1)))
 :        +- SubqueryAlias y

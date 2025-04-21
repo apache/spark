@@ -87,7 +87,7 @@ struct<x1:int,x2:int,scalarsubquery(x1):bigint>
 -- !query
 select *, (select count(*) from y where x1 = y1 and y2 = x1 + 1 group by y2) from x
 -- !query schema
-struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
+struct<x1:int,x2:int,scalarsubquery(x1):bigint>
 -- !query output
 1	1	NULL
 2	2	NULL
@@ -97,7 +97,7 @@ struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
 select *, (select count(*) from y where x1 = y1 and cast(y2 as double) = x1 + 1
            group by cast(y2 as double)) from x
 -- !query schema
-struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
+struct<x1:int,x2:int,scalarsubquery(x1):bigint>
 -- !query output
 1	1	NULL
 2	2	NULL
@@ -221,7 +221,7 @@ org.apache.spark.SparkRuntimeException
 -- !query
 select *, (select count(*) from y where x1 = y1 and y2 + 10 = x1 + 1 group by y2) from x
 -- !query schema
-struct<x1:int,x2:int,scalarsubquery(x1, x1):bigint>
+struct<x1:int,x2:int,scalarsubquery(x1):bigint>
 -- !query output
 1	1	NULL
 2	2	NULL

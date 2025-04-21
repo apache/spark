@@ -45,7 +45,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 SELECT i, (SELECT (SELECT 42+i1.i)+42+i1.i) AS j FROM table_integers i1 ORDER BY i
 -- !query analysis
 Sort [i#x ASC NULLS FIRST], true
-+- Project [i#x, scalar-subquery#x [i#x && i#x] AS j#x]
++- Project [i#x, scalar-subquery#x [i#x] AS j#x]
    :  +- Project [((scalar-subquery#x [i#x] + 42) + outer(i#x)) AS ((scalarsubquery(i) + 42) + outer(i1.i))#x]
    :     :  +- Project [(42 + outer(i#x)) AS (42 + outer(i1.i))#x]
    :     :     +- OneRowRelation
@@ -59,9 +59,9 @@ Sort [i#x ASC NULLS FIRST], true
 SELECT i, (SELECT (SELECT (SELECT (SELECT 42+i1.i)++i1.i)+42+i1.i)+42+i1.i) AS j FROM table_integers i1 ORDER BY i
 -- !query analysis
 Sort [i#x ASC NULLS FIRST], true
-+- Project [i#x, scalar-subquery#x [i#x && i#x && i#x && i#x] AS j#x]
-   :  +- Project [((scalar-subquery#x [i#x && i#x && i#x] + 42) + outer(i#x)) AS ((scalarsubquery(i, i, i) + 42) + outer(i1.i))#x]
-   :     :  +- Project [((scalar-subquery#x [i#x && i#x] + 42) + outer(i#x)) AS ((scalarsubquery(i, i) + 42) + outer(i1.i))#x]
++- Project [i#x, scalar-subquery#x [i#x] AS j#x]
+   :  +- Project [((scalar-subquery#x [i#x] + 42) + outer(i#x)) AS ((scalarsubquery(i) + 42) + outer(i1.i))#x]
+   :     :  +- Project [((scalar-subquery#x [i#x] + 42) + outer(i#x)) AS ((scalarsubquery(i) + 42) + outer(i1.i))#x]
    :     :     :  +- Project [(scalar-subquery#x [i#x] + positive(outer(i#x))) AS (scalarsubquery(i) + (+ outer(i1.i)))#x]
    :     :     :     :  +- Project [(42 + outer(i#x)) AS (42 + outer(i1.i))#x]
    :     :     :     :     +- OneRowRelation
@@ -77,10 +77,10 @@ Sort [i#x ASC NULLS FIRST], true
 SELECT i, (SELECT (SELECT (SELECT (SELECT i1.i+i1.i+i1.i+i1.i+i1.i)))) AS j FROM table_integers i1 ORDER BY i
 -- !query analysis
 Sort [i#x ASC NULLS FIRST], true
-+- Project [i#x, scalar-subquery#x [i#x && i#x && i#x && i#x && i#x] AS j#x]
-   :  +- Project [scalar-subquery#x [i#x && i#x && i#x && i#x && i#x] AS scalarsubquery(i, i, i, i, i)#x]
-   :     :  +- Project [scalar-subquery#x [i#x && i#x && i#x && i#x && i#x] AS scalarsubquery(i, i, i, i, i)#x]
-   :     :     :  +- Project [scalar-subquery#x [i#x && i#x && i#x && i#x && i#x] AS scalarsubquery(i, i, i, i, i)#x]
++- Project [i#x, scalar-subquery#x [i#x] AS j#x]
+   :  +- Project [scalar-subquery#x [i#x] AS scalarsubquery(i)#x]
+   :     :  +- Project [scalar-subquery#x [i#x] AS scalarsubquery(i)#x]
+   :     :     :  +- Project [scalar-subquery#x [i#x] AS scalarsubquery(i)#x]
    :     :     :     :  +- Project [((((outer(i#x) + outer(i#x)) + outer(i#x)) + outer(i#x)) + outer(i#x)) AS ((((outer(i1.i) + outer(i1.i)) + outer(i1.i)) + outer(i1.i)) + outer(i1.i))#x]
    :     :     :     :     +- OneRowRelation
    :     :     :     +- OneRowRelation
@@ -98,7 +98,7 @@ Sort [i#x ASC NULLS FIRST], true
 +- Project [i#x, scalar-subquery#x [i#x] AS j#x]
    :  +- Project [scalar-subquery#x [i#x] AS scalarsubquery(i)#x]
    :     :  +- Project [scalar-subquery#x [i#x] AS scalarsubquery(i)#x]
-   :     :     :  +- Project [scalar-subquery#x [i#x && i#x && i#x && i#x && i#x && i#x] AS scalarsubquery(i, i, i, i, i, i)#x]
+   :     :     :  +- Project [scalar-subquery#x [i#x && i#x] AS scalarsubquery(i, i)#x]
    :     :     :     :  +- Project [(((((outer(i#x) + outer(i#x)) + outer(i#x)) + outer(i#x)) + outer(i#x)) + outer(i#x)) AS (((((outer(i1.i) + outer(i1.i)) + outer(i1.i)) + outer(i1.i)) + outer(i1.i)) + outer(i2.i))#x]
    :     :     :     :     +- OneRowRelation
    :     :     :     +- Filter (i#x = outer(i#x))
@@ -189,7 +189,7 @@ Sort [i#x ASC NULLS FIRST], true
 SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1, (SELECT (SELECT 42+i1.i) AS k) s2) AS j FROM table_integers i1 ORDER BY i
 -- !query analysis
 Sort [i#x ASC NULLS FIRST], true
-+- Project [i#x, scalar-subquery#x [i#x && i#x] AS j#x]
++- Project [i#x, scalar-subquery#x [i#x] AS j#x]
    :  +- Project [(k#x + k#x) AS (k + k)#x]
    :     +- Join Inner
    :        :- SubqueryAlias s1
@@ -211,7 +211,7 @@ Sort [i#x ASC NULLS FIRST], true
 SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1 LEFT OUTER JOIN (SELECT (SELECT 42+i1.i) AS k) s2 ON s1.k=s2.k) AS j FROM table_integers i1 ORDER BY i
 -- !query analysis
 Sort [i#x ASC NULLS FIRST], true
-+- Project [i#x, scalar-subquery#x [i#x && i#x] AS j#x]
++- Project [i#x, scalar-subquery#x [i#x] AS j#x]
    :  +- Project [(k#x + k#x) AS (k + k)#x]
    :     +- Join LeftOuter, (k#x = k#x)
    :        :- SubqueryAlias s1

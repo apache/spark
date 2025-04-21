@@ -546,23 +546,3 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "SELECT MAX(col7)"
   } ]
 }
-
-
--- !query
-CREATE TABLE tbl(a TINYINT, b SMALLINT, c INTEGER, d BIGINT, e VARCHAR(1), f DATE, g TIMESTAMP)
-SELECT 1 FROM tbl t1 JOIN tbl t2 ON (t1.d=t2.d) WHERE EXISTS(SELECT t1.c FROM tbl t3 WHERE t1.d+t3.c<100 AND EXISTS(SELECT t2.f < DATE '2000-01-01'))
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
-  "messageParameters" : {
-    "message" : "Schema may not be specified in a Create Table As Select (CTAS) statement"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 245,
-    "fragment" : "CREATE TABLE tbl(a TINYINT, b SMALLINT, c INTEGER, d BIGINT, e VARCHAR(1), f DATE, g TIMESTAMP)\nSELECT 1 FROM tbl t1 JOIN tbl t2 ON (t1.d=t2.d) WHERE EXISTS(SELECT t1.c FROM tbl t3 WHERE t1.d+t3.c<100 AND EXISTS(SELECT t2.f < DATE '2000-01-01'))"
-  } ]
-}

@@ -529,7 +529,7 @@ Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#x]
 -- !query
 SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1
 -- !query analysis
-Project [t1c#x, scalar-subquery#x [t1c#x && t1c#x] AS scalarsubquery(t1c, t1c)#x]
+Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#x]
 :  +- Project [outer(t1c#x)]
 :     +- Filter (outer(t1c#x) = 8)
 :        +- OneRowRelation
@@ -1023,7 +1023,7 @@ WithCTE
 :  +- SubqueryAlias T
 :     +- Project [1 AS a#x]
 :        +- OneRowRelation
-+- Project [scalar-subquery#x [col#x && col#x] AS scalarsubquery(col, col)#xL]
++- Project [scalar-subquery#x [col#x] AS scalarsubquery(col)#xL]
    :  +- Aggregate [sum(1) AS sum(1)#xL]
    :     +- Filter ((a#x = cast(outer(col#x) as int)) OR (upper(cast(outer(col#x) as string)) = Y))
    :        +- SubqueryAlias T

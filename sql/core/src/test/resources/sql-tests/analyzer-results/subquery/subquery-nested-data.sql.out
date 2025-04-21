@@ -100,7 +100,7 @@ Project [xm#x, x2#x, ym#x, y2#x]
 select * from x join lateral (select * from y where xm[1] = ym[1] union all select * from y where xm[1] = ym[1] + 1)
 -- !query analysis
 Project [xm#x, x2#x, ym#x, y2#x]
-+- LateralJoin lateral-subquery#x [xm#x && xm#x], Inner
++- LateralJoin lateral-subquery#x [xm#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Union false, false
    :        :- Project [ym#x, y2#x]
@@ -174,7 +174,7 @@ Project [xm#x, x2#x]
 select * from x where (select sum(y2) from y where xm[1] = ym[1] and xm[1] >= 1) > 2
 -- !query analysis
 Project [xm#x, x2#x]
-+- Filter (scalar-subquery#x [xm#x && xm#x] > cast(2 as bigint))
++- Filter (scalar-subquery#x [xm#x] > cast(2 as bigint))
    :  +- Aggregate [sum(y2#x) AS sum(y2)#xL]
    :     +- Filter ((outer(xm#x)[1] = ym#x[1]) AND (outer(xm#x)[1] >= 1))
    :        +- SubqueryAlias spark_catalog.default.y
@@ -187,7 +187,7 @@ Project [xm#x, x2#x]
 select * from x where (select sum(y2) from y where xm[1] = ym[1] and xm[2] >= ym[2]) > 2
 -- !query analysis
 Project [xm#x, x2#x]
-+- Filter (scalar-subquery#x [xm#x && xm#x] > cast(2 as bigint))
++- Filter (scalar-subquery#x [xm#x] > cast(2 as bigint))
    :  +- Aggregate [sum(y2#x) AS sum(y2)#xL]
    :     +- Filter ((outer(xm#x)[1] = ym#x[1]) AND (outer(xm#x)[2] >= ym#x[2]))
    :        +- SubqueryAlias spark_catalog.default.y
@@ -230,7 +230,7 @@ Project [xm#x, x2#x, (outer(spark_catalog.default.x.xm)[1] - ym[1])#x]
 select * from x join lateral (select xm[1], xm[1] as s1, xm[1] - ym[1] as s2 from y)
 -- !query analysis
 Project [xm#x, x2#x, outer(spark_catalog.default.x.xm)[1]#x, s1#x, s2#x]
-+- LateralJoin lateral-subquery#x [xm#x && xm#x && xm#x], Inner
++- LateralJoin lateral-subquery#x [xm#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [outer(xm#x)[1] AS outer(spark_catalog.default.x.xm)[1]#x, outer(xm#x)[1] AS s1#x, (outer(xm#x)[1] - ym#x[1]) AS s2#x]
    :        +- SubqueryAlias spark_catalog.default.y
@@ -289,7 +289,7 @@ Project [xm#x, x2#x]
 select * from x where (select sum(y2) from y where xm[x2+1] = ym[1] and xm[1+x2] = ym[2]) > 2
 -- !query analysis
 Project [xm#x, x2#x]
-+- Filter (scalar-subquery#x [xm#x && x2#x && xm#x && x2#x] > cast(2 as bigint))
++- Filter (scalar-subquery#x [xm#x && x2#x] > cast(2 as bigint))
    :  +- Aggregate [sum(y2#x) AS sum(y2)#xL]
    :     +- Filter ((outer(xm#x)[(outer(x2#x) + 1)] = ym#x[1]) AND (outer(xm#x)[(1 + outer(x2#x))] = ym#x[2]))
    :        +- SubqueryAlias spark_catalog.default.y
