@@ -31,7 +31,7 @@ import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -53,6 +53,8 @@ private case class PostgresDialect()
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
+
+  override def isSupportedExtract(extract: Extract): Boolean = true
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
