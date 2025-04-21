@@ -1099,7 +1099,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
           assert(numInternalKeys.longValue() > 0)
         },
         StopStream,
-        // Retart the query from the same checkpoint
+        // Restart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         AddData(input1, 2, 10), // Should join with previous run's data
         CheckNewAnswer((10, 20, 30)),
@@ -1225,6 +1225,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
         MultiAddData(leftInput, 20)(rightInput, 21),
         CheckNewAnswer(),
         StopStream,
+        // Restart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         AddData(rightInput, 20),
         CheckNewAnswer((20, 30, 40, "60"))
@@ -1932,6 +1933,7 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
         // right: 3, 4, 5, 6, 7
         assertNumStateRows(total = 10, updated = 10),
         StopStream,
+        // Restart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         MultiAddData(leftInput, 21)(rightInput, 22),
         // Watermark = 11, should remove rows having window=[0,10].
@@ -1950,6 +1952,7 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
         // right: 3, 4, 5, 6, 7 (below watermark)
         assertNumStateRows(total = 2, updated = 2),
         StopStream,
+        // Restart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         AddData(leftInput, 22),
         CheckNewAnswer(Row(22, 30, 44, 66)),
@@ -1958,6 +1961,7 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
         // right: 22
         assertNumStateRows(total = 3, updated = 1),
         StopStream,
+        // Restart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         AddData(leftInput, 1),
         // Row not add as 1 < state key watermark = 12.
@@ -2171,6 +2175,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
         // right: 22
         assertNumStateRows(total = 2, updated = 0),
         StopStream,
+        // Restart the query from the same checkpoint
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         AddData(leftInput, 1),
         // Row not add as 1 < state key watermark = 12.
