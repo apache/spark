@@ -219,8 +219,7 @@ final class BypassMergeSortShuffleWriter<K, V>
   }
 
   public long getAggregatedChecksumValue() {
-    final long checksum = RowBasedChecksum.getAggregatedChecksumValue(rowBasedChecksums);
-    return checksum;
+    return RowBasedChecksum.getAggregatedChecksumValue(rowBasedChecksums);
   }
 
   /**

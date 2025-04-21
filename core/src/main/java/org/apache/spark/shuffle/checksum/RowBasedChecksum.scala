@@ -48,7 +48,7 @@ abstract class RowBasedChecksum() extends Serializable with Logging {
         checksumValue = checksumValue ^ rowChecksumValue
       } catch {
         case NonFatal(e) =>
-          logInfo("Checksum computation encountered error: ", e)
+          logError("Checksum computation encountered error: ", e)
           hasError = true
       }
     }
@@ -62,6 +62,9 @@ abstract class RowBasedChecksum() extends Serializable with Logging {
  * A Concrete implementation of RowBasedChecksum. The checksum for each row is
  * computed by first converting the (key, value) pair to byte array using OutputStreams,
  * and then computing the checksum for the byte array.
+ * Note that this checksum computation is very expensive, and it is used only in tests
+ * in the core component. A much cheaper implementation of RowBasedChecksum is in
+ * UnsafeRowChecksum.
  *
  * @param checksumAlgorithm the algorithm used for computing checksum.
  */
@@ -105,21 +108,12 @@ object RowBasedChecksum {
   def createPartitionRowBasedChecksums(
       numPartitions: Int,
       checksumAlgorithm: String): Array[RowBasedChecksum] = {
-    val rowBasedChecksums: Array[RowBasedChecksum] = new Array[RowBasedChecksum](numPartitions)
-    for (i <- 0 until numPartitions) {
-      rowBasedChecksums(i) = new OutputStreamRowBasedChecksum(checksumAlgorithm)
-    }
-    rowBasedChecksums
+    Array.tabulate(numPartitions)(_ => new OutputStreamRowBasedChecksum(checksumAlgorithm))
   }
 
   def getAggregatedChecksumValue(rowBasedChecksums: Array[RowBasedChecksum]): Long = {
-    val numPartitions: Int = if (rowBasedChecksums != null) rowBasedChecksums.length else 0
-    var aggregatedChecksum: Long = 0
-    if (numPartitions > 0) {
-      for (i <- 0 until numPartitions) {
-        aggregatedChecksum = aggregatedChecksum * 31 + rowBasedChecksums(i).getValue
-      }
-    }
-    return aggregatedChecksum
+    Option(rowBasedChecksums)
+      .map(_.foldLeft(0L)((acc, c) => acc * 31L + c.getValue))
+      .getOrElse(0L)
   }
 }
