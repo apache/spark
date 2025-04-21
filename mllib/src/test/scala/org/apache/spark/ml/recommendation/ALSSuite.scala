@@ -1133,7 +1133,7 @@ class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     import testImplicits._
 
     val als = new ALS().setMaxIter(1).setRank(8)
-    val estimatedSavedModelSize = (3 + 2) * 8 * 2
+    val estimatedSavedModelSize = (3 + 2) * (8 + 1) * 4
     val df = sc.parallelize(Seq(
       (123, 1, 0.5),
       (123, 2, 0.7),

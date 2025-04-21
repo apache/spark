@@ -543,7 +543,7 @@ class ALSModel private[ml] (
   override def estimatedSavedSize: Long = {
     val userCount = userFactors.count()
     val itemCount = itemFactors.count()
-    (userCount + itemCount) * rank * 2
+    (userCount + itemCount) * (rank + 1) * 4
   }
 }
 
@@ -781,7 +781,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val userCount = dataset.select(getUserCol).distinct().count()
     val itemCount = dataset.select(getItemCol).distinct().count()
     val rank = getRank
-    (userCount + itemCount) * rank * 2
+    (userCount + itemCount) * (rank + 1) * 4
   }
 }
 
