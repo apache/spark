@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
  * Resolves string types in logical plans by assigning them the appropriate collation. The
- * collation is inherited from the relevant object in the hierarchy (e.g., table/view → schema →
+ * collation is inherited from the relevant object in the hierarchy (e.g., table/view -> schema ->
  * catalog). This rule is primarily applied to DDL commands, but it can also be triggered in other
  * scenarios. For example, when querying a view, its query is re-resolved each time, and that query
  * can take various forms.
