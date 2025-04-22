@@ -516,4 +516,7 @@ case class InMemoryRelation(
 
   override def simpleString(maxFields: Int): String =
     s"InMemoryRelation [${truncatedString(output, ", ", maxFields)}], ${cacheBuilder.storageLevel}"
+
+  override def stringArgs: Iterator[Any] =
+    Iterator(output, cacheBuilder.storageLevel, outputOrdering)
 }
