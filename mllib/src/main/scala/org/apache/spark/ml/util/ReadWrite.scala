@@ -18,10 +18,13 @@
 package org.apache.spark.ml.util
 
 import java.io.IOException
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, ServiceLoader}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
@@ -30,7 +33,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PATH
@@ -442,7 +445,7 @@ private[ml] object DefaultParamsWriter {
     val metadataJson = getMetadataToSave(instance, spark, extraMetadata, paramMap)
     // Note that we should write single file. If there are more than one row
     // it produces more partitions.
-    spark.createDataFrame(Seq(Tuple1(metadataJson))).write.text(metadataPath)
+    ReadWriteUtils.saveText(metadataPath, metadataJson, spark)
   }
 
   def saveMetadata(
@@ -662,7 +665,7 @@ private[ml] object DefaultParamsReader {
 
   def loadMetadata(path: String, spark: SparkSession, expectedClassName: String): Metadata = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataStr = spark.read.text(metadataPath).first().getString(0)
+    val metadataStr = ReadWriteUtils.loadText(metadataPath, spark)
     parseMetadata(metadataStr, expectedClassName)
   }
 
@@ -771,6 +774,94 @@ private[spark] class FileSystemOverwrite extends Logging {
           s"please use write.overwrite().save(path) for Scala and use " +
           s"write().overwrite().save(path) for Java and Python.")
       }
+    }
+  }
+}
+
+
+private[spark] object ReadWriteUtils {
+
+  val localSavingModeState = new ThreadLocal[Boolean]() {
+    override def initialValue: Boolean = false
+  }
+
+  def saveText(path: String, data: String, spark: SparkSession): Unit = {
+    if (localSavingModeState.get()) {
+      val filePath = Paths.get(path)
+
+      Files.createDirectories(filePath.getParent)
+      Files.writeString(filePath, data)
+    } else {
+      spark.createDataFrame(Seq(Tuple1(data))).write.text(path)
+    }
+  }
+
+  def loadText(path: String, spark: SparkSession): String = {
+    if (localSavingModeState.get()) {
+      Files.readString(Paths.get(path))
+    } else {
+      spark.read.text(path).first().getString(0)
+    }
+  }
+
+  def saveObject[T <: Product: ClassTag: TypeTag](
+      path: String, data: T, spark: SparkSession
+  ): Unit = {
+    if (localSavingModeState.get()) {
+      val serializer = SparkEnv.get.serializer.newInstance()
+      val dataBuffer = serializer.serialize(data)
+      val dataBytes = new Array[Byte](dataBuffer.limit)
+      dataBuffer.get(dataBytes)
+
+      val filePath = Paths.get(path)
+
+      Files.createDirectories(filePath.getParent)
+      Files.write(filePath, dataBytes)
+    } else {
+      spark.createDataFrame[T](Seq(data)).write.parquet(path)
+    }
+  }
+
+  def loadObject[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): T = {
+    if (localSavingModeState.get()) {
+      val serializer = SparkEnv.get.serializer.newInstance()
+
+      val dataBytes = Files.readAllBytes(Paths.get(path))
+      serializer.deserialize[T](java.nio.ByteBuffer.wrap(dataBytes))
+    } else {
+      import spark.implicits._
+      spark.read.parquet(path).as[T].head()
+    }
+  }
+
+  def saveArray[T <: Product: ClassTag: TypeTag](
+      path: String, data: Array[T], spark: SparkSession
+  ): Unit = {
+    if (localSavingModeState.get()) {
+      val serializer = SparkEnv.get.serializer.newInstance()
+      val dataBuffer = serializer.serialize(data)
+      val dataBytes = new Array[Byte](dataBuffer.limit)
+      dataBuffer.get(dataBytes)
+
+      val filePath = Paths.get(path)
+
+      Files.createDirectories(filePath.getParent)
+      Files.write(filePath, dataBytes)
+    } else {
+      import org.apache.spark.util.ArrayImplicits._
+      spark.createDataFrame[T](data.toImmutableArraySeq).write.parquet(path)
+    }
+  }
+
+  def loadArray[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): Array[T] = {
+    if (localSavingModeState.get()) {
+      val serializer = SparkEnv.get.serializer.newInstance()
+
+      val dataBytes = Files.readAllBytes(Paths.get(path))
+      serializer.deserialize[Array[T]](java.nio.ByteBuffer.wrap(dataBytes))
+    } else {
+      import spark.implicits._
+      spark.read.parquet(path).as[T].collect()
     }
   }
 }
