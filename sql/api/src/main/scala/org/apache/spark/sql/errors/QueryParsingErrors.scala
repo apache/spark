@@ -687,7 +687,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def invalidTableValuedFunctionNameError(
       name: Seq[String],
-      ctx: TableValuedFunctionContext): Throwable = {
+      ctx: FunctionTableContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
       messageParameters = Map("funcName" -> toSQLId(name)),

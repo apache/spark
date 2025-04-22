@@ -853,7 +853,7 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    * operation to logical plan
    */
-  private def withInsertInto(
+  protected def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     ctx match {
@@ -2346,22 +2346,25 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
-    val func = ctx.functionTable
-    val aliases = if (func.tableAlias.identifierList != null) {
-      visitIdentifierList(func.tableAlias.identifierList)
+    visitFunctionTable(ctx.functionTable)
+  }
+
+  override def visitFunctionTable(ctx: FunctionTableContext) : LogicalPlan = withOrigin(ctx) {
+    val aliases = if (ctx.tableAlias.identifierList != null) {
+      visitIdentifierList(ctx.tableAlias.identifierList)
     } else {
       Seq.empty
     }
 
     withFuncIdentClause(
-      func.functionName,
+      ctx.functionName,
       Nil,
       (ident, _) => {
         if (ident.length > 1) {
           throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
         }
-        val funcName = func.functionName.getText
-        val args = func.functionTableArgument.asScala.map { e =>
+        val funcName = ctx.functionName.getText
+        val args = ctx.functionTableArgument.asScala.map { e =>
           Option(e.functionArgument).map(extractNamedArgument(_, funcName))
             .getOrElse {
               extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
@@ -2372,8 +2375,28 @@ class AstBuilder extends DataTypeAstBuilder
 
         val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
 
-        tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+        tvfAliases.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
       })
+  }
+
+  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+    withOrigin(ctx) {
+      visitFunctionTable(ctx.functionTable).transformUp {
+        case tvf: UnresolvedTableValuedFunction => tvf.copy(isStreaming = true)
+      }
+    }
+
+  override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
+    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableRelation = createUnresolvedRelation(
+      ctx = ctx,
+      ident = ident,
+      optionsClause = None,
+      writePrivileges = Seq.empty)
+    val tableWithAlias = mayApplyAliasPlan(ctx.tableAlias, tableRelation)
+    tableWithAlias.transformUp {
+      case r: UnresolvedRelation => r.copy(isStreaming = true)
+    }
   }
 
   /**
@@ -4782,7 +4805,7 @@ class AstBuilder extends DataTypeAstBuilder
     (fileFormatSerdeInfo ++ rowFormatSerdeInfo).reduceLeftOption((l, r) => l.merge(r))
   }
 
-  private def partitionExpressions(
+  protected[sql] def partitionExpressions(
       partTransforms: Seq[Transform],
       partCols: Seq[ColumnDefinition],
       ctx: ParserRuleContext): Seq[Transform] = {

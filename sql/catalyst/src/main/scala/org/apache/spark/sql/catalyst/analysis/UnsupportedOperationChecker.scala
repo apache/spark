@@ -37,9 +37,14 @@ import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
  */
 object UnsupportedOperationChecker extends Logging {
 
-  def checkForBatch(plan: LogicalPlan): Unit = {
+  def checkForBatch(plan: LogicalPlan, isSqlContext: Boolean): Unit = {
     plan.foreachUp {
       case p if p.isStreaming =>
+        if (isSqlContext) {
+          throwError("SQL streaming queries must be executed with a Spark Declarative Pipeline. " +
+            "Either remove the streaming source from your statement, or run your statement in a " +
+            "Spark Declarative Pipeline")(p)
+        }
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
       case d: DeduplicateWithinWatermark =>

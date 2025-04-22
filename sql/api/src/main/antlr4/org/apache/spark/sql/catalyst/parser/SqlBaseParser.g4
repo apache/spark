@@ -349,6 +349,32 @@ statement
         (functionArgument (COMMA functionArgument)*)?
         RIGHT_PAREN                                                    #call
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    | createPipelineDatasetHeader (LEFT_PAREN colDefinitionList? RIGHT_PAREN)? tableProvider?
+        createTableClauses
+        (AS query)?                                                    #createPipelineDataset
+    | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
+    ;
+
+materializedView
+    : MATERIALIZED VIEW
+    ;
+
+streamingTable
+    : STREAMING TABLE
+    ;
+
+createPipelineDatasetHeader
+    : CREATE
+      (materializedView | streamingTable)
+      (IF errorCapturingNot EXISTS)?
+      identifierReference
+    ;
+
+streamRelationPrimary
+    : STREAM multipartIdentifier tableAlias                           #streamTableName
+    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN tableAlias    #streamTableName
+    | STREAM functionTable                                            #streamTableValuedFunction
+    | STREAM LEFT_PAREN functionTable RIGHT_PAREN                     #streamTableValuedFunction
     ;
 
 setResetStatement
@@ -512,6 +538,10 @@ partitionSpec
 partitionVal
     : identifier (EQ constant)?
     | identifier EQ DEFAULT
+    ;
+
+createPipelineFlowHeader
+    : CREATE FLOW flowName=multipartIdentifier (commentSpec)? AS
     ;
 
 namespace
@@ -973,7 +1003,8 @@ identifierComment
     ;
 
 relationPrimary
-    : identifierReference temporalClause?
+    : streamRelationPrimary                                 #streamRelation
+    | identifierReference temporalClause?
       optionsClause? sample? tableAlias                     #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
     | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
@@ -1768,6 +1799,7 @@ ansiNonReserved
     | FILEFORMAT
     | FIRST
     | FLOAT
+    | FLOW
     | FOLLOWING
     | FORMAT
     | FORMATTED
@@ -1823,6 +1855,7 @@ ansiNonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATERIALIZED
     | MERGE
     | MICROSECOND
     | MICROSECONDS
@@ -1923,6 +1956,7 @@ ansiNonReserved
     | STRATIFY
     | STRING
     | STRUCT
+    | STREAMING
     | SUBSTR
     | SUBSTRING
     | SYNC

@@ -4543,6 +4543,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_DATASET_WITHOUT_FLOW" : {
+    "message" : [
+      "Pipeline dataset <identifier> does not have any defined flows. Please attach a query with the dataset's definition, or explicitly define at least one flow that writes to the dataset."
+    ],
+    "sqlState": "0A000"
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>."
@@ -5844,6 +5850,16 @@
           "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
+      "CREATE_FLOW_QUERY_EXECUTION": {
+        "message" : [
+          "Direct execution of a CREATE FLOW statement is not supported. To create a flow, create and execute a pipeline with a SQL file containing your statement attached in the pipeline spec."
+        ]
+      },
+      "CREATE_PIPELINE_DATASET_QUERY_EXECUTION": {
+        "message" : [
+          "Direct execution of a CREATE ... <pipelineDatasetType> query. To create a pipeline dataset, create and execute a pipeline with a SQL file containing your query attached in the pipeline definition."
+        ]
+      },
       "DESC_TABLE_COLUMN_JSON" : {
         "message" : [
           "DESC TABLE COLUMN AS JSON not supported for individual columns."
@@ -6316,6 +6332,12 @@
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
+    "message" : [
+      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
+    ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [

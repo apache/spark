@@ -2105,6 +2105,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   catalog, "table-valued functions")
               }
             }
+            if (u.isStreaming && !resolvedFunc.isStreaming) {
+              // If the function was marked as streaming in the SQL statement but its determined
+              // through resolution that the underlying function does not actually produce a
+              // streaming relation, throw an unsupported streaming exception.
+              throw QueryCompilationErrors.unsupportedStreamingTVF(u.funcName)
+            }
             resolvedFunc.transformAllExpressionsWithPruning(
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
               case t: FunctionTableSubqueryArgumentExpression =>

@@ -3976,6 +3976,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def unsupportedCreatePipelineFlowQueryExecutionError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION"
+    )
+  }
+
+  def unsupportedCreatePipelineDatasetQueryExecutionError(
+      pipelineDatasetType: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType)
+    )
+  }
+
   def avroIncompatibleReadError(
       avroPath: String,
       sqlPath: String,
@@ -4355,5 +4369,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ),
       origin = origin
     )
+  }
+
+  def unsupportedStreamingTVF(funcName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 }
