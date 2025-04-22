@@ -18,7 +18,7 @@
 import tempfile
 import unittest
 
-from pyspark.sql import Row
+from pyspark.sql import is_remote, Row
 import pyspark.sql.functions as sf
 from pyspark.ml.fpm import (
     FPGrowth,
@@ -29,6 +29,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class FPMTestsMixin:
+    @unittest.skipIf(is_remote(), "Do not support Spark Connect.")
     def test_fp_growth(self):
         df = self.spark.createDataFrame(
             [

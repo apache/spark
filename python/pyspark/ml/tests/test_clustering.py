@@ -37,6 +37,7 @@ from pyspark.ml.clustering import (
     DistributedLDAModel,
     PowerIterationClustering,
 )
+from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -376,6 +377,7 @@ class ClusteringTestsMixin:
             model2 = LocalLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    @unittest.skipIf(is_remote(), "Do not support Spark Connect.")
     def test_distributed_lda(self):
         spark = self.spark
         df = (
