@@ -629,6 +629,61 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
+class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
+    """
+    Serializer used by Python worker to evaluate Arrow UDFs
+    """
+
+    def __init__(self, assign_cols_by_name):
+        super(ArrowStreamArrowUDFSerializer, self).__init__()
+        self._assign_cols_by_name = assign_cols_by_name
+
+    """
+    Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
+    for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
+    """
+
+    def load_stream(self, stream):
+        """
+        Flatten the struct into Arrow's record batches.
+        """
+        import pyarrow as pa
+
+        batches = super(ArrowStreamArrowUDFSerializer, self).load_stream(stream)
+        for batch in batches:
+            # struct = batch.column(0)
+            # yield [pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))]
+            yield batch
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+        import pyarrow as pa
+
+        def wrap_and_init_stream():
+            should_write_start_length = True
+            for arr, _ in iterator:
+                assert isinstance(arr, pa.Array), type(batch)
+
+                batch = pa.RecordBatch.from_arrays([arr], ["_0"])
+
+                # Write the first record batch with initialization.
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+                yield batch
+
+        return super(ArrowStreamArrowUDFSerializer, self).dump_stream(
+            wrap_and_init_stream(), stream
+        )
+
+    def __repr__(self):
+        return "ArrowStreamArrowUDFSerializer"
+
+
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.

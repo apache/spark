@@ -49,7 +49,8 @@ case class UserDefinedPythonFunction(
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+        || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
