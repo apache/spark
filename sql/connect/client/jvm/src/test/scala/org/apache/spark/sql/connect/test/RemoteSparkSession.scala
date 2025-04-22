@@ -223,8 +223,9 @@ trait RemoteSparkSession
 
   override def afterAll(): Unit = {
     def isArrowAllocatorIssue(message: String): Boolean = {
-      Option(message).exists(m => m.contains("closed with outstanding") ||
-        m.contains("Memory leaked"))
+      Option(message).exists(m =>
+        m.contains("closed with outstanding") ||
+          m.contains("Memory leaked"))
     }
     try {
       if (spark != null) spark.stop()
