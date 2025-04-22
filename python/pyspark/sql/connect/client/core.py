@@ -686,7 +686,7 @@ class SparkConnectClient(object):
         self._progress_handlers: List[ProgressHandler] = []
 
         # cleanup ml cache if possible
-        atexit.register(self._cleanup_ml)
+        atexit.register(self._cleanup_ml_cache)
 
     @property
     def _stub(self) -> grpc_lib.SparkConnectServiceStub:
