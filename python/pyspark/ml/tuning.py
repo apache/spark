@@ -59,6 +59,7 @@ from pyspark.ml.util import (
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql import functions as F
+from pyspark.sql import is_remote
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -112,6 +113,12 @@ def _parallelFitTasks(
 
     def singleTask() -> Tuple[int, float, Transformer]:
         index, model = next(modelIter)
+
+        if collectSubModel and is_remote():
+            # In remote mode, we need to explicitly disable the
+            # model __del__ which seems to be triggered inside thread pool.
+            train._session.client.thread_local.disable_ml_del = True
+
         # TODO: duplicate evaluator to take extra params from input
         #  Note: Supporting tuning params in evaluator need update method
         #  `MetaAlgorithmReadWrite.getAllNestedStages`, make it return
@@ -873,6 +880,11 @@ class CrossValidator(
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
+
+        if is_remote():
+            # the main thread should not be affected
+            assert not hasattr(dataset._session.client.thread_local, "disable_ml_del")
+
         return self._copyValues(
             CrossValidatorModel(bestModel, metrics, cast(List[List[Model]], subModels), std_metrics)
         )
@@ -1504,6 +1516,11 @@ class TrainValidationSplit(
         else:
             bestIndex = np.argmin(cast(List[float], metrics))
         bestModel = est.fit(dataset, epm[bestIndex])
+
+        if is_remote():
+            # the main thread should not be affected
+            assert not hasattr(dataset._session.client.thread_local, "disable_ml_del")
+
         return self._copyValues(
             TrainValidationSplitModel(
                 bestModel,

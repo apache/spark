@@ -1981,7 +1981,9 @@ class SparkConnectClient(object):
         self.thread_local.ml_caches.add(cache_id)
 
     def remove_ml_cache(self, cache_id: str) -> None:
-        if hasattr(self.thread_local, "ml_caches"):
+        if hasattr(self.thread_local, "ml_caches") and not hasattr(
+            self.thread_local, "disable_ml_del"
+        ):
             if cache_id in self.thread_local.ml_caches:
                 deleted = self._delete_ml_cache([cache_id])
                 for obj_id in deleted:
