@@ -47,9 +47,9 @@ import org.apache.spark.sql.types.DataType
  * @param outerAttrs outer references of this subquery plan, generally empty since these table
  *                   arguments do not allow correlated references currently
  * @param outerScopeAttrs outer references of the subquery plan that cannot be resolved by the
- *                         direct containing query of the subquery. They have to be the subset of
- *                         outerAttrs and are generally empty since these table arguments do not
- *                         allow correlated references currently
+ *                        direct containing query of the subquery. They have to be the subset of
+ *                        outerAttrs and are generally empty since these table arguments do not
+ *                        allow correlated references currently
  * @param exprId expression ID of this subquery expression, generally generated afresh each time
  * @param partitionByExpressions if non-empty, the TABLE argument included the PARTITION BY clause
  *                               to indicate that the input relation should be repartitioned by the
