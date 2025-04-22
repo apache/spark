@@ -293,22 +293,29 @@ case class TransformWithStateExec(
       keyRow: UnsafeRow,
       initStateIter: Iterator[InternalRow]): Unit = {
 
-    val getInitStateValueObj =
-      ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
+    try {
+      val getInitStateValueObj =
+        ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
 
-    val keyObj = getKeyObj(keyRow) // convert key to objects
-    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
+      val keyObj = getKeyObj(keyRow) // convert key to objects
+      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+      val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
 
-    initStateObjIter.foreach { initState =>
-      // allow multiple initial state rows on the same grouping key for integration
-      // with state data source reader with initial state
-      statefulProcessor
-        .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
-        .handleInitialState(keyObj, initState,
-          new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction))
+      initStateObjIter.foreach { initState =>
+        // allow multiple initial state rows on the same grouping key for integration
+        // with state data source reader with initial state
+        statefulProcessor
+          .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
+          .handleInitialState(keyObj, initState,
+            new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction))
+      }
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+    } catch {
+      case sparkThrowable: SparkThrowable =>
+        throw sparkThrowable
+      case e: Exception =>
+        throw TransformWithStateUserFunctionException(e)
     }
-    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
   private def processNewData(dataIter: Iterator[InternalRow]): Iterator[InternalRow] = {
@@ -323,19 +330,26 @@ case class TransformWithStateExec(
       keyObj: Any,
       expiryTimestampMs: Long,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
-    val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
-    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val mappedIterator = statefulProcessor.handleExpiredTimer(
-      keyObj,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
-      new ExpiredTimerInfoImpl(Some(expiryTimestampMs))).map { obj =>
-      getOutputRow(obj)
-    }
-    ImplicitGroupingKeyTracker.removeImplicitKey()
+    try {
+      val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+      val mappedIterator = statefulProcessor.handleExpiredTimer(
+        keyObj,
+        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
+        new ExpiredTimerInfoImpl(Some(expiryTimestampMs))).map { obj =>
+        getOutputRow(obj)
+      }
+      ImplicitGroupingKeyTracker.removeImplicitKey()
 
-    iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
-      processorHandle.deleteTimer(expiryTimestampMs)
-    })
+      iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
+        processorHandle.deleteTimer(expiryTimestampMs)
+      })
+    } catch {
+      case sparkThrowable: SparkThrowable =>
+        throw sparkThrowable
+      case e: Exception =>
+        throw TransformWithStateUserFunctionException(e)
+    }
   }
 
   private def processTimers(
