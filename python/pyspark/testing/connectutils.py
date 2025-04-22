@@ -190,7 +190,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     def setUp(self) -> None:
         # force to clean up the ML cache before each test
-        self.spark.client._cleanup_ml()
+        self.spark.client._cleanup_ml_cache()
 
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote
@@ -233,7 +233,7 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
 
     def setUp(self) -> None:
         # force to clean up the ML cache before each test
-        self.connect.client._cleanup_ml()
+        self.connect.client._cleanup_ml_cache()
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.classic.dataframe import DataFrame as SDF

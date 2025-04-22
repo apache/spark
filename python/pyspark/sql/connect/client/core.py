@@ -2007,7 +2007,7 @@ class SparkConnectClient(object):
         except Exception:
             return []
 
-    def _cleanup_ml(self) -> None:
+    def _cleanup_ml_cache(self) -> None:
         if hasattr(self.thread_local, "ml_caches"):
             try:
                 command = pb2.Command()
