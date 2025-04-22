@@ -90,14 +90,20 @@ case class FunctionTableSubqueryArgumentExpression(
     "WITH SINGLE PARTITION is mutually exclusive with PARTITION BY")
 
   override def dataType: DataType = plan.schema
+
   override def nullable: Boolean = false
+
   override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =
     copy(plan = plan)
+
   override def withNewOuterAttrs(outerAttrs: Seq[Expression])
   : FunctionTableSubqueryArgumentExpression = copy(outerAttrs = outerAttrs)
+
   override def hint: Option[HintInfo] = None
+
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
+
   override def withNewOuterScopeAttrs(
     outerScopeAttrs: Seq[Expression]
   ): FunctionTableSubqueryArgumentExpression = {
@@ -106,6 +112,7 @@ case class FunctionTableSubqueryArgumentExpression(
   }
 
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
+
   override lazy val canonicalized: Expression = {
     FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
