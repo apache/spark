@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.{hasCorrelatedSubquery, hasSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
@@ -205,6 +204,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       OptimizeOneRowRelationSubquery,
       PullOutNestedDataOuterRefExpressions,
       PullupCorrelatedPredicates),
+    Batch("Rewrite Nested Correlated Subqueries", Once,
+      RewriteDomainJoinsInSubqueries,
+    )
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
@@ -295,6 +297,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteIntersectAll.ruleName,
       ReplaceDistinctWithAggregate.ruleName,
       PullupCorrelatedPredicates.ruleName,
+      RewriteDomainJoinsInSubqueries.ruleName,
       RewriteCorrelatedScalarSubquery.ruleName,
       RewritePredicateSubquery.ruleName,
       NormalizeFloatingNumbers.ruleName,

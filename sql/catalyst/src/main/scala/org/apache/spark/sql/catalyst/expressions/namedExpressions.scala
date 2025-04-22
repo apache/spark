@@ -445,6 +445,49 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
+ * A place holder used to hold attributes cannot be solved by the subquery plan and
+ * its immediate parent plan. When rewriting subqueries into joins, joinConds containing
+ * OuterScopeReferences are transformed into filter predicates between the joins transformed
+ * from the subqueries and the outer plan.
+ * It can only be used in the intermediate results in the optimization stage, should not appear
+ * in the physical plan.
+ */
+case class OuterScopeReference(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outerScope"
+
+  override def sql: String = s"$prettyName(${e.sql})"
+  override def name: String = e.name
+  override def qualifier: Seq[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = OuterScopeReference(e.newInstance())
+}
+
+/**
+ * A place holder used to hold attributes need to be propagated up through subqueries.
+ * This should be only used in PullUpCorrelatedPredicates, RewritePredicateSubquery,
+ * RewriteLateralSubquery, RewriteCorrelatedScalarSubquery rules.
+ * It can only be used in the intermediate results in the optimization stage, should not appear
+ * in the physical plan.
+ */
+case class InnerReference(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "inner"
+
+  override def sql: String = s"$prettyName(${e.sql})"
+  override def name: String = e.name
+  override def qualifier: Seq[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = InnerReference(e.newInstance())
+}
+
+/**
  * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
  * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if
  * the lateral column alias can't be resolved, or become a normal resolved column in the rewritten

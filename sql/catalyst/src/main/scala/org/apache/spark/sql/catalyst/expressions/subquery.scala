@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -114,6 +114,14 @@ abstract class SubqueryExpression(
   def hint: Option[HintInfo]
 
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
+
+  override def nodePatternsInternal(): Seq[TreePattern] = {
+    if (outerScopeAttrs.nonEmpty) {
+      Seq(NESTED_CORRELATED_SUBQUERY)
+      } else {
+      Seq()
+    }
+  }
 }
 
 object SubqueryExpression {
@@ -196,6 +204,165 @@ object SubExprUtils extends PredicateHelper {
    */
   def hasOuterReferences(plan: LogicalPlan): Boolean = {
     plan.exists(_.expressions.exists(containsOuter))
+  }
+
+  /**
+   * Given a logical plan, returns TRUE if it has a SubqueryExpression
+   * with non empty outer references
+   */
+  def containsCorrelatedSubquery(e: Expression): Boolean = {
+    e.exists{
+      case in: InSubquery => in.query.getOuterAttrs.nonEmpty && in.query.getJoinCond.isEmpty
+      case s: SubqueryExpression => s.getOuterAttrs.nonEmpty && s.getJoinCond.isEmpty
+      case _ => false
+    }
+  }
+
+  /**
+   * Given a logical plan, returns TRUE if it has an outer reference or
+   * correlated subqueries.
+   */
+  def hasOuterReferencesConsideringNestedCorrelation(plan: LogicalPlan): Boolean = {
+    plan.exists(_.expressions.exists {
+      expr => containsOuter(expr) || containsCorrelatedSubquery(expr)
+    })
+  }
+
+  /**
+   * Returns TRUE if the scalar subquery has multiple Aggregates and the lower Aggregate
+   * is vulnerable to count bug.
+   * If it returns TRUE, we need to handle the count bug in [[DecorrelateInnerQuery]].
+   * If it returns FALSE, the scalar subquery either does not have a count bug or it
+   * has a count bug but we handle it in [[RewriteCorrelatedScalarSubquery#constructLeftJoins]].
+   */
+  def scalarSubqueryHasCountBug(sub: LogicalPlan): Boolean = {
+    def mayHaveCountBugAgg(a: Aggregate): Boolean = {
+      a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
+        case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
+        case _ => false
+      })
+    }
+
+    // The below logic controls handling count bug for scalar subqueries in
+    // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
+    // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
+    // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
+    // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
+    // not introduced.
+    val conf = SQLConf.get
+    conf.decorrelateInnerQueryEnabled &&
+      !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) &&
+      !(sub match {
+        // Handle count bug only if there exists lower level Aggs with count bugs. It does not
+        // matter if the top level agg is count bug vulnerable or not, because:
+        // 1. If the top level agg is count bug vulnerable, it can be handled in
+        // constructLeftJoins, unless there are lower aggs that are count bug vulnerable.
+        // E.g. COUNT(COUNT + COUNT)
+        // 2. If the top level agg is not count bug vulnerable, it can be count bug vulnerable if
+        // there are lower aggs that are count bug vulnerable. E.g. SUM(COUNT)
+        case agg: Aggregate => !agg.child.exists {
+          case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
+          case _ => false
+        }
+        case _ => false
+      })
+  }
+
+  /** Returns true if 'query' is guaranteed to return at most 1 row. */
+  private def guaranteedToReturnOneRow(query: LogicalPlan): Boolean = {
+    if (query.maxRows.exists(_ <= 1)) {
+      return true
+    }
+    val aggNode = query match {
+      case havingPart@Filter(_, aggPart: Aggregate) => Some(aggPart)
+      case aggPart: Aggregate => Some(aggPart)
+      // LIMIT 1 is handled above, this is for all other types of LIMITs
+      case Limit(_, aggPart: Aggregate) => Some(aggPart)
+      case Project(_, aggPart: Aggregate) => Some(aggPart)
+      case _: LogicalPlan => None
+    }
+    if (!aggNode.isDefined) {
+      return false
+    }
+    val aggregates = aggNode.get.expressions.flatMap(_.collect {
+      case a: AggregateExpression => a
+    })
+    if (aggregates.isEmpty) {
+      return false
+    }
+    nonEquivalentGroupbyCols(query, aggNode.get).isEmpty
+  }
+
+  /** Returns TRUE if the scalarSubquery needs a single join. */
+  def scalarSubqueryNeedsSingleJoinAfterDecorrelate(
+      sub: LogicalPlan, needSingleJoinOld: Option[Boolean]): Boolean = {
+    if (needSingleJoinOld.isDefined) {
+      needSingleJoinOld.get
+    } else {
+      SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN) && !guaranteedToReturnOneRow(sub)
+    }
+  }
+
+  /**
+   * Split the plan for a scalar subquery into the parts above the innermost query block
+   * (first part of returned value), the HAVING clause of the innermost query block
+   * (optional second part) and the Aggregate below the HAVING CLAUSE (optional third part).
+   * When the third part is empty, it means the subquery is a non-aggregated single-row subquery.
+   */
+  def splitSubquery(
+                     plan: LogicalPlan): (Seq[LogicalPlan], Option[Filter], Option[Aggregate]) = {
+    val topPart = ArrayBuffer.empty[LogicalPlan]
+    var bottomPart: LogicalPlan = plan
+    while (true) {
+      bottomPart match {
+        case havingPart @ Filter(_, aggPart: Aggregate) =>
+          return (topPart.toSeq, Option(havingPart), Some(aggPart))
+
+        case aggPart: Aggregate =>
+          // No HAVING clause
+          return (topPart.toSeq, None, Some(aggPart))
+
+        case p @ Project(_, child) =>
+          topPart += p
+          bottomPart = child
+
+        case s @ SubqueryAlias(_, child) =>
+          topPart += s
+          bottomPart = child
+
+        case p: LogicalPlan if p.maxRows.exists(_ <= 1) =>
+          // Non-aggregated one row subquery.
+          return (topPart.toSeq, None, None)
+
+        case Filter(_, op) =>
+          throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op, " below filter")
+
+        case op @ _ => throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(op)
+      }
+    }
+
+    throw QueryExecutionErrors.unreachableError()
+
+  }
+
+  def scalarSubqueryMayHaveCountBugAfterDecorrelate(
+      sub: LogicalPlan,
+      mayHaveCountBugOld: Option[Boolean],
+      handleCountBugInDecorrelate: Boolean): Boolean = {
+    if (mayHaveCountBugOld.isDefined) {
+      // For idempotency, we must save this variable the first time this rule is run, because
+      // decorrelation introduces a GROUP BY is if one wasn't already present.
+      mayHaveCountBugOld.get
+    } else if (handleCountBugInDecorrelate) {
+      // Count bug was already handled in the above decorrelate function call.
+      false
+    } else {
+      // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
+      // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
+      // no COUNT bug.
+      val (topPart, havingNode, aggNode) = splitSubquery(sub)
+      (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
+    }
   }
 
   /**
