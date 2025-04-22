@@ -746,7 +746,7 @@ private[spark] class PythonAccumulatorV2(
       if (isUnixDomainSock) {
         socket = SocketChannel.open(UnixDomainSocketAddress.of(socketPath.get))
         logInfo(
-          log"Connected to AccumulatorServer at socket: ${MDC(SOCKET_ADDRESS, serverHost.get)}")
+          log"Connected to AccumulatorServer at socket: ${MDC(SOCKET_ADDRESS, socketPath.get)}")
       } else {
         socket = SocketChannel.open(new InetSocketAddress(serverHost.get, serverPort.get))
         logInfo(log"Connected to AccumulatorServer at host: ${MDC(HOST, serverHost.get)}" +
