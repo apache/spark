@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -259,26 +260,33 @@ case class TransformWithStateExec(
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
 
-    val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+    try {
+      val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
-    val keyObj = getKeyObj(keyRow)  // convert key to objects
-    val valueObjIter = valueRowIter.map(getValueObj.apply)
+      val keyObj = getKeyObj(keyRow) // convert key to objects
+      val valueObjIter = valueRowIter.map(getValueObj.apply)
 
-    // The statefulProcessor's handleInputRows method may create an eager iterator,
-    // and in that case, the implicit key needs to be set now. However, it could return
-    // a lazy iterator, in which case the implicit key should be set when the actual
-    // methods on the iterator are invoked. This is done with the wrapper class
-    // at the end of this method.
-    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val mappedIterator = statefulProcessor.handleInputRows(
-      keyObj,
-      valueObjIter,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
-      getOutputRow(obj)
+      // The statefulProcessor's handleInputRows method may create an eager iterator,
+      // and in that case, the implicit key needs to be set now. However, it could return
+      // a lazy iterator, in which case the implicit key should be set when the actual
+      // methods on the iterator are invoked. This is done with the wrapper class
+      // at the end of this method.
+      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+      val mappedIterator = statefulProcessor.handleInputRows(
+        keyObj,
+        valueObjIter,
+        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
+        getOutputRow(obj)
+      }
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+
+      iteratorWithImplicitKeySet(keyObj, mappedIterator)
+    } catch {
+      case sparkThrowable: SparkThrowable =>
+        throw sparkThrowable
+      case e: Exception =>
+        throw TransformWithStateUserFunctionException(e)
     }
-    ImplicitGroupingKeyTracker.removeImplicitKey()
-
-    iteratorWithImplicitKeySet(keyObj, mappedIterator)
   }
 
   private def processInitialStateRows(

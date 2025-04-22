@@ -99,6 +99,47 @@ class DefaultValueInitialProcessor
   }
 }
 
+class UnclassifiedErrorProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    null.asInstanceOf[ValueState[BasicState]].get()
+    Seq.empty.iterator
+  }
+}
+
+class ClassifiedErrorProcessor
+  extends StatefulProcessor[String, String, (String, BasicState)] {
+
+  @transient var state: ValueState[BasicState] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    state = getHandle.getValueState[BasicState](
+      "testState",
+      Encoders.product[BasicState],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, BasicState)] = {
+    throw StateStoreErrors.multipleColumnFamiliesNotSupported("dummy val")
+  }
+}
+
 // Evolved processor with additional primitive fields
 class DefaultValueEvolvedProcessor
   extends StatefulProcessor[String, String, (String, EvolvedState)] {
@@ -2398,6 +2439,56 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         assert(t.getMessage.contains("not supported"))
       }
     )
+  }
+
+  test("transformWithState - check that error within handleInputRows is classified") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new UnclassifiedErrorProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[TransformWithStateUserFunctionException] { error =>
+          checkError(
+            error.asInstanceOf[SparkException],
+            condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
+            parameters = Map("reason" ->
+              ("Cannot invoke \"org.apache.spark.sql.streaming.ValueState." +
+                "get()\" because \"null\" is null"))
+          )
+        }
+      )
+    }
+  }
+
+  test("transformWithState - check that classified error is thrown from handleInputRows") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new ClassifiedErrorProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { error =>
+          assert(error.getMessage.contains("not supported"))
+        }
+      )
+    }
   }
 
   test("transformWithState - ValueState.exists() should fail in init") {
