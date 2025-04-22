@@ -365,7 +365,7 @@ Aggregate [country#x, city#x, name#x, id#x, power#x], [country#x, city#x, name#x
 -- !query
 SELECT 4 AS a, 5 AS b, 6 AS c, * FROM data GROUP BY ALL
 -- !query analysis
-Aggregate [1, 2, 3, country#x, city#x, name#x, id#x, power#x], [4 AS a#x, 5 AS b#x, 6 AS c#x, country#x, city#x, name#x, id#x, power#x]
+Aggregate [4, 5, 6, country#x, city#x, name#x, id#x, power#x], [4 AS a#x, 5 AS b#x, 6 AS c#x, country#x, city#x, name#x, id#x, power#x]
 +- SubqueryAlias data
    +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
@@ -377,7 +377,7 @@ Aggregate [1, 2, 3, country#x, city#x, name#x, id#x, power#x], [4 AS a#x, 5 AS b
 -- !query
 SELECT *, 4 AS a, 5 AS b, 6 AS c FROM data GROUP BY ALL
 -- !query analysis
-Aggregate [country#x, city#x, name#x, id#x, power#x, 6, 7, 8], [country#x, city#x, name#x, id#x, power#x, 4 AS a#x, 5 AS b#x, 6 AS c#x]
+Aggregate [country#x, city#x, name#x, id#x, power#x, 4, 5, 6], [country#x, city#x, name#x, id#x, power#x, 4 AS a#x, 5 AS b#x, 6 AS c#x]
 +- SubqueryAlias data
    +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
@@ -389,7 +389,7 @@ Aggregate [country#x, city#x, name#x, id#x, power#x, 6, 7, 8], [country#x, city#
 -- !query
 SELECT 4 AS a, 5 AS b, *, 6 AS c FROM data GROUP BY ALL
 -- !query analysis
-Aggregate [1, 2, country#x, city#x, name#x, id#x, power#x, 8], [4 AS a#x, 5 AS b#x, country#x, city#x, name#x, id#x, power#x, 6 AS c#x]
+Aggregate [4, 5, country#x, city#x, name#x, id#x, power#x, 6], [4 AS a#x, 5 AS b#x, country#x, city#x, name#x, id#x, power#x, 6 AS c#x]
 +- SubqueryAlias data
    +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
       +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]

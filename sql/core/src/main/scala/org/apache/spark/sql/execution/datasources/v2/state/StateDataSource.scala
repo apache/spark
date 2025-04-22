@@ -55,7 +55,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   // Seq of operator names who uses state schema v3 and TWS related options.
   // This Seq was used in checks before reading state schema files.
-  private val twsShortNameSeq = Seq("transformWithStateExec", "transformWithStateInPandasExec")
+  private val twsShortNameSeq = Seq(
+    "transformWithStateExec",
+    "transformWithStateInPandasExec",
+    "transformWithStateInPySparkExec"
+  )
 
   override def shortName(): String = "statestore"
 
@@ -88,6 +92,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
+      // SPARK-51779 TODO: Support stream-stream joins with virtual column families
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,

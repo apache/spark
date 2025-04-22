@@ -1209,8 +1209,20 @@
   },
   "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<rangeMessage>."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "If necessary set <ansiConfig> to \"false\" to bypass this error."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {

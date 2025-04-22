@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.time.LocalDateTime
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
@@ -608,6 +609,19 @@ class HiveDDLSuite
       parameters = Map(
         "details" -> "The spec ([partCol1=]) contains an empty partition column value")
     )
+  }
+
+  test("SPARK-51840: Restore Partition columns in HiveExternalCatalog#alterTable") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t USING json
+          |  PARTITIONED BY (A) AS
+          |    SELECT 'APACHE' A, TIMESTAMP_NTZ '2018-11-17 13:33:33' B
+          |""".stripMargin)
+      sql("MSCK REPAIR TABLE t")
+      checkAnswer(spark.table("t"), Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33), "APACHE"))
+    }
   }
 
   test("add/drop partitions - external table") {

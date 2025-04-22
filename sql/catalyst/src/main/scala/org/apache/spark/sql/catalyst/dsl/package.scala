@@ -24,6 +24,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -64,7 +65,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *    LocalRelation [key#2,value#3], []
  * }}}
  */
-package object dsl {
+package object dsl extends SQLConfHelper {
   trait ImplicitOperators {
     def expr: Expression
 
@@ -446,11 +447,16 @@ package object dsl {
       def sortBy(sortExprs: SortOrder*): LogicalPlan = Sort(sortExprs, false, logicalPlan)
 
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): LogicalPlan = {
+        // Replace top-level integer literals with ordinals, if `groupByOrdinal` is enabled.
+        val groupingExpressionsWithOrdinals = groupingExprs.map {
+          case Literal(value: Int, IntegerType) if conf.groupByOrdinal => UnresolvedOrdinal(value)
+          case other => other
+        }
         val aliasedExprs = aggregateExprs.map {
           case ne: NamedExpression => ne
           case e => UnresolvedAlias(e)
         }
-        Aggregate(groupingExprs, aliasedExprs, logicalPlan)
+        Aggregate(groupingExpressionsWithOrdinals, aliasedExprs, logicalPlan)
       }
 
       def having(

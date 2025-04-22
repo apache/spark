@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.time.DateTimeException
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -125,6 +126,20 @@ case class ToTimeParser(fmt: Option[String]) {
       TimeFormatter(format, isParsing = true).parse(s.toString)
     }
   }
+}
+
+object TimePart {
+
+  def parseExtractField(extractField: String, source: Expression): Expression =
+    extractField.toUpperCase(Locale.ROOT) match {
+      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => HoursOfTime(source)
+      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => MinutesOfTime(source)
+      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondsOfTimeWithFraction(source)
+      case _ =>
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
+          extractField,
+          source)
+    }
 }
 
 /**
@@ -297,6 +312,32 @@ object HourExpressionBuilder extends ExpressionBuilder {
   }
 }
 
+case class SecondsOfTimeWithFraction(child: Expression)
+  extends RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def replacement: Expression = {
+
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      DecimalType(8, 6),
+      "getSecondsOfTimeWithFraction",
+      Seq(child, Literal(precision)),
+      Seq(child.dataType, IntegerType))
+  }
+  private val precision: Int = child.dataType.asInstanceOf[TimeType].precision
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimeType(precision))
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(child = newChildren.head)
+  }
+}
+
 case class SecondsOfTime(child: Expression)
   extends RuntimeReplaceable
     with ExpectsInputTypes {
@@ -460,4 +501,50 @@ case class CurrentTime(child: Expression = Literal(TimeType.MICROS_PRECISION))
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(hour, minute, second) - Create time from hour, minute and second fields. For invalid inputs it will throw an error.",
+  arguments = """
+    Arguments:
+      * hour - the hour to represent, from 0 to 23
+      * minute - the minute to represent, from 0 to 59
+      * second - the second to represent, from 0 to 59.999999
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(6, 30, 45.887);
+       06:30:45.887
+      > SELECT _FUNC_(NULL, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class MakeTime(
+    hours: Expression,
+    minutes: Expression,
+    secsAndMicros: Expression)
+  extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with ExpectsInputTypes {
+
+  // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
+  // it to the fractional part of `sec`. If `sec` is an IntegerType, it can be cast into decimal
+  // safely because we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(16, 6))
+  override def children: Seq[Expression] = Seq(hours, minutes, secsAndMicros)
+  override def prettyName: String = "make_time"
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimeType(TimeType.MICROS_PRECISION),
+    "timeToMicros",
+    children,
+    inputTypes
+  )
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MakeTime =
+    copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
 }

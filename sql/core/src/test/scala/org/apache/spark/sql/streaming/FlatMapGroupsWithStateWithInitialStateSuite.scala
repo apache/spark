@@ -422,9 +422,7 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
       s"have same keys and skipEmittingInitialStateKeys=$skipEmittingInitialStateKeys") {
       withSQLConf(
         SQLConf.FLATMAPGROUPSWITHSTATE_SKIP_EMITTING_INITIAL_STATE_KEYS.key ->
-        skipEmittingInitialStateKeys.toString,
-        // restore behavior before SPARK-51747
-        SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> "true"
+        skipEmittingInitialStateKeys.toString
       ) {
         val initialState = Seq(
           ("apple", 1L),
@@ -442,11 +440,14 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
             .groupByKey(x => x)
             .flatMapGroupsWithState(Update, NoTimeout(), initialState)(fruitCountFunc)
         testStream(result, Update)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = new StreamManualClock),
           AddData(inputData, "apple"),
           AddData(inputData, "apple"),
           AddData(inputData, "orange"),
+          AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("apple", 3), ("orange", 3)),
           AddData(inputData, "orange"),
+          AdvanceManualClock(1 * 1000),
           CheckNewAnswer(("orange", 4)),
           StopStream
         )

@@ -2569,10 +2569,11 @@ object SQLConf {
       .internal()
       .doc("State format version used by streaming join operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
-        "be modified after running.")
+        "be modified after running. Version 3 uses a single state store with virtual column " +
+        "families instead of four stores and is only supported with RocksDB.")
       .version("3.0.0")
       .intConf
-      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")
       .createWithDefault(2)
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
@@ -3583,11 +3584,15 @@ object SQLConf {
           "than zero and less than INT_MAX.")
       .createWithDefaultString("256MB")
 
-  val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
-    buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
-      .doc("When using TransformWithStateInPandas, limit the maximum number of state records " +
-        "that can be written to a single ArrowRecordBatch in memory.")
+  val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
+      .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
+        "the maximum number of state records that can be written to a single ArrowRecordBatch " +
+        "in memory.")
       .version("4.0.0")
+      // NOTE: This config was released already in Spark 4.0.0, so we should not remove the
+      // support of this.
+      .withAlternative("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
       .intConf
       .createWithDefault(10000)
 
@@ -6589,8 +6594,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
-  def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
-    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH)
+  def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 
