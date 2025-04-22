@@ -228,7 +228,7 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withOuterPlans[A](outerPlans: Seq[LogicalPlan])(f: => A): A = {
+  def withOuterPlan[A](outerPlans: Seq[LogicalPlan])(f: => A): A = {
     val originContext = value.get()
     val context = originContext.copy(outerPlans = Some(outerPlans))
     set(context)
@@ -2357,11 +2357,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // and unresolved direct outer plan. Append the current outer plan into
         // new outerPlanContext as current outer is guaranteed to be resolved.
         val updatedOuterPlan = Seq(outer) ++ outerPlanContext.get
-        AnalysisContext.withOuterPlans(updatedOuterPlan) {
+        AnalysisContext.withOuterPlan(updatedOuterPlan) {
           executeSameContext(e.plan)
         }
       } else {
-        AnalysisContext.withOuterPlans(Seq(outer)) {
+        AnalysisContext.withOuterPlan(Seq(outer)) {
           executeSameContext(e.plan)
         }
       }

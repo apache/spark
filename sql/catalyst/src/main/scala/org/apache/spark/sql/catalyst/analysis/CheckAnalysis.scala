@@ -252,6 +252,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           (subExpr, AttributeSet(attrs))
       }
     }
+
     def findFirstOccurence(
         plan: LogicalPlan,
         outerScopeAttrs: AttributeSet,

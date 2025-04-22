@@ -71,12 +71,11 @@ case class DynamicPruningSubquery(
   override def withNewOuterScopeAttrs(
     outerScopeAttrs: Seq[Expression]
   ): DynamicPruningSubquery = {
-    // DynamicPruningSubquery should not have outer scope attrs
     if (outerScopeAttrs.nonEmpty) {
       throw SparkException.internalError(
         "DynamicPruningSubquery should not have outer scope attributes.")
     }
-    copy()
+    this
   }
 
   override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)
