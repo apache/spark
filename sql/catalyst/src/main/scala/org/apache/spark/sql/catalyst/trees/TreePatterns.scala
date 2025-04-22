@@ -69,6 +69,7 @@ object TreePattern extends Enumeration  {
   val LITERAL: Value = Value
   val MAP_OBJECTS: Value = Value
   val MULTI_ALIAS: Value = Value
+  val NESTED_CORRELATED_SUBQUERY: Value = Value
   val NEW_INSTANCE: Value = Value
   val NOT: Value = Value
   val NULL_CHECK: Value = Value
