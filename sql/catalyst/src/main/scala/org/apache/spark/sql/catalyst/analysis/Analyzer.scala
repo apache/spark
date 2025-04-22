@@ -348,7 +348,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals,
       EliminateLazyExpression),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
@@ -364,67 +363,66 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
-      Seq(
-        new ResolveCatalogs(catalogManager),
-        ResolveInsertInto,
-        ResolveRelations,
-        ResolvePartitionSpec,
-        ResolveFieldNameAndPosition,
-        AddMetadataColumns,
-        DeduplicateRelations,
-        ResolveCollationName) ++
+      new ResolveCatalogs(catalogManager) ::
+      ResolveInsertInto ::
+      ResolveRelations ::
+      ResolvePartitionSpec ::
+      ResolveFieldNameAndPosition ::
+      AddMetadataColumns ::
+      DeduplicateRelations ::
+      ResolveCollationName ::
+      new ResolveReferences(catalogManager) ::
+      // Please do not insert any other rules in between. See the TODO comments in rule
+      // ResolveLateralColumnAliasReference for more details.
+      ResolveLateralColumnAliasReference ::
+      ResolveExpressionsWithNamePlaceholders ::
+      ResolveDeserializer ::
+      ResolveNewInstance ::
+      ResolveUpCast ::
+      ResolveGroupingAnalytics ::
+      ResolvePivot ::
+      ResolveUnpivot ::
+      ResolveOrdinalInOrderByAndGroupBy ::
+      ExtractGenerator ::
+      ResolveGenerate ::
+      ResolveFunctions ::
+      ResolveProcedures ::
+      BindProcedures ::
+      ResolveTableSpec ::
+      ValidateAndStripPipeExpressions ::
+      ResolveSQLFunctions ::
+      ResolveSQLTableFunctions ::
+      ResolveAliases ::
+      ResolveSubquery ::
+      ResolveSubqueryColumnAliases ::
+      ResolveDDLCommandStringTypes ::
+      ResolveWindowOrder ::
+      ResolveWindowFrame ::
+      ResolveNaturalAndUsingJoin ::
+      ResolveOutputRelation ::
+      new ResolveDataFrameDropColumns(catalogManager) ::
+      new ResolveSetVariable(catalogManager) ::
+      ExtractWindowExpressions ::
+      GlobalAggregates ::
+      ResolveAggregateFunctions ::
+      TimeWindowing ::
+      SessionWindowing ::
+      ResolveWindowTime ::
+      ResolveInlineTables ::
+      ResolveLambdaVariables ::
+      ResolveTimeZone ::
+      ResolveRandomSeed ::
+      ResolveBinaryArithmetic ::
+      new ResolveIdentifierClause(earlyBatches) ::
+      ResolveUnion ::
+      ResolveRowLevelCommandAssignments ::
+      MoveParameterizedQueriesDown ::
+      BindParameters ::
+      new SubstituteExecuteImmediate(
+        catalogManager,
+        resolveChild = executeSameContext,
+        checkAnalysis = checkAnalysis) ::
       typeCoercionRules() ++
-      Seq(
-        new ResolveReferences(catalogManager),
-        // Please do not insert any other rules in between. See the TODO comments in rule
-        // ResolveLateralColumnAliasReference for more details.
-        ResolveLateralColumnAliasReference,
-        ResolveExpressionsWithNamePlaceholders,
-        ResolveDeserializer,
-        ResolveNewInstance,
-        ResolveUpCast,
-        ResolveGroupingAnalytics,
-        ResolvePivot,
-        ResolveUnpivot,
-        ResolveOrdinalInOrderByAndGroupBy,
-        ExtractGenerator,
-        ResolveGenerate,
-        ResolveFunctions,
-        ResolveProcedures,
-        BindProcedures,
-        ResolveTableSpec,
-        ValidateAndStripPipeExpressions,
-        ResolveSQLFunctions,
-        ResolveSQLTableFunctions,
-        ResolveAliases,
-        ResolveSubquery,
-        ResolveSubqueryColumnAliases,
-        ResolveWindowOrder,
-        ResolveWindowFrame,
-        ResolveNaturalAndUsingJoin,
-        ResolveOutputRelation,
-        new ResolveDataFrameDropColumns(catalogManager),
-        new ResolveSetVariable(catalogManager),
-        ExtractWindowExpressions,
-        GlobalAggregates,
-        ResolveAggregateFunctions,
-        TimeWindowing,
-        SessionWindowing,
-        ResolveWindowTime,
-        ResolveInlineTables,
-        ResolveLambdaVariables,
-        ResolveTimeZone,
-        ResolveRandomSeed,
-        ResolveBinaryArithmetic,
-        new ResolveIdentifierClause(earlyBatches),
-        ResolveUnion,
-        ResolveRowLevelCommandAssignments,
-        MoveParameterizedQueriesDown,
-        BindParameters,
-        new SubstituteExecuteImmediate(
-          catalogManager,
-          resolveChild = executeSameContext,
-          checkAnalysis = checkAnalysis)) ++
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
@@ -455,7 +453,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("DML rewrite", fixedPoint,
       RewriteDeleteFromTable,
       RewriteUpdateTable,
-      RewriteMergeIntoTable),
+      RewriteMergeIntoTable,
+      // Ensures columns of an output table are correctly resolved from the data in a logical plan.
+      ResolveOutputRelation),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -1226,8 +1226,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           // We put the synchronously resolved relation into the [[AnalyzerBridgeState]] for
           // it to be later reused by the single-pass [[Resolver]] to avoid resolving the relation
           // metadata twice.
-          AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
-            bridgeState.relationsWithResolvedMetadata.put(unresolvedRelation, relation)
+          AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+            bridgeState.addUnresolvedRelation(unresolvedRelation, relation)
           }
           relation
         }
@@ -1974,24 +1974,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         withPosition(ordinal) {
           if (index > 0 && index <= aggs.size) {
             val ordinalExpr = aggs(index - 1)
+
             if (ordinalExpr.exists(_.isInstanceOf[AggregateExpression])) {
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
-            } else {
-              trimAliases(ordinalExpr) match {
-                // HACK ALERT: If the ordinal expression is also an integer literal, don't use it
-                //             but still keep the ordinal literal. The reason is we may repeatedly
-                //             analyze the plan. Using a different integer literal may lead to
-                //             a repeat GROUP BY ordinal resolution which is wrong. GROUP BY
-                //             constant is meaningless so whatever value does not matter here.
-                // TODO: (SPARK-45932) GROUP BY ordinal should pull out grouping expressions to
-                //       a Project, then the resolved ordinal expression is always
-                //       `AttributeReference`.
-                case Literal(_: Int, IntegerType) =>
-                  Literal(index)
-                case _ => ordinalExpr
-              }
             }
+
+            ordinalExpr
           } else {
             throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size)
           }
