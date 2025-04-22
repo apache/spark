@@ -41,9 +41,23 @@ class PandasUDFType:
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
 
+class ArrowUDFType:
+    """Arrow UDF Types. See :meth:`pyspark.sql.functions.arrow_udf`."""
+
+    SCALAR = PythonEvalType.SQL_SCALAR_ARROW_UDF
+
+
+def arrow_udf(f=None, returnType=None, functionType=None):
+    return vectorized_udf(f, returnType, functionType)
+
+
 def pandas_udf(f=None, returnType=None, functionType=None):
+    return vectorized_udf(f, returnType, functionType)
+
+
+def vectorized_udf(f=None, returnType=None, functionType=None):
     """
-    Creates a pandas user defined function (a.k.a. vectorized user defined function).
+    Creates a vectorized user defined function.
 
     Pandas UDFs are user defined functions that are executed by Spark using Arrow to transfer
     data and Pandas to work with the data, which allows vectorized operations. A Pandas UDF
@@ -406,6 +420,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     if eval_type not in [
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -430,13 +445,13 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         )
 
     if is_decorator:
-        return functools.partial(_create_pandas_udf, returnType=return_type, evalType=eval_type)
+        return functools.partial(_create_vectorized_udf, returnType=return_type, evalType=eval_type)
     else:
-        return _create_pandas_udf(f=f, returnType=return_type, evalType=eval_type)
+        return _create_vectorized_udf(f=f, returnType=return_type, evalType=eval_type)
 
 
 # validate the pandas udf and return the adjusted eval type
-def _validate_pandas_udf(f, evalType) -> int:
+def _validate_vectorized_udf(f, evalType) -> int:
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
@@ -487,6 +502,7 @@ def _validate_pandas_udf(f, evalType) -> int:
     if (
         (
             evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
         )
         and len(argspec.args) == 0
@@ -540,8 +556,8 @@ def _validate_pandas_udf(f, evalType) -> int:
     return evalType
 
 
-def _create_pandas_udf(f, returnType, evalType):
-    evalType = _validate_pandas_udf(f, evalType)
+def _create_vectorized_udf(f, returnType, evalType):
+    evalType = _validate_vectorized_udf(f, evalType)
 
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
