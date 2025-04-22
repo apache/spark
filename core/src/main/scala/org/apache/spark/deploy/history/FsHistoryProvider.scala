@@ -469,8 +469,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // right after this check and before the check for stale entities will be identified as stale
       // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
-      val updated = Option(fs.listStatus(new Path(logDir)))
+
+      // List subdirectories first
+      val subDirs = Option(fs.listStatus(new Path(logDir)))
         .map(_.toImmutableArraySeq).getOrElse(Nil)
+        .filter(_.isDirectory) // Keep only directories
+
+      // Then list the contents of each subdirectory
+      val updated = subDirs.flatMap { subDir =>
+          Option(fs.listStatus(subDir.getPath))
+            .map(_.toImmutableArraySeq).getOrElse(Nil)
+      }
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry =>
           if (isProcessing(entry.getPath)) {
