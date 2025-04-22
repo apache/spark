@@ -310,8 +310,10 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 object ReplaceArrayContainsWithInSet extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformAllExpressions  {
+      // In Catalyst, arrays evaluated as NULL values have "arrayParam.value = NULL" set,
+      // so transforming its value to a set of objects will fail.
       case ArrayContains(arrayParam: Literal, col)
-        if arrayParam.value.isInstanceOf[GenericArrayData] =>
+        if arrayParam.value != null =>
           InSet(col, arrayParam.value.asInstanceOf[GenericArrayData].array.toSet)
     }
   }
