@@ -117,7 +117,7 @@ def _parallelFitTasks(
         if collectSubModel and is_remote():
             # In remote mode, we need to explicitly disable the
             # model __del__ which seems to be triggered inside thread pool.
-            train._session.client.thread_local.disable_ml_del = True
+            train._session.client.thread_local.disable_ml_del = True  # type: ignore[union-attr, operator]
 
         # TODO: duplicate evaluator to take extra params from input
         #  Note: Supporting tuning params in evaluator need update method
@@ -883,7 +883,10 @@ class CrossValidator(
 
         if is_remote():
             # the main thread should not be affected
-            assert not hasattr(dataset._session.client.thread_local, "disable_ml_del")
+            assert not hasattr(
+                dataset._session.client.thread_local,  # type: ignore[union-attr, operator]
+                "disable_ml_del",
+            )
 
         return self._copyValues(
             CrossValidatorModel(bestModel, metrics, cast(List[List[Model]], subModels), std_metrics)
@@ -1519,7 +1522,10 @@ class TrainValidationSplit(
 
         if is_remote():
             # the main thread should not be affected
-            assert not hasattr(dataset._session.client.thread_local, "disable_ml_del")
+            assert not hasattr(
+                dataset._session.client.thread_local,  # type: ignore[union-attr, operator]
+                "disable_ml_del",
+            )
 
         return self._copyValues(
             TrainValidationSplitModel(
