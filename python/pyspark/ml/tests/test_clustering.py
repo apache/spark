@@ -377,8 +377,9 @@ class ClusteringTestsMixin:
             model2 = LocalLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
-    @unittest.skipIf(is_remote(), "Do not support Spark Connect.")
     def test_distributed_lda(self):
+        if is_remote():
+            self.skipTest("Do not support Spark Connect.")
         spark = self.spark
         df = (
             spark.createDataFrame(
