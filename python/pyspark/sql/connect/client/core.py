@@ -686,7 +686,7 @@ class SparkConnectClient(object):
         self._progress_handlers: List[ProgressHandler] = []
 
         # cleanup ml cache if possible
-        atexit.register(self._cleanup_ml)
+        atexit.register(self._cleanup_ml_cache)
 
     @property
     def _stub(self) -> grpc_lib.SparkConnectServiceStub:
@@ -2007,7 +2007,7 @@ class SparkConnectClient(object):
         except Exception:
             return []
 
-    def _cleanup_ml(self) -> None:
+    def _cleanup_ml_cache(self) -> None:
         if hasattr(self.thread_local, "ml_caches"):
             try:
                 command = pb2.Command()

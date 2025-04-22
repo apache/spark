@@ -25,8 +25,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class MLConnectCacheTests(ReusedConnectTestCase):
     def test_delete_model(self):
         spark = self.spark
-        spark.client._cleanup_ml()
-
         df = (
             spark.createDataFrame(
                 [
@@ -61,10 +59,8 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 0)
 
-    def test_cleanup_ml(self):
+    def test_cleanup_ml_cache(self):
         spark = self.spark
-        spark.client._cleanup_ml()
-
         df = (
             spark.createDataFrame(
                 [
@@ -105,7 +101,7 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 2)
 
-        spark.client._cleanup_ml()
+        spark.client._cleanup_ml_cache()
 
         # All models are removed in python side
         self.assertEqual(len(spark.client.thread_local.ml_caches), 0)
