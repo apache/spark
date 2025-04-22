@@ -316,8 +316,14 @@ object SparkEnv extends Logging {
       shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
     val shuffleManager = Utils.instantiateSerializerOrShuffleManager[ShuffleManager](
       shuffleMgrClass, conf, isDriver)
-
-    val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
+    val memoryManager: MemoryManager
+    try {
+       memoryManager = UnifiedMemoryManager(conf, numUsableCores)
+    } catch {
+      case e: Throwable =>
+        rpcEnv.shutdown()
+        throw e
+    }
 
     val blockManagerPort = if (isDriver) {
       conf.get(DRIVER_BLOCK_MANAGER_PORT)
