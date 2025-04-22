@@ -40,7 +40,7 @@ class ConditionalExpressionResolver(
 
   override def resolve(unresolvedConditionalExpression: ConditionalExpression): Expression = {
     val conditionalExpressionWithResolvedChildren =
-      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve)
+      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve _)
 
     typeCoercionResolver.resolve(conditionalExpressionWithResolvedChildren)
   }

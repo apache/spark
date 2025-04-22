@@ -35,6 +35,8 @@ import com.typesafe.tools.mima.core.*
 object MimaExcludes {
 
   lazy val v41excludes = v40excludes ++ Seq(
+    // [SPARK-51261][ML][CONNECT] Introduce model size estimation to control ml cache
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes")
   )
 
   // Exclude rules for 4.0.x from 3.5.0

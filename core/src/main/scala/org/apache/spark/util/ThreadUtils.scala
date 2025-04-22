@@ -65,7 +65,7 @@ private[spark] object ThreadUtils {
       }
     }
 
-    override def isTerminated: Boolean = synchronized {
+    override def isTerminated: Boolean = {
       lock.lock()
       try {
         serviceIsShutdown && runningTasks == 0

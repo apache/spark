@@ -74,10 +74,10 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     .build[ExecuteKey, ExecuteInfo]()
 
   /** The time when the last execution was removed. */
-  private var lastExecutionTimeNs: AtomicLong = new AtomicLong(System.nanoTime())
+  private val lastExecutionTimeNs: AtomicLong = new AtomicLong(System.nanoTime())
 
   /** Executor for the periodic maintenance */
-  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+  private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
   /**

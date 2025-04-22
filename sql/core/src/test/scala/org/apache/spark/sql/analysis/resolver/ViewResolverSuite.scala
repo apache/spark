@@ -95,9 +95,11 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
               },
               tableName = "`table1`",
               queryContext = ExpectedContext(
-                fragment = "view3",
-                start = 14,
-                stop = 18
+                objectType = "VIEW",
+                objectName = s"$catalogName.default.view1",
+                startIndex = 23,
+                stopIndex = 28,
+                fragment = "table1"
               )
             )
           }
@@ -121,11 +123,6 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "viewName" -> s"`$catalogName`.`default`.`v0`",
           "maxNestedDepth" -> conf.maxNestedViewDepth.toString
-        ),
-        context = ExpectedContext(
-          fragment = "v100",
-          start = 14,
-          stop = 17
         )
       )
     } finally {
@@ -169,7 +166,9 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       .child
       .asInstanceOf[View]
     assert(resolvedView.isTempView == unresolvedView.isTempView)
-    assert(normalizeExprIds(resolvedView.child) == normalizeExprIds(expectedChild))
+    assert(
+      normalizeExprIds(resolvedView.child).prettyJson == normalizeExprIds(expectedChild).prettyJson
+    )
   }
 
   private def cast(

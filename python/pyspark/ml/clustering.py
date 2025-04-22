@@ -263,7 +263,10 @@ class GaussianMixtureModel(
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
+            s = GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -710,7 +713,10 @@ class KMeansModel(
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return KMeansSummary(super(KMeansModel, self).summary)
+            s = KMeansSummary(super(KMeansModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__
@@ -1057,7 +1063,10 @@ class BisectingKMeansModel(
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
+            s = BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
+            if is_remote():
+                s.__source_transformer__ = self  # type: ignore[attr-defined]
+            return s
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__

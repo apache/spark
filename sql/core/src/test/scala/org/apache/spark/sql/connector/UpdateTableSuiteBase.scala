@@ -27,6 +27,43 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
 
+  test("update table containing added column with default value") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"ALTER TABLE $tableNameAsString ADD COLUMN txt STRING DEFAULT 'initial-text'")
+
+    append("pk INT, salary INT, dep STRING, txt STRING",
+      """{ "pk": 3, "salary": 300, "dep": "hr", "txt": "explicit-text" }
+        |{ "pk": 4, "salary": 400, "dep": "software", "txt": "explicit-text" }
+        |{ "pk": 5, "salary": 500, "dep": "hr" }
+        |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", "initial-text"),
+        Row(2, 200, "software", "initial-text"),
+        Row(3, 300, "hr", "explicit-text"),
+        Row(4, 400, "software", "explicit-text"),
+        Row(5, 500, "hr", null)))
+
+    sql(s"ALTER TABLE $tableNameAsString ALTER COLUMN txt SET DEFAULT 'new-text'")
+
+    sql(s"UPDATE $tableNameAsString SET txt = DEFAULT WHERE pk IN (2, 8, 11)")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", "initial-text"),
+        Row(2, 200, "software", "new-text"),
+        Row(3, 300, "hr", "explicit-text"),
+        Row(4, 400, "software", "explicit-text"),
+        Row(5, 500, "hr", null)))
+  }
+
   test("EXPLAIN only update") {
     createAndInitTable("pk INT NOT NULL, dep STRING", """{ "pk": 1, "dep": "hr" }""")
 

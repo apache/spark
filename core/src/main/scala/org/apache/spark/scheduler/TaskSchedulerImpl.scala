@@ -780,8 +780,6 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
-    var failedExecutor: Option[String] = None
-    var reason: Option[ExecutorLossReason] = None
     synchronized {
       try {
         Option(taskIdToTaskSetManager.get(tid)) match {
@@ -808,12 +806,6 @@ private[spark] class TaskSchedulerImpl(
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
       }
-    }
-    // Update the DAGScheduler without holding a lock on this, since that can deadlock
-    if (failedExecutor.isDefined) {
-      assert(reason.isDefined)
-      dagScheduler.executorLost(failedExecutor.get, reason.get)
-      backend.reviveOffers()
     }
   }
 

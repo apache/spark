@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite, WriteBuilder, WriterCommitMessage}
@@ -35,6 +36,7 @@ class InMemoryTable(
     schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
+    override val constraints: Array[Constraint] = Array.empty,
     distribution: Distribution = Distributions.unspecified(),
     ordering: Array[SortOrder] = Array.empty,
     numPartitions: Option[Int] = None,
@@ -61,23 +63,31 @@ class InMemoryTable(
 
   override def withData(
       data: Array[BufferedRows],
-      writeSchema: StructType): InMemoryTable = dataMap.synchronized {
-    data.foreach(_.rows.foreach { row =>
-      val key = getKey(row, writeSchema)
-      dataMap += dataMap.get(key)
-        .map { splits =>
-          val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-            splits :+ new BufferedRows(key)
-          } else {
-            splits
+      writeSchema: StructType): InMemoryTable = {
+    dataMap.synchronized {
+      data.foreach(_.rows.foreach { row =>
+        val key = getKey(row, writeSchema)
+        dataMap += dataMap.get(key)
+          .map { splits =>
+            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
+              splits :+ new BufferedRows(key)
+            } else {
+              splits
+            }
+            newSplits.last.withRow(row)
+            key -> newSplits
           }
-          newSplits.last.withRow(row)
-          key -> newSplits
-        }
-        .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
-      addPartitionKey(key)
-    })
-    this
+          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
+        addPartitionKey(key)
+      })
+
+      if (data.exists(_.rows.exists(row => row.numFields == 1 &&
+          row.getInt(0) == InMemoryTable.uncommittableValue()))) {
+        throw new IllegalArgumentException(s"Test only mock write failure")
+      }
+
+      this
+    }
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -165,6 +175,8 @@ object InMemoryTable {
       case _ => false
     }
   }
+
+  def uncommittableValue(): Int = Int.MaxValue / 2
 
   private def splitAnd(filter: Filter): Seq[Filter] = {
     filter match {

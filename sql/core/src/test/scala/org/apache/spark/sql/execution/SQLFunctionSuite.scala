@@ -58,4 +58,20 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SQL table function") {
+    withUserDefinedFunction("foo" -> false) {
+      sql(
+        """
+          |CREATE FUNCTION foo(x INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x + 1 AS x1
+          |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM foo(1)"), Row(2))
+      checkAnswer(sql(
+        """
+          |SELECT t2.a FROM VALUES (1, 2), (3, 4) t1(a, b), LATERAL foo(a) t2
+          |""".stripMargin), Seq(Row(2), Row(4)))
+    }
+  }
 }

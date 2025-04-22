@@ -45,7 +45,7 @@ if ! npm ls eslint > /dev/null; then
   npm ci eslint
 fi
 
-npx eslint -c "$SPARK_ROOT_DIR/dev/eslint.js" ${LINT_TARGET_FILES[@]} | tee "$LINT_JS_REPORT_FILE_NAME"
+npx eslint -c "$SPARK_ROOT_DIR/dev/eslint.js" "${LINT_TARGET_FILES[@]}" "$@" | tee "$LINT_JS_REPORT_FILE_NAME"
 lint_status=$?
 
 if [ "$lint_status" = "0" ] ; then

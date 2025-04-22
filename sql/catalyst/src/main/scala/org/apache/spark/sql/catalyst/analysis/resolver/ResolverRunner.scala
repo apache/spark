@@ -17,58 +17,65 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, CleanupAliases}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Wrapper class for [[Resolver]] and single-pass resolution. This class encapsulates single-pass
- * resolution and post-processing of resolved plan. This post-processing is necessary in order to
+ * resolution, rewriting and validation of resolved plan. The plan rewrite is necessary in order to
  * either fully resolve the plan or stay compatible with the fixed-point analyzer.
  */
 class ResolverRunner(
     resolver: Resolver,
     extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty
-) extends SQLConfHelper {
-
-  private val resolutionPostProcessingExecutor = new RuleExecutor[LogicalPlan] {
-    override def batches: Seq[Batch] = Seq(
-      Batch("Post-process", Once, CleanupAliases)
-    )
-  }
+) extends ResolverMetricTracker
+    with SQLConfHelper {
 
   /**
-   * Entry point for the resolver. This method performs following 3 steps:
-   *  - Resolves the plan in a bottom-up, single-pass manner.
-   *  - Validates the result of single-pass resolution.
-   *  - Applies necessary post-processing rules.
+   * Sequence of post-resolution rules that should be applied on the result of single-pass
+   * resolution.
+   */
+  private val planRewriteRules: Seq[Rule[LogicalPlan]] = Seq(
+    PruneMetadataColumns,
+    CleanupAliases
+  )
+
+  /**
+   * `planRewriter` is used to rewrite the plan and the subqueries inside by applying
+   * `planRewriteRules`.
+   */
+  private val planRewriter = new PlanRewriter(planRewriteRules)
+
+  /**
+   * Entry point for the resolver. This method performs following 4 steps:
+   *  - Resolves the plan in a bottom-up using [[Resolver]], single-pass manner.
+   *  - Rewrites the plan using rules configured in the [[planRewriter]].
+   *  - Validates the final result internally using [[ResolutionValidator]].
+   *  - Validates the final result using [[extendedResolutionChecks]].
    */
   def resolve(
       plan: LogicalPlan,
-      analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
-    AnalysisContext.withNewAnalysisContext {
-      val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
-      if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
-        val validator = new ResolutionValidator
-        validator.validatePlan(resolvedPlan)
+      analyzerBridgeState: Option[AnalyzerBridgeState] = None,
+      tracker: QueryPlanningTracker = new QueryPlanningTracker): LogicalPlan =
+    recordMetrics(tracker) {
+      AnalysisContext.withNewAnalysisContext {
+        val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
+
+        val rewrittenPlan = planRewriter.rewriteWithSubqueries(resolvedPlan)
+
+        if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
+          val validator = new ResolutionValidator
+          validator.validatePlan(rewrittenPlan)
+        }
+
+        for (rule <- extendedResolutionChecks) {
+          rule(rewrittenPlan)
+        }
+
+        rewrittenPlan
       }
-      finishResolution(resolvedPlan)
     }
-  }
-
-  /**
-   * This method performs necessary post-processing rules that aren't suitable for single-pass
-   * resolver. We apply these rules after the single-pass has finished resolution to stay
-   * compatible with fixed-point analyzer.
-   */
-  private def finishResolution(plan: LogicalPlan): LogicalPlan = {
-    val planWithPostProcessing = resolutionPostProcessingExecutor.execute(plan)
-
-    for (rule <- extendedResolutionChecks) {
-      rule(planWithPostProcessing)
-    }
-    planWithPostProcessing
-  }
 }

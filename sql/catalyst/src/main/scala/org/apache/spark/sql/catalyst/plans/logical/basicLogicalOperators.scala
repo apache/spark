@@ -417,9 +417,14 @@ case class Intersect(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
+  private def computeOutput(): Seq[Attribute] = Intersect.mergeChildOutputs(children.map(_.output))
+}
+
+/** Factory methods for `Intersect` nodes. */
+object Intersect {
   /** We don't use right.output because those rows get excluded from the set. */
-  private def computeOutput(): Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
+    childOutputs.head.zip(childOutputs.tail.head).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 }
@@ -451,11 +456,16 @@ case class Except(
 
   private lazy val lazyOutput: Seq[Attribute] = computeOutput()
 
-  /** We don't use right.output because those rows get excluded from the set. */
-  private def computeOutput(): Seq[Attribute] = left.output
+  private def computeOutput(): Seq[Attribute] = Except.mergeChildOutputs(children.map(_.output))
 }
 
-/** Factory for constructing new `Union` nodes. */
+/** Factory methods for `Except` nodes. */
+object Except {
+  /** We don't use right.output because those rows get excluded from the set. */
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = childOutputs.head
+}
+
+/** Factory methods for `Union` nodes. */
 object Union {
   def apply(left: LogicalPlan, right: LogicalPlan): Union = {
     Union (left :: right :: Nil)
@@ -1199,7 +1209,14 @@ object Aggregate {
       groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
   }
 
-  def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+  def supportsObjectHashAggregate(
+      aggregateExpressions: Seq[AggregateExpression],
+      groupingExpressions: Seq[Expression]): Boolean = {
+    // We should not use hash aggregation on binary unstable types.
+    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+      return false
+    }
+
     aggregateExpressions.map(_.aggregateFunction).exists {
       case _: TypedImperativeAggregate[_] => true
       case _ => false
@@ -1392,6 +1409,8 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
   }
   override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
     copy(child = newChild)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(OFFSET)
 }
 
 /**

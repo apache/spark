@@ -22,7 +22,6 @@ import java.sql.Connection
 import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.PostgresDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -39,6 +38,22 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new PostgresDatabaseOnDocker
+
+  object JdbcClientTypes {
+    val INTEGER = "int4"
+    val STRING = "text"
+  }
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = JdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -194,7 +209,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -223,7 +238,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       s" TBLPROPERTIES('TABLESPACE'='pg_default')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
@@ -250,7 +265,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   test("SPARK-49695: Postgres fix xor push-down") {
     val df = spark.sql(s"select dept, name from $catalogName.employee where dept ^ 6 = 0")
     val rows = df.collect()
-    assert(!df.queryExecution.sparkPlan.exists(_.isInstanceOf[FilterExec]))
+    checkFilterPushed(df)
     assert(rows.length == 1)
     assert(rows(0).getInt(0) === 6)
     assert(rows(0).getString(1) === "jen")
@@ -373,5 +388,29 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
       parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\"")
     )
+  }
+
+  test("SPARK-51321: Postgres pushdown for RPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE rpad(name, 10, 'x') = 'amyxxxxxxx'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-51321: Postgres pushdown for LPAD expression on string column") {
+    val df = sql(
+      s"""|SELECT name FROM $catalogName.employee
+          |WHERE lpad(name, 10, 'x') = 'xxxxxxxamy'
+          |""".stripMargin
+    )
+    checkFilterPushed(df)
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "amy")
   }
 }

@@ -214,6 +214,10 @@ case class StructField(
     }
   }
 
+  private[sql] def hasExistenceDefaultValue: Boolean = {
+    metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+  }
+
   private def getDDLDefault = getCurrentDefaultValue()
     .map(" DEFAULT " + _)
     .getOrElse("")

@@ -258,7 +258,8 @@ object LBFGS extends Logging {
        }
 
       val zeroSparseVector = Vectors.sparse(n, Seq.empty)
-      val (gradientSum, lossSum) = data.treeAggregate((zeroSparseVector, 0.0))(seqOp, combOp)
+      val (gradientSum, lossSum) = data.treeAggregate(
+        (zeroSparseVector, 0.0), seqOp, combOp, 2, true)
 
       // broadcasted model is not needed anymore
       bcW.destroy()

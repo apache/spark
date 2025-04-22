@@ -453,7 +453,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val model = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
     // When it is trained by WeightedLeastSquares, training summary does not
     // attach returned model.
-    val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
+    val lrModel = copyValues(new LinearRegressionModel(
+      uid, model.coefficients.compressed, model.intercept))
     val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
     val trainingSummary = new LinearRegressionTrainingSummary(
       summaryModel.transform(dataset), predictionColName, $(labelCol), $(featuresCol),
@@ -648,6 +649,14 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
 }
 
 @Since("1.6.0")
@@ -750,6 +759,14 @@ class LinearRegressionModel private[ml] (
   override def copy(extra: ParamMap): LinearRegressionModel = {
     val newModel = copyValues(new LinearRegressionModel(uid, coefficients, intercept), extra)
     newModel.setSummary(trainingSummary).setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
   }
 
   /**

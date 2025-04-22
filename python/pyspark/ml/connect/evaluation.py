@@ -24,7 +24,6 @@ from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasProbabilityCol
 from pyspark.ml.connect.base import Evaluator
 from pyspark.ml.connect.io_utils import ParamsReadWrite
-from pyspark.ml.connect.util import aggregate_dataframe
 from pyspark.sql import DataFrame
 
 
@@ -56,6 +55,8 @@ class _TorchMetricEvaluator(Evaluator):
         raise NotImplementedError()
 
     def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
+        from pyspark.ml.connect.util import aggregate_dataframe
+
         torch_metric = self._get_torch_metric()
 
         def local_agg_fn(pandas_df: "pd.DataFrame") -> "pd.DataFrame":

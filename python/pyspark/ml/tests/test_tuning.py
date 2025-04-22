@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import tempfile
 import unittest
 
@@ -30,6 +30,7 @@ from pyspark.ml.tuning import (
     TrainValidationSplit,
     TrainValidationSplitModel,
 )
+from pyspark.ml.util import _SPARKML_TEMP_DFS_PATH
 from pyspark.sql.functions import rand
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -69,6 +70,15 @@ class TuningTestsMixin:
 
         evaluation_score = evaluator.evaluate(tvs_model.transform(dataset))
         self.assertTrue(np.isclose(evaluation_score, 0.8333333333333333, atol=1e-4))
+
+        with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
+            os.environ[_SPARKML_TEMP_DFS_PATH] = d
+            tvs_model2 = tvs.fit(dataset)
+            assert len(os.listdir(d)) == 0
+            self.assertTrue(np.isclose(tvs_model2.validationMetrics[0], 0.5, atol=1e-4))
+            self.assertTrue(
+                np.isclose(tvs_model2.validationMetrics[1], 0.8857142857142857, atol=1e-4)
+            )
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="train_validation_split") as d:
@@ -117,6 +127,12 @@ class TuningTestsMixin:
         self.assertEqual(model.getEvaluator(), evaluator)
         self.assertEqual(model.getEstimatorParamMaps(), grid)
         self.assertTrue(np.isclose(model.avgMetrics[0], 0.5, atol=1e-4))
+
+        with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
+            os.environ[_SPARKML_TEMP_DFS_PATH] = d
+            model2 = cv.fit(dataset)
+            assert len(os.listdir(d)) == 0
+            self.assertTrue(np.isclose(model2.avgMetrics[0], 0.5, atol=1e-4))
 
         output = model.transform(dataset)
         self.assertEqual(

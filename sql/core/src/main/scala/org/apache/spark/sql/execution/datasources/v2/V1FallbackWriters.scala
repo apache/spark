@@ -69,17 +69,19 @@ sealed trait V1FallbackWriters extends LeafV2CommandExec with SupportsV1Write {
   def write: V1Write
 
   override def run(): Seq[InternalRow] = {
-    writeWithV1(write.toInsertableRelation)
-    refreshCache()
+    try {
+      writeWithV1(write.toInsertableRelation)
+      refreshCache()
 
-    write.reportDriverMetrics().foreach { customTaskMetric =>
-      metrics.get(customTaskMetric.name()).foreach(_.set(customTaskMetric.value()))
+      Nil
+    } finally {
+      write.reportDriverMetrics().foreach { customTaskMetric =>
+        metrics.get(customTaskMetric.name()).foreach(_.set(customTaskMetric.value()))
+      }
+
+      val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
     }
-
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-
-    Nil
   }
 }
 

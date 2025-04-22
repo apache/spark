@@ -70,6 +70,11 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
+  test("SPARK-51391: Use 'user.name' by default") {
+    client = SparkConnectClient.builder().build()
+    assert(client.userId == System.getProperty("user.name"))
+  }
+
   test("Placeholder test: Create SparkConnectClient") {
     client = SparkConnectClient.builder().userId("abc123").build()
     assert(client.userId == "abc123")
@@ -482,7 +487,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     val session = SparkSession.builder().client(client).create()
     val artifactFilePath = commonResourcePath.resolve("artifact-tests")
-    session.addArtifact(artifactFilePath.resolve("smallClassFile.class").toString)
+    val path = artifactFilePath.resolve("smallClassFile.class")
+    assume(path.toFile.exists)
+    session.addArtifact(path.toString)
   }
 
   private def buildPlan(query: String): proto.Plan = {
@@ -629,6 +636,26 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     // despite that, requests can be sent to the request observer without error being thrown.
     observer.onNext(proto.AddArtifactsRequest.newBuilder().build())
     observer.onCompleted()
+  }
+
+  test("client can set a custom operation id for ExecutePlan requests") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+
+    val plan = buildPlan("select * from range(10000000)")
+    val dummyUUID = "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+    val iter = client.execute(plan, operationId = Some(dummyUUID))
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    assert(reattachableIter.operationId == dummyUUID)
+    while (reattachableIter.hasNext) {
+      val resp = reattachableIter.next()
+      assert(resp.getOperationId == dummyUUID)
+    }
   }
 }
 

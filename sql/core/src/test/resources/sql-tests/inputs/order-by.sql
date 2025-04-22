@@ -2,6 +2,8 @@
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
+CREATE OR REPLACE TEMPORARY VIEW v1 AS SELECT 1 AS col1;
+CREATE OR REPLACE TEMPORARY VIEW v2 AS SELECT 1 AS col1;
 
 -- ORDER BY a column from a child's output
 SELECT a FROM testData ORDER BY a;
@@ -30,5 +32,38 @@ SELECT * FROM testData ORDER BY (SELECT * FROM testData ORDER BY (SELECT a FROM 
 -- Fails because correlation is not allowed in ORDER BY
 SELECT * FROM testData ORDER BY (SELECT a FROM VALUES (1));
 
+-- Nondeterministic expression + Aggregate expression in ORDER BY
+SELECT col1 FROM VALUES (1, 2) GROUP BY col1 ORDER BY MAX(col2), RAND();
+
+-- Order by table column and alias with the same name
+SELECT 1 AS col1, col1 FROM VALUES (10) ORDER BY col1;
+
+-- Order by on top of natural join with count(distinct)
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v2
+GROUP BY
+  col1
+ORDER BY
+  col1
+;
+
+SELECT
+  COUNT(DISTINCT col1)
+FROM
+  v1
+NATURAL JOIN
+  v1
+GROUP BY
+  col1
+ORDER BY
+  col1
+;
+
 -- Clean up
 DROP VIEW IF EXISTS testData;
+DROP VIEW IF EXISTS v1;
+DROP VIEW IF EXISTS v2;

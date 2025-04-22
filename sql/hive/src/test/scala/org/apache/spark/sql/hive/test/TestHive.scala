@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SQL
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
-import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, WAREHOUSE_PATH}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -70,7 +70,13 @@ object TestHive
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
         // ConstantPropagation etc.
-        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName))) {
+        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
+        .set(SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
+          sys.env.getOrElse("SPARK_TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
+            SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
+        .set(RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
+          sys.env.getOrElse("SPARK_TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
+            RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt))) {
   override def conf: SQLConf = sparkSession.sessionState.conf
 }
 

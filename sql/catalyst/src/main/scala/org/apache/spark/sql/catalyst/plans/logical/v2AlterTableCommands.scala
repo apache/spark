@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.{Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, TableConstraint, Unevaluable}
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -285,6 +285,30 @@ case class AlterTableCollation(
   override def changes: Seq[TableChange] = {
     Seq(TableChange.setProperty(TableCatalog.PROP_COLLATION, collation))
   }
+
+  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD CONSTRAINT command.
+ */
+case class AddConstraint(
+    table: LogicalPlan,
+    tableConstraint: TableConstraint) extends AlterTableCommand {
+  override def changes: Seq[TableChange] = Seq.empty
+
+  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... DROP CONSTRAINT command.
+ */
+case class DropConstraint(
+    table: LogicalPlan,
+    name: String,
+    ifExists: Boolean,
+    cascade: Boolean) extends AlterTableCommand {
+  override def changes: Seq[TableChange] = Seq.empty
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

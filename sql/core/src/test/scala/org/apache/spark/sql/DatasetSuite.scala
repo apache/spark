@@ -2329,6 +2329,11 @@ class DatasetSuite extends QueryTest
     assert(spark.range(1).map { _ => instant }.head() === instant)
   }
 
+  test("implicit encoder for LocalTime") {
+    val localTime = java.time.LocalTime.of(19, 30, 30)
+    assert(spark.range(1).map { _ => localTime }.head() === localTime)
+  }
+
   val dotColumnTestModes = Table(
     ("caseSensitive", "colName"),
     ("true", "field.1"),

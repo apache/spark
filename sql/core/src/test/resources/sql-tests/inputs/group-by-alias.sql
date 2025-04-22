@@ -43,6 +43,33 @@ SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k;
 -- Aggregate functions cannot be used in GROUP BY
 SELECT COUNT(b) AS k FROM testData GROUP BY k;
 
+-- Ordinal is replaced correctly when grouping by alias of a literal
+SELECT MAX(col1), 3 as abc FROM VALUES(1),(2),(3),(4) GROUP BY col1 % abc;
+
+-- GROUP BY attribute takes precedence over alias
+SELECT 1 AS a FROM testData GROUP BY `a`;
+
+-- Group alias on subquery with CTE inside
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  subq1
+;
+
+-- Group by alias on subquery with relation
+SELECT (
+  SELECT a FROM testData LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  subq1
+;
+
 -- turn off group by aliases
 set spark.sql.groupByAliases=false;
 

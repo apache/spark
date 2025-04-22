@@ -68,6 +68,7 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
 test_packages = []
 if "SPARK_TESTING" in os.environ:
     test_packages = [
+        "pyspark.errors.tests.connect",
         "pyspark.tests",  # for Memory profiler parity tests
         "pyspark.resource.tests",
         "pyspark.sql.tests",
@@ -79,6 +80,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.connect.pandas",
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
+        "pyspark.sql.tests.pandas.helper",
         "pyspark.sql.tests.plot",
         "pyspark.sql.tests.streaming",
         "pyspark.ml.tests",

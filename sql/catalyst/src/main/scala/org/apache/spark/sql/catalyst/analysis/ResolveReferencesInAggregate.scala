@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, IntegerLiteral, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
@@ -129,27 +129,9 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       groupExprs: Seq[Expression]): Seq[Expression] = {
     assert(selectList.forall(_.resolved))
     if (isGroupByAll(groupExprs)) {
-      val expandedGroupExprs = expandGroupByAll(selectList)
-      if (expandedGroupExprs.isEmpty) {
-        // Don't replace the ALL when we fail to infer the grouping columns. We will eventually
-        // tell the user in checkAnalysis that we cannot resolve the all in group by.
-        groupExprs
-      } else {
-        // This is a valid GROUP BY ALL aggregate.
-        expandedGroupExprs.get.zipWithIndex.map { case (expr, index) =>
-          trimAliases(expr) match {
-            // HACK ALERT: If the expanded grouping expression is an integer literal, don't use it
-            //             but use an integer literal of the index. The reason is we may repeatedly
-            //             analyze the plan, and the original integer literal may cause failures
-            //             with a later GROUP BY ordinal resolution. GROUP BY constant is
-            //             meaningless so whatever value does not matter here.
-            case IntegerLiteral(_) =>
-              // GROUP BY ordinal uses 1-based index.
-              Literal(index + 1)
-            case _ => expr
-          }
-        }
-      }
+      // Don't replace the ALL when we fail to infer the grouping columns. We will eventually tell
+      // the user in checkAnalysis that we cannot resolve the all in group by.
+      expandGroupByAll(selectList).getOrElse(groupExprs)
     } else {
       groupExprs
     }

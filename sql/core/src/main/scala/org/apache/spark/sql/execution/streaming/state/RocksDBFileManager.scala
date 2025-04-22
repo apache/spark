@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, FileInputStream, InputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.{mutable, Map}
+import scala.math._
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -32,11 +32,11 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -133,8 +133,12 @@ class RocksDBFileManager(
 
   import RocksDBImmutableFile._
 
+  protected def getFileSystem(myDfsRootDir: String, myHadoopConf: Configuration) : FileSystem = {
+    new Path(myDfsRootDir).getFileSystem(myHadoopConf)
+  }
+
   private lazy val fm = CheckpointFileManager.create(new Path(dfsRootDir), hadoopConf)
-  private val fs = new Path(dfsRootDir).getFileSystem(hadoopConf)
+  private val fs = getFileSystem(dfsRootDir, hadoopConf)
   private val onlyZipFiles = new PathFilter {
     override def accept(path: Path): Boolean = path.toString.endsWith(".zip")
   }
@@ -178,40 +182,50 @@ class RocksDBFileManager(
       checkpointUniqueId: Option[String] = None,
       stateStoreCheckpointIdLineage: Option[Array[LineageItem]] = None
     ): StateStoreChangelogWriter = {
-    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
-    if (!rootDirChecked) {
-      val rootDir = new Path(dfsRootDir)
-      if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
-      rootDirChecked = true
+    try {
+      val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
+      if (!rootDirChecked) {
+        val rootDir = new Path(dfsRootDir)
+        if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+        rootDirChecked = true
+      }
+
+      val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
+      val changelogVersion = getChangelogWriterVersion(
+        useColumnFamilies, enableStateStoreCheckpointIds)
+
+      val changelogWriter = changelogVersion match {
+        case 1 =>
+          new StateStoreChangelogWriterV1(fm, changelogFile, codec)
+        case 2 =>
+          new StateStoreChangelogWriterV2(fm, changelogFile, codec)
+        case 3 =>
+          assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
+            "StateStoreChangelogWriterV3 should only be initialized when " +
+              "state store checkpoint unique id is enabled")
+          new StateStoreChangelogWriterV3(fm, changelogFile, codec,
+            stateStoreCheckpointIdLineage.get)
+        case 4 =>
+          assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
+            "StateStoreChangelogWriterV4 should only be initialized when " +
+              "state store checkpoint unique id is enabled")
+          new StateStoreChangelogWriterV4(fm, changelogFile, codec,
+            stateStoreCheckpointIdLineage.get)
+        case _ =>
+          throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
+      }
+
+      logInfo(log"Loaded change log reader version " +
+        log"${MDC(LogKeys.FILE_VERSION, changelogWriter.version)}")
+
+      changelogWriter
+    } catch {
+      case e: SparkException
+        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
+          throw e
+      case e: Throwable =>
+        throw StateStoreErrors.failedToGetChangelogWriter(version, e)
     }
-
-    val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
-    val changelogVersion = getChangelogWriterVersion(
-      useColumnFamilies, enableStateStoreCheckpointIds)
-
-    val changelogWriter = changelogVersion match {
-      case 1 =>
-        new StateStoreChangelogWriterV1(fm, changelogFile, codec)
-      case 2 =>
-        new StateStoreChangelogWriterV2(fm, changelogFile, codec)
-      case 3 =>
-        assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
-          "StateStoreChangelogWriterV3 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogWriterV3(fm, changelogFile, codec, stateStoreCheckpointIdLineage.get)
-      case 4 =>
-        assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
-          "StateStoreChangelogWriterV4 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogWriterV4(fm, changelogFile, codec, stateStoreCheckpointIdLineage.get)
-      case _ =>
-        throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
-    }
-
-    logInfo(log"Loaded change log reader version " +
-      log"${MDC(LogKeys.FILE_VERSION, changelogWriter.version)}")
-
-    changelogWriter
   }
 
   // Get the changelog file at version
@@ -281,7 +295,7 @@ class RocksDBFileManager(
       colFamilyIdMapping, colFamilyTypeMapping, maxColumnFamilyId)
     val metadataFile = localMetadataFile(checkpointDir)
     metadata.writeToFile(metadataFile)
-    logInfo(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
+    logDebug(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
       log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
     if (version <= 1 && numKeys <= 0) {
@@ -322,6 +336,8 @@ class RocksDBFileManager(
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
       localDir.mkdirs()
+      // Since we cleared the local dir, we should also clear the local file mapping
+      rocksDBFileMapping.clear()
       RocksDBCheckpointMetadata(Seq.empty, 0)
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
@@ -331,7 +347,7 @@ class RocksDBFileManager(
       // Copy the necessary immutable files
       val metadataFile = localMetadataFile(localDir)
       val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
-      logInfo(log"Read metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
+      logDebug(log"Read metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
         log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
       loadImmutableFilesFromDfs(metadata.immutableFiles, localDir, rocksDBFileMapping, version)
       versionToRocksDBFiles.put((version, checkpointUniqueId), metadata.immutableFiles)
@@ -340,6 +356,10 @@ class RocksDBFileManager(
     }
     logFilesInDir(localDir, log"Loaded checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
+    logInfo(log"RocksDB file mapping after loading checkpoint version " +
+      log"${MDC(LogKeys.VERSION_NUM, version)} from DFS:\n" +
+      log"${MDC(LogKeys.ROCKS_DB_FILE_MAPPING, rocksDBFileMapping)}")
+
     metadata
   }
 
@@ -507,7 +527,9 @@ class RocksDBFileManager(
         logInfo(log"Estimated maximum version is " +
           log"${MDC(LogKeys.MAX_SEEN_VERSION, maxSeenVersion.get)}" +
           log" and minimum version is ${MDC(LogKeys.MIN_SEEN_VERSION, minSeenVersion)}")
-        val versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
+        // If the number of versions to delete is negative, that means that none of the versions
+        // are eligible for deletion and we set the variable to 0
+        val versionsToDelete = max(maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain, 0)
         if (versionsToDelete < minVersionsToDelete) {
           logInfo(log"Skipping deleting files." +
             log" Need at least ${MDC(LogKeys.MIN_VERSIONS_TO_DELETE, minVersionsToDelete)}" +
@@ -833,7 +855,7 @@ class RocksDBFileManager(
         totalBytes += bytes
       }
       zout.close()  // so that any error in closing also cancels the output stream
-      logInfo(log"Zipped ${MDC(LogKeys.NUM_BYTES, totalBytes)} bytes (before compression) to " +
+      logDebug(log"Zipped ${MDC(LogKeys.NUM_BYTES, totalBytes)} bytes (before compression) to " +
         log"${MDC(LogKeys.FILE_NAME, filesStr)}")
       // The other fields saveCheckpointMetrics should have been filled
       saveCheckpointMetrics =
@@ -856,14 +878,8 @@ class RocksDBFileManager(
     lazy val files = Option(Utils.recursiveList(dir)).getOrElse(Array.empty).map { f =>
       s"${f.getAbsolutePath} - ${f.length()} bytes"
     }
-    logInfo(msg + log" - ${MDC(LogKeys.NUM_FILES, files.length)} files\n\t" +
+    logDebug(msg + log" - ${MDC(LogKeys.NUM_FILES, files.length)} files\n\t" +
       log"${MDC(LogKeys.FILE_NAME, files.mkString("\n\t"))}")
-  }
-
-  private def newDFSFileName(localFileName: String): String = {
-    val baseName = FilenameUtils.getBaseName(localFileName)
-    val extension = FilenameUtils.getExtension(localFileName)
-    s"$baseName-${UUID.randomUUID}.$extension"
   }
 
   def newDFSFileName(localFileName: String, dfsFileSuffix: String): String = {

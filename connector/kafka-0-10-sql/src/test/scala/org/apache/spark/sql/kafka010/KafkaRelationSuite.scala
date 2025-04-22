@@ -637,7 +637,7 @@ class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
   test("V1 Source is used when set through SQLConf") {
     val topic = newTopic()
     val df = createDF(topic)
-    assert(df.logicalPlan.collect {
+    assert(df.logicalPlan.collectFirst {
       case _: LogicalRelation => true
     }.nonEmpty)
   }
@@ -652,7 +652,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
   test("V2 Source is used when set through SQLConf") {
     val topic = newTopic()
     val df = createDF(topic)
-    assert(df.logicalPlan.collect {
+    assert(df.logicalPlan.collectFirst {
       case _: DataSourceV2Relation => true
     }.nonEmpty)
   }

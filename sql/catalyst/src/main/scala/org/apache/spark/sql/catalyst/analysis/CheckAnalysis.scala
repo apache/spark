@@ -21,7 +21,7 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.{checkForSelfReferenceInSubquery, checkIfSelfReferenceIsPlacedCorrectly}
+import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
@@ -279,9 +279,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case _ =>
     }
 
-    // Check if there is any self-reference within subqueries
-    checkForSelfReferenceInSubquery(plan)
-
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -348,6 +345,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
+          case hof: HigherOrderFunction if hof.arguments.exists {
+            case LambdaFunction(_, _, _) => true
+            case _ => false
+          } =>
+            throw new AnalysisException(
+              errorClass =
+                "INVALID_LAMBDA_FUNCTION_CALL.PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION",
+              messageParameters = Map.empty,
+              origin = hof.origin
+            )
           // Check argument data types of higher-order functions downwards first.
           // If the arguments of the higher-order functions are resolved but the type check fails,
           // the argument functions will not get resolved, but we should report the argument type
@@ -869,20 +876,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           // used in equality comparison, remove this type check once we support it.
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
-            o.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
-              messageParameters = Map(
-                "colName" -> toSQLId(mapCol.name),
-                "dataType" -> toSQLType(mapCol.dataType)))
+            throw QueryCompilationErrors.unsupportedSetOperationOnMapType(
+              mapCol = mapCol,
+              origin = operator.origin
+            )
 
           // TODO: Remove this type check once we support Variant ordering
           case o if variantColumnInSetOperation(o).isDefined =>
             val variantCol = variantColumnInSetOperation(o).get
-            o.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
-              messageParameters = Map(
-                "colName" -> toSQLId(variantCol.name),
-                "dataType" -> toSQLType(variantCol.dataType)))
+            throw QueryCompilationErrors.unsupportedSetOperationOnVariantType(
+              variantCol = variantCol,
+              origin = operator.origin
+            )
 
           case o if variantExprInPartitionExpression(o).isDefined =>
             val variantExpr = variantExprInPartitionExpression(o).get
@@ -1037,8 +1042,24 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     if (expr.plan.isStreaming) {
       plan.failAnalysis("INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY", Map.empty)
     }
+    assertNoRecursiveCTE(expr.plan)
     checkAnalysis0(expr.plan)
     ValidateSubqueryExpression(plan, expr)
+  }
+
+  private def assertNoRecursiveCTE(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case r: CTERelationRef if r.recursive =>
+        throw new AnalysisException(
+          errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+          messageParameters = Map.empty)
+      case p => p.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach {
+        expr => expr.foreach {
+          case s: SubqueryExpression => assertNoRecursiveCTE(s.plan)
+          case _ =>
+        }
+      }
+    }
   }
 
   /**

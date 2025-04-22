@@ -173,6 +173,15 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val topology = FeedForwardTopology.multiLayerPerceptron($(layers), softmaxOnTop = true)
+    val expectedWeightSize = topology.layers.map(_.weightSize).sum
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(expectedWeightSize) // weights
+    size
+  }
+
   /**
    * Train a model using the given dataset and parameters.
    * Developers can implement this instead of `fit()` to avoid dealing with schema validation
@@ -326,6 +335,14 @@ class MultilayerPerceptronClassificationModel private[ml] (
     val copied = new MultilayerPerceptronClassificationModel(uid, weights)
       .setParent(parent)
     copyValues(copied, extra)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.weights != null) {
+      size += this.weights.getSizeInBytes
+    }
+    size
   }
 
   @Since("2.0.0")

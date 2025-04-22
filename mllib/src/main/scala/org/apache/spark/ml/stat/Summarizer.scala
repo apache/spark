@@ -217,15 +217,16 @@ object Summarizer extends Logging {
       aggregationDepth: Int = 2,
       requested: Seq[String] = Seq("mean", "std", "count")) = {
     instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer(requested: _*),
-        Summarizer.createSummarizerBuffer("mean", "std", "count")))(
+      zeroValue = (Summarizer.createSummarizerBuffer(requested: _*),
+        Summarizer.createSummarizerBuffer("mean", "std", "count")),
       seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight),
           c._2.add(Vectors.dense(instance.label), instance.weight)),
       combOp = (c1: (SummarizerBuffer, SummarizerBuffer),
                 c2: (SummarizerBuffer, SummarizerBuffer)) =>
         (c1._1.merge(c2._1), c1._2.merge(c2._2)),
-      depth = aggregationDepth
+      depth = aggregationDepth,
+      finalAggregateOnExecutor = true
     )
   }
 
@@ -235,13 +236,14 @@ object Summarizer extends Logging {
       aggregationDepth: Int = 2,
       requested: Seq[String] = Seq("mean", "std", "count")) = {
     instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer(requested: _*), new MultiClassSummarizer))(
+      zeroValue = (Summarizer.createSummarizerBuffer(requested: _*), new MultiClassSummarizer),
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
                 c2: (SummarizerBuffer, MultiClassSummarizer)) =>
         (c1._1.merge(c2._1), c1._2.merge(c2._2)),
-      depth = aggregationDepth
+      depth = aggregationDepth,
+      finalAggregateOnExecutor = true
     )
   }
 }

@@ -22,13 +22,10 @@ var PlanVizConstants = {
   svgMarginY: 16
 };
 
-/* eslint-disable no-unused-vars */
 function shouldRenderPlanViz() {
   return planVizContainer().selectAll("svg").empty();
 }
-/* eslint-enable no-unused-vars */
 
-/* eslint-disable no-unused-vars */
 function renderPlanViz() {
   var svg = planVizContainer().append("svg");
   var metadata = d3.select("#plan-viz-metadata");
@@ -52,7 +49,6 @@ function renderPlanViz() {
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
 }
-/* eslint-enable no-unused-vars */
 
 /* -------------------- *
  * | Helper functions | *
@@ -312,3 +308,49 @@ function collectLinks(map, key, value) {
   }
   map.get(key).add(value);
 }
+
+function downloadPlanBlob(b, ext) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(b);
+  link.download = `plan.${ext}`;
+  link.click();
+}
+
+document.getElementById("plan-viz-download-btn").addEventListener("click", async function () {
+  const format = document.getElementById("plan-viz-format-select").value;
+  let blob;
+  if (format === "svg") {
+    const svg = planVizContainer().select("svg").node().cloneNode(true);
+    let css = "";
+    try {
+      css = await fetch("/static/sql/spark-sql-viz.css").then((resp) => resp.text());
+    } catch (e) {
+      console.error("Failed to fetch CSS for SVG download", e);
+    }
+    d3.select(svg).insert("style", ":first-child").text(css);
+    const svgData = new XMLSerializer().serializeToString(svg);
+    blob = new Blob([svgData], { type: "image/svg+xml" });
+  } else if (format === "dot") {
+    const dot = d3.select("#plan-viz-metadata .dot-file").text().trim();
+    blob = new Blob([dot], { type: "text/plain" });
+  } else if (format === "txt") {
+    const txt = d3.select("#physical-plan-details pre").text().trim();
+    blob = new Blob([txt], { type: "text/plain" });
+  } else {
+    return;
+  }
+  downloadPlanBlob(blob, format);
+});
+
+/* eslint-disable no-unused-vars */
+function clickPhysicalPlanDetails() {
+/* eslint-enable no-unused-vars */
+  $('#physical-plan-details').toggle();
+  $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  if (shouldRenderPlanViz()) {
+    renderPlanViz();
+  }
+});

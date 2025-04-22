@@ -168,6 +168,13 @@ class LinearSVC @Since("2.2.0") (
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
@@ -259,7 +266,7 @@ class LinearSVC @Since("2.2.0") (
       if (featuresStd(i) != 0.0) rawCoefficients(i) / featuresStd(i) else 0.0
     }
     val intercept = if ($(fitIntercept)) rawCoefficients.last else 0.0
-    createModel(dataset, Vectors.dense(coefficientArray), intercept, objectiveHistory)
+    createModel(dataset, Vectors.dense(coefficientArray).compressed, intercept, objectiveHistory)
   }
 
   private def createModel(
@@ -419,6 +426,14 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVCModel = {
     copyValues(new LinearSVCModel(uid, coefficients, intercept), extra).setParent(parent)
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
   }
 
   @Since("2.2.0")
