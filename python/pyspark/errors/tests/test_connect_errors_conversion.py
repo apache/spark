@@ -18,7 +18,6 @@
 
 import unittest
 
-from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
 from pyspark.testing import should_test_connect, connect_requirement_message
 from pyspark.errors.exceptions.connect import (
     convert_exception,
@@ -116,6 +115,7 @@ class ConnectErrorsTest(unittest.TestCase):
     def test_convert_exception_with_stacktrace(self):
         # Mock FetchErrorDetailsResponse with stacktrace
         from google.rpc.error_details_pb2 import ErrorInfo
+        from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
 
         resp = pb2(
             root_error_idx=0,

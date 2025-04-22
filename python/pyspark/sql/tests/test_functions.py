@@ -23,7 +23,6 @@ import io
 from itertools import chain
 import math
 import re
-import sys
 import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
@@ -91,7 +90,6 @@ class FunctionsTestsMixin:
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
         )
 
-    @unittest.skipIf(sys.version_info < (3, 11), "Only works with Python 3.11+")
     def test_wildcard_import(self):
         all_set = set(F.__all__)
 
@@ -104,14 +102,16 @@ class FunctionsTestsMixin:
         #     "aes_encrypt",
         #     ...,
         # }
-        fn_set = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
+        fn_set = {
+            name
+            for (name, value) in getmembers(F, isfunction)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
 
         expected_fn_all_diff = {
             "approxCountDistinct",  # deprecated
             "bitwiseNOT",  # deprecated
-            "cast",  # typing
             "countDistinct",  # deprecated
-            "overload",  # typing
             "quote",  # new function in 4.1
             "shiftLeft",  # deprecated
             "shiftRight",  # deprecated
@@ -134,10 +134,13 @@ class FunctionsTestsMixin:
         #     "UserDefinedFunction",
         #     "UserDefinedTableFunction",
         # }
-        clz_set = {name for (name, value) in getmembers(F, isclass) if name[0] != "_"}
+        clz_set = {
+            name
+            for (name, value) in getmembers(F, isclass)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
 
         expected_clz_all_diff = {
-            "Any",  # typing
             "ArrayType",  # should be imported from pyspark.sql.types
             "ByteType",  # should be imported from pyspark.sql.types
             "Column",  # should be imported from pyspark.sql
