@@ -315,7 +315,7 @@ if [ "$MAKE_TGZ" == "true" ]; then
   $TAR -czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
   if [[ "$MAKE_SPARK_CONNECT" == "true" ]]; then
-    TARDIR_NAME=spark-$VERSION-bin-$NAME-spark-connect
+    TARDIR_NAME=spark-$VERSION-bin-$NAME-connect
     TARDIR="$SPARK_HOME/$TARDIR_NAME"
     rm -rf "$TARDIR"
     cp -r "$DISTDIR" "$TARDIR"
