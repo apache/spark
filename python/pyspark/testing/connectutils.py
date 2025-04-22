@@ -188,6 +188,10 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
 
+    def setUp(self) -> None:
+        # force to clean up the ML cache before each test
+        self.spark.client._cleanup_ml_cache()
+
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote
 
@@ -200,3 +204,55 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             return QuietTest(self._legacy_sc)
         else:
             return contextlib.nullcontext()
+
+
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "Requires JVM access",
+)
+class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
+    @classmethod
+    def setUpClass(cls):
+        super(ReusedMixedTestCase, cls).setUpClass()
+        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
+        # PySpark libraries.
+        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
+
+        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
+        cls.spark = PySparkSession._instantiatedSession
+        assert cls.spark is not None
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            # Stopping Spark Connect closes the session in JVM at the server.
+            cls.spark = cls.connect
+            del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
+        finally:
+            super(ReusedMixedTestCase, cls).tearDownClass()
+
+    def setUp(self) -> None:
+        # force to clean up the ML cache before each test
+        self.connect.client._cleanup_ml_cache()
+
+    def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
+        from pyspark.sql.classic.dataframe import DataFrame as SDF
+        from pyspark.sql.connect.dataframe import DataFrame as CDF
+
+        assert isinstance(df1, (SDF, CDF))
+        if isinstance(df1, SDF):
+            str1 = df1._jdf.showString(n, truncate, False)
+        else:
+            str1 = df1._show_string(n, truncate, False)
+
+        assert isinstance(df2, (SDF, CDF))
+        if isinstance(df2, SDF):
+            str2 = df2._jdf.showString(n, truncate, False)
+        else:
+            str2 = df2._show_string(n, truncate, False)
+
+        self.assertEqual(str1, str2)
+
+    def test_assert_remote_mode(self):
+        # no need to test this in mixed mode
+        pass

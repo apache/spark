@@ -16,14 +16,18 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
+import java.io.CharArrayWriter
 import java.time.ZoneOffset
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.VariantType
+import org.apache.spark.types.variant.{Variant, VariantBuilder}
+import org.apache.spark.unsafe.types.VariantVal
 
 class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
 
@@ -379,9 +383,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // =======================
-  // ====== DSL tests ======
-  // =======================
+  // ==============================
+  // ====== DSL reader tests ======
+  // ==============================
 
   private def createDSLDataFrame(
       fileName: String,
@@ -414,14 +418,20 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     val df = createDSLDataFrame(
       fileName = "books-complicated.xml",
       schemaDDL = Some(
-        "_id string, author string, title string, genre variant, price double, " +
-          "publish_dates variant"
+        "_id string, author string, title string, " +
+        "genre struct<genreid int, name variant>, " + // Struct with variant
+        "price variant, " + // Scalar as variant
+        "publish_dates struct<publish_date array<variant>>" // Array with variant
       ),
       extraOptions = Map("rowTag" -> "book")
     )
     checkAnswer(
-      df.select(variant_get(col("genre"), "$.name", "string")),
-      Seq(Row("Computer"), Row("Fantasy"), Row("Fantasy"))
+      df.select(
+        variant_get(col("genre.name"), "$", "string"),
+        variant_get(col("price"), "$", "double"),
+        variant_get(col("publish_dates.publish_date").getItem(0), "$.month", "int")
+      ),
+      Seq(Row("Computer", 44.95, 10), Row("Fantasy", 5.95, 12), Row("Fantasy", null, 11))
     )
   }
 
@@ -479,9 +489,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         ).collect()
       }.getCause.asInstanceOf[SparkException],
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map(
-        "badRecord" -> "[null]",
-        "failFastMode" -> "FAILFAST")
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
     )
 
     // PERMISSIVE mode
@@ -527,9 +535,9 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     )
   }
 
-  // =======================
-  // ====== SQL tests ======
-  // =======================
+  // ============================
+  // ====== from_xml tests ======
+  // ============================
 
   test("SQL: read an entire XML record as variant using from_xml SQL expression") {
     val xmlStr =
@@ -555,6 +563,342 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   test("SQL: read partial XML record as variant using from_xml with a defined schema") {
     val xmlStr =
       """
+        |<ROW>
+        |   <scalar>Hello</scalar>
+        |   <arrayField><a>1</a></arrayField>
+        |   <arrayField><a>2</a></arrayField>
+        |   <structField>
+        |     <a><b>3</b></a>
+        |     <c><d>4</d></c>
+        |   </structField>
+        |   <nestedVariantField>
+        |     <a>5</a>
+        |     <b>
+        |        <c>6</c>
+        |     </b>
+        |   </nestedVariantField>
+        |   <mapField>
+        |     <a><b>7</b></a>
+        |     <c>8</c>
+        |   </mapField>
+        | </ROW>
+        | """.stripMargin.replaceAll("\\s+", "")
+    // Read specific elements in the XML record as variant
+    val schemaDDL =
+      "scalar variant, " +
+      "arrayField array<variant>, " + // Array with variants
+      "structField struct<a variant, c struct<d variant>>, " + // Struct with variants
+      "nestedVariantField variant, " +
+      "mapField map<string, variant>"
+    // Verify we can extract fields from the variant type
+    checkAnswer(
+      spark
+        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as row""".stripMargin)
+        .select(
+          variant_get(col("row.scalar"), "$", "string"),
+          variant_get(col("row.arrayField").getItem(0), "$.a", "int"),
+          variant_get(col("row.arrayField").getItem(1), "$.a", "int"),
+          variant_get(col("row.structField.a"), "$.b", "int"),
+          variant_get(col("row.structField.c.d"), "$", "int"),
+          variant_get(col("row.nestedVariantField"), "$.a", "int"),
+          variant_get(col("row.nestedVariantField"), "$.b.c", "int"),
+          variant_get(col("row.mapField.a"), "$.b", "int"),
+          variant_get(col("row.mapField.c"), "$", "int")
+        ),
+      Seq(Row("Hello", 1, 2, 3, 4, 5, 6, 7, 8))
+    )
+  }
+
+  // =============================
+  // ====== Generator tests ======
+  // =============================
+
+  private val writer = new CharArrayWriter()
+
+  private def testGenerator(
+      v: Variant,
+      expectedXml: String,
+      extraOptions: Map[String, String]): Unit = {
+    testGenerator(new VariantVal(v.getValue, v.getMetadata), expectedXml, extraOptions)
+  }
+
+  private def testGenerator(
+      v: VariantVal,
+      expectedXml: String,
+      extraOptions: Map[String, String] = Map.empty): Unit = {
+    val gen = new StaxXmlGenerator(
+      schema = VariantType,
+      writer = writer,
+      options = new XmlOptions(baseOptions ++ extraOptions),
+      validateStructure = false
+    )
+    gen.write(v)
+    gen.flush()
+    val xmlString = writer.toString
+    writer.reset()
+    assert(xmlString == expectedXml)
+  }
+
+  test("Generator: serialize Variant primitive fields to XML") {
+    def testPrimitive(
+        primitiveValue: Any,
+        expectedXml: String,
+        extraOptions: Map[String, String] = Map.empty): Unit = {
+      val builder = new VariantBuilder(false)
+      primitiveValue match {
+        case null => builder.appendNull()
+        case v: String => builder.appendString(v)
+        case v: Int => builder.appendLong(v)
+        case v: Long => builder.appendLong(v)
+        case v: Boolean => builder.appendBoolean(v)
+        case v: Double => builder.appendDouble(v)
+        case v: java.math.BigDecimal => builder.appendDecimal(v)
+        case v: Float => builder.appendFloat(v)
+        case v: java.sql.Date => builder.appendDate(v.toLocalDate.toEpochDay.toInt)
+        case v: java.sql.Timestamp =>
+          builder.appendTimestamp(v.getTime * 1000L)
+        case v: java.util.UUID => builder.appendUuid(v)
+      }
+      testGenerator(builder.result(), expectedXml, extraOptions)
+    }
+
+    // NULL
+    testPrimitive(null, "<ROW/>")
+    testPrimitive(null, "<ROW>null</ROW>", extraOptions = Map("nullValue" -> "null"))
+
+    // Long
+    testPrimitive(1, "<ROW>1</ROW>")
+    testPrimitive(9223372036854775807L, "<ROW>9223372036854775807</ROW>") // Max long
+    testPrimitive(-9223372036854775808L, "<ROW>-9223372036854775808</ROW>") // Min long
+
+    // Boolean
+    testPrimitive(true, "<ROW>true</ROW>")
+    testPrimitive(false, "<ROW>false</ROW>")
+
+    // Double
+    testPrimitive(1.0, "<ROW>1.0</ROW>")
+    testPrimitive(Double.MaxValue, "<ROW>1.7976931348623157E308</ROW>")
+    testPrimitive(Double.MinValue, "<ROW>-1.7976931348623157E308</ROW>")
+    testPrimitive(Double.MinPositiveValue, "<ROW>4.9E-324</ROW>")
+
+    // Decimal
+    testPrimitive(new java.math.BigDecimal("1.0"), "<ROW>1</ROW>")
+    testPrimitive(new java.math.BigDecimal("1E-10"), "<ROW>1E-10</ROW>")
+    testPrimitive(new java.math.BigDecimal("123456789.987654321"), "<ROW>123456789.987654321</ROW>")
+
+    // Float
+    testPrimitive(1.0f, "<ROW>1.0</ROW>")
+    testPrimitive(Float.MaxValue, "<ROW>3.4028235E38</ROW>")
+    testPrimitive(Float.MinValue, "<ROW>-3.4028235E38</ROW>")
+
+    // Date
+    testPrimitive(
+      java.sql.Date.valueOf("2023-10-01"),
+      "<ROW>2023-10-01</ROW>"
+    )
+    testPrimitive(
+      java.sql.Date.valueOf("2023-10-01"),
+      "<ROW>10/01/2023</ROW>",
+      extraOptions = Map("dateFormat" -> "MM/dd/yyyy")
+    )
+
+    // Timestamp
+    testPrimitive(
+      java.sql.Timestamp.valueOf("2023-10-01 12:00:00"),
+      "<ROW>2023-10-01T12:00:00-07</ROW>",
+      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssX")
+    )
+    testPrimitive(
+      java.sql.Timestamp.valueOf("1970-01-01 00:00:00"),
+      "<ROW>1970-01-01T00:00:00Z</ROW>",
+      extraOptions = Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss'Z'")
+    )
+    testPrimitive(
+      java.sql.Timestamp.valueOf("1970-01-01 12:30:45"),
+      "<ROW>01/01/1970 12:30:45 PM</ROW>",
+      extraOptions = Map("timestampFormat" -> "MM/dd/yyyy hh:mm:ss a")
+    )
+
+    // UUID
+    val uuid = java.util.UUID.randomUUID()
+    testPrimitive(uuid, s"<ROW>${uuid.toString}</ROW>")
+
+    // String
+    testPrimitive("Hello World", "<ROW>Hello World</ROW>")
+  }
+
+  test("Generator: serialize Variant array fields to XML") {
+    Seq(
+      """<ROW>
+        |    <array>1</array>
+        |    <array>2</array>
+        |    <array>3</array>
+        |</ROW>""".stripMargin,
+      """<ROW>
+        |    <array>2</array>
+        |    <array>1</array>
+        |    <array>3</array>
+        |</ROW>""".stripMargin,
+      """<ROW>
+        |    <array>3</array>
+        |    <array>2</array>
+        |    <array>1</array>
+        |</ROW>""".stripMargin
+    ).foreach { xmlString =>
+      testGenerator(
+        StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+        expectedXml = xmlString,
+        extraOptions = Map.empty
+      )
+    }
+  }
+
+  test("Generator: serialize Variant object to XML") {
+    val xmlString =
+      """<ROW>
+        |    <struct>
+        |        <field1>1</field1>
+        |        <field2>2</field2>
+        |    </struct>
+        |</ROW>""".stripMargin
+    testGenerator(
+      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+      expectedXml = xmlString,
+      extraOptions = Map.empty
+    )
+  }
+
+  test("Generator: serialize Variant object with attribute fields to XML") {
+    val xmlString =
+      """<ROW>
+        |    <struct attr1="1" attr2="2">
+        |        <field1>3</field1>
+        |        <field2>4</field2>
+        |    </struct>
+        |</ROW>""".stripMargin
+    testGenerator(
+      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+      expectedXml = xmlString,
+      extraOptions = Map.empty
+    )
+  }
+
+  test("Generator: serialize Variant object with value tag to XML") {
+    val xmlString =
+      """<ROW>
+        |    <struct>value
+        |        <field1>2</field1>
+        |        <field2>3</field2>
+        |    </struct>
+        |</ROW>""".stripMargin
+    testGenerator(
+      StaxXmlParser.parseVariant(xmlString, XmlOptions(baseOptions)),
+      expectedXml = xmlString,
+      extraOptions = Map.empty
+    )
+  }
+
+  // =============================
+  // ====== DSL write tests ======
+  // =============================
+
+  test("DSL: save singleVariantColumn to XML") {
+    // Load the XML file as a single variant column
+    val df = spark.read
+      .format("xml")
+      .option("singleVariantColumn", "var")
+      .options(baseOptions)
+      .load(getTestResourcePath(resDir + "cars.xml"))
+
+    withTempDir { dir =>
+      // Write the single Variant column Dataframe to XML
+      val outputPath = dir.getCanonicalPath
+      df.write
+        .format("xml")
+        .option("rowTag", "ROW")
+        .option("singleVariantColumn", "var")
+        .mode("overwrite")
+        .save(outputPath)
+
+      // Check if the written XML file matches the original XML file
+      val df1 = spark.read
+        .format("xml")
+        .options(baseOptions)
+        .load(getTestResourcePath(resDir + "cars.xml"))
+      val df2 = spark.read
+        .format("xml")
+        .options(baseOptions)
+        .load(outputPath)
+      checkAnswer(df1, df2)
+    }
+  }
+
+  test("DSL: save Dataframe with child variant columns to XML") {
+    // Load the XML file as a struct with two variant columns
+    val df = spark.read
+      .format("xml")
+      .option("rowTag", "book")
+      .schema(
+        "_id string, author string, title string, genre variant, price double, " +
+        "publish_dates variant"
+      )
+      .load(getTestResourcePath(resDir + "books-complicated.xml"))
+
+    withTempDir { dir =>
+      // Write the Dataframe with the two Variant columns to XML
+      val outputPath = dir.getCanonicalPath
+      df.write
+        .format("xml")
+        .option("rowTag", "book")
+        .mode("overwrite")
+        .save(outputPath)
+
+      // Check if the written XML file matches the original XML file
+      val df1 = spark.read
+        .format("xml")
+        .option("rowTag", "book")
+        .load(getTestResourcePath(resDir + "books-complicated.xml"))
+      val df2 = spark.read
+        .format("xml")
+        .option("rowTag", "book")
+        .load(outputPath)
+      checkAnswer(df1, df2)
+    }
+  }
+
+  // =============================
+  // ====== to_xml tests =========
+  // =============================
+
+  test("SQL: to_xml with a single variant column") {
+    val xmlStr =
+      """
+        |<ROW>
+        |    <year>2012<!--A comment within tags--></year>
+        |    <make>Tesla</make>
+        |    <model>S</model>
+        |    <comment>NoComment</comment>
+        |</ROW>
+        |""".stripMargin
+
+    // Read the entire XML record as a single variant
+    val xmlResult = spark
+      .sql(s"""SELECT to_xml(from_xml('$xmlStr', 'variant'))""")
+      .collect()
+      .map(_.getString(0).replaceAll("\\s+", ""))
+    val expectedResult =
+      """<ROW>
+        |    <comment>NoComment</comment>
+        |    <make>Tesla</make>
+        |    <model>S</model>
+        |    <year>2012</year>
+        |</ROW>""".stripMargin.replaceAll("\\s+", "")
+    assert(xmlResult.head === expectedResult)
+  }
+
+  test("SQL: to_xml with a subset of variant columns") {
+    val xmlStr =
+      """
         |<book>
         |   <author>Gambardella</author>
         |   <title>Hello</title>
@@ -572,15 +916,14 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
         |   </publish_dates>
         | </book>
         | """.stripMargin.replaceAll("\\s+", "")
-    // Read specific elements in the XML record as variant
+
+    // Read the entire XML record as a single variant
     val schemaDDL =
       "author string, title string, genre variant, price double, publish_dates variant"
-    // Verify we can extract fields from the variant type
-    checkAnswer(
-      spark
-        .sql(s"""SELECT from_xml('$xmlStr', '$schemaDDL') as book""".stripMargin)
-        .select(variant_get(col("book.publish_dates"), "$.publish_date.year", "int")),
-      Seq(Row(2000))
-    )
+    val xmlResult = spark
+      .sql(s"""SELECT to_xml(from_xml('$xmlStr', '$schemaDDL'), map('rowTag', 'book'))""")
+      .collect()
+      .map(_.getString(0).replaceAll("\\s+", ""))
+    assert(xmlResult.head === xmlStr)
   }
 }

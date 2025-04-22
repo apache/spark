@@ -148,18 +148,9 @@ if [ "$SBT_ENABLED" == "true" ]; then
   SCALA_VERSION=$("$SBT" -no-colors "show scalaBinaryVersion" | awk '/\[info\]/{ver=$2} END{print ver}')
   SPARK_HADOOP_VERSION=$("$SBT" -no-colors "show hadoopVersion" | awk '/\[info\]/{ver=$2} END{print ver}')
 else
-  VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
-      | grep -v "INFO"\
-      | grep -v "WARNING"\
-      | tail -n 1)
-  SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
-      | grep -v "INFO"\
-      | grep -v "WARNING"\
-      | tail -n 1)
-  SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
-      | grep -v "INFO"\
-      | grep -v "WARNING"\
-      | tail -n 1)
+  VERSION=$("$MVN" help:evaluate -Dexpression=project.version "$@" -q -DforceStdout)
+  SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version "$@" -q -DforceStdout)
+  SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version "$@" -q -DforceStdout)
 fi
 
 if [ "$NAME" == "none" ]; then
@@ -334,7 +325,7 @@ if [ "$MAKE_TGZ" == "true" ]; then
   $TAR -czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
   if [[ "$MAKE_SPARK_CONNECT" == "true" ]]; then
-    TARDIR_NAME=spark-$VERSION-bin-$NAME-spark-connect
+    TARDIR_NAME=spark-$VERSION-bin-$NAME-connect
     TARDIR="$SPARK_HOME/$TARDIR_NAME"
     rm -rf "$TARDIR"
     cp -r "$DISTDIR" "$TARDIR"

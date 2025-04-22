@@ -227,9 +227,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 64,
+    "startIndex" : 55,
     "stopIndex" : 64,
-    "fragment" : "3"
+    "fragment" : "GROUP BY 3"
   } ]
 }
 

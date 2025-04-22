@@ -16,17 +16,37 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability, TableChange}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 object ResolveTableConstraints {
-  // Fails if the given catalog does not support table constraint.
+  // Validates that the catalog supports create/replace table with constraints.
+  // Throws an exception if unsupported
   def validateCatalogForTableConstraint(
       constraints: Seq[Constraint],
       catalog: TableCatalog,
       ident: Identifier): Unit = {
     if (constraints.nonEmpty &&
+      !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT)) {
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "table constraint")
+    }
+  }
+
+  // Validates that the catalog supports ALTER TABLE ADD/DROP CONSTRAINT operations.
+  // Throws an exception if unsupported.
+  def validateCatalogForTableChange(
+      tableChanges: Seq[TableChange],
+      catalog: TableCatalog,
+      ident: Identifier): Unit = {
+    // Check if the table changes contain table constraints.
+    val hasTableConstraint = tableChanges.exists {
+      case _: TableChange.AddConstraint => true
+      case _: TableChange.DropConstraint => true
+      case _ => false
+    }
+    if (hasTableConstraint &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "table constraint")

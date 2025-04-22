@@ -55,15 +55,11 @@ import org.apache.spark.util.SerializableConfiguration
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
  * `DataSource`'s backwardCompatibilityMap.
  */
-class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
+case class OrcFileFormat() extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "orc"
 
   override def toString: String = "ORC"
-
-  override def hashCode(): Int = getClass.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[OrcFileFormat]
 
   override def inferSchema(
       sparkSession: SparkSession,

@@ -32,7 +32,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
+case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   override val shortName: String = "json"
 
   override def isSplitable(
@@ -127,10 +127,6 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
   override def toString: String = "JSON"
-
-  override def hashCode(): Int = getClass.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => true

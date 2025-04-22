@@ -671,6 +671,7 @@ object FunctionRegistry {
     expression[SessionWindow]("session_window"),
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
+    expression[MakeTime]("make_time"),
     expression[MakeTimestamp]("make_timestamp"),
     expression[TryMakeTimestamp]("try_make_timestamp"),
     expression[MonthName]("monthname"),

@@ -143,13 +143,19 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       tableProvider = Some("in-memory"),
       statementType = "ALTER TABLE")
     val finalPartitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
+    val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTable = new InMemoryTable(table.name, schema, finalPartitioning, properties)
+    val newTable = new InMemoryTable(
+      name = table.name,
+      schema = schema,
+      partitioning = finalPartitioning,
+      properties = properties,
+      constraints = constraints)
       .withData(table.data)
 
     tables.put(ident, newTable)

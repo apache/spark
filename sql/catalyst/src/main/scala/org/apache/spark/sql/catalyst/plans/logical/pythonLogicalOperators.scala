@@ -178,16 +178,18 @@ case class FlatMapGroupsInPandasWithState(
  * @param outputAttrs used to define the output rows
  * @param outputMode defines the output mode for the statefulProcessor
  * @param timeMode the time mode semantics of the stateful processor for timers and TTL.
+ * @param userFacingDataType the data type of the input and return type in user functions.
  * @param child logical plan of the underlying data
  * @param initialState logical plan of initial state
  * @param initGroupingAttrsLen length of the seq of grouping attributes for initial state dataframe
  */
-case class TransformWithStateInPandas(
+case class TransformWithStateInPySpark(
     functionExpr: Expression,
     groupingAttributesLen: Int,
     outputAttrs: Seq[Attribute],
     outputMode: OutputMode,
     timeMode: TimeMode,
+    userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value,
     child: LogicalPlan,
     hasInitialState: Boolean,
     initialState: LogicalPlan,
@@ -205,7 +207,7 @@ case class TransformWithStateInPandas(
     AttributeSet(leftAttributes ++ rightAttributes ++ functionExpr.references) -- producedAttributes
 
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPandas =
+      newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPySpark =
     copy(child = newLeft, initialState = newRight)
 
   def leftAttributes: Seq[Attribute] = {
@@ -222,6 +224,13 @@ case class TransformWithStateInPandas(
       // in physical operators.
       left.output.take(groupingAttributesLen)
     }
+  }
+}
+
+object TransformWithStateInPySpark {
+  object UserFacingDataType extends Enumeration {
+    val PYTHON_ROW = Value("python_row")
+    val PANDAS = Value("pandas")
   }
 }
 

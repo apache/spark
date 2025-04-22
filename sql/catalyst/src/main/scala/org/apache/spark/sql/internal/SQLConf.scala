@@ -2569,10 +2569,11 @@ object SQLConf {
       .internal()
       .doc("State format version used by streaming join operations in a streaming query. " +
         "State between versions are tend to be incompatible, so state format version shouldn't " +
-        "be modified after running.")
+        "be modified after running. Version 3 uses a single state store with virtual column " +
+        "families instead of four stores and is only supported with RocksDB.")
       .version("3.0.0")
       .intConf
-      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")
       .createWithDefault(2)
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
@@ -3583,11 +3584,15 @@ object SQLConf {
           "than zero and less than INT_MAX.")
       .createWithDefaultString("256MB")
 
-  val ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH =
-    buildConf("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
-      .doc("When using TransformWithStateInPandas, limit the maximum number of state records " +
-        "that can be written to a single ArrowRecordBatch in memory.")
+  val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
+      .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
+        "the maximum number of state records that can be written to a single ArrowRecordBatch " +
+        "in memory.")
       .version("4.0.0")
+      // NOTE: This config was released already in Spark 4.0.0, so we should not remove the
+      // support of this.
+      .withAlternative("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch")
       .intConf
       .createWithDefault(10000)
 
@@ -3665,6 +3670,15 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
+
+  val PYSPARK_ARROW_VALIDATE_SCHEMA =
+    buildConf("spark.sql.execution.arrow.pyspark.validateSchema.enabled")
+      .doc(
+        "When true, validate the schema of Arrow batches returned by mapInArrow, mapInPandas " +
+        "and DataSource against the expected schema to ensure that they are compatible.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
@@ -5260,6 +5274,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS =
+    buildConf("spark.sql.legacy.readFileSourceTableCacheIgnoreOptions")
+      .internal()
+      .doc("When set to true, reading from file source table caches the first query plan and " +
+        "ignores subsequent changes in query options. Otherwise, query options will be applied " +
+        "to the cached plan and may produce different results.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val READ_SIDE_CHAR_PADDING = buildConf("spark.sql.readSideCharPadding")
     .doc("When true, Spark applies string padding when reading CHAR type columns/fields, " +
       "in addition to the write-side padding. This config is true by default to better enforce " +
@@ -6570,8 +6594,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
-  def arrowTransformWithStateInPandasMaxRecordsPerBatch: Int =
-    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PANDAS_MAX_RECORDS_PER_BATCH)
+  def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
+    getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 
@@ -6582,6 +6606,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
+
+  def pysparkArrowValidateSchema: Boolean = getConf(PYSPARK_ARROW_VALIDATE_SCHEMA)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
