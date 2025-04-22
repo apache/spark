@@ -164,12 +164,9 @@ case class UnionLoopExec(
       val newRecursion = recursion.transform {
         case r: UnionLoopRef if r.loopId == loopId =>
           prevDF.queryExecution.optimizedPlan match {
-            case _: LocalRelation =>
+            case l: LocalRelation =>
               prevPlan = prevDF.queryExecution.optimizedPlan
-              val prevPlanToRefMapping = prevPlan.output.zip(r.output).map {
-                case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
-              }
-              Project(prevPlanToRefMapping, prevPlan)
+              l.copy(output = r.output)
             case p @ Project(projectList, _: OneRowRelation) =>
               prevPlan = prevDF.queryExecution.optimizedPlan
               val prevPlanToRefMapping = projectList.zip(r.output).map {
