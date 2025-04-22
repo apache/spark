@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.nio.file.{Files, Paths}
 import java.util.{Locale, ServiceLoader}
 
@@ -27,6 +27,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.{Failure, Success, Try}
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.{DefaultFormats, JObject}
@@ -170,6 +171,19 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   def save(path: String): Unit = {
     new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sparkSession)
     saveImpl(path)
+  }
+
+  /**
+   * Saves the ML instances to the local file system path.
+   */
+  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
+  private[spark] def saveToLocal(path: String): Unit = {
+    ReadWriteUtils.localSavingModeState.set(true)
+    try {
+      save(path)
+    } finally {
+      ReadWriteUtils.localSavingModeState.set(false)
+    }
   }
 
   /**
@@ -331,6 +345,18 @@ abstract class MLReader[T] extends BaseReadWrite {
    */
   @Since("1.6.0")
   def load(path: String): T
+
+  /**
+   * Loads the ML component from the local file system path.
+   */
+  private[spark] def loadFromLocal(path: String): T = {
+    ReadWriteUtils.localSavingModeState.set(true)
+    try {
+      load(path)
+    } finally {
+      ReadWriteUtils.localSavingModeState.set(false)
+    }
+  }
 
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
@@ -760,19 +786,33 @@ private[ml] object MetaAlgorithmReadWrite {
 private[spark] class FileSystemOverwrite extends Logging {
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
-    val hadoopConf = session.sessionState.newHadoopConf()
-    val outputPath = new Path(path)
-    val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    if (fs.exists(qualifiedOutputPath)) {
-      if (shouldOverwrite) {
-        logInfo(log"Path ${MDC(PATH, path)} already exists. It will be overwritten.")
-        // TODO: Revert back to the original content if save is not successful.
-        fs.delete(qualifiedOutputPath, true)
-      } else {
-        throw new IOException(s"Path $path already exists. To overwrite it, " +
-          s"please use write.overwrite().save(path) for Scala and use " +
-          s"write().overwrite().save(path) for Java and Python.")
+    val errMsg = s"Path $path already exists. To overwrite it, " +
+      s"please use write.overwrite().save(path) for Scala and use " +
+      s"write().overwrite().save(path) for Java and Python."
+
+    if (ReadWriteUtils.localSavingModeState.get()) {
+      val filePath = new File(path)
+      if (filePath.exists()) {
+        if (shouldOverwrite) {
+          FileUtils.deleteDirectory(filePath)
+        } else {
+          throw new IOException(errMsg)
+        }
+      }
+
+    } else {
+      val hadoopConf = session.sessionState.newHadoopConf()
+      val outputPath = new Path(path)
+      val fs = outputPath.getFileSystem(hadoopConf)
+      val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      if (fs.exists(qualifiedOutputPath)) {
+        if (shouldOverwrite) {
+          logInfo(log"Path ${MDC(PATH, path)} already exists. It will be overwritten.")
+          // TODO: Revert back to the original content if save is not successful.
+          fs.delete(qualifiedOutputPath, true)
+        } else {
+          throw new IOException(errMsg)
+        }
       }
     }
   }
