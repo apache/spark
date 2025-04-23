@@ -287,7 +287,7 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
         def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
             """
             Takes start and end offset as input and read an iterator of data deterministically.
-            This is called whe query replay batches during restart or after failure.
+            This is called when replaying batches during restart or after failure.
             """
             start_idx = start["offset"]
             end_idx = end["offset"]
@@ -356,9 +356,19 @@ For library that are used inside a method, it must be imported inside the method
         from pyspark import TaskContext
         context = TaskContext.get()
 
+Mutating State
+~~~~~~~~~~~~~~
+Some methods such as DataSourceReader.read() and DataSourceReader.partitions() must be stateless. Changes to the object state made in these methods are not guaranteed to be visible or invisible to future invocations.
+
+Other methods such as DataSource.schema() and DataSourceStreamReader.latestOffset() can be stateful. Changes to the object state made in these methods are visible to future invocations.
+
+Refer to the documentation of each method for more details.
+
 Using a Python Data Source
 --------------------------
-**Use a Python Data Source in Batch Query**
+
+Use a Python Data Source in Batch Query
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 After defining your data source, it must be registered before usage.
 
@@ -366,7 +376,8 @@ After defining your data source, it must be registered before usage.
 
     spark.dataSource.register(FakeDataSource)
 
-**Read From a Python Data Source**
+Read From a Python Data Source
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Read from the fake datasource with the default schema and options:
 
@@ -412,7 +423,8 @@ Read from the fake datasource with a different number of rows:
     # | Douglas James|2007-01-18|  46226|     Alabama|
     # +--------------+----------+-------+------------+
 
-**Write To a Python Data Source**
+Write To a Python Data Source
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To write data to a custom location, make sure that you specify the `mode()` clause. Supported modes are `append` and `overwrite`.
 
@@ -424,7 +436,8 @@ To write data to a custom location, make sure that you specify the `mode()` clau
     # You can check the Spark log (standard error) to see the output of the write operation.
     # Total number of rows: 10
 
-**Use a Python Data Source in Streaming Query**
+Use a Python Data Source in Streaming Query
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Once we register the python data source, we can also use it in streaming queries as source of readStream() or sink of writeStream() by passing short name or full name to format().
 
