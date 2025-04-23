@@ -1163,7 +1163,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         parameters = Map(
           "expression" -> s"'$invalidTime'",
           "sourceType" -> "\"STRING\"",
-          "targetType" -> "\"TIME(6)\""))
+          "targetType" -> "\"TIME(6)\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
   }
 }

@@ -226,12 +226,11 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def castingCauseOverflowError(t: String, from: DataType, to: DataType): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CAST_OVERFLOW",
-      messageParameters =
-        Map(
-          "value" -> t,
-          "sourceType" -> toSQLType(from),
-          "targetType" -> toSQLType(to),
-          "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
+      messageParameters = Map(
+        "value" -> t,
+        "sourceType" -> toSQLType(from),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = Array.empty,
       summary = "")
   }

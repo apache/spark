@@ -171,6 +171,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       parameters = Map(
         "expression" -> "'x123'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"TIME(6)\""))
+        "targetType" -> "\"TIME(6)\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 }
