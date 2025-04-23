@@ -25,12 +25,18 @@ if TYPE_CHECKING:
         PandasScalarUDFType,
         PandasScalarIterUDFType,
         PandasGroupedAggUDFType,
+        ArrowScalarUDFType,
     )
 
 
 def infer_eval_type(
     sig: Signature, type_hints: Dict[str, Any]
-) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
+) -> Union[
+    "PandasScalarUDFType",
+    "PandasScalarIterUDFType",
+    "PandasGroupedAggUDFType",
+    "ArrowScalarUDFType",
+]:
     """
     Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
     :class:`inspect.Signature` instance and type hints.
@@ -76,7 +82,7 @@ def infer_eval_type(
         for a in parameters_sig
     ) and (return_annotation == pd.Series or return_annotation == pd.DataFrame)
 
-    # Series, Frame or Union[DataFrame, Series], ... -> Series or Frame
+    # pa.Array, ... -> pa.Array
     is_arrow_array = all(
         a == pa.Array or check_union_annotation(a, parameter_check_func=lambda na: na == pa.Array)
         for a in parameters_sig
