@@ -132,7 +132,7 @@ case class TransformWithStateExec(
    * This instance of the stateful processor won't be used again.
    */
   private def closeProcessorHandle(): Unit = {
-    statefulProcessor.close()
+    closeStatefulProcessor()
     statefulProcessor.setHandle(null)
   }
 
@@ -457,10 +457,21 @@ case class TransformWithStateExec(
       }
       setStoreMetrics(store)
       setOperatorMetrics()
-      statefulProcessor.close()
+      closeStatefulProcessor()
       statefulProcessor.setHandle(null)
       processorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
     })
+  }
+
+  def closeStatefulProcessor(): Unit = {
+    try {
+      statefulProcessor.close()
+    } catch {
+      case sparkThrowable: SparkThrowable =>
+        throw sparkThrowable
+      case e: Exception =>
+        throw TransformWithStateUserFunctionException(e)
+    }
   }
 
   // operator specific metrics
@@ -625,7 +636,7 @@ case class TransformWithStateExec(
     val outputIterator = f(store)
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
       stateStoreProvider.close()
-      statefulProcessor.close()
+      closeStatefulProcessor()
     })
   }
 
