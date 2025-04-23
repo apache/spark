@@ -114,11 +114,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-50983: Currently nested correlations tests are using
     // analyzer results as results. The expected segment sizes are different
     // from other testcases.
-    "subquery/nestedcorrelation/combined-subquery.sql",
-    "subquery/nestedcorrelation/exists-subquery.sql",
-    "subquery/nestedcorrelation/lateral-subquery.sql",
-    "subquery/nestedcorrelation/scalar-subquery.sql",
-    "subquery/nestedcorrelation/subquery-not-supported.sql"
+    "subquery/nestedcorrelation-analyzer-only/combined-subquery.sql",
+    "subquery/nestedcorrelation-analyzer-only/exists-subquery.sql",
+    "subquery/nestedcorrelation-analyzer-only/lateral-subquery.sql",
+    "subquery/nestedcorrelation-analyzer-only/scalar-subquery.sql",
+    "subquery/nestedcorrelation-analyzer-only/subquery-not-supported.sql",
+    "subquery/nestedcorrelation/scalar-subquery.sql"
   )
 
   override def runQueries(

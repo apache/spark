@@ -205,8 +205,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
       OptimizeOneRowRelationSubquery,
       PullOutNestedDataOuterRefExpressions,
       PullupCorrelatedPredicates),
+    // This batch rewrites all correlated subqueries along with any domain joins inside.
+    // Each rule in the batch is only effective when there are nested correlated subqueries
+    // in the plan.
     Batch("Rewrite Nested Correlated Subqueries", Once,
       RewriteDomainJoinsInOnePass,
+      RewriteCorrelatedSubqueriesInOnePass
     ),
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).

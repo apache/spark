@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Project, Repartition, RepartitionByExpression, Sort}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION, NESTED_CORRELATED_SUBQUERY, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
@@ -128,8 +128,13 @@ case class FunctionTableSubqueryArgumentExpression(
       newChildren: IndexedSeq[Expression]): FunctionTableSubqueryArgumentExpression =
     copy(outerAttrs = newChildren)
 
-  final override def nodePatternsInternal(): Seq[TreePattern] =
-    Seq(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)
+  final override def nodePatternsInternal(): Seq[TreePattern] = {
+    if (outerScopeAttrs.isEmpty) {
+      Seq(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)
+    } else {
+      Seq(NESTED_CORRELATED_SUBQUERY, FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)
+    }
+  }
 
   def hasRepartitioning: Boolean = withSinglePartition || partitionByExpressions.nonEmpty
 

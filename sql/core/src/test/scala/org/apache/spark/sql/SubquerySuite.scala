@@ -2847,32 +2847,109 @@ class SubquerySuite extends QueryTest
     )
   }
 
-  test("test non deterministic query") {
-    sql("CREATE TABLE tbl(a TINYINT, b SMALLINT," +
-      " c INTEGER, d BIGINT, e VARCHAR(1), f DATE, g TIMESTAMP);")
-
-//    set spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled=true;
-//    set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled=true;
-//    set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForINSubqueries.enabled=true;
-//    set spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled=true;
+  test("query without count bug without domain joins") {
+    sql("CREATE TEMP VIEW t0 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t1 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t2 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t3 AS SELECT 1 AS a, 2 AS b, 3 AS c")
     val query =
       """
-        |SELECT 1 FROM tbl t1 JOIN tbl t2 ON (t1.d=t2.d) WHERE
-        | EXISTS(SELECT t1.c FROM tbl t3 WHERE t1.d+t3.c<100 AND
-        |  EXISTS(SELECT 1 FROM tbl t4 WHERE t2.f < DATE '2000-01-01'));
+        |SELECT *
+        |FROM t1
+        |WHERE t1.a = (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a = (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b = t2.b AND t3.c = t1.c
+        |  ) AND t2.b = t1.b
+        |)
         |""".stripMargin
     withSQLConf(
-      "spark.sql.planChangeLog.level" -> "info",
       "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
       "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
-      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForEXISTSSubqueries.enabled" -> "true"
+      "spark.sql.planChangeLog.level" -> "info"
     ) {
-      val df = sql(query)
-      df.collect()
-      val analyzedPlan = df.queryExecution.analyzed
-      // scalastyle:off println
-      println(analyzedPlan.toString)
-      // scalastyle:on println
+      val df = sql(query).collect()
+    }
+    val querySuperNested =
+      """
+        |SELECT *
+        |FROM t0
+        |WHERE t0.a = (
+        |SELECT t1.a
+        |FROM t1
+        |WHERE t1.a = (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a = (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b = t2.b AND t3.c = t0.c
+        |  ) AND t2.b = t1.b
+        | )
+        |)
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.planChangeLog.level" -> "info"
+    ) {
+      val df = sql(querySuperNested).collect()
+    }
+  }
+
+  test("query without count bug with domain joins") {
+    sql("CREATE TEMP VIEW t0 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t1 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t2 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    sql("CREATE TEMP VIEW t3 AS SELECT 1 AS a, 2 AS b, 3 AS c")
+    val query =
+      """
+        |SELECT *
+        |FROM t1
+        |WHERE t1.a > (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a > (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b > t2.b AND t3.c > t1.c
+        |  ) AND t2.b > t1.b
+        |)
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.planChangeLog.level" -> "info"
+    ) {
+      val df = sql(query).collect()
+    }
+    val querySuperNested =
+      """
+        |SELECT *
+        |FROM t0
+        |WHERE t0.a > (
+        |SELECT t1.a
+        |FROM t1
+        |WHERE t1.a > (
+        |  SELECT MAX(t2.a)
+        |  FROM t2
+        |  WHERE t2.a > (
+        |   SELECT MAX(t3.a)
+        |   FROM t3
+        |   WHERE t3.b > t2.b AND t3.c > t0.c
+        |  ) AND t2.b > t1.b
+        | )
+        |)
+        |""".stripMargin
+    withSQLConf(
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+      "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true",
+      "spark.sql.planChangeLog.level" -> "info"
+    ) {
+      val df = sql(querySuperNested).collect()
     }
   }
 }

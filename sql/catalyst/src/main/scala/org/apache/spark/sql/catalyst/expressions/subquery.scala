@@ -638,7 +638,13 @@ case class ScalarSubquery(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = {
+    if (outerScopeAttrs.isEmpty) {
+      Seq(SCALAR_SUBQUERY)
+    } else {
+      Seq(NESTED_CORRELATED_SUBQUERY, SCALAR_SUBQUERY)
+    }
+  }
 }
 
 object ScalarSubquery {
@@ -726,7 +732,17 @@ case class LateralSubquery(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(LATERAL_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = {
+    if (outerScopeAttrs.isEmpty) {
+      Seq(LATERAL_SUBQUERY)
+    } else {
+      // Currently we don't support lateral subqueries with
+      // nested outer references.
+      assert(false, "Nested outer references are not supported in lateral subqueries." +
+        " Please file a bug if you see this error.")
+      Seq(NESTED_CORRELATED_SUBQUERY, LATERAL_SUBQUERY)
+    }
+  }
 }
 
 /**
@@ -803,7 +819,13 @@ case class ListQuery(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(LIST_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = {
+    if (outerScopeAttrs.isEmpty) {
+      Seq(LIST_SUBQUERY)
+    } else {
+      Seq(NESTED_CORRELATED_SUBQUERY, LIST_SUBQUERY)
+    }
+  }
 }
 
 /**
@@ -873,7 +895,13 @@ case class Exists(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = {
+    if (outerScopeAttrs.isEmpty) {
+      Seq(EXISTS_SUBQUERY)
+    } else {
+      Seq(NESTED_CORRELATED_SUBQUERY, EXISTS_SUBQUERY)
+    }
+  }
 }
 
 case class UnresolvedExistsPlanId(planId: Long)
