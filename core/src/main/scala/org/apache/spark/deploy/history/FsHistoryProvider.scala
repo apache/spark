@@ -1214,7 +1214,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def addListing(app: ApplicationInfoWrapper): Unit = listing.synchronized {
     val newAttempt = app.attempts.head // The attempt parsed by AppListingListener
     // SPARK-XXXX: Store the full log path directly as received.
-    logDebug(s"addListing: Received attempt with full path: ${newAttempt.logPath}")
+    logInfo(s"addListing: Received attempt with full path: ${newAttempt.logPath}")
 
     // Create a new AttemptInfoWrapper instance using the received full path.
     // No relativization needed.
@@ -1228,7 +1228,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       newAttempt.adminAclsGroups, // adminAclsGroups: Option[String]
       newAttempt.viewAclsGroups // viewAclsGroups: Option[String]
     )
-    logDebug(s"addListing: Storing attempt with full path: ${attemptWithFullPath.logPath}")
+    logInfo(s"addListing: Storing attempt with full path: ${attemptWithFullPath.logPath}")
 
     val oldApp = try {
       listing.read(classOf[ApplicationInfoWrapper], app.info.id)
@@ -1410,7 +1410,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case ioe: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
-          logInfo(s"Exception occurred while rebuilding log path $attempt - trying again...")
+          logError(s"Exception occurred while rebuilding log path $ioe $attempt - trying again...", ioe)
           retried = true
 
         case e: Exception =>
