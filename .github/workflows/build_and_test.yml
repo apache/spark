@@ -622,6 +622,8 @@ jobs:
           # For branch-3.5 and below, it uses the default Python versions.
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
+    - name: Check Disk Space
+      run : df -h
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v5
