@@ -627,7 +627,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * Extract all correlated scalar subqueries from an expression. The subqueries are collected using
    * the given collector. The expression is rewritten and returned.
    */
-  private def extractCorrelatedScalarSubqueries[E <: Expression](
+  def extractCorrelatedScalarSubqueries[E <: Expression](
       expression: E,
       subqueries: ArrayBuffer[ScalarSubquery]): E = {
     val newExpression = expression.transformWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
@@ -795,7 +795,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val neededInnerAttrs = conditionsContainInnerReferences.flatMap(_.collect {
           case InnerReference(a) => a
         })
-        assert(neededInnerAttrs.isEmpty == outerScopeAttrs.isEmpty,
+        assert(neededInnerAttrs.isEmpty || outerScopeAttrs.nonEmpty,
           "Inner references are not allowed for subqueries without nested correlations")
 
         val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
@@ -1268,6 +1268,56 @@ object RewriteDomainJoinsInOnePass extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsPattern(NESTED_CORRELATED_SUBQUERY)) {
       apply0(plan)
+    } else {
+      plan
+    }
+  }
+}
+
+/**
+ * This rule rewrites all correlated subqueries into joins.
+ * It rewrites the subqueries in a bottom up manner.
+ * Now it only works for correlated scalar subqueries as currently
+ * only scalar subqueries are allowed to have nested outer references.
+ */
+object RewriteCorrelatedSubqueriesInOnePass extends Rule[LogicalPlan] {
+  private def containsCorrelatedScalarSubquery(e: Expression): Boolean = {
+    e.exists {
+      case s: ScalarSubquery if s.children.nonEmpty => true
+      case _ => false
+    }
+  }
+
+  private def apply0(plan: LogicalPlan): LogicalPlan = {
+    val newPlan = plan.transformUpWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
+      case p: LogicalPlan if p.expressions.exists(containsCorrelatedScalarSubquery) =>
+        val subqueries = ArrayBuffer.empty[ScalarSubquery]
+        p.expressions.map(
+          RewriteCorrelatedScalarSubquery.extractCorrelatedScalarSubqueries(_, subqueries))
+        val newSubqueries = subqueries.map {
+          case sub =>
+            val newPlan = apply0(sub.plan)
+            sub.withNewPlan(newPlan)
+        }
+        val replaceMap = subqueries.zip(newSubqueries).map {
+          case (oldSub, newSub) => oldSub -> newSub
+        }.toMap
+        val newP = p.transformExpressionsUpWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
+          case s: ScalarSubquery => replaceMap.applyOrElse(s, (s: ScalarSubquery) => s)
+        }
+        newP
+    }
+    RewriteCorrelatedScalarSubquery(newPlan)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (plan.containsPattern(NESTED_CORRELATED_SUBQUERY)) {
+      val newPlan = apply0(plan)
+      // After rewrite, there should be no nested correlated subqueries left.
+      assert(!newPlan.containsPattern(NESTED_CORRELATED_SUBQUERY),
+        "There should be no nested correlated subqueries left after" +
+          "RewriteCorrelatedSubqueriesInOnePass.")
+      newPlan
     } else {
       plan
     }

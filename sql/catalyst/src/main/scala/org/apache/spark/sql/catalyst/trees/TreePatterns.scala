@@ -78,6 +78,7 @@ object TreePattern extends Enumeration  {
   val SERIALIZE_FROM_OBJECT: Value = Value
   val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
+  val OUTER_REFERENCE_FOR_DOMAIN_JOIN: Value = Value
   val PARAMETER: Value = Value
   val PARAMETERIZED_QUERY: Value = Value
   val PIPE_EXPRESSION: Value = Value

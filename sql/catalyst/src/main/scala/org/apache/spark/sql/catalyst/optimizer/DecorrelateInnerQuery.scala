@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{NESTED_CORRELATED_SUBQUERY, OUTER_REFERENCE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{NESTED_CORRELATED_SUBQUERY, OUTER_REFERENCE, OUTER_REFERENCE_FOR_DOMAIN_JOIN, PLAN_EXPRESSION}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
@@ -126,6 +126,14 @@ object DecorrelateInnerQuery extends PredicateHelper {
    */
   private def collectOuterReferences(expression: Expression): AttributeSet = {
     AttributeSet(expression.collect { case o: OuterReference => o.toAttribute })
+  }
+
+  /**
+   * Collect outer references for domain joins
+   * in an expressions that are in the output attributes of the outer plan.
+   */
+  private def collectOuterReferencesForDomainJoin(expression: Expression): AttributeSet = {
+    AttributeSet(expression.collect { case o: OuterReferenceForDomainJoin => o.toAttribute })
   }
 
   /**
@@ -445,8 +453,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
       // We only needs the domain join conditions that contain outer references,
       // which stores the mapping between the domain attributes and the outer plan attributes.
       val conditions = splitConjunctivePredicates(outerJoinCondition.get)
-      val (conditionsContainingOuter, conditionsNotContainingOuter) =
-        conditions.partition(_.containsPattern(OUTER_REFERENCE))
+      val (conditionsContainingOuterReferenceForDomainJoin, conditionsNotContainingOuter) =
+        conditions.partition(_.containsPattern(OUTER_REFERENCE_FOR_DOMAIN_JOIN))
+      val conditionsContainingOuter =
+        conditionsContainingOuterReferenceForDomainJoin.map(_.transform {
+          case OuterReferenceForDomainJoin(a) => OuterReference(a)
+        })
       val domainAttrMap = buildDomainAttrMap(conditionsContainingOuter, domainAttrs)
       assert((joinType == Inner && conditionsNotContainingOuter.isEmpty)
         || (joinType == LeftOuter && conditionsNotContainingOuter.nonEmpty),
@@ -479,7 +491,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // Join joinType condition
               // :- Domain
               // +- Inner Query
-              case _ => Join(domain, newChild, joinType, outerJoinCondition, JoinHint.NONE)
+              case _ => Join(domain, newChild, joinType, domainJoinCond, JoinHint.NONE)
             }
         }
         assert(newChild.outputSet.subsetOf(plan.outputSet))
@@ -840,9 +852,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
     }
 
     def insertDomainJoin(
-                          plan: LogicalPlan,
-                          attributes: Seq[Attribute]
-                        ): (LogicalPlan, Seq[Expression], AttributeMap[Attribute]) = {
+        plan: LogicalPlan,
+        attributes: Seq[Attribute]
+    ): (LogicalPlan, Seq[Expression], AttributeMap[Attribute]) = {
       val domains = attributes.map(_.newInstance())
       // A placeholder to be rewritten into domain join.
       val outerReferenceMap = Utils.toMap(attributes, domains)
@@ -874,7 +886,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
           cond
       }
       val joinConditions: Seq[Expression] = conditions.toSeq
-      val domainJoin = DomainJoin(domains, plan, Inner, Some(joinConditions.reduce(And)))
+      val domainJoinCondition = joinConditions.map{
+        _.transform {
+          case OuterReference(a) => OuterReferenceForDomainJoin(a)
+        }
+      }
+      val domainJoin = DomainJoin(domains, plan, Inner, Some(domainJoinCondition.reduce(And)))
       (domainJoin, joinConditions, AttributeMap(outerReferenceMap))
     }
 
@@ -1337,7 +1354,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 if (containsNestedCorrelations) {
                   val conds: Seq[Expression] = mapping.map {
                     case (o, a) =>
-                      val cond = EqualNullSafe(a, OuterReference(o))
+                      val cond = EqualNullSafe(a, OuterReferenceForDomainJoin(o))
                       // SPARK-40615: Certain data types (e.g. MapType) do not support ordering, so
                       // the EqualNullSafe join condition can become unresolved.
                       if (!cond.resolved) {
