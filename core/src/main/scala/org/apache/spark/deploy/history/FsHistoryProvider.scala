@@ -572,8 +572,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                   listing.delete(classOf[LogInfo], reader.rootPath.toString)
                   false
                 } else if (count < conf.get(UPDATE_BATCHSIZE)) {
-                  listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
-                    LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
+                  listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime, LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
                     None, reader.completed))
                   count = count + 1
                   reader.fileSizeForLastIndex > 0
@@ -1213,18 +1212,31 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Calculate path relative to logDir
     val fullLogPath = new Path(newAttempt.logPath)
-    val relativePath = relativize(logDir, fullLogPath) // Use helper function
+    val relativePath = relativize(new Path(logDir), fullLogPath) // Use helper function
+    val relativePathStr = relativePath.toString
 
     // Create a new AttemptInfoWrapper with the relative path
     // SPARK-XXXX: Ensure logPath stored is relative to logDir
-    val attemptWithRelativePath = newAttempt.copy(logPath = relativePath.toString)
+    // Manually construct new instance instead of using .copy()
+    val attemptWithRelativePath = new AttemptInfoWrapper(
+      newAttempt.info,
+      relativePathStr,
+      newAttempt.fileSize,
+      newAttempt.lastIndex,
+      newAttempt.adminAcls,
+      newAttempt.viewAcls,
+      newAttempt.adminAclsGroups,
+      newAttempt.viewAclsGroups
+    )
 
     val oldApp = try {
       listing.read(classOf[ApplicationInfoWrapper], app.info.id)
     } catch {
       case _: NoSuchElementException =>
         // This is the first attempt for this app ID. Create a new wrapper.
-        listing.write(app.copy(attempts = List(attemptWithRelativePath)))
+        // Manually construct new instance instead of using .copy()
+        val finalApp = new ApplicationInfoWrapper(app.info, List(attemptWithRelativePath))
+        listing.write(finalApp)
         return
     }
 
@@ -1234,22 +1246,23 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val updatedAttempts = (existingAttempts :+ attemptWithRelativePath)
       .sortBy(_.info.startTime.getTime()) // Keep attempts sorted
 
-    listing.write(oldApp.copy(attempts = updatedAttempts))
+    // Manually construct new instance instead of using .copy()
+    val finalApp = new ApplicationInfoWrapper(oldApp.info, updatedAttempts)
+    listing.write(finalApp)
   }
 
   // Helper function to get the relative path (assuming logDir is an ancestor)
   // This might need adjustment based on how Path objects behave with URIs (like s3a://)
   private def relativize(base: Path, absolute: Path): Path = {
     // A simple approach if paths are well-behaved URIs or file paths:
-    val baseUri = base.toUri
-    val absoluteUri = absolute.toUri
-    val relativeUri = baseUri.relativize(absoluteUri)
-    // Convert the relative URI back to a Path.
-    // If relativize results in an absolute URI (e.g., different schemes or authorities),
-    // this might return the original absolute path's URI path part, which might be acceptable
-    // if Path resolution handles it, but needs testing.
-    // Using getPath handles cases where the URI might still have scheme/authority.
-    new Path(relativeUri.getPath)
+    val baseUri: java.net.URI = base.toUri
+    val absoluteUri: java.net.URI = absolute.toUri
+    // Ensure relativeUri is explicitly typed as URI
+    val relativeUri: java.net.URI = baseUri.relativize(absoluteUri)
+    // Construct the Path using the URI constructor and explicitly type the result
+    val resultPath: org.apache.hadoop.fs.Path = new Path(relativeUri)
+    // Explicitly return the typed Path
+    resultPath
   }
 
   private def loadDiskStore(
