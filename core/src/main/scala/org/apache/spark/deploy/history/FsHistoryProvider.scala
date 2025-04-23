@@ -475,6 +475,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .map(_.toImmutableArraySeq).getOrElse(Nil)
         .filter(_.isDirectory) // Keep only directories
 
+      logInfo(s"checkForLogs: Found ${subDirs.size} subdirectories in $logDir")
+
       // Then list the contents of each subdirectory
       val updated = subDirs.flatMap { subDir =>
           Option(fs.listStatus(subDir.getPath))
