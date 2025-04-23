@@ -592,8 +592,8 @@ case class TransformWithStateExec(
     try {
       block
     } catch {
-      case sparkThrowable: SparkThrowable =>
-        throw sparkThrowable
+      case st: Exception with SparkThrowable if st.getCondition != null =>
+        throw st
       case e: Exception =>
         throw TransformWithStateUserFunctionException(e, functionName)
     }
