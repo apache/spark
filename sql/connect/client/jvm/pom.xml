@@ -138,6 +138,13 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
+      <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <configuration>
+          <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Darrow.memory.debug.allocator=true</argLine>
+        </configuration>
+      </plugin>
       <!-- Shade all Guava / Protobuf / Netty dependencies of this build -->
       <!-- TODO (SPARK-42449): Ensure shading rules are handled correctly in `native-image.properties` and support GraalVM   -->
       <plugin>

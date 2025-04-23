@@ -840,6 +840,8 @@ object SparkConnectClient {
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
 
+    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true",
+
     (assembly / test) := { },
 
     (assembly / logLevel) := Level.Info,
