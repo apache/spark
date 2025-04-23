@@ -17182,7 +17182,7 @@ def character_length(str: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def chr(n: Column) -> Column:
+def chr(n: "ColumnOrName") -> Column:
     """
     Returns the ASCII character having the binary equivalent to `n`.
     If n is larger than 256 the result is equivalent to chr(n % 256).
@@ -17191,13 +17191,13 @@ def chr(n: Column) -> Column:
 
     Parameters
     ----------
-    n : :class:`~pyspark.sql.Column`
-        Input column.
+    n : :class:`~pyspark.sql.Column` or column name
+        target column to compute on.
 
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(60, 70).select("*", sf.chr(sf.col("id"))).show()
+    >>> spark.range(60, 70).select("*", sf.chr("id")).show()
     +---+-------+
     | id|chr(id)|
     +---+-------+

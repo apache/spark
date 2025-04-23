@@ -3002,7 +3002,7 @@ def character_length(str: "ColumnOrName") -> Column:
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
 
 
-def chr(n: Column) -> Column:
+def chr(n: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("chr", n)
 
 
