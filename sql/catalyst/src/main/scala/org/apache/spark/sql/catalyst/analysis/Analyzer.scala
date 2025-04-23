@@ -2372,7 +2372,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Record the outer references as children of subquery expression.
         val outer = SubExprUtils.getOuterReferences(newSubqueryPlan) ++
           getOuterAttrsNeedToBePropagated(newSubqueryPlan)
-        f(newSubqueryPlan, outer.distinct)
+        f(newSubqueryPlan, outer)
       } else {
         e.withNewPlan(newSubqueryPlan)
       }

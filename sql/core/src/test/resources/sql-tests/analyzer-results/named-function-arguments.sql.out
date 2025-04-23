@@ -131,7 +131,7 @@ Project [col#x, col#x]
 SELECT * FROM explode(array(1, 2)) AS t, LATERAL explode(array(3 * t.col, 4 * t.col))
 -- !query analysis
 Project [col#x, col#x]
-+- LateralJoin lateral-subquery#x [col#x], Inner
++- LateralJoin lateral-subquery#x [col#x && col#x], Inner
    :  +- Generate explode(array((3 * outer(col#x)), (4 * outer(col#x)))), false, [col#x]
    :     +- OneRowRelation
    +- SubqueryAlias t
@@ -180,7 +180,7 @@ Project [pos#x, col#x, pos#x, col#x]
 SELECT * FROM posexplode(array(1, 2)) AS t, LATERAL posexplode(array(3 * t.col, 4 * t.col))
 -- !query analysis
 Project [pos#x, col#x, pos#x, col#x]
-+- LateralJoin lateral-subquery#x [col#x], Inner
++- LateralJoin lateral-subquery#x [col#x && col#x], Inner
    :  +- Generate posexplode(array((3 * outer(col#x)), (4 * outer(col#x)))), false, [pos#x, col#x]
    :     +- OneRowRelation
    +- SubqueryAlias t
@@ -229,7 +229,7 @@ Project [col1#x, col2#x, col1#x, col2#x]
 SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t, LATERAL inline(array(struct(3 * t.col1, 4 * t.col1)))
 -- !query analysis
 Project [col1#x, col2#x, col1#x, col2#x]
-+- LateralJoin lateral-subquery#x [col1#x], Inner
++- LateralJoin lateral-subquery#x [col1#x && col1#x], Inner
    :  +- Generate inline(array(struct(col1, (3 * outer(col1#x)), col2, (4 * outer(col1#x))))), false, [col1#x, col2#x]
    :     +- OneRowRelation
    +- SubqueryAlias t

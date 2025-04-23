@@ -101,7 +101,7 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(c#x) AS sum(c)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Union false, false
@@ -203,7 +203,7 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
 :  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Union false, false
@@ -269,7 +269,7 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(d#x) AS sum(d)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Union false, false
@@ -399,7 +399,7 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(c#x) AS sum(c)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Distinct
@@ -504,7 +504,7 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
 :  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Distinct
@@ -572,7 +572,7 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(d#x) AS sum(d)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Distinct
@@ -701,7 +701,7 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(c#x) AS sum(c)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Intersect All true
@@ -803,7 +803,7 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
 :  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Intersect All true
@@ -869,7 +869,7 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(d#x) AS sum(d)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Intersect All true
@@ -997,7 +997,7 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(c#x) AS sum(c)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Intersect false
@@ -1099,7 +1099,7 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
 :  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Intersect false
@@ -1165,7 +1165,7 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(d#x) AS sum(d)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Intersect false
@@ -1293,7 +1293,7 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(c#x) AS sum(c)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Except All true
@@ -1395,7 +1395,7 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
 :  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Except All true
@@ -1461,7 +1461,7 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(d#x) AS sum(d)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Except All true
@@ -1589,7 +1589,7 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(c#x) AS sum(c)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Except false
@@ -1691,7 +1691,7 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
 :  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Except false
@@ -1757,7 +1757,7 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(d#x) AS sum(d)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Except false
@@ -1814,7 +1814,7 @@ SELECT t0a, (SELECT sum(t1b) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(t1b#x) AS sum(t1b)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Union false, false
@@ -1854,7 +1854,7 @@ SELECT t0a, (SELECT sum(t1b) FROM
 )
 FROM t0
 -- !query analysis
-Project [t0a#x, scalar-subquery#x [t0a#x] AS scalarsubquery(t0a)#xL]
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
 :  +- Aggregate [sum(t1b#x) AS sum(t1b)#xL]
 :     +- SubqueryAlias __auto_generated_subquery_name
 :        +- Union false, false

@@ -1320,7 +1320,7 @@ SELECT * FROM t0 WHERE t0a <
 )
 -- !query analysis
 Project [t0a#x, t0b#x]
-+- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x])
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0a#x])
    :  +- Aggregate [sum(c#x) AS sum(c)#xL]
    :     +- SubqueryAlias __auto_generated_subquery_name
    :        +- Union false, false
@@ -1461,7 +1461,7 @@ SELECT * FROM t0 WHERE t0a <
 )
 -- !query analysis
 Project [t0a#x, t0b#x]
-+- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x])
    :  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
    :     +- SubqueryAlias __auto_generated_subquery_name
    :        +- Union false, false
@@ -1530,7 +1530,7 @@ SELECT * FROM t0 WHERE t0a <
 )
 -- !query analysis
 Project [t0a#x, t0b#x]
-+- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x])
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0a#x])
    :  +- Aggregate [sum(d#x) AS sum(d)#xL]
    :     +- SubqueryAlias __auto_generated_subquery_name
    :        +- Union false, false

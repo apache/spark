@@ -243,7 +243,7 @@ NULL	NULL
 -- !query
 SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1
 -- !query schema
-struct<t1c:int,scalarsubquery(t1c):int>
+struct<t1c:int,scalarsubquery(t1c, t1c):int>
 -- !query output
 12	NULL
 12	NULL
@@ -574,7 +574,7 @@ WITH T AS (SELECT 1 AS a)
 SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
 FROM (SELECT null as col) as foo
 -- !query schema
-struct<scalarsubquery(col):bigint>
+struct<scalarsubquery(col, col):bigint>
 -- !query output
 NULL
 

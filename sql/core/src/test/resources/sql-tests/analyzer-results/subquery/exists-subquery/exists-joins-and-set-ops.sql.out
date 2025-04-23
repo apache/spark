@@ -686,7 +686,7 @@ WHERE  EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter exists#x [dept_id#x]
++- Filter exists#x [dept_id#x && dept_id#x]
    :  +- Distinct
    :     +- Union false, false
    :        :- Project [dept_id#x, dept_name#x, state#x]
@@ -725,7 +725,7 @@ WHERE NOT EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter NOT exists#x [dept_id#x]
++- Filter NOT exists#x [dept_id#x && dept_id#x]
    :  +- Distinct
    :     +- Union false, false
    :        :- Project [dept_id#x, dept_name#x, state#x]
@@ -764,7 +764,7 @@ WHERE  EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter exists#x [dept_id#x]
++- Filter exists#x [dept_id#x && dept_id#x]
    :  +- Intersect All true
    :     :- Project [dept_id#x, dept_name#x, state#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
@@ -802,7 +802,7 @@ WHERE EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter exists#x [dept_id#x]
++- Filter exists#x [dept_id#x && dept_id#x]
    :  +- Intersect false
    :     :- Project [dept_id#x, dept_name#x, state#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
@@ -840,7 +840,7 @@ WHERE  EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter exists#x [dept_id#x]
++- Filter exists#x [dept_id#x && dept_id#x]
    :  +- Except All true
    :     :- Project [dept_id#x, dept_name#x, state#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
@@ -878,7 +878,7 @@ WHERE  EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter exists#x [dept_id#x]
++- Filter exists#x [dept_id#x && dept_id#x]
    :  +- Except false
    :     :- Project [dept_id#x, dept_name#x, state#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
@@ -916,7 +916,7 @@ WHERE NOT EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter NOT exists#x [dept_id#x]
++- Filter NOT exists#x [dept_id#x && dept_id#x]
    :  +- Intersect All true
    :     :- Project [dept_id#x, dept_name#x, state#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))
@@ -954,7 +954,7 @@ WHERE NOT EXISTS (SELECT *
                WHERE  dept_id = emp.dept_id and state = "TX")
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter NOT exists#x [dept_id#x]
++- Filter NOT exists#x [dept_id#x && dept_id#x]
    :  +- Except false
    :     :- Project [dept_id#x, dept_name#x, state#x]
    :     :  +- Filter ((dept_id#x = outer(dept_id#x)) AND (state#x = CA))

@@ -79,7 +79,7 @@ select (
 ) a from t1 order by a desc
 -- !query analysis
 Sort [a#xL DESC NULLS LAST], true
-+- Project [scalar-subquery#x [a1#x] AS a#xL]
++- Project [scalar-subquery#x [a1#x && a1#x] AS a#xL]
    :  +- Aggregate [sum((cnt#xL + cnt#xL)) AS sum((cnt + cnt))#xL]
    :     +- Join Inner, (cnt#xL = cnt#xL)
    :        :- SubqueryAlias l
@@ -113,7 +113,7 @@ select (
 ) a from t1 order by a desc
 -- !query analysis
 Sort [a#xL DESC NULLS LAST], true
-+- Project [scalar-subquery#x [a1#x] AS a#xL]
++- Project [scalar-subquery#x [a1#x && a1#x] AS a#xL]
    :  +- Aggregate [sum((cnt#xL + cnt#xL)) AS sum((cnt + cnt))#xL]
    :     +- Join Inner, (cnt#xL = cnt#xL)
    :        :- SubqueryAlias l

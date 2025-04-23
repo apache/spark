@@ -324,7 +324,7 @@ Sort [i#x ASC NULLS FIRST], true
    :  +- Aggregate [sum(i#x) AS sum(i)#xL]
    :     +- SubqueryAlias ss1
    :        +- Project [i#x]
-   :           +- Filter exists#x [i#x]
+   :           +- Filter exists#x [i#x && i#x]
    :              :  +- Project [i#x]
    :              :     +- Filter (NOT (i#x = outer(i#x)) AND (outer(i#x) > i#x))
    :              :        +- SubqueryAlias spark_catalog.default.table_integers
@@ -346,7 +346,7 @@ Sort [i#x ASC NULLS FIRST], true
    :     +- Join LeftOuter, (i#x = i#x)
    :        :- SubqueryAlias ss1
    :        :  +- Project [i#x]
-   :        :     +- Filter ((i#x = outer(i#x)) AND exists#x [i#x])
+   :        :     +- Filter ((i#x = outer(i#x)) AND exists#x [i#x && i#x])
    :        :        :  +- Project [i#x]
    :        :        :     +- Filter (NOT (i#x = outer(i#x)) AND (outer(i#x) > i#x))
    :        :        :        +- SubqueryAlias spark_catalog.default.table_integers

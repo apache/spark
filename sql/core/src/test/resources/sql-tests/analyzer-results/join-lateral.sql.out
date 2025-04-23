@@ -635,7 +635,7 @@ Project [c1#x, c2#x, c1#x, m#x, m#x]
 +- LateralJoin lateral-subquery#x [c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [c1#x, m#x, m#x]
-   :        +- LateralJoin lateral-subquery#x [m#x && c1#x], Inner
+   :        +- LateralJoin lateral-subquery#x [m#x && m#x && c1#x], Inner
    :           :  +- SubqueryAlias __auto_generated_subquery_name
    :           :     +- Project [outer(m#x) AS m#x]
    :           :        +- Filter (outer(m#x) > outer(c1#x))
@@ -1201,7 +1201,7 @@ Project [c1#x, c2#x, count(1)#xL]
 SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT COUNT(*) cnt FROM t2 WHERE t1.c1 = t2.c1) WHERE cnt = c1 - 1)
 -- !query analysis
 Project [c1#x, c2#x, cnt#xL]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [cnt#xL]
    :        +- Filter (cnt#xL = cast((outer(c1#x) - 1) as bigint))
@@ -1222,7 +1222,7 @@ Project [c1#x, c2#x, cnt#xL]
 SELECT * FROM t1, LATERAL (SELECT COUNT(*) FROM (SELECT COUNT(*) cnt FROM t2 WHERE t1.c1 = t2.c1) WHERE cnt = c1 - 1)
 -- !query analysis
 Project [c1#x, c2#x, count(1)#xL]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Aggregate [count(1) AS count(1)#xL]
    :        +- Filter (cnt#xL = cast((outer(c1#x) - 1) as bigint))
@@ -1246,7 +1246,7 @@ SELECT * FROM t1, LATERAL (
 )
 -- !query analysis
 Project [c1#x, c2#x, count(1)#xL]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Aggregate [cnt#xL], [count(1) AS count(1)#xL]
    :        +- Filter (cnt#xL = cast((outer(c1#x) - 1) as bigint))
@@ -1299,7 +1299,7 @@ SELECT * FROM t1, LATERAL (
 )
 -- !query analysis
 Project [c1#x, c2#x, (cnt + cnt)#xL]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [(cnt#xL + cnt#xL) AS (cnt + cnt)#xL]
    :        +- Join Inner
@@ -1472,7 +1472,7 @@ SELECT * FROM t1 JOIN LATERAL
   WHERE  t4.c1 = t1.c1)
 -- !query analysis
 Project [c1#x, c2#x, c2#x]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Union false, false
    :        :- Project [c2#x]
@@ -1537,7 +1537,7 @@ SELECT * FROM t1 JOIN LATERAL
   WHERE  t4.c1 = t1.c1)
 -- !query analysis
 Project [c1#x, c2#x, c2#x]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Intersect All true
    :        :- Project [c2#x]
@@ -1601,7 +1601,7 @@ SELECT * FROM t1 JOIN LATERAL
   WHERE  t4.c1 = t1.c1)
 -- !query analysis
 Project [c1#x, c2#x, c2#x]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Except All true
    :        :- Project [c2#x]
@@ -1698,7 +1698,7 @@ SELECT * FROM t1 JOIN LATERAL
   WHERE  t4.c1 = t1.c1)
 -- !query analysis
 Project [c1#x, c2#x, c1#x, c2#x]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Union false, false
    :        :- Project [c1#x, c2#x]
@@ -2078,7 +2078,7 @@ SELECT * FROM t2 JOIN LATERAL
 -- !query analysis
 Union false, false
 :- Project [c1#x, c2#x, c2#x]
-:  +- LateralJoin lateral-subquery#x [c1#x], Inner
+:  +- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
 :     :  +- SubqueryAlias __auto_generated_subquery_name
 :     :     +- Union false, false
 :     :        :- Project [c2#x]
@@ -2098,7 +2098,7 @@ Union false, false
 :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :              +- LocalRelation [col1#x, col2#x]
 +- Project [c1#x, c2#x, c2#x]
-   +- LateralJoin lateral-subquery#x [c1#x], Inner
+   +- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
       :  +- SubqueryAlias __auto_generated_subquery_name
       :     +- Union false, false
       :        :- Project [c2#x]
@@ -2139,7 +2139,7 @@ SELECT * FROM t1 JOIN LATERAL
 )
 -- !query analysis
 Project [c1#x, c2#x, c2#x]
-+- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c2#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Distinct
    :        +- Union false, false
@@ -2195,7 +2195,7 @@ SELECT * FROM t1 JOIN LATERAL
 )
 -- !query analysis
 Project [c1#x, c2#x, c2#x]
-+- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c2#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Intersect false
    :        :- Union false, false
@@ -2437,7 +2437,7 @@ Project [c1#x, c2#x, col#x]
 SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3))
 -- !query analysis
 Project [c1#x, c2#x, (outer(spark_catalog.default.t1.c1) + c3)#x]
-+- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x && c2#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [(outer(c1#x) + c3#x) AS (outer(spark_catalog.default.t1.c1) + c3)#x]
    :        +- SubqueryAlias t
@@ -2454,7 +2454,7 @@ Project [c1#x, c2#x, (outer(spark_catalog.default.t1.c1) + c3)#x]
 SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3) WHERE t1.c2 > 1)
 -- !query analysis
 Project [c1#x, c2#x, (outer(spark_catalog.default.t1.c1) + c3)#x]
-+- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c1#x && c2#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [(outer(c1#x) + c3#x) AS (outer(spark_catalog.default.t1.c1) + c3)#x]
    :        +- Filter (outer(c2#x) > 1)
@@ -2472,7 +2472,7 @@ Project [c1#x, c2#x, (outer(spark_catalog.default.t1.c1) + c3)#x]
 SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)) l(x) JOIN EXPLODE(ARRAY(c2, c1)) r(y) ON x = y)
 -- !query analysis
 Project [c1#x, c2#x, x#x, y#x]
-+- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c2#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [x#x, y#x]
    :        +- Join Inner, (x#x = y#x)
@@ -2947,7 +2947,7 @@ select * from t1 join lateral
    (select t4.c1 from t4 where t1.c1 = t4.c1 order by t4.c1 limit 3))
 -- !query analysis
 Project [c1#x, c2#x, c2#x]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Union false, false
    :        :- GlobalLimit 1
@@ -2983,7 +2983,7 @@ select * from t1 join lateral
    order by foo.t limit 5)
 -- !query analysis
 Project [c1#x, c2#x, t#x]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- GlobalLimit 5
    :        +- LocalLimit 5
@@ -3031,7 +3031,7 @@ left join
  ) as lateral_table
 -- !query analysis
 Project [1 AS 1#x]
-+- LateralJoin lateral-subquery#x [c2#x && c1#x], LeftOuter
++- LateralJoin lateral-subquery#x [c2#x && c1#x && c1#x], LeftOuter
    :  +- SubqueryAlias lateral_table
    :     +- GlobalLimit 1
    :        +- LocalLimit 1

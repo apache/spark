@@ -138,7 +138,7 @@ WHERE  EXISTS (SELECT dept.dept_name
                        OR emp.dept_id IS NULL)
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter exists#x [dept_id#x]
++- Filter exists#x [dept_id#x && dept_id#x]
    :  +- Project [dept_name#x]
    :     +- Filter ((outer(dept_id#x) = dept_id#x) OR isnull(outer(dept_id#x)))
    :        +- SubqueryAlias dept
