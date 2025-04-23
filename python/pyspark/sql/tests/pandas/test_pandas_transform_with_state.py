@@ -595,7 +595,6 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    @unittest.skip("test will hang during the GA testing, skipping until we can resolve")
     def test_transform_with_state_in_pandas_event_time(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -630,6 +629,7 @@ class TransformWithStateInPandasTestsMixin:
             EventTimeStatefulProcessor(), check_results
         )
 
+    @unittest.skip("test will hang during the GA testing, skipping until we can resolve")
     def test_transform_with_state_with_wmark_and_non_event_time(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
