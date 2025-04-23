@@ -522,7 +522,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     val e = intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "invalid")
     }
-    assert(e.getMessage === "" +
+    assert(e.getMessage ===
       s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} should be one of " +
       s"${LegacyBehaviorPolicy.values.mkString(", ")}, but was invalid")
   }
