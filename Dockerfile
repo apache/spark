@@ -6,13 +6,13 @@ WORKDIR /build
 # Copy the source code
 COPY . .
 
-ENV MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -T 1C"
+ENV MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 # Build Spark using the provided Maven wrapper and command
 # It might take a significant amount of time and resources.
-RUN --mount=type=cache,target=/root/.m2 ./dev/make-distribution.sh --name custom-spark -Phadoop-cloud -DskipTests -Dmaven.javadoc.skip=true
+RUN --mount=type=cache,target=/root/.m2 ./dev/make-distribution.sh --name custom-spark -Phadoop-cloud -DskipTests -Dmaven.javadoc.skip=true -T 1C
 # Minimal build for History Server, includes hadoop-cloud for S3/etc log reading
-# Uses cache mount for Maven repo and skips tests/docs
+# Uses cache mount for Maven repo and skips tests/docs. Parallel build enabled.
 
 
 
