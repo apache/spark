@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, FoldableUnevaluable, Literal, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, IdentityColumnSpec}
@@ -197,29 +197,19 @@ object ColumnDefinition {
 case class DefaultValueExpression(
     child: Expression,
     originalSQL: String,
-    exposeCurrentDefaultAsExprV2: Boolean)
+    analyzedChild: Option[Expression] = None)
   extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
-  override def stringArgs: Iterator[Any] = Iterator(child, originalSQL)
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
   // Convert the default expression to ColumnDefaultValue, which is required by DS v2 APIs.
   def toV2(statement: String, colName: String): ColumnDefaultValue = child match {
     case Literal(value, dataType) =>
-      val literalV2 = LiteralValue(value, dataType)
-      val exprV2 = if (exposeCurrentDefaultAsExprV2) literalV2 else null
-      new ColumnDefaultValue(originalSQL, exprV2, literalV2)
+      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      val existsDefault = LiteralValue(value, dataType)
+      new ColumnDefaultValue(originalSQL, currentDefault.orNull, existsDefault)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
-  }
-}
-
-object DefaultValueExpression {
-  def apply(expr: Expression, originalSQL: String): DefaultValueExpression = {
-    // only expose V2 expressions as current defaults if all Catalyst expressions are evaluable
-    // Catalyst expressions like CURRENT_USER or CURRENT_DATE will require special handling
-    val exposeCurrentDefaultAsExprV2 = !expr.exists(_.isInstanceOf[FoldableUnevaluable])
-    apply(expr, originalSQL, exposeCurrentDefaultAsExprV2)
   }
 }

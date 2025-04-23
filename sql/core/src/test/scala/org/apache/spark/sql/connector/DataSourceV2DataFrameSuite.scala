@@ -24,7 +24,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Identifier, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
@@ -363,15 +363,21 @@ class DataSourceV2DataFrameSuite
           null,
           new ColumnDefaultValue(
             "(100 + 23)",
-            LiteralValue(123, IntegerType),
+            new GeneralScalarExpression(
+              "+",
+              Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
             LiteralValue(123, IntegerType)),
           new ColumnDefaultValue(
             "('h' || 'r')",
-            LiteralValue(UTF8String.fromString("hr"), StringType),
+            new GeneralScalarExpression(
+              "CONCAT",
+              Array(
+                LiteralValue(UTF8String.fromString("h"), StringType),
+                LiteralValue(UTF8String.fromString("r"), StringType))),
             LiteralValue(UTF8String.fromString("hr"), StringType)),
           new ColumnDefaultValue(
             "CAST(1 AS BOOLEAN)",
-            LiteralValue(true, BooleanType),
+            new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
             LiteralValue(true, BooleanType))))
 
       val df1 = Seq(1).toDF("id")
@@ -406,15 +412,21 @@ class DataSourceV2DataFrameSuite
           null,
           new ColumnDefaultValue(
             "(50 * 2)",
-            LiteralValue(100, IntegerType),
+            new GeneralScalarExpression(
+              "*",
+              Array(LiteralValue(50, IntegerType), LiteralValue(2, IntegerType))),
             LiteralValue(100, IntegerType)),
           new ColumnDefaultValue(
             "('un' || 'known')",
-            LiteralValue(UTF8String.fromString("unknown"), StringType),
+            new GeneralScalarExpression(
+              "CONCAT",
+              Array(
+                LiteralValue(UTF8String.fromString("un"), StringType),
+                LiteralValue(UTF8String.fromString("known"), StringType))),
             LiteralValue(UTF8String.fromString("unknown"), StringType)),
           new ColumnDefaultValue(
             "CAST(0 AS BOOLEAN)",
-            LiteralValue(false, BooleanType),
+            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType),
             LiteralValue(false, BooleanType))))
 
       val df3 = Seq(1).toDF("id")
