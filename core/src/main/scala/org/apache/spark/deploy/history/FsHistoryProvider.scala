@@ -1216,43 +1216,26 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * where two threads are processing separate attempts of the same application.
    */
   private def addListing(app: ApplicationInfoWrapper): Unit = listing.synchronized {
-    val newAttempt = app.attempts.head // The attempt parsed by AppListingListener
-    // SPARK-XXXX: Store the full log path directly as received.
-    logInfo(s"addListing: Received attempt with full path: ${newAttempt.logPath}")
-
-    // Create a new AttemptInfoWrapper instance using the received full path.
-    // No relativization needed.
-    val attemptWithFullPath = new AttemptInfoWrapper(
-      newAttempt.info, // ApplicationAttemptInfo
-      newAttempt.logPath, // Store the full logPath directly
-      newAttempt.fileSize, // fileSize: Long
-      newAttempt.lastIndex, // lastIndex: Option[Long]
-      newAttempt.adminAcls, // adminAcls: Option[String]
-      newAttempt.viewAcls, // viewAcls: Option[String]
-      newAttempt.adminAclsGroups, // adminAclsGroups: Option[String]
-      newAttempt.viewAclsGroups // viewAclsGroups: Option[String]
-    )
-    logInfo(s"addListing: Storing attempt with full path: ${attemptWithFullPath.logPath}")
+    val attempt = app.attempts.head
 
     val oldApp = try {
-      listing.read(classOf[ApplicationInfoWrapper], app.info.id)
+      load(app.id)
     } catch {
       case _: NoSuchElementException =>
-        // This is the first attempt for this app ID. Create a new wrapper.
-        val finalApp = new ApplicationInfoWrapper(app.info, List(attemptWithFullPath))
-        listing.write(finalApp)
-        return
+        app
     }
 
-    // App already exists, merge attempts. Filter out the attempt we're replacing
-    // (if it exists) based on attemptId, and add the new one.
-    val existingAttempts = oldApp.attempts.filter(_.info.attemptId != attemptWithFullPath.info.attemptId)
-    val updatedAttempts = (existingAttempts :+ attemptWithFullPath)
-      .sortBy(_.info.startTime.getTime()) // Keep attempts sorted
+    def compareAttemptInfo(a1: AttemptInfoWrapper, a2: AttemptInfoWrapper): Boolean = {
+      a1.info.startTime.getTime() > a2.info.startTime.getTime()
+    }
 
-    // Manually construct new instance instead of using .copy()
-    val finalApp = new ApplicationInfoWrapper(oldApp.info, updatedAttempts)
-    listing.write(finalApp)
+    val attempts = oldApp.attempts.filter(_.info.attemptId != attempt.info.attemptId) ++
+      List(attempt)
+
+    val newAppInfo = new ApplicationInfoWrapper(
+      app.info,
+      attempts.sortWith(compareAttemptInfo))
+    listing.write(newAppInfo)
   }
 
   private def loadDiskStore(
@@ -1560,7 +1543,7 @@ private[history] class AppListingListener(
     haltEnabled: Boolean) extends SparkListener {
 
   private val app = new MutableApplicationInfo()
-  private val attempt = new MutableAttemptInfo(reader.rootPath.getName(),
+  private val attempt = new MutableAttemptInfo(reader.rootPath.getPath().toString(),
     reader.fileSizeForLastIndex, reader.lastIndex)
 
   private var gotEnvUpdate = false
