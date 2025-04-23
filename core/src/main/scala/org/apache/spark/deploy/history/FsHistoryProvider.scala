@@ -1251,42 +1251,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     listing.write(finalApp)
   }
 
-  // Helper function to get the relative path using string manipulation
-  private def relativize(base: Path, absolute: Path): Path = {
-    val baseStr = base.toString // e.g., "s3a://bucket/prefix/"
-    val absoluteStr = absolute.toString // e.g., "s3a://bucket/prefix/subdir/file"
-    logDebug(s"relativize: base='$baseStr', absolute='$absoluteStr'")
-
-    // Ensure base path ends with a slash for correct prefix check and substring logic
-    val normalizedBaseStr = if (baseStr.endsWith("/")) baseStr else baseStr + "/"
-
-    if (absoluteStr.startsWith(normalizedBaseStr)) {
-      // Get the part after the base path
-      val relativeStr = absoluteStr.substring(normalizedBaseStr.length)
-      logDebug(s"relativize: Calculated relative path: '$relativeStr'")
-      new Path(relativeStr) // e.g., "subdir/file"
-    } else if (absoluteStr.startsWith(baseStr) && !baseStr.endsWith("/") && absoluteStr.charAt(baseStr.length) == '/') {
-      // Handle case where baseStr doesn't end with / but absoluteStr has it right after
-      val relativeStr = absoluteStr.substring(baseStr.length + 1)
-      logDebug(s"relativize: Calculated relative path (no slash case): '$relativeStr'")
-      new Path(relativeStr)
-    }
-    else {
-      // If absolute path doesn't start with the base path, something is wrong.
-      // Log a warning and return the original absolute path's name component as a fallback,
-      // though this might lead to issues later if the structure isn't flat relative to base.
-      // Ideally, this case shouldn't happen if logs are always under logDir.
-      val fallbackName = absolute.getName
-      logWarning(s"Path '$absoluteStr' does not appear to be relative to base directory " +
-        s"'$normalizedBaseStr'. Falling back to using absolute path name: '$fallbackName'")
-      // Returning just the name is often incorrect for subdirectory structure.
-      // Consider throwing an exception if this case is truly unexpected.
-      // For now, let's try returning the name component.
-      logDebug(s"relativize: Falling back to path name: '$fallbackName'")
-      new Path(fallbackName)
-    }
-  }
-
   private def loadDiskStore(
       dm: HistoryServerDiskManager,
       appId: String,
