@@ -13203,11 +13203,15 @@ def uuid() -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(5).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
     +------------------------------------+
     |uuid()                              |
     +------------------------------------+
-    |762ad649-a230-4ecc-abe9-92870251155d|
+    |627ae05e-b319-42b5-b4e4-71c8c9754dd1|
+    |f781cce5-a2e2-464d-bc8b-426ff448e404|
+    |15e2e66e-8416-4ea2-af3c-409363408189|
+    |fb1d6178-7676-4791-baa9-f2ddcc494515|
+    |d48665e8-2657-4c6b-b7c8-8ae0cd646e41|
     +------------------------------------+
     """
     return _invoke_function("uuid")
