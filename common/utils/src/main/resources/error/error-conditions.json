@@ -5235,7 +5235,7 @@
   },
   "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR" : {
     "message" : [
-      "An error occurred in the handleInputRows function of the StatefulProcessor. Reason: <reason>"
+      "An error occurred in the handleInputRows function of the StatefulProcessor. Function: <function>. Reason: <reason>"
     ],
     "sqlState" : "39000"
   },

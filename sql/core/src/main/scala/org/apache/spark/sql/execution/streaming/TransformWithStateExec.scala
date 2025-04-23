@@ -285,7 +285,7 @@ case class TransformWithStateExec(
       case sparkThrowable: SparkThrowable =>
         throw sparkThrowable
       case e: Exception =>
-        throw TransformWithStateUserFunctionException(e)
+        throw TransformWithStateUserFunctionException(e, "handleInputRows")
     }
   }
 
@@ -314,7 +314,7 @@ case class TransformWithStateExec(
       case sparkThrowable: SparkThrowable =>
         throw sparkThrowable
       case e: Exception =>
-        throw TransformWithStateUserFunctionException(e)
+        throw TransformWithStateUserFunctionException(e, "handleInitialState")
     }
   }
 
@@ -348,7 +348,7 @@ case class TransformWithStateExec(
       case sparkThrowable: SparkThrowable =>
         throw sparkThrowable
       case e: Exception =>
-        throw TransformWithStateUserFunctionException(e)
+        throw TransformWithStateUserFunctionException(e, "handleExpiredTimer")
     }
   }
 
@@ -470,7 +470,7 @@ case class TransformWithStateExec(
       case sparkThrowable: SparkThrowable =>
         throw sparkThrowable
       case e: Exception =>
-        throw TransformWithStateUserFunctionException(e)
+        throw TransformWithStateUserFunctionException(e, "close")
     }
   }
 

@@ -370,10 +370,14 @@ class TWSSchemaMustBeNullable(
       "columnFamilyName" -> columnFamilyName,
       "schema" -> schema))
 
-private[sql] case class TransformWithStateUserFunctionException(cause: Throwable)
+private[sql] case class TransformWithStateUserFunctionException(
+    cause: Throwable,
+    functionName: String)
   extends SparkException(
     errorClass = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
-    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+    messageParameters = Map(
+      "reason" -> Option(cause.getMessage).getOrElse(""),
+      "function" -> functionName),
     cause = cause)
 
 class StateStoreInvalidValueSchemaEvolution(
