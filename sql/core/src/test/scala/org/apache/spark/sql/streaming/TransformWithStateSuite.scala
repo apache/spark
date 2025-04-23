@@ -125,11 +125,10 @@ class UnclassifiedTimerErrorProcessor
       key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, BasicState)] = {
-    null.asInstanceOf[ValueState[BasicState]].get()
+    throw new IllegalStateException("dummy unclassified error")
     Seq.empty.iterator
   }
 }
-
 
 class ClassifiedErrorInitialStateProcessor
   extends StatefulProcessorWithInitialState[String, String, (String, BasicState), String] {
@@ -158,7 +157,6 @@ class ClassifiedErrorInitialStateProcessor
   }
 }
 
-
 class UnclassifiedErrorInitialStateProcessor
   extends StatefulProcessorWithInitialState[String, String, (String, BasicState), String] {
 
@@ -175,7 +173,7 @@ class UnclassifiedErrorInitialStateProcessor
       key: String,
       initialState: String,
       timerValues: TimerValues): Unit = {
-    null.asInstanceOf[ValueState[BasicState]].get()
+    throw new IllegalStateException("dummy unclassified error")
   }
 
   override def handleInputRows(
@@ -228,7 +226,7 @@ class UnclassifiedErrorProcessor
       key: String,
       rows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, BasicState)] = {
-    null.asInstanceOf[ValueState[BasicState]].get()
+    throw new IllegalStateException("dummy unclassified error")
     Seq.empty.iterator
   }
 }
@@ -2573,10 +2571,9 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
           checkError(
             error.asInstanceOf[SparkException],
             condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
-            parameters = Map("reason" ->
-              ("Cannot invoke \"org.apache.spark.sql.streaming.ValueState." +
-                "get()\" because \"null\" is null"),
-            "function" -> "handleInputRows")
+            parameters = Map(
+              "reason" -> "dummy unclassified error",
+              "function" -> "handleInputRows")
           )
         }
       )
@@ -2626,10 +2623,9 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
           checkError(
             error.asInstanceOf[SparkException],
             condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
-            parameters = Map("reason" ->
-              ("Cannot invoke \"org.apache.spark.sql.streaming.ValueState." +
-                "get()\" because \"null\" is null"),
-            "function" -> "handleInitialState")
+            parameters = Map(
+              "reason" -> "dummy unclassified error",
+              "function" -> "handleInitialState")
           )
         }
       )
@@ -2684,9 +2680,8 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
           checkError(
             error.asInstanceOf[SparkException],
             condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
-            parameters = Map("reason" ->
-              ("Cannot invoke \"org.apache.spark.sql.streaming.ValueState." +
-                "get()\" because \"null\" is null"),
+            parameters = Map(
+              "reason" -> "dummy unclassified error",
               "function" -> "handleExpiredTimer")
           )
         }
