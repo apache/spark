@@ -200,8 +200,10 @@ case class TransformWithStateInPySparkExec(
           "exited unexpectedly (crashed)", e)
     }
     runner.stop()
+    val info = getStateInfo
+    val stateSchemaDir = stateSchemaDirPath()
 
-    validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, getStateInfo,
+    validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, info, stateSchemaDir,
       session, operatorStateMetadataVersion, stateStoreEncodingFormat =
         conf.stateStoreEncodingFormat)
   }

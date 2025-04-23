@@ -745,11 +745,12 @@ private[spark] class PythonAccumulatorV2(
     if (socket == null || !socket.isOpen) {
       if (isUnixDomainSock) {
         socket = SocketChannel.open(UnixDomainSocketAddress.of(socketPath.get))
-        logInfo(log"Connected to AccumulatorServer at socket: ${MDC(SOCKET_ADDRESS, serverHost)}")
+        logInfo(
+          log"Connected to AccumulatorServer at socket: ${MDC(SOCKET_ADDRESS, socketPath.get)}")
       } else {
         socket = SocketChannel.open(new InetSocketAddress(serverHost.get, serverPort.get))
-        logInfo(log"Connected to AccumulatorServer at host: ${MDC(HOST, serverHost)}" +
-          log" port: ${MDC(PORT, serverPort)}")
+        logInfo(log"Connected to AccumulatorServer at host: ${MDC(HOST, serverHost.get)}" +
+          log" port: ${MDC(PORT, serverPort.get)}")
       }
       // send the secret just for the initial authentication when opening a new connection
       secretToken.foreach { token =>

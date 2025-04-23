@@ -1421,7 +1421,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
             same time. And data chunks from the same grouping key should appear sequentially.
             """
             for batch in batches:
-                DataRow = Row(*(batch.column_names))
+                DataRow = Row(*(batch.schema.names))
 
                 # This is supposed to be the same.
                 batch_key = tuple(batch[o][0].as_py() for o in self.key_offsets)
@@ -1462,7 +1462,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
                     row_as_dict = row.asDict(True)
                     rows_as_dict.append(row_as_dict)
 
-                pdf_schema = pa.schema(pdf_type.fields)
+                pdf_schema = pa.schema(list(pdf_type))
                 record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
 
                 yield (record_batch, pdf_type)

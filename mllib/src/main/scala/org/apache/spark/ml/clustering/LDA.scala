@@ -805,6 +805,11 @@ class DistributedLDAModel private[ml] (
   override def toString: String = {
     s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
+
+  override def estimatedSize: Long = {
+    // TODO: Implement this method.
+    throw new UnsupportedOperationException
+  }
 }
 
 

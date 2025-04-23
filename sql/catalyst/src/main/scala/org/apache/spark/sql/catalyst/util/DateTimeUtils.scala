@@ -148,6 +148,23 @@ object DateTimeUtils extends SparkDateTimeUtils {
     Decimal(getMicroseconds(micros, zoneId), 8, 6)
   }
 
+
+  /**
+   * Returns the second value with fraction from a given TIME (TimeType) value.
+   * @param micros
+   *   The number of microseconds since the epoch.
+   * @param precision
+   *   The time fractional seconds precision, which indicates the number of decimal digits
+   *   maintained.
+   */
+  def getSecondsOfTimeWithFraction(micros: Long, precision: Int): Decimal = {
+    val seconds = (micros / MICROS_PER_SECOND) % SECONDS_PER_MINUTE
+    val scaleFactor = math.pow(10, precision).toLong
+    val scaledFraction = (micros % MICROS_PER_SECOND) * scaleFactor / MICROS_PER_SECOND
+    val fraction = scaledFraction.toDouble / scaleFactor
+    Decimal(seconds + fraction, 8, 6)
+  }
+
   /**
    * Returns local seconds, including fractional parts, multiplied by 1000000.
    *

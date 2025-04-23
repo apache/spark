@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.time.Duration
 
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -36,25 +36,22 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 // used to add a record into the secondary index for every appendList call.
 class MultiStatefulVariableTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, String, (String, Long)]{
-  @transient private var _listState: ListStateImplWithTTL[String] = _
+  @transient private var _listState: ListState[String] = _
   // Map from index to count
-  @transient private var _mapState: MapStateImplWithTTL[Long, Long] = _
+  @transient private var _mapState: MapState[Long, Long] = _
   // Counts the number of times the string has occurred. It should always be
   // equal to the size of the list state at the start and end of handleInputRows.
-  @transient private var _valueState: ValueStateImplWithTTL[Long] = _
+  @transient private var _valueState: ValueState[Long] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _listState = getHandle
       .getListState("listState", Encoders.STRING, ttlConfig)
-      .asInstanceOf[ListStateImplWithTTL[String]]
     _mapState = getHandle
         .getMapState("mapState", Encoders.scalaLong, Encoders.scalaLong, ttlConfig)
-        .asInstanceOf[MapStateImplWithTTL[Long, Long]]
     _valueState = getHandle
         .getValueState("valueState", Encoders.scalaLong, ttlConfig)
-        .asInstanceOf[ValueStateImplWithTTL[Long]]
   }
   override def handleInputRows(
       key: String,
@@ -94,14 +91,13 @@ class MultiStatefulVariableTTLProcessor(ttlConfig: TTLConfig)
 class ListStateTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, InputEvent, OutputEvent] {
 
-  @transient private var _listState: ListStateImplWithTTL[Int] = _
+  @transient private var _listState: ListState[Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _listState = getHandle
       .getListState("listState", Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[ListStateImplWithTTL[Int]]
   }
 
   override def handleInputRows(
@@ -111,7 +107,8 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
     var results = List[OutputEvent]()
 
     inputRows.foreach { row =>
-      val resultIter = processRow(row, _listState)
+      val resultIter = processRow(row,
+        _listState.asInstanceOf[ListStateImplWithTTL[Int]])
       resultIter.foreach { r =>
         results = r :: results
       }

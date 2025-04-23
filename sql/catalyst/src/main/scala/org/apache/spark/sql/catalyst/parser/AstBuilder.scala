@@ -6615,7 +6615,8 @@ class AstBuilder extends DataTypeAstBuilder
   private def replaceIntegerLiteralWithOrdinal(
       expression: Expression,
       canReplaceWithOrdinal: Boolean = true) = expression match {
-    case Literal(value: Int, IntegerType) if canReplaceWithOrdinal => UnresolvedOrdinal(value)
+    case literal @ Literal(value: Int, IntegerType) if canReplaceWithOrdinal =>
+      CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
     case other => other
   }
 

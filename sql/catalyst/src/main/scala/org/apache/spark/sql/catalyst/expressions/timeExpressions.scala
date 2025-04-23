@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.time.DateTimeException
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -125,6 +126,20 @@ case class ToTimeParser(fmt: Option[String]) {
       TimeFormatter(format, isParsing = true).parse(s.toString)
     }
   }
+}
+
+object TimePart {
+
+  def parseExtractField(extractField: String, source: Expression): Expression =
+    extractField.toUpperCase(Locale.ROOT) match {
+      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => HoursOfTime(source)
+      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => MinutesOfTime(source)
+      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondsOfTimeWithFraction(source)
+      case _ =>
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
+          extractField,
+          source)
+    }
 }
 
 /**
@@ -294,6 +309,32 @@ object HourExpressionBuilder extends ExpressionBuilder {
           Hour(child)
       }
     }
+  }
+}
+
+case class SecondsOfTimeWithFraction(child: Expression)
+  extends RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def replacement: Expression = {
+
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      DecimalType(8, 6),
+      "getSecondsOfTimeWithFraction",
+      Seq(child, Literal(precision)),
+      Seq(child.dataType, IntegerType))
+  }
+  private val precision: Int = child.dataType.asInstanceOf[TimeType].precision
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimeType(precision))
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(child = newChildren.head)
   }
 }
 
