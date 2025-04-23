@@ -1060,7 +1060,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     if (remaining.isEmpty) {
-      listing.delete(app.getClass(), app.id)
+      listing.delete(classOf[ApplicationInfoWrapper], app.id)
     }
 
     countDeleted
@@ -1209,26 +1209,47 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * where two threads are processing separate attempts of the same application.
    */
   private def addListing(app: ApplicationInfoWrapper): Unit = listing.synchronized {
-    val attempt = app.attempts.head
+    val newAttempt = app.attempts.head // The attempt parsed by AppListingListener
+
+    // Calculate path relative to logDir
+    val fullLogPath = new Path(newAttempt.logPath)
+    val relativePath = relativize(logDir, fullLogPath) // Use helper function
+
+    // Create a new AttemptInfoWrapper with the relative path
+    // SPARK-XXXX: Ensure logPath stored is relative to logDir
+    val attemptWithRelativePath = newAttempt.copy(logPath = relativePath.toString)
 
     val oldApp = try {
-      load(app.id)
+      listing.read(classOf[ApplicationInfoWrapper], app.info.id)
     } catch {
       case _: NoSuchElementException =>
-        app
+        // This is the first attempt for this app ID. Create a new wrapper.
+        listing.write(app.copy(attempts = List(attemptWithRelativePath)))
+        return
     }
 
-    def compareAttemptInfo(a1: AttemptInfoWrapper, a2: AttemptInfoWrapper): Boolean = {
-      a1.info.startTime.getTime() > a2.info.startTime.getTime()
-    }
+    // App already exists, merge attempts. Filter out the attempt we're replacing
+    // (if it exists) based on attemptId, and add the new one.
+    val existingAttempts = oldApp.attempts.filter(_.info.attemptId != attemptWithRelativePath.info.attemptId)
+    val updatedAttempts = (existingAttempts :+ attemptWithRelativePath)
+      .sortBy(_.info.startTime.getTime()) // Keep attempts sorted
 
-    val attempts = oldApp.attempts.filter(_.info.attemptId != attempt.info.attemptId) ++
-      List(attempt)
+    listing.write(oldApp.copy(attempts = updatedAttempts))
+  }
 
-    val newAppInfo = new ApplicationInfoWrapper(
-      app.info,
-      attempts.sortWith(compareAttemptInfo))
-    listing.write(newAppInfo)
+  // Helper function to get the relative path (assuming logDir is an ancestor)
+  // This might need adjustment based on how Path objects behave with URIs (like s3a://)
+  private def relativize(base: Path, absolute: Path): Path = {
+    // A simple approach if paths are well-behaved URIs or file paths:
+    val baseUri = base.toUri
+    val absoluteUri = absolute.toUri
+    val relativeUri = baseUri.relativize(absoluteUri)
+    // Convert the relative URI back to a Path.
+    // If relativize results in an absolute URI (e.g., different schemes or authorities),
+    // this might return the original absolute path's URI path part, which might be acceptable
+    // if Path resolution handles it, but needs testing.
+    // Using getPath handles cases where the URI might still have scheme/authority.
+    new Path(relativeUri.getPath)
   }
 
   private def loadDiskStore(
