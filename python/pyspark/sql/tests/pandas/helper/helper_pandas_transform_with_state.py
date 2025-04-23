@@ -972,7 +972,9 @@ class PandasMapStateProcessor(StatefulProcessor):
         assert next(map_iter)[1] == (value2,)
         self.map_state.removeKey(key1)
         assert not self.map_state.containsKey(key1)
+        assert self.map_state.exists()
         self.map_state.clear()
+        assert not self.map_state.exists()
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:
@@ -1011,7 +1013,9 @@ class RowMapStateProcessor(StatefulProcessor):
         assert next(map_iter)[1] == (value2,)
         self.map_state.removeKey(key1)
         assert not self.map_state.containsKey(key1)
+        assert self.map_state.exists()
         self.map_state.clear()
+        assert not self.map_state.exists()
         yield Row(id=key[0], countAsString=str(count))
 
     def close(self) -> None:
