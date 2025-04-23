@@ -1142,7 +1142,7 @@ def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
 def _cache_spark_dataset(
     dataset: "DataFrame",
     storageLevel: "StorageLevel" = StorageLevel.MEMORY_AND_DISK_DESER,
-    enable=True,
+    enable: bool = True,
 ) -> Iterator[Any]:
     if not enable:
         yield dataset
