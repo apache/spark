@@ -1543,7 +1543,7 @@ private[history] class AppListingListener(
     haltEnabled: Boolean) extends SparkListener {
 
   private val app = new MutableApplicationInfo()
-  private val attempt = new MutableAttemptInfo(reader.rootPath.getPath().toString(),
+  private val attempt = new MutableAttemptInfo(reader.rootPath.toString(),
     reader.fileSizeForLastIndex, reader.lastIndex)
 
   private var gotEnvUpdate = false
