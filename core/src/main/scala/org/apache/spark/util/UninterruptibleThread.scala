@@ -95,9 +95,8 @@ private[spark] class UninterruptibleThread(
     uninterruptibleLock.synchronized {
       if (uninterruptible) {
         shouldInterruptThread = true
-      } else {
-        super.interrupt()
       }
     }
+    super.interrupt()
   }
 }
