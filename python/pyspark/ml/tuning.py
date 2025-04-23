@@ -880,14 +880,6 @@ class CrossValidator(
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-
-        if is_remote():
-            # the main thread should not be affected
-            assert not hasattr(
-                dataset._session.client.thread_local,  # type: ignore[union-attr, operator]
-                "disable_ml_del",
-            )
-
         return self._copyValues(
             CrossValidatorModel(bestModel, metrics, cast(List[List[Model]], subModels), std_metrics)
         )
@@ -1519,14 +1511,6 @@ class TrainValidationSplit(
         else:
             bestIndex = np.argmin(cast(List[float], metrics))
         bestModel = est.fit(dataset, epm[bestIndex])
-
-        if is_remote():
-            # the main thread should not be affected
-            assert not hasattr(
-                dataset._session.client.thread_local,  # type: ignore[union-attr, operator]
-                "disable_ml_del",
-            )
-
         return self._copyValues(
             TrainValidationSplitModel(
                 bestModel,

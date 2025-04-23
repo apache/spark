@@ -97,7 +97,6 @@ class TuningTestsMixin:
             self.assertEqual(str(tvs_model.getEstimator()), str(model2.getEstimator()))
             self.assertEqual(str(tvs_model.getEvaluator()), str(model2.getEvaluator()))
 
-    @unittest.skip("Disabled due to a Python side reference count issue in _parallelFitTasks.")
     def test_cross_validator(self):
         dataset = self.spark.createDataFrame(
             [
