@@ -416,6 +416,19 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val KUBERNETES_EXECUTOR_ENABLE_SERVICE =
+    ConfigBuilder("spark.kubernetes.executor.enableService")
+      .doc("If a Kubernetes service is created for the executor. " +
+        "The executor pod creates a Kubernetes service that allows to connect to executor ports " +
+        "via the Kubernetes service instead of the pod host IP. Connecting to such ports " +
+        "instantly fails with 'connection refused' error once the executor got decommissioned. " +
+        "Connection to the port via the pod host IP instead fails with a 'connection timeout' " +
+        "which is set via NETWORK_TIMEOUT and defaults to 2 minutes. " +
+        "The kubernetes service provides access to the executors shuffle service.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL =
     ConfigBuilder("spark.kubernetes.executor.decommissionLabel")
       .doc("Label to apply to a pod which is being decommissioned." +
