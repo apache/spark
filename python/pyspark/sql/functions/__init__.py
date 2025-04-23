@@ -153,6 +153,7 @@ __all__ = [  # noqa: F405
     "overlay",
     "position",
     "printf",
+    "quote",
     "randstr",
     "regexp_count",
     "regexp_extract",

@@ -112,7 +112,6 @@ class FunctionsTestsMixin:
             "approxCountDistinct",  # deprecated
             "bitwiseNOT",  # deprecated
             "countDistinct",  # deprecated
-            "quote",  # new function in 4.1
             "shiftLeft",  # deprecated
             "shiftRight",  # deprecated
             "shiftRightUnsigned",  # deprecated
