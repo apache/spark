@@ -540,6 +540,11 @@ class ALSModel private[ml] (
     }
   }
 
+  override def estimatedSize: Long = {
+    val userCount = userFactors.count()
+    val itemCount = itemFactors.count()
+    (userCount + itemCount) * (rank + 1) * 4
+  }
 }
 
 @Since("1.6.0")
@@ -771,6 +776,13 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val userCount = dataset.select(getUserCol).distinct().count()
+    val itemCount = dataset.select(getItemCol).distinct().count()
+    val rank = getRank
+    (userCount + itemCount) * (rank + 1) * 4
+  }
 }
 
 
