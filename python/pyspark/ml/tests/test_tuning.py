@@ -73,12 +73,15 @@ class TuningTestsMixin:
 
         with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
             os.environ[_SPARKML_TEMP_DFS_PATH] = d
-            tvs_model2 = tvs.fit(dataset)
-            assert len(os.listdir(d)) == 0
-            self.assertTrue(np.isclose(tvs_model2.validationMetrics[0], 0.5, atol=1e-4))
-            self.assertTrue(
-                np.isclose(tvs_model2.validationMetrics[1], 0.8857142857142857, atol=1e-4)
-            )
+            try:
+                tvs_model2 = tvs.fit(dataset)
+                assert len(os.listdir(d)) == 0
+                self.assertTrue(np.isclose(tvs_model2.validationMetrics[0], 0.5, atol=1e-4))
+                self.assertTrue(
+                    np.isclose(tvs_model2.validationMetrics[1], 0.8857142857142857, atol=1e-4)
+                )
+            finally:
+                os.environ.pop(_SPARKML_TEMP_DFS_PATH, None)
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="train_validation_split") as d:
@@ -131,9 +134,12 @@ class TuningTestsMixin:
 
         with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
             os.environ[_SPARKML_TEMP_DFS_PATH] = d
-            model2 = cv.fit(dataset)
-            assert len(os.listdir(d)) == 0
-            self.assertTrue(np.isclose(model2.avgMetrics[0], 0.5, atol=1e-4))
+            try:
+                model2 = cv.fit(dataset)
+                assert len(os.listdir(d)) == 0
+                self.assertTrue(np.isclose(model2.avgMetrics[0], 0.5, atol=1e-4))
+            finally:
+                os.environ.pop(_SPARKML_TEMP_DFS_PATH, None)
 
         output = model.transform(dataset)
         self.assertEqual(
