@@ -7687,6 +7687,9 @@ def rand(seed: Optional[int] = None) -> Column:
         return _invoke_function("rand")
 
 
+random = rand
+
+
 @_try_remote_functions
 def randn(seed: Optional[int] = None) -> Column:
     """Generates a random column with independent and identically distributed (i.i.d.) samples
@@ -13191,6 +13194,26 @@ def session_user() -> Column:
 
 
 @_try_remote_functions
+def uuid() -> Column:
+    """Returns an universally unique identifier (UUID) string.
+    The value is returned as a canonical UUID 36-character string.
+
+    .. versionadded:: 4.1.0
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
+    +------------------------------------+
+    |uuid()                              |
+    +------------------------------------+
+    |762ad649-a230-4ecc-abe9-92870251155d|
+    +------------------------------------+
+    """
+    return _invoke_function("uuid")
+
+
+@_try_remote_functions
 def crc32(col: "ColumnOrName") -> Column:
     """
     Calculates the cyclic redundancy check value (CRC32) of a binary column and
@@ -17156,6 +17179,41 @@ def character_length(str: "ColumnOrName") -> Column:
     +--------------------------+
     """
     return _invoke_function_over_columns("character_length", str)
+
+
+@_try_remote_functions
+def chr(n: Column) -> Column:
+    """
+    Returns the ASCII character having the binary equivalent to `n`.
+    If n is larger than 256 the result is equivalent to chr(n % 256).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    n : :class:`~pyspark.sql.Column`
+        Input column.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(60, 70).select("*", sf.chr(sf.col("id"))).show()
+    +---+-------+
+    | id|chr(id)|
+    +---+-------+
+    | 60|      <|
+    | 61|      =|
+    | 62|      >|
+    | 63|      ?|
+    | 64|      @|
+    | 65|      A|
+    | 66|      B|
+    | 67|      C|
+    | 68|      D|
+    | 69|      E|
+    +---+-------+
+    """
+    return _invoke_function_over_columns("chr", n)
 
 
 @_try_remote_functions

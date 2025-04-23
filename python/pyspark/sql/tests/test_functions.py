@@ -65,9 +65,6 @@ class FunctionsTestsMixin:
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
-            "random",  # namespace conflict with python built-in module
-            "uuid",  # namespace conflict with python built-in module
-            "chr",  # namespace conflict with python built-in function
             "partitioning$",  # partitioning expressions for DSv2
         ]
 
@@ -112,12 +109,15 @@ class FunctionsTestsMixin:
             "approxCountDistinct",  # deprecated
             "bitwiseNOT",  # deprecated
             "countDistinct",  # deprecated
+            "chr",  # name conflict with builtin function
+            "random",  # name conflict with builtin function
             "shiftLeft",  # deprecated
             "shiftRight",  # deprecated
             "shiftRightUnsigned",  # deprecated
             "sumDistinct",  # deprecated
             "toDegrees",  # deprecated
             "toRadians",  # deprecated
+            "uuid",  # name conflict with builtin module
         }
 
         self.assertEqual(
