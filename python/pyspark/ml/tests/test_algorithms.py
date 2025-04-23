@@ -156,6 +156,7 @@ class OneVsRestTests(SparkSessionTestCase):
 
     def test_tmp_dfs_cache(self):
         from pyspark.ml.util import _SPARKML_TEMP_DFS_PATH
+
         with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
             os.environ[_SPARKML_TEMP_DFS_PATH] = d
             try:
