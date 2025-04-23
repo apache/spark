@@ -551,6 +551,11 @@ class DataSourceReader(ABC):
         This method is allowed to modify `self`. The object must remain picklable.
         Modifications to `self` are visible to the `partitions()` and `read()` methods.
 
+        Notes
+        -----
+        Configuration `spark.sql.python.filterPushdown.enabled` must be set to `true`
+        to implement this method.
+
         Examples
         --------
         Example filters and the resulting arguments passed to pushFilters:
