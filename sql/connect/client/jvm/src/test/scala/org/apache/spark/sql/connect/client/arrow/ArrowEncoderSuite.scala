@@ -827,8 +827,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
   }
 
-  // TODO(SPARK-51866): Re-enable this test.
-  ignore("kryo serialization") {
+  test("kryo serialization") {
     val e = intercept[SparkRuntimeException] {
       val encoder = agnosticEncoderFor(Encoders.kryo[(Int, String)])
       roundTripAndCheckIdentical(encoder) { () =>
