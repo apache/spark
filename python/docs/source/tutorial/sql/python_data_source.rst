@@ -530,6 +530,121 @@ The following example demonstrates how to implement a basic Data Source using Ar
 
     df.show()
 
+Filter Pushdown in Python Data Sources
+--------------------------------------
+
+Filter pushdown is an optimization technique that allows data sources to handle filters natively, reducing the amount of data that needs to be transferred and processed by Spark.
+
+The filter pushdown API is introduced in Spark 4.1, enabling DataSourceReader to selectively push down filters from the query to the source.
+
+You must turn on the configuration ``spark.sql.python.filterPushdown.enabled`` to enable filter pushdown.
+
+**How Filter Pushdown Works**
+
+When a query includes filter conditions, Spark can pass these filters to the data source implementation, which can then apply the filters during data retrieval. This is especially beneficial for:
+
+- Data sources backed by formats that allow efficient filtering (e.g. key-value stores)
+- APIs that support filtering (e.g. REST and GraphQL APIs)
+
+The data source receives the filters, decides which ones can be pushed down, and returns the remaining filters to Spark to be applied later.
+
+**Implementing Filter Pushdown**
+
+To enable filter pushdown in your Python Data Source, implement the ``pushFilters`` method in your ``DataSourceReader`` class:
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import EqualTo, Filter, GreaterThan, LessThan
+
+    def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+        """
+        Parameters
+        ----------
+        filters : list of Filter objects
+            The AND of the filters that Spark would like to push down
+
+        Returns
+        -------
+        iterable of Filter objects
+            Filters that could not be pushed down and still need to be 
+            evaluated by Spark
+        """
+        # Process the filters and determine which ones can be handled by the data source
+        pushed = []
+        for filter in filters:
+            if isinstance(filter, (EqualTo, GreaterThan, LessThan)):
+                pushed.append(filter)
+            # Check for other supported filter types...
+            else:
+                yield filter  # Let Spark handle unsupported filters
+
+        # Store the pushed filters for use in partitions() and read() methods
+        self.pushed_filters = pushed
+
+**Notes**
+
+pushFilters() is called only if there are filters available to push down.
+If it is called, the call happens before partitions().
+
+**Supported Filter Types**
+
+Spark supports pushing down the following filter types:
+
+.. list-table::
+    :header-rows: 1
+
+    * - Filter Type
+      - Class
+      - SQL Equivalent
+    * - Equality
+      - ``EqualTo``
+      - ``column = constant``
+    * - Greater Than
+      - ``GreaterThan``
+      - ``column > constant``
+    * - Greater Than or Equal
+      - ``GreaterThanOrEqual``
+      - ``column >= constant``
+    * - Less Than
+      - ``LessThan``
+      - ``column < constant``
+    * - Less Than or Equal
+      - ``LessThanOrEqual``
+      - ``column <= constant``
+    * - IN list
+      - ``In``
+      - ``column IN (constants)``
+    * - IS NULL
+      - ``IsNull``
+      - ``column IS NULL``
+    * - IS NOT NULL
+      - ``IsNotNull``
+      - ``column IS NOT NULL``
+    * - String Contains
+      - ``StringContains``
+      - ``column LIKE '%constant%'``
+    * - String Starts With
+      - ``StringStartsWith``
+      - ``column LIKE 'constant%'``
+    * - String Ends With
+      - ``StringEndsWith``
+      - ``column LIKE '%constant'``
+    * - NOT
+      - ``Not``
+      - ``NOT filter``
+
+Only supported filters are passed to the ``pushFilters`` method.
+
+**Best Practices**
+
+1. **Handle what you can, pass back what you can't**: Implement pushdown for filter types that your data source can handle efficiently. Return the remaining filters for Spark to process.
+
+2. **Anticipate new filter types**: More filter types may be added in the future, so do not assume that you handled all possible filters in your implementation.
+
+3. **Use pushed filters throughout the execution**: Store pushed filters and respect them in both ``partitions()`` and ``read()``.
+
+4. **Test performance**: Compare query performance with and without filter pushdown to ensure it's providing the expected benefits.
+
 Usage Notes
 -----------
 
