@@ -52,7 +52,8 @@ private object ConfigHelpers {
       enumClass.withName(s.trim.toUpperCase(Locale.ROOT))
     } catch {
       case _: NoSuchElementException =>
-        throw new IllegalArgumentException(s"$key should be one of $enumClass, but was $s")
+        throw new IllegalArgumentException(
+          s"$key should be one of ${enumClass.values.mkString(", ")}, but was $s")
     }
   }
 
@@ -283,9 +284,7 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def enumConf(e: Enumeration): TypedConfigBuilder[e.Value] = {
     checkPrependConfig
-    val builder = new TypedConfigBuilder(this, toEnum(_, e, key))
-    builder.checkValues(e.values)
-    builder
+    new TypedConfigBuilder(this, toEnum(_, e, key))
   }
 
   def timeConf(unit: TimeUnit): TypedConfigBuilder[Long] = {
