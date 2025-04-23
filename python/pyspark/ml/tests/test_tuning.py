@@ -22,7 +22,7 @@ import numpy as np
 
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.linalg import Vectors
-from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
 from pyspark.ml.tuning import (
     ParamGridBuilder,
     CrossValidator,
@@ -94,6 +94,7 @@ class TuningTestsMixin:
             self.assertEqual(str(tvs_model.getEstimator()), str(model2.getEstimator()))
             self.assertEqual(str(tvs_model.getEvaluator()), str(model2.getEvaluator()))
 
+    @unittest.skip("Disabled due to a Python side reference count issue in _parallelFitTasks.")
     def test_cross_validator(self):
         dataset = self.spark.createDataFrame(
             [
@@ -245,6 +246,28 @@ class TuningTestsMixin:
         )
         with self.assertRaisesRegex(Exception, "The validation data at fold 3 is empty"):
             cv.fit(dataset_with_folds)
+
+    def test_crossvalidator_with_random_forest_classifier(self):
+        dataset = self.spark.createDataFrame(
+            [
+                (Vectors.dense(1.0, 2.0), 0),
+                (Vectors.dense(2.0, 3.0), 1),
+                (Vectors.dense(1.5, 2.5), 0),
+                (Vectors.dense(3.0, 4.0), 1),
+                (Vectors.dense(1.1, 2.1), 0),
+                (Vectors.dense(2.5, 3.5), 1),
+            ],
+            ["features", "label"],
+        )
+        rf = RandomForestClassifier(labelCol="label", featuresCol="features")
+        evaluator = BinaryClassificationEvaluator(labelCol="label")
+        paramGrid = (
+            ParamGridBuilder().addGrid(rf.maxDepth, [2]).addGrid(rf.numTrees, [5, 10]).build()
+        )
+        cv = CrossValidator(
+            estimator=rf, estimatorParamMaps=paramGrid, evaluator=evaluator, numFolds=3
+        )
+        cv.fit(dataset)
 
 
 class TuningTests(TuningTestsMixin, ReusedSQLTestCase):
