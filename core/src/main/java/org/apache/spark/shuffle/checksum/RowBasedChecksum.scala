@@ -17,13 +17,14 @@
 
 package org.apache.spark.shuffle.checksum
 
-import java.io.{ByteArrayOutputStream, ObjectOutputStream}
+import java.io.ObjectOutputStream
 import java.util.zip.Checksum
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
+import org.apache.spark.util.MyByteArrayOutputStream
 
 /**
  * A class for computing checksum for input (key, value) pairs. The checksum is independent of
@@ -70,12 +71,6 @@ abstract class RowBasedChecksum() extends Serializable with Logging {
  */
 class OutputStreamRowBasedChecksum(checksumAlgorithm: String)
   extends RowBasedChecksum() {
-
-  /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
-  final private class MyByteArrayOutputStream(size: Int)
-    extends ByteArrayOutputStream(size) {
-    def getBuf: Array[Byte] = buf
-  }
 
   private val DEFAULT_INITIAL_SER_BUFFER_SIZE = 32 * 1024
 

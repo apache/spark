@@ -64,6 +64,7 @@ import org.apache.spark.shuffle.checksum.RowBasedChecksum;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.util.MyByteArrayOutputStream;
 import org.apache.spark.util.Utils;
 
 @Private
@@ -94,12 +95,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private ShuffleExternalSorter sorter;
   @Nullable private long[] partitionLengths;
   private long peakMemoryUsedBytes = 0;
-
-  /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
-  private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {
-    MyByteArrayOutputStream(int size) { super(size); }
-    public byte[] getBuf() { return buf; }
-  }
 
   private MyByteArrayOutputStream serBuffer;
   private SerializationStream serOutputStream;
@@ -349,7 +344,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.debug("Using slow merge");
         mergeSpillsWithFileStream(spills, mapWriter, compressionCodec);
       }
-      partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
+      partitionLengths =
+          mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
