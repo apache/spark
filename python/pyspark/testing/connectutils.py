@@ -160,8 +160,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         conf.set("spark.connect.authenticate.token", "deadbeef")
         # Make the max size of ML Cache larger, to avoid CONNECT_ML.CACHE_INVALID issues
         # in tests.
-        conf.set("spark.connect.session.connectML.mlCache.maxSize", "3g")
-        conf.set("spark.connect.session.connectML.mlCache.timeout", "30")
+        conf.set("spark.connect.session.connectML.mlCache.maxSize", "1g")
         return conf
 
     @classmethod
