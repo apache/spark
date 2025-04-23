@@ -649,7 +649,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         def wrap_and_init_stream():
             should_write_start_length = True
             for arr, _ in iterator:
-                assert isinstance(arr, pa.Array), type(batch)
+                assert isinstance(arr, pa.Array), type(arr)
 
                 batch = pa.RecordBatch.from_arrays([arr], ["_0"])
 
