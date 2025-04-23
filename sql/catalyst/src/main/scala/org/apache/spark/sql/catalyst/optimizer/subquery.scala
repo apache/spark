@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -25,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.optimizer.RewriteCorrelatedScalarSubquery.splitSubquery
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -526,7 +526,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     val baseConditions = predicateMap.values.flatten.toSeq
     val outerPlanInputAttrs = outer.inputSet
     val (newPlan, newCond) = if (outerPlanInputAttrs.nonEmpty) {
-      val (plan, deDuplicatedConditions) =
+      val (plan, deDuplicatedConditions, _) =
         DecorrelateInnerQuery.deduplicate(transformed, baseConditions, outerPlanInputAttrs)
       (plan, stripOuterReferences(deDuplicatedConditions))
     } else {
@@ -1081,7 +1081,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
  * It rewrites all the domain joins within the main query and nested subqueries
  *  in a top down manner.
  */
-object RewriteDomainJoinsInSubqueries extends Rule[LogicalPlan] {
+object RewriteDomainJoinsInOnePass extends Rule[LogicalPlan] {
   private def containsCorrelatedSubquery(expr: Expression): Boolean = {
     expr exists {
       case s: SubqueryExpression => s.children.nonEmpty
