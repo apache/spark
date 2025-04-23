@@ -2575,7 +2575,8 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
             condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
             parameters = Map("reason" ->
               ("Cannot invoke \"org.apache.spark.sql.streaming.ValueState." +
-                "get()\" because \"null\" is null"))
+                "get()\" because \"null\" is null"),
+            "function" -> "handleInputRows")
           )
         }
       )
@@ -2627,7 +2628,8 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
             condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
             parameters = Map("reason" ->
               ("Cannot invoke \"org.apache.spark.sql.streaming.ValueState." +
-                "get()\" because \"null\" is null"))
+                "get()\" because \"null\" is null"),
+            "function" -> "handleInitialState")
           )
         }
       )
@@ -2684,7 +2686,8 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
             condition = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
             parameters = Map("reason" ->
               ("Cannot invoke \"org.apache.spark.sql.streaming.ValueState." +
-                "get()\" because \"null\" is null"))
+                "get()\" because \"null\" is null"),
+              "function" -> "handleExpiredTimer")
           )
         }
       )
