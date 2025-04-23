@@ -102,7 +102,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       parquetSchema: String,
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
-        SQLConf.ParquetOutputTimestampType.INT96,
+        SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS,
       inferTimestampNTZ: Boolean = true): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
@@ -124,7 +124,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
-        SQLConf.ParquetOutputTimestampType.INT96,
+        SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS,
       expectedParquetColumn: Option[ParquetColumn] = None,
       nanosAsLong: Boolean = false): Unit = {
 
@@ -2305,7 +2305,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true,
     int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    writeLegacyParquetFormat = true,
+    outputTimestampType = SQLConf.ParquetOutputTimestampType.INT96)
 
   testSchema(
     "Timestamp written and read as INT64 with TIMESTAMP_MILLIS",
