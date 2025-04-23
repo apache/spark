@@ -16,12 +16,16 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import scala.jdk.CollectionConverters.IterableHasAsScala
+
+import io.fabric8.kubernetes.api.model.Service
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.mockito.Mockito.mock
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features.KubernetesExecutorCustomFeatureConfigStep
-import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.internal.config.{ConfigEntry, SHUFFLE_SERVICE_PORT}
 import org.apache.spark.resource.ResourceProfile
 
 class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
@@ -64,6 +68,47 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     val secMgr = new SecurityManager(sparkConf)
     val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, defaultProfile).pod
+  }
+
+  test("SPARK-XXXXX: check executor kubernetes spec with service disabled by default") {
+    val sparkConf = baseConf
+    val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+    val secMgr = new SecurityManager(sparkConf)
+    val client = mock(classOf[KubernetesClient])
+    val profile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val spec = new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, profile)
+
+    val containerEnvs = spec.pod.container.getEnv.asScala
+    assert(!containerEnvs.exists(_.getName === "EXECUTOR_SERVICE_NAME"))
+
+    assert(spec.executorKubernetesResources.size === 0)
+  }
+
+  test("SPARK-XXXXX: check executor kubernetes spec with service enabled") {
+    Seq(None, Some(1234)).foreach { somePort =>
+      val sparkConf = baseConf.clone.set(Config.KUBERNETES_EXECUTOR_ENABLE_SERVICE, true)
+      somePort.foreach(sparkConf.set(SHUFFLE_SERVICE_PORT, _))
+      val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+      val secMgr = new SecurityManager(sparkConf)
+      val client = mock(classOf[KubernetesClient])
+      val profile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+      val spec = new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, profile)
+
+      val containerEnvs = spec.pod.container.getEnv.asScala
+      assert(containerEnvs.exists(_.getName === "EXECUTOR_SERVICE_NAME"))
+      val containerEnv = containerEnvs.filter(_.getName === "EXECUTOR_SERVICE_NAME").head
+      assert(containerEnv.getValue === "svc-appId-exec-1")
+
+      assert(spec.executorKubernetesResources.size === 1)
+      val resource = spec.executorKubernetesResources.head
+      assert(resource.getKind === "Service")
+      val service = resource.asInstanceOf[Service]
+      assert(service.getMetadata.getName === "svc-appId-exec-1")
+      assert(service.getSpec.getPorts.size() === 1)
+      val port = service.getSpec.getPorts.get(0)
+      assert(port.getName === "spark-shuffle-service")
+      assert(port.getPort === somePort.getOrElse(SHUFFLE_SERVICE_PORT.defaultValue.get))
+    }
   }
 }
 
