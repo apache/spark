@@ -1462,7 +1462,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
                     row_as_dict = row.asDict(True)
                     rows_as_dict.append(row_as_dict)
 
-                pdf_schema = pa.schema(pdf_type.fields)
+                pdf_schema = pa.schema(list(pdf_type))
                 record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
 
                 yield (record_batch, pdf_type)

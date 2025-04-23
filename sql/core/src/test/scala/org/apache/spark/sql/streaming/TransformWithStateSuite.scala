@@ -764,6 +764,63 @@ class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
   }
 }
 
+class TestMapStateExistsInInit extends StatefulProcessor[String, String, String] {
+  @transient var _mapState: MapState[String, String] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _mapState = getHandle.getMapState[String, String](
+      "mapState", Encoders.STRING, Encoders.STRING, TTLConfig.NONE)
+
+    // This should fail as we can't call exists() during init
+    val exists = _mapState.exists()
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    Iterator.empty
+  }
+}
+
+class TestValueStateExistsInInit extends StatefulProcessor[String, String, String] {
+  @transient var _valueState: ValueState[String] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _valueState = getHandle.getValueState[String](
+      "valueState", Encoders.STRING, TTLConfig.NONE)
+
+    // This should fail as we can't call exists() during init
+    val exists = _valueState.exists()
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    Iterator.empty
+  }
+}
+
+class TestListStateExistsInInit extends StatefulProcessor[String, String, String] {
+  @transient var _listState: ListState[String] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _listState = getHandle.getListState[String](
+      "listState", Encoders.STRING, TTLConfig.NONE)
+
+    // This should fail as we can't call exists() during init
+    val exists = _listState.exists()
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    Iterator.empty
+  }
+}
+
 /**
  * Class that adds tests for transformWithState stateful streaming operator
  */
@@ -2341,6 +2398,90 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         assert(t.getMessage.contains("not supported"))
       }
     )
+  }
+
+  test("transformWithState - ValueState.exists() should fail in init") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new TestValueStateExistsInInit(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[StatefulProcessorCannotPerformOperationWithInvalidHandleState] { error =>
+          checkError(
+            error.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+            parameters = Map(
+              "operationType" -> "valueState.exists",
+              "handleState" -> "PRE_INIT")
+          )
+        }
+      )
+    }
+  }
+
+  test("transformWithState - MapState.exists() should fail in init") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new TestMapStateExistsInInit(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[StatefulProcessorCannotPerformOperationWithInvalidHandleState] { error =>
+          checkError(
+            error.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+            parameters = Map(
+              "operationType" -> "mapState.exists",
+              "handleState" -> "PRE_INIT")
+          )
+        }
+      )
+    }
+  }
+
+  test("transformWithState - ListState.exists() should fail in init") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new TestListStateExistsInInit(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        ExpectFailure[StatefulProcessorCannotPerformOperationWithInvalidHandleState] { error =>
+          checkError(
+            error.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+            parameters = Map(
+              "operationType" -> "listState.exists",
+              "handleState" -> "PRE_INIT")
+          )
+        }
+      )
+    }
   }
 
   test("transformWithStateWithInitialState - streaming with hdfsStateStoreProvider should fail") {
