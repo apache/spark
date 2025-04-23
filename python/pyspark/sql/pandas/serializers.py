@@ -659,9 +659,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
                     should_write_start_length = False
                 yield batch
 
-        return super(ArrowStreamArrowUDFSerializer, self).dump_stream(
-            wrap_and_init_stream(), stream
-        )
+        return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
 
     def __repr__(self):
         return "ArrowStreamArrowUDFSerializer"
