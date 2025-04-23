@@ -204,10 +204,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
       DecimalType.bounded(precision - scale, 0)
     case java.sql.Types.DECIMAL | java.sql.Types.NUMERIC =>
       DecimalPrecisionTypeCoercion.bounded(
-        precision,
-        // A safeguard in case the JDBC scale is larger than precision which is not supported by
-        // Spark.
-        math.min(scale, precision))
+        // A safeguard in case the JDBC scale is larger than the precision that is not supported
+        // by Spark.
+        math.max(precision, scale),
+        scale)
     case java.sql.Types.DOUBLE => DoubleType
     case java.sql.Types.FLOAT => FloatType
     case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
