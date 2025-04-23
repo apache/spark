@@ -122,7 +122,9 @@ case class TransformWithStateExec(
     val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
-    statefulProcessor.init(outputMode, timeMode)
+    withStatefulProcessorErrorHandling("init") {
+      statefulProcessor.init(outputMode, timeMode)
+    }
     driverProcessorHandle
   }
 
@@ -260,7 +262,7 @@ case class TransformWithStateExec(
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
 
-    try {
+    withStatefulProcessorErrorHandling("handleInputRows") {
       val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
       val keyObj = getKeyObj(keyRow) // convert key to objects
@@ -281,11 +283,6 @@ case class TransformWithStateExec(
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       iteratorWithImplicitKeySet(keyObj, mappedIterator)
-    } catch {
-      case sparkThrowable: SparkThrowable =>
-        throw sparkThrowable
-      case e: Exception =>
-        throw TransformWithStateUserFunctionException(e, "handleInputRows")
     }
   }
 
@@ -293,7 +290,7 @@ case class TransformWithStateExec(
       keyRow: UnsafeRow,
       initStateIter: Iterator[InternalRow]): Unit = {
 
-    try {
+    withStatefulProcessorErrorHandling("handleInitialState") {
       val getInitStateValueObj =
         ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
 
@@ -310,11 +307,6 @@ case class TransformWithStateExec(
             new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction))
       }
       ImplicitGroupingKeyTracker.removeImplicitKey()
-    } catch {
-      case sparkThrowable: SparkThrowable =>
-        throw sparkThrowable
-      case e: Exception =>
-        throw TransformWithStateUserFunctionException(e, "handleInitialState")
     }
   }
 
@@ -330,7 +322,7 @@ case class TransformWithStateExec(
       keyObj: Any,
       expiryTimestampMs: Long,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
-    try {
+    withStatefulProcessorErrorHandling("handleExpiredTimer") {
       val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
       ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
       val mappedIterator = statefulProcessor.handleExpiredTimer(
@@ -344,11 +336,6 @@ case class TransformWithStateExec(
       iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
         processorHandle.deleteTimer(expiryTimestampMs)
       })
-    } catch {
-      case sparkThrowable: SparkThrowable =>
-        throw sparkThrowable
-      case e: Exception =>
-        throw TransformWithStateUserFunctionException(e, "handleExpiredTimer")
     }
   }
 
@@ -464,13 +451,8 @@ case class TransformWithStateExec(
   }
 
   def closeStatefulProcessor(): Unit = {
-    try {
+    withStatefulProcessorErrorHandling("close") {
       statefulProcessor.close()
-    } catch {
-      case sparkThrowable: SparkThrowable =>
-        throw sparkThrowable
-      case e: Exception =>
-        throw TransformWithStateUserFunctionException(e, "close")
     }
   }
 
@@ -597,6 +579,26 @@ case class TransformWithStateExec(
     }
   }
 
+  /**
+   * Executes a block of code with standardized error handling for StatefulProcessor
+   * operations. Rethrows SparkThrowables directly and wraps other exceptions in
+   * TransformWithStateUserFunctionException with the provided function name.
+   *
+   * @param functionName The name of the function being executed (for error reporting)
+   * @param block The code block to execute with error handling
+   * @return The result of the block execution
+   */
+  private def withStatefulProcessorErrorHandling[R](functionName: String)(block: => R): R = {
+    try {
+      block
+    } catch {
+      case sparkThrowable: SparkThrowable =>
+        throw sparkThrowable
+      case e: Exception =>
+        throw TransformWithStateUserFunctionException(e, functionName)
+    }
+  }
+
   override def supportsSchemaEvolution: Boolean = true
 
   /**
@@ -653,7 +655,9 @@ case class TransformWithStateExec(
       isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
-    statefulProcessor.init(outputMode, timeMode)
+    withStatefulProcessorErrorHandling("init") {
+      statefulProcessor.init(outputMode, timeMode)
+    }
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
     processDataWithPartition(singleIterator, store, processorHandle)
   }
@@ -667,7 +671,9 @@ case class TransformWithStateExec(
       keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
-    statefulProcessor.init(outputMode, timeMode)
+    withStatefulProcessorErrorHandling("init") {
+      statefulProcessor.init(outputMode, timeMode)
+    }
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
 
     val initialStateProcTimeMs = longMetric("initialStateProcessingTimeMs")
