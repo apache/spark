@@ -641,14 +641,11 @@ class TransformWithStateInPandasTestsMixin:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="4"),
                 }
-            elif batch_id == 2:
+            else:
                 # watermark for late event = 10 and min event = 2 with no filtering
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="2"),
                 }
-            else:
-                for q in batch_df.sparkSession.streams.active:
-                    q.stop()
 
         self._test_transform_with_state_in_pandas_event_time(
             MinEventTimeStatefulProcessor(), check_results, "None"
