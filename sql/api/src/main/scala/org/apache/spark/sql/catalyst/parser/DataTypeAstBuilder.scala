@@ -45,6 +45,31 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
+  override def visitSingleRoutineParam(ctx: SingleRoutineParamContext): StructType = {
+    withOrigin(ctx)(StructType(visitRoutineColDefinitionList(ctx.colDefinitionList)))
+  }
+
+  private def visitRoutineColDefinitionList(
+      ctx: ColDefinitionListContext): Seq[StructField] = withOrigin(ctx) {
+    ctx.colDefinition().asScala.map(visitRoutineParam).toSeq
+  }
+
+  private def visitRoutineParam(ctx: ColDefinitionContext): StructField =
+    withOrigin(ctx) {
+      import ctx._
+      val builder = new MetadataBuilder
+      ctx.colDefinitionOption().asScala.foreach { option =>
+        Option(option.defaultExpression()).foreach { expr =>
+          builder.putString("default", expr.toString)
+        }
+      }
+      StructField(
+        name = colName.getText,
+        dataType = typedVisit[DataType](dataType),
+        nullable = true,
+        metadata = builder.build())
+    }
+
   override def visitStringLit(ctx: StringLitContext): Token = {
     if (ctx != null) {
       if (ctx.STRING_LITERAL != null) {

@@ -70,7 +70,7 @@ case class CreateSQLFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     val conf = sparkSession.sessionState.conf
 
-    val inputParam = inputParamText.map(parser.parseTableSchema)
+    val inputParam = inputParamText.map(parser.parseRoutineParam)
     val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser)
 
     val function = SQLFunction(
