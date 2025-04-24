@@ -19,12 +19,15 @@ from io import StringIO
 import unittest
 from typing import Iterable
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    connect_requirement_message,
+)
 from pyspark.testing.utils import PySparkErrorTestUtils
 
 if should_test_connect:
     from pyspark.sql.connect.shell.progress import Progress, StageInfo
-    from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
