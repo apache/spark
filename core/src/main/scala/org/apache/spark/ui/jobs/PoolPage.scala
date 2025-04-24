@@ -28,6 +28,8 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val appId = parent.store.applicationInfo().id
+    checkJobRunStatus(appId, request)
     val poolName = Option(request.getParameter("poolname")).map { poolname =>
       UIUtils.decodeURLParameter(poolname)
     }.getOrElse {

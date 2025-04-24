@@ -475,8 +475,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .map(_.toImmutableArraySeq).getOrElse(Nil)
         .filter(_.isDirectory) // Keep only directories
 
-      logInfo(s"checkForLogs: Found ${subDirs.size} subdirectories in $logDir")
-
       // Then list the contents of each subdirectory
       // In checkForLogs()
         val updated = subDirs.flatMap { subDir =>
@@ -668,11 +666,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           // Compare the full path from LogInfo (logPath) with the full path stored in the attempt (a.logPath)
           if (a.logPath != logPath) {
             // If the full paths don't match, this attempt is not the one associated with the stale LogInfo entry.
-            logDebug(s"cleanAppData: Attempt log path '${a.logPath}' does not match stale log path '${logPath}'. Leaving attempt alone.")
             false
           } else {
             // Full paths match, proceed with cleaning up this attempt's data.
-            logDebug(s"cleanAppData: Attempt log path '${a.logPath}' matches stale log path '${logPath}'. Cleaning attempt.")
             if (others.nonEmpty) {
               val newAppInfo = new ApplicationInfoWrapper(app.info, others)
               listing.write(newAppInfo)
@@ -718,9 +714,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .getOrElse(app.attempts)
         .foreach { attempt =>
           val fullLogPath = new Path(attempt.logPath) // Use the stored full path directly
-          logDebug(s"writeEventLogs: Processing attempt ${attempt.info.attemptId.getOrElse("N/A")}")
-          logDebug(s"writeEventLogs:   attempt.logPath (full) = '${attempt.logPath}'")
-          logDebug(s"writeEventLogs:   Using path = '${fullLogPath}'")
           val reader = EventLogFileReader(fs, fullLogPath, // Pass the full path
             attempt.lastIndex)
           reader.zipEventLogFiles(zipStream)

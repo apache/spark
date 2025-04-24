@@ -22,6 +22,7 @@ import scala.xml.{Node, Text}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkContext
+import org.apache.spark.ui.jobs.StagesTab
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
 
 private[spark] class TaskThreadDumpPage(
@@ -37,6 +38,9 @@ private[spark] class TaskThreadDumpPage(
   }
 
   override def render(request: HttpServletRequest): Seq[Node] = {
+    val store = parent.asInstanceOf[StagesTab].store
+    val appId = store.applicationInfo().id
+    checkJobRunStatus(appId, request)
     val executorId = Option(request.getParameter("executorId")).map { executorId =>
       UIUtils.decodeURLParameter(executorId)
     }.getOrElse {
