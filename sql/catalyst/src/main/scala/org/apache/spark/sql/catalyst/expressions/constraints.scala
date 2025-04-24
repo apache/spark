@@ -269,6 +269,12 @@ case class ForeignKeyConstraint(
   }
 }
 
+
+/** This class is used to represent a collection of constraints in a table.
+ * It is used for analysis purposes only.
+ *
+ * @param children The list of constraint expressions
+ */
 case class Constraints(children: Seq[Expression]) extends Expression with Unevaluable {
   assert(children.forall(_.isInstanceOf[TableConstraint]),
     "All children of Constraints must be TableConstraints")

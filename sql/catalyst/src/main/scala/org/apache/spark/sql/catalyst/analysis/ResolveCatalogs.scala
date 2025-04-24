@@ -78,6 +78,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
 
+    // For CREATE TABLE and REPLACE TABLE statements, resolve the table identifier and include
+    // the table columns as output. This allows expressions (e.g., constraints) referencing these
+    // columns to be resolved correctly.
     case c @ CreateTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       c.copy(name = resolvedIdentifier)
