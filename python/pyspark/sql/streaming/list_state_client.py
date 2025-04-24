@@ -86,9 +86,7 @@ class ListStateClient:
             if status == 0:
                 data_batch = list(
                     map(
-                        lambda x: self._stateful_processor_api_client._deserialize_from_bytes(
-                            x
-                        ),
+                        lambda x: self._stateful_processor_api_client._deserialize_from_bytes(x),
                         response_message[2],
                     )
                 )
@@ -142,12 +140,11 @@ class ListStateClient:
         else:
             values_as_bytes = map(
                 lambda x: self._stateful_processor_api_client._serialize_to_bytes(self.schema, x),
-                values
+                values,
             )
 
         append_list_call = stateMessage.AppendList(
-            value=values_as_bytes,
-            fetchWithArrow=send_data_via_arrow
+            value=values_as_bytes, fetchWithArrow=send_data_via_arrow
         )
         list_state_call = stateMessage.ListStateCall(
             stateName=state_name, appendList=append_list_call
@@ -178,12 +175,11 @@ class ListStateClient:
         else:
             values_as_bytes = map(
                 lambda x: self._stateful_processor_api_client._serialize_to_bytes(self.schema, x),
-                values
+                values,
             )
 
         put_call = stateMessage.ListStatePut(
-            value=values_as_bytes,
-            fetchWithArrow=send_data_via_arrow
+            value=values_as_bytes, fetchWithArrow=send_data_via_arrow
         )
 
         list_state_call = stateMessage.ListStateCall(stateName=state_name, listStatePut=put_call)

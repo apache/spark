@@ -962,7 +962,9 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
             list_size = self.list_size_state.get()
             assert list_size is not None
             list_size = list_size[0]
-            assert list_size == len(elements), f"list_size ({list_size}) != len(elements) ({len(elements)})"
+            assert list_size == len(
+                elements
+            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
             expected_elements_in_state = [(i,) for i in range(list_size)]
             assert elements == expected_elements_in_state
@@ -984,11 +986,7 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
         updated_elements = ",".join(map(lambda x: str(x[0]), self.list_state.get()))
 
         yield pd.DataFrame(
-            {
-                "id": key,
-                "prevElements": prev_elements,
-                "updatedElements": updated_elements
-            }
+            {"id": key, "prevElements": prev_elements, "updatedElements": updated_elements}
         )
 
 
@@ -1025,7 +1023,9 @@ class RowListStateLargeListProcessor(StatefulProcessor):
             list_size = self.list_size_state.get()
             assert list_size is not None
             list_size = list_size[0]
-            assert list_size == len(elements), f"list_size ({list_size}) != len(elements) ({len(elements)})"
+            assert list_size == len(
+                elements
+            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
             expected_elements_in_state = [(i,) for i in range(list_size)]
             assert elements == expected_elements_in_state
