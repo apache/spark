@@ -1097,7 +1097,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         options: CaseInsensitiveStringMap): LogicalPlan = plan match {
       case view: View if !view.child.resolved =>
         ViewResolution
-          .resolve(view, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
+          .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
       case _ => plan
