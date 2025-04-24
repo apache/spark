@@ -650,6 +650,9 @@ class TransformWithStateInPySparkStateServer(
           mapStateInfo.keyDeserializer)
         mapStateInfo.mapState.removeKey(keyRow)
         sendResponse(0)
+      case MapStateCall.MethodCase.CLEAR =>
+        mapStateInfo.mapState.clear()
+        sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
