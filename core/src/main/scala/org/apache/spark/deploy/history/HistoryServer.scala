@@ -87,6 +87,16 @@ class HistoryServer(
       }
 
       val appId = parts(1)
+      val headers = {
+        val headerNames = req.getHeaderNames()
+        val headerMap = scala.collection.mutable.Map[String, String]()
+        while (headerNames.hasMoreElements) {
+          val name = headerNames.nextElement()
+          headerMap += (name -> req.getHeader(name))
+        }
+        headerMap.toMap
+      }
+      val _ = checkJobRunStatus(appId, headers)
       var shouldAppendAttemptId = false
       val attemptId = if (parts.length >= 3) {
         Some(parts(2))
@@ -248,6 +258,44 @@ class HistoryServer(
    * @return A map with the provider's configuration.
    */
   def getProviderConfig(): Map[String, String] = provider.getConfig()
+
+  /**
+   * Checks the status of a job run from an external service.
+   * @param appId The application ID to check
+   * @param headers Map of HTTP headers to forward to the external service
+   * @return The HTTP response status code from the external service
+   * @throws java.io.IOException if the response status code is not 200
+   */
+  def checkJobRunStatus(appId: String, headers: Map[String, String]): Int = {
+    val externalServiceUrl = sys.env.get("SFY_SERVER_URL")
+      .getOrElse(throw new NoSuchElementException("SFY_SERVER_URL environment variable not set"))
+    
+    val url = s"$externalServiceUrl/v1/x/jobs/runs/external-id/$appId"
+    
+    try {
+      val connection = new java.net.URL(url).openConnection().asInstanceOf[java.net.HttpURLConnection]
+      connection.setRequestMethod("GET")
+      
+      // Add all headers to the request
+      headers.foreach { case (key, value) =>
+        connection.setRequestProperty(key, value)
+      }
+      
+      connection.connect()
+      val statusCode = connection.getResponseCode
+      connection.disconnect()
+      
+      if (statusCode != HttpServletResponse.SC_OK) {
+        throw new java.io.IOException(s"Unexpected status code $statusCode from external service for app $appId")
+      }
+      
+      statusCode
+    } catch {
+      case NonFatal(e) =>
+        logError(s"Failed to check job run status for $appId", e)
+        throw e
+    }
+  }
 
   /**
    * Load an application UI and attach it to the web server.

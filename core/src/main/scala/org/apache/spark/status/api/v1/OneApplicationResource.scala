@@ -20,6 +20,8 @@ import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
 
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import scala.util.control.NonFatal
 
 import jakarta.ws.rs.{NotFoundException => _, _}
@@ -32,40 +34,93 @@ import org.apache.spark.util.Utils
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
 
+  /**
+   * Checks the status of a job run from an external service.
+   * @param appId The application ID to check
+   * @param request The HTTP request object to extract headers from
+   * @return The HTTP response status code from the external service
+   * @throws java.io.IOException if the response status code is not 200
+   */
+  def checkJobRunStatus(appId: String, request: HttpServletRequest): Int = {
+    val externalServiceUrl = sys.env.get("SFY_SERVER_URL")
+      .getOrElse(throw new NoSuchElementException("SFY_SERVER_URL environment variable not set"))
+    
+    val url = s"$externalServiceUrl/v1/x/jobs/runs/external-id/$appId"
+    
+    // Extract headers inside the function
+    val headers = {
+      val headerNames = request.getHeaderNames()
+      val headerMap = scala.collection.mutable.Map[String, String]()
+      while (headerNames.hasMoreElements) {
+        val name = headerNames.nextElement()
+        headerMap += (name -> request.getHeader(name))
+      }
+      headerMap.toMap
+    }
+
+    val connection = new java.net.URL(url).openConnection().asInstanceOf[java.net.HttpURLConnection]
+    connection.setRequestMethod("GET")
+    
+    // Add all headers to the request
+    headers.foreach { case (key, value) =>
+      connection.setRequestProperty(key, value)
+    }
+    
+    connection.connect()
+    val statusCode = connection.getResponseCode
+    connection.disconnect()
+    
+    if (statusCode != HttpServletResponse.SC_OK) {
+      throw new ForbiddenException(s"Failed to check job run status for $appId")
+    }
+    
+    statusCode
+  }
+  
   @GET
   @Path("jobs")
   def jobsList(@QueryParam("status") statuses: JList[JobExecutionStatus]): Seq[JobData] = {
+    val _ = checkJobRunStatus(appId, httpRequest)
     withUI(_.store.jobsList(statuses))
   }
 
   @GET
   @Path("jobs/{jobId: \\d+}")
-  def oneJob(@PathParam("jobId") jobId: Int): JobData = withUI { ui =>
-    try {
-      ui.store.job(jobId)
-    } catch {
-      case _: NoSuchElementException =>
-        throw new NotFoundException("unknown job: " + jobId)
+  def oneJob(@PathParam("jobId") jobId: Int): JobData = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI { ui =>
+      try {
+        ui.store.job(jobId)
+      } catch {
+        case _: NoSuchElementException =>
+          throw new NotFoundException("unknown job: " + jobId)
+      }
     }
   }
 
   @GET
   @Path("executors")
-  def executorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(true))
+  def executorList(): Seq[ExecutorSummary] = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI(_.store.executorList(true))
+  }
 
   @GET
   @Path("executors/{executorId}/threads")
-  def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = withUI { ui =>
-    checkExecutorId(execId)
-    val safeSparkContext = checkAndGetSparkContext()
-    ui.store.asOption(ui.store.executorSummary(execId)) match {
-      case Some(executorSummary) if executorSummary.isActive =>
-          val safeThreadDump = safeSparkContext.getExecutorThreadDump(execId).getOrElse {
-            throw new NotFoundException("No thread dump is available.")
-          }
-          safeThreadDump
-      case Some(_) => throw new BadParameterException("Executor is not active.")
-      case _ => throw new NotFoundException("Executor does not exist.")
+  def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI { ui =>
+      checkExecutorId(execId)
+      val safeSparkContext = checkAndGetSparkContext()
+      ui.store.asOption(ui.store.executorSummary(execId)) match {
+        case Some(executorSummary) if executorSummary.isActive =>
+            val safeThreadDump = safeSparkContext.getExecutorThreadDump(execId).getOrElse {
+              throw new NotFoundException("No thread dump is available.")
+            }
+            safeThreadDump
+        case Some(_) => throw new BadParameterException("Executor is not active.")
+        case _ => throw new NotFoundException("Executor does not exist.")
+      }
     }
   }
 
@@ -74,6 +129,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   def getTaskThreadDump(
       @QueryParam("taskId") taskId: Long,
       @QueryParam("executorId") execId: String): ThreadStackTrace = {
+    val _ = checkJobRunStatus(appId, httpRequest)
     checkExecutorId(execId)
     val safeSparkContext = checkAndGetSparkContext()
     safeSparkContext
@@ -86,43 +142,61 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("allexecutors")
-  def allExecutorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(false))
+  def allExecutorList(): Seq[ExecutorSummary] = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI(_.store.executorList(false))
+  }
 
   @GET
   @Path("allmiscellaneousprocess")
-  def allProcessList(): Seq[ProcessSummary] = withUI(_.store.miscellaneousProcessList(false))
+  def allProcessList(): Seq[ProcessSummary] = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI(_.store.miscellaneousProcessList(false))
+  }
 
   @Path("stages")
-  def stages(): Class[StagesResource] = classOf[StagesResource]
+  def stages(): Class[StagesResource] = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    classOf[StagesResource]
+  }
 
   @GET
   @Path("storage/rdd")
-  def rddList(): Seq[RDDStorageInfo] = withUI(_.store.rddList())
+  def rddList(): Seq[RDDStorageInfo] = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI(_.store.rddList())
+  }
 
   @GET
   @Path("storage/rdd/{rddId: \\d+}")
-  def rddData(@PathParam("rddId") rddId: Int): RDDStorageInfo = withUI { ui =>
-    try {
-      ui.store.rdd(rddId)
-    } catch {
+  def rddData(@PathParam("rddId") rddId: Int): RDDStorageInfo = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI { ui =>
+      try {
+        ui.store.rdd(rddId)
+      } catch {
       case _: NoSuchElementException =>
         throw new NotFoundException(s"no rdd found w/ id $rddId")
+      }
     }
   }
 
   @GET
   @Path("environment")
-  def environmentInfo(): ApplicationEnvironmentInfo = withUI { ui =>
-    val envInfo = ui.store.environmentInfo()
-    val resourceProfileInfo = ui.store.resourceProfileInfo()
-    new v1.ApplicationEnvironmentInfo(
-      envInfo.runtime,
+  def environmentInfo(): ApplicationEnvironmentInfo = {
+    val _ = checkJobRunStatus(appId, httpRequest)
+    withUI { ui =>
+      val envInfo = ui.store.environmentInfo()
+      val resourceProfileInfo = ui.store.resourceProfileInfo()
+      new v1.ApplicationEnvironmentInfo(
+        envInfo.runtime,
       Utils.redact(ui.conf, envInfo.sparkProperties).sortBy(_._1),
       Utils.redact(ui.conf, envInfo.hadoopProperties).sortBy(_._1),
       Utils.redact(ui.conf, envInfo.systemProperties).sortBy(_._1),
       Utils.redact(ui.conf, envInfo.metricsProperties).sortBy(_._1),
       envInfo.classpathEntries.sortBy(_._1),
       resourceProfileInfo)
+    }
   }
 
   @GET
@@ -197,8 +271,10 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
 private[v1] class OneApplicationResource extends AbstractApplicationResource {
 
+  
   @GET
   def getApp(): ApplicationInfo = {
+    val _ = checkJobRunStatus(appId, httpRequest)
     val app = uiRoot.getApplicationInfo(appId)
     app.getOrElse(throw new NotFoundException("unknown app: " + appId))
   }
