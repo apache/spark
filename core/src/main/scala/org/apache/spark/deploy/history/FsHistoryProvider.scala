@@ -763,8 +763,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           // Do nothing, the application completed during processing, the final event log file
           // will be processed by next around.
         } else {
-          logWarning(s"In-progress event log file does not exist: $reader.rootPath, " +
-            s"neither does the final event log file: $finalFilePath.")
+          logWarning(log"In-progress event log file does not exist: " +
+            log"${MDC(PATH, reader.rootPath)}, " +
+            log"neither does the final event log file: ${MDC(FINAL_PATH, finalFilePath)}.")
         }
       case e: Exception =>
         logError("Exception while merging application listings", e)
@@ -817,7 +818,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val listener = new AppListingListener(reader, clock, shouldHalt)
     bus.addListener(listener)
 
-    logInfo(s"Parsing $logPath for listing data...")
+    logInfo(log"Parsing ${MDC(PATH, logPath)} for listing data...")
     val logFiles = reader.listEventLogFiles
     parseAppEventLogs(logFiles, bus, !appCompleted, eventsFilter)
 
@@ -845,7 +846,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       Utils.tryWithResource(EventLogFileReader.openEventLog(lastFile.getPath, fs)) { in =>
         val target = lastFile.getLen - reparseChunkSize
         if (target > 0) {
-          logInfo(s"Looking for end event; skipping $target bytes from $logPath...")
+          logInfo(log"Looking for end event; skipping ${MDC(NUM_BYTES, target)} bytes" +
+            log" from ${MDC(PATH, logPath)}...")
           var skipped = 0L
           while (skipped < target) {
             skipped += in.skip(target - skipped)
@@ -864,7 +866,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    logInfo(s"Finished parsing $logPath")
+    logInfo(log"Finished parsing ${MDC(PATH, logPath)}")
 
     listener.applicationInfo match {
       case Some(app) if !lookForEndEvent || app.attempts.head.info.completed =>
@@ -899,7 +901,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // In this case, the attempt is still not marked as finished but was expected to. This can
         // mean the end event is before the configured threshold, so call the method again to
         // re-parse the whole log.
-        logInfo(s"Reparsing $logPath since end event was not found.")
+        logInfo(log"Reparsing ${MDC(PATH, logPath)} since end event was not found.")
         doMergeApplicationListingInternal(reader, scanTime, enableOptimizations = false,
           lastEvaluatedForCompaction)
 
@@ -938,9 +940,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: InterruptedException =>
         throw e
       case e: AccessControlException =>
-        logWarning(s"Insufficient permission while compacting log for $rootPath", e)
+        logWarning(log"Insufficient permission while compacting log for ${MDC(PATH, rootPath)}", e)
       case e: Exception =>
-        logError(s"Exception while compacting log for $rootPath", e)
+        logError(log"Exception while compacting log for ${MDC(PATH, rootPath)}", e)
     } finally {
       endProcessing(rootPath)
     }
@@ -968,7 +970,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val log = listing.read(classOf[LogInfo], logPath)
 
     if (log.lastProcessed <= maxTime && log.appId.isEmpty) {
-      logInfo(s"Deleting invalid / corrupt event log $logPath")
+      logInfo(log"Deleting invalid / corrupt event log ${MDC(PATH, log.logPath)}")
       deleteLog(fs, new Path(log.logPath))
       listing.delete(classOf[LogInfo], log.logPath)
     }
@@ -1010,7 +1012,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .first(maxTime), Int.MaxValue) { l => l.logType == null || l.logType == LogType.EventLogs }
     stale.filterNot(isProcessing).foreach { log =>
       if (log.appId.isEmpty) {
-        logInfo(s"Deleting invalid / corrupt event log $log")
+        logInfo(log"Deleting invalid / corrupt event log ${MDC(PATH, log.logPath)}")
         deleteLog(fs, new Path(log.logPath))
         listing.delete(classOf[LogInfo], log.logPath)
       }
@@ -1021,7 +1023,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val num = KVUtils.size(listing.view(classOf[LogInfo]).index("lastProcessed"))
     var count = num - maxNum
     if (count > 0) {
-      logInfo(s"Try to delete $count old event logs to keep $maxNum logs in total.")
+      logInfo(log"Try to delete ${MDC(NUM_FILES, count)} old event logs" +
+        log" to keep ${MDC(MAX_NUM_FILES, maxNum)} logs in total.")
       KVUtils.foreach(listing.view(classOf[ApplicationInfoWrapper]).index("oldestAttempt")) { app =>
         if (count > 0) {
           // Applications may have multiple attempts, some of which may not be completed yet.
@@ -1030,7 +1033,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
       if (count > 0) {
-        logWarning(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
+        logWarning(log"Fail to clean up according to MAX_LOG_NUM policy " +
+          log"(${MDC(MAX_NUM_LOG_POLICY, maxNum)}).")
       }
     }
 
@@ -1098,7 +1102,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             false
         }
       if (deleteFile) {
-        logInfo(s"Deleting expired driver log for: $logFileStr")
+       logInfo(log"Deleting expired driver log for: ${MDC(PATH, logFileStr)}")
         listing.delete(classOf[LogInfo], logFileStr)
         deleteLog(driverLogFs, f.getPath())
       }
@@ -1111,7 +1115,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .reverse()
       .first(maxTime), Int.MaxValue) { l => l.logType != null && l.logType == LogType.DriverLogs }
     stale.filterNot(isProcessing).foreach { log =>
-      logInfo(s"Deleting invalid driver log $log")
+      logInfo(log"Deleting invalid driver log ${MDC(PATH, log.logPath)}")
       listing.delete(classOf[LogInfo], log.logPath)
       deleteLog(driverLogFs, new Path(log.logPath))
     }
