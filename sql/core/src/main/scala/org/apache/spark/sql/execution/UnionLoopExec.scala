@@ -168,7 +168,7 @@ case class UnionLoopExec(
               prevPlan = l
               l.copy(output = r.output)
             case p @ Project(projectList, _: OneRowRelation) =>
-              prevPlan = prevDF.queryExecution.optimizedPlan
+              prevPlan = p
               val prevPlanToRefMapping = projectList.zip(r.output).map {
                 case (fa: Alias, ta) => Alias(fa.child, ta.name)(ta.exprId)
               }
