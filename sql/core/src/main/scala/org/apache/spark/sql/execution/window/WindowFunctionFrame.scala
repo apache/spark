@@ -180,10 +180,9 @@ abstract class OffsetWindowFunctionFrameBase(
     }
   }
 
-  /** Indicates whether the default values are Literal values. */
-  protected lazy val onlyLiteralNulls = expressions.forall { e =>
-//    e.default == null || e.default.foldable
-    e.default == null || (e.default.foldable && e.default.eval() == null)
+  /** Indicates whether the default values are Literal. */
+  protected lazy val onlyLiterals = expressions.forall { e =>
+    e.default == null || e.default.isInstanceOf[Literal]
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
@@ -191,8 +190,8 @@ abstract class OffsetWindowFunctionFrameBase(
     if (absOffset > rows.length) {
       // Avoid evaluating non-literal defaults with EmptyRow,
       // which causes NullPointerException.
-      // Check whether defaults are Literal or null.
-      if (onlyLiteralNulls) {
+      // Check whether defaults are Literal.
+      if (onlyLiterals) {
         fillDefaultValue(EmptyRow)
       }
       // Handle non-literal defaults in write().
@@ -321,7 +320,7 @@ class FrameLessOffsetWindowFunctionFrame(
 
   override def write(index: Int, current: InternalRow): Unit = {
     if (absOffset > input.length) {
-      if (!onlyLiteralNulls) {
+      if (!onlyLiterals) {
         // Handle non-literal defaults, e.g., column references
         // Use default values since the offset row does not exist.
         fillDefaultValue(current)
