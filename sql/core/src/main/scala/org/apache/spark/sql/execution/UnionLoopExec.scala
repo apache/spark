@@ -134,6 +134,8 @@ case class UnionLoopExec(
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
+    val AnchorRowLimitToConverToLocalLimit =
+      conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
@@ -149,11 +151,21 @@ case class UnionLoopExec(
 
     var currentLevel = 1
 
-    var currentNumRows = 0
+    var currentNumRows: Long = 0
 
     var limitReached: Boolean = false
 
     val numPartitions = prevDF.queryExecution.toRdd.partitions.length
+
+    // In the case we return a sufficiently small number of rows when executing the anchor,
+    // we convert the result of the anchor into a LocalRelation, so that, if the recursion doesn't
+    // reference any external tables, we are able to calculate everything in the optimizer, using
+    // the ConvertToLocalRelation rule, which significantly improves runtime.
+    if (prevCount <= AnchorRowLimitToConverToLocalLimit &&
+      !prevDF.queryExecution.optimizedPlan.isInstanceOf[LocalRelation]) {
+      val local = LocalRelation.fromExternalRows(anchor.output, prevDF.collect().toIndexedSeq)
+      prevDF = Dataset.ofRows(session, local)
+    }
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
       var prevPlan: LogicalPlan = null
@@ -170,7 +182,7 @@ case class UnionLoopExec(
             case p @ Project(projectList, _: OneRowRelation) =>
               prevPlan = p
               val prevPlanToRefMapping = projectList.zip(r.output).map {
-                case (fa: Alias, ta) => Alias(fa.child, ta.name)(ta.exprId)
+                case (fa: Alias, ta) => fa.withExprId(ta.exprId).withName(ta.name)
               }
               p.copy(projectList = prevPlanToRefMapping)
             case _ =>

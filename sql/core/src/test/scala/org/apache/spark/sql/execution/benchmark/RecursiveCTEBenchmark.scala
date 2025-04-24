@@ -38,6 +38,8 @@ object RecursiveCTEBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     runBenchmark("Recursive CTE with only LocalRelation") {
+      spark.sql("CREATE TABLE tb(a INT)")
+      spark.sql("INSERT INTO tb VALUES 1")
       for (i <- 10 to 100 by 10) {
         val benchmark =
           new Benchmark(s"First $i integers", i, output = output)
@@ -65,8 +67,17 @@ object RecursiveCTEBenchmark extends SqlBasedBenchmark {
                |  SELECT n+1 FROM t)
                |SELECT * FROM t  LIMIT $i""".stripMargin).count()
         }
+        benchmark.addCase(s"First $i integers referencing external table in anchor", 3) { _ =>
+          spark.sql(
+            s"""WITH RECURSIVE t(n) AS (
+               |  SELECT * FROM tb
+               |  UNION ALL
+               |  SELECT n+1 FROM t WHERE n < $i)
+               |SELECT * FROM t""".stripMargin).count()
+        }
         benchmark.run()
       }
+      spark.sql("DROP TABLE tb")
     }
   }
 }
