@@ -1192,10 +1192,10 @@ object StateStore extends Logging {
           } else if (!verifyIfStoreInstanceActive(id)) {
             unload(id)
           }
-          logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}")
+          logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
       } catch {
         case NonFatal(e) =>
-          logWarning(log"Error ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
+          logWarning(log"Error ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
             log"unloading state store provider", e)
           // When we get a non-fatal exception, we just unload the provider.
           //
