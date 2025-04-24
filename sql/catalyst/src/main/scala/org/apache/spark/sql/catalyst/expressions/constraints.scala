@@ -126,13 +126,8 @@ case class CheckConstraint(
     val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
     val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
-    // The validation status is set to UNVALIDATED for create table and
-    // VALID for alter table.
-    val validateStatus = if (isCreateTable) {
-      Constraint.ValidationStatus.UNVALIDATED
-    } else {
-      Constraint.ValidationStatus.VALID
-    }
+    // TODO(SPARK-51903): Change the status to VALIDATED when we support validation on ALTER TABLE
+    val validateStatus = Constraint.ValidationStatus.UNVALIDATED
     Constraint
       .check(name)
       .predicateSql(condition)

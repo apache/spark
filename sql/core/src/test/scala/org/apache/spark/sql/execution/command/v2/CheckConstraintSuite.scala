@@ -132,14 +132,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "c1")
       assert(constraint.toDDL ==
-        "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED VALID NORELY")
+        "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED UNVALIDATED NORELY")
       assert(constraint.predicateSql() == "from_json(j, 'a INT').a > 1")
       assert(constraint.predicate() == null)
     }
   }
 
-  def getConstraintCharacteristics(isCreateTable: Boolean): Seq[(String, String)] = {
-    val validStatus = if (isCreateTable) "UNVALIDATED" else "VALID"
+  def getConstraintCharacteristics(): Seq[(String, String)] = {
+    val validStatus = "UNVALIDATED"
     Seq(
       ("", s"ENFORCED $validStatus NORELY"),
       ("NOT ENFORCED", s"NOT ENFORCED $validStatus NORELY"),
@@ -155,7 +155,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   }
 
   test("Create table with check constraint") {
-    getConstraintCharacteristics(true).foreach { case (characteristic, expectedDDL) =>
+    getConstraintCharacteristics().foreach { case (characteristic, expectedDDL) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         val constraintStr = s"CONSTRAINT c1 CHECK (id > 0) $characteristic"
         sql(s"CREATE TABLE $t (id bigint, data string, $constraintStr) $defaultUsing")
@@ -168,7 +168,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   }
 
   test("Replace table with check constraint") {
-    getConstraintCharacteristics(true).foreach { case (characteristic, expectedDDL) =>
+    getConstraintCharacteristics().foreach { case (characteristic, expectedDDL) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         val constraintStr = s"CONSTRAINT c1 CHECK (id > 0) $characteristic"
         sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
@@ -182,7 +182,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   }
 
   test("Alter table add check constraint") {
-    getConstraintCharacteristics(false).foreach { case (characteristic, expectedDDL) =>
+    getConstraintCharacteristics().foreach { case (characteristic, expectedDDL) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
         assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
@@ -212,7 +212,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "abc",
-            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED VALID NORELY")
+            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED UNVALIDATED NORELY")
         )
       }
     }
