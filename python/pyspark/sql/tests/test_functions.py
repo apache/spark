@@ -105,7 +105,7 @@ class FunctionsTestsMixin:
             if name[0] != "_" and value.__module__ != "typing"
         }
 
-        expected_fn_all_diff = {
+        deprecated_fn_list = [
             "approxCountDistinct",  # deprecated
             "bitwiseNOT",  # deprecated
             "countDistinct",  # deprecated
@@ -118,13 +118,14 @@ class FunctionsTestsMixin:
             "toDegrees",  # deprecated
             "toRadians",  # deprecated
             "uuid",  # name conflict with builtin module
-        }
-
-        self.assertEqual(
-            expected_fn_all_diff,
-            fn_set - all_set,
-            "some functions are not registered in __all__",
-        )
+        ]
+        unregistered_fn_list = [
+            "chr",  # name conflict with builtin function
+            "random",  # name conflict with builtin function
+            "uuid",  # name conflict with builtin module
+        ]
+        expected_fn_all_diff = set(deprecated_fn_list + unregistered_fn_list)
+        self.assertEqual(expected_fn_all_diff, fn_set - all_set)
 
         # {
         #     "AnalyzeArgument",
@@ -151,19 +152,10 @@ class FunctionsTestsMixin:
             "StringType",  # should be imported from pyspark.sql.types
             "StructType",  # should be imported from pyspark.sql.types
         }
-
-        self.assertEqual(
-            expected_clz_all_diff,
-            clz_set - all_set,
-            "some classes are not registered in __all__",
-        )
+        self.assertEqual(expected_clz_all_diff, clz_set - all_set)
 
         unknonw_set = all_set - (fn_set | clz_set)
-        self.assertEqual(
-            unknonw_set,
-            set(),
-            "some unknown items are registered in __all__",
-        )
+        self.assertEqual(unknonw_set, set())
 
     def test_explode(self):
         d = [
