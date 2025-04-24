@@ -42,17 +42,18 @@ class PredicateResolver(
   extends TreeNodeResolver[Predicate, Expression]
   with ResolvesExpressionChildren {
 
-  private val typeCoercionRules = if (conf.ansiEnabled) {
-    PredicateResolver.ANSI_TYPE_COERCION_RULES
+  private val typeCoercionTransformations: Seq[Expression => Expression] =
+  if (conf.ansiEnabled) {
+    PredicateResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
   } else {
-    PredicateResolver.TYPE_COERCION_RULES
+    PredicateResolver.TYPE_COERCION_TRANSFORMATIONS
   }
-  private val typeCoercionResolver =
-    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionRules)
+  private val typeCoercionResolver: TypeCoercionResolver =
+    new TypeCoercionResolver(timezoneAwareExpressionResolver, typeCoercionTransformations)
 
   override def resolve(unresolvedPredicate: Predicate): Expression = {
     val predicateWithResolvedChildren =
-      withResolvedChildren(unresolvedPredicate, expressionResolver.resolve)
+      withResolvedChildren(unresolvedPredicate, expressionResolver.resolve _)
     val predicateWithTypeCoercion = typeCoercionResolver.resolve(predicateWithResolvedChildren)
     val predicateWithCharTypePadding = {
       ApplyCharTypePaddingHelper.singleNodePaddingForStringComparison(
@@ -86,7 +87,7 @@ class PredicateResolver(
 
 object PredicateResolver {
   // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     CollationTypeCoercion.apply,
     TypeCoercion.InTypeCoercion.apply,
     StringPromotionTypeCoercion.apply,
@@ -99,7 +100,7 @@ object PredicateResolver {
   )
 
   // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_RULES: Seq[Expression => Expression] = Seq(
+  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
     CollationTypeCoercion.apply,
     AnsiTypeCoercion.InTypeCoercion.apply,
     AnsiStringPromotionTypeCoercion.apply,

@@ -107,7 +107,8 @@ class MaxAbsScalerModel private[ml] (
 
   import MaxAbsScalerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("maxAbsScal"), Vectors.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty)
 
   /** @group setParam */
   @Since("2.0.0")

@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder, SchemaFormatter}
 import org.apache.avro.LogicalTypes.{Decimal, _}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.SchemaBuilder.FieldAssembler
@@ -148,9 +148,10 @@ object SchemaConverters extends Logging {
       case RECORD =>
         val recursiveDepth: Int = existingRecordNames.getOrElse(avroSchema.getFullName, 0)
         if (recursiveDepth > 0 && recursiveFieldMaxDepth <= 0) {
+          val formattedAvroSchema = SchemaFormatter.format(AvroUtils.JSON_PRETTY_FORMAT, avroSchema)
           throw new IncompatibleSchemaException(s"""
             |Found recursive reference in Avro schema, which can not be processed by Spark by
-            | default: ${avroSchema.toString(true)}. Try setting the option `recursiveFieldMaxDepth`
+            | default: $formattedAvroSchema. Try setting the option `recursiveFieldMaxDepth`
             | to 1 - $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.
           """.stripMargin)
         } else if (recursiveDepth > 0 && recursiveDepth >= recursiveFieldMaxDepth) {

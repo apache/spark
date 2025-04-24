@@ -17,6 +17,8 @@
 #
 
 import unittest
+
+from pyspark.testing import should_test_connect, connect_requirement_message
 from pyspark.errors.exceptions.connect import (
     convert_exception,
     EXCEPTION_CLASS_MAPPING,
@@ -24,13 +26,15 @@ from pyspark.errors.exceptions.connect import (
     PythonException,
     AnalysisException,
 )
-from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
-from google.rpc.error_details_pb2 import ErrorInfo
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ConnectErrorsTest(unittest.TestCase):
     def test_convert_exception_known_class(self):
         # Mock ErrorInfo with a known error class
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.sql.AnalysisException",
             "metadata": {
@@ -42,16 +46,23 @@ class ConnectErrorsTest(unittest.TestCase):
         }
         truncated_message = "Analysis error occurred"
         exception = convert_exception(
-            info=ErrorInfo(**info), truncated_message=truncated_message, resp=None
+            info=ErrorInfo(**info),
+            truncated_message=truncated_message,
+            resp=None,
+            grpc_status_code=StatusCode.INTERNAL,
         )
 
         self.assertIsInstance(exception, AnalysisException)
         self.assertEqual(exception.getSqlState(), "42000")
         self.assertEqual(exception._errorClass, "ANALYSIS.ERROR")
         self.assertEqual(exception._messageParameters, {"param1": "value1"})
+        self.assertEqual(exception.getGrpcStatusCode(), StatusCode.INTERNAL)
 
     def test_convert_exception_python_exception(self):
         # Mock ErrorInfo for PythonException
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.api.python.PythonException",
             "metadata": {
@@ -60,27 +71,38 @@ class ConnectErrorsTest(unittest.TestCase):
         }
         truncated_message = "Python worker error occurred"
         exception = convert_exception(
-            info=ErrorInfo(**info), truncated_message=truncated_message, resp=None
+            info=ErrorInfo(**info),
+            truncated_message=truncated_message,
+            resp=None,
+            grpc_status_code=StatusCode.INTERNAL,
         )
 
         self.assertIsInstance(exception, PythonException)
         self.assertIn("An exception was thrown from the Python worker", exception.getMessage())
+        self.assertEqual(exception.getGrpcStatusCode(), StatusCode.INTERNAL)
 
     def test_convert_exception_unknown_class(self):
         # Mock ErrorInfo with an unknown error class
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.UnknownException",
             "metadata": {"classes": '["org.apache.spark.UnknownException"]'},
         }
         truncated_message = "Unknown error occurred"
         exception = convert_exception(
-            info=ErrorInfo(**info), truncated_message=truncated_message, resp=None
+            info=ErrorInfo(**info),
+            truncated_message=truncated_message,
+            resp=None,
+            grpc_status_code=StatusCode.INTERNAL,
         )
 
         self.assertIsInstance(exception, SparkConnectGrpcException)
         self.assertEqual(
             exception.getMessage(), "(org.apache.spark.UnknownException) Unknown error occurred"
         )
+        self.assertEqual(exception.getGrpcStatusCode(), StatusCode.INTERNAL)
 
     def test_exception_class_mapping(self):
         # Ensure that all keys in EXCEPTION_CLASS_MAPPING are valid
@@ -92,6 +114,9 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_with_stacktrace(self):
         # Mock FetchErrorDetailsResponse with stacktrace
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
+
         resp = pb2(
             root_error_idx=0,
             errors=[
@@ -132,7 +157,10 @@ class ConnectErrorsTest(unittest.TestCase):
         }
         truncated_message = "Root error message"
         exception = convert_exception(
-            info=ErrorInfo(**info), truncated_message=truncated_message, resp=resp
+            info=ErrorInfo(**info),
+            truncated_message=truncated_message,
+            resp=resp,
+            display_server_stacktrace=True,
         )
 
         self.assertIsInstance(exception, SparkConnectGrpcException)
@@ -141,6 +169,9 @@ class ConnectErrorsTest(unittest.TestCase):
 
     def test_convert_exception_fallback(self):
         # Mock ErrorInfo with missing class information
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
         info = {
             "reason": "org.apache.spark.UnknownReason",
             "metadata": {},
@@ -154,6 +185,7 @@ class ConnectErrorsTest(unittest.TestCase):
         self.assertEqual(
             exception.getMessage(), "(org.apache.spark.UnknownReason) Fallback error occurred"
         )
+        self.assertEqual(exception.getGrpcStatusCode(), StatusCode.UNKNOWN)
 
 
 if __name__ == "__main__":

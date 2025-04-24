@@ -54,6 +54,15 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("endLabel" -> toSQLId(endLabel)))
   }
 
+  def labelNameForbidden(origin: Origin, label: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "LABEL_NAME_FORBIDDEN",
+      cause = null,
+      messageParameters = Map("label" -> toSQLId(label))
+    )
+  }
+
   def variableDeclarationNotAllowedInScope(
       origin: Origin,
       varName: Seq[String]): Throwable = {
@@ -142,5 +151,116 @@ private[sql] object SqlScriptingErrors {
       errorClass = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
       cause = null,
       messageParameters = Map("labelName" -> toSQLStmt(labelName)))
+  }
+
+  def conditionCannotBeQualified(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.QUALIFIED_CONDITION_NAME",
+      cause = null,
+      messageParameters = Map("conditionName" -> toSQLStmt(conditionName)))
+  }
+
+  def conditionDeclarationOnlyAtBeginning(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.ONLY_AT_BEGINNING",
+      cause = null,
+      messageParameters = Map("conditionName" -> toSQLId(conditionName)))
+  }
+
+  def conditionDeclarationContainsSpecialCharacter(
+      origin: Origin,
+      conditionName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_ERROR_CONDITION_DECLARATION.SPECIAL_CHARACTER_FOUND",
+      cause = null,
+      messageParameters = Map("conditionName" -> toSQLId(conditionName)))
+  }
+
+  def duplicateConditionInScope(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_CONDITION_IN_SCOPE",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
+  }
+
+  def handlerDeclarationInWrongPlace(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.WRONG_PLACE_OF_DECLARATION",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
+  def duplicateConditionInHandlerDeclaration(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.DUPLICATE_CONDITION_IN_HANDLER_DECLARATION",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
+  }
+
+  def duplicateSqlStateInHandlerDeclaration(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
+
+  def duplicateHandlerForSameCondition(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
+  }
+
+  def duplicateHandlerForSameSqlState(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "DUPLICATE_EXCEPTION_HANDLER.SQLSTATE",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
+
+
+  def continueHandlerNotSupported(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "UNSUPPORTED_FEATURE.CONTINUE_EXCEPTION_HANDLER",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
+  def invalidSqlStateValue(origin: Origin, sqlState: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_SQLSTATE",
+      cause = null,
+      messageParameters = Map("sqlState" -> sqlState))
+  }
+
+  def sqlExceptionOrNotFoundCannotBeCombinedWithOtherConditions(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.INVALID_CONDITION_COMBINATION",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
+  def conditionNotFound(origin: Origin, condition: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_HANDLER_DECLARATION.CONDITION_NOT_FOUND",
+      cause = null,
+      messageParameters = Map("condition" -> condition))
   }
 }

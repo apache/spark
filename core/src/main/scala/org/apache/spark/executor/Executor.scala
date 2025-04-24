@@ -22,7 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
-import java.util.{Locale, Properties, Timer, TimerTask}
+import java.util.{Locale, Properties}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
@@ -186,7 +186,8 @@ private[spark] class Executor(
     val currentJars = new HashMap[String, Long]
     val currentArchives = new HashMap[String, Long]
     val urlClassLoader =
-      createClassLoader(currentJars, isStubbingEnabledForState(jobArtifactState.uuid))
+      createClassLoader(currentJars, isStubbingEnabledForState(jobArtifactState.uuid),
+        isDefaultState(jobArtifactState.uuid))
     val replClassLoader = addReplClassLoaderIfNeeded(
       urlClassLoader, jobArtifactState.replClassDirUri, jobArtifactState.uuid)
     new IsolatedSessionState(
@@ -209,10 +210,9 @@ private[spark] class Executor(
   // The default isolation group
   val defaultSessionState: IsolatedSessionState = newSessionState(JobArtifactState("default", None))
 
-  private val cacheExpiryTime = 30 * 60 * 1000
   val isolatedSessionCache: Cache[String, IsolatedSessionState] = CacheBuilder.newBuilder()
     .maximumSize(100)
-    .expireAfterAccess(cacheExpiryTime, TimeUnit.MILLISECONDS)
+    .expireAfterAccess(30, TimeUnit.MINUTES)
     .removalListener(new RemovalListener[String, IsolatedSessionState]() {
       override def onRemoval(
           notification: RemovalNotification[String, IsolatedSessionState]): Unit = {
@@ -296,8 +296,6 @@ private[spark] class Executor(
 
   private val pollOnHeartbeat = if (METRICS_POLLING_INTERVAL_MS > 0) false else true
 
-  private val timer = new Timer("executor-state-timer", true)
-
   // Poller for the memory metrics. Visible for testing.
   private[executor] val metricsPoller = new ExecutorMetricsPoller(
     env.memoryManager,
@@ -310,7 +308,7 @@ private[spark] class Executor(
     "executor-heartbeater",
     HEARTBEAT_INTERVAL_MS)
 
-  // must be initialized before running startDriverHeartbeat()
+  // must be initialized before running heartbeater.start()
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
@@ -448,9 +446,6 @@ private[spark] class Executor(
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
       }
-      if (timer != null) {
-        timer.cancel()
-      }
       ShuffleBlockPusher.stop()
       if (threadPool != null) {
         threadPool.shutdown()
@@ -510,8 +505,9 @@ private[spark] class Executor(
     @volatile var task: Task[Any] = _
 
     def kill(interruptThread: Boolean, reason: String): Unit = {
-      logInfo(log"Executor is trying to kill ${LogMDC(TASK_NAME, taskName)}," +
-        log" reason: ${LogMDC(REASON, reason)}")
+      logInfo(log"Executor is trying to kill ${LogMDC(TASK_NAME, taskName)}, " +
+        log"interruptThread: ${LogMDC(INTERRUPT_THREAD, interruptThread)}, " +
+        log"reason: ${LogMDC(REASON, reason)}")
       reasonIfKilled = Some(reason)
       if (task != null) {
         synchronized {
@@ -549,7 +545,8 @@ private[spark] class Executor(
         t.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
           // SPARK-32898: it's possible that a task is killed when taskStartTimeNs has the initial
           // value(=0) still. In this case, the executorRunTime should be considered as 0.
-          if (taskStartTimeNs > 0) System.nanoTime() - taskStartTimeNs else 0))
+          if (taskStartTimeNs > 0) (System.nanoTime() - taskStartTimeNs) * taskDescription.cpus
+          else 0))
         t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
       })
 
@@ -565,17 +562,9 @@ private[spark] class Executor(
     override def run(): Unit = {
 
       // Classloader isolation
-      var maybeTimerTask: Option[TimerTask] = None
       val isolatedSession = taskDescription.artifacts.state match {
         case Some(jobArtifactState) =>
-          val state = isolatedSessionCache.get(
-            jobArtifactState.uuid, () => newSessionState(jobArtifactState))
-          maybeTimerTask = Some(new TimerTask {
-            // Resets the expire time till the task ends.
-            def run(): Unit = isolatedSessionCache.getIfPresent(jobArtifactState.uuid)
-          })
-          maybeTimerTask.foreach(timer.schedule(_, cacheExpiryTime / 10, cacheExpiryTime / 10))
-          state
+          isolatedSessionCache.get(jobArtifactState.uuid, () => newSessionState(jobArtifactState))
         case _ => defaultSessionState
       }
 
@@ -714,7 +703,8 @@ private[spark] class Executor(
           (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
         // We need to subtract Task.run()'s deserialization time to avoid double-counting
         task.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
-          (taskFinishNs - taskStartTimeNs) - task.executorDeserializeTimeNs))
+          (taskFinishNs - taskStartTimeNs) * taskDescription.cpus
+            - task.executorDeserializeTimeNs))
         task.metrics.setExecutorCpuTime(
           (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
@@ -876,7 +866,6 @@ private[spark] class Executor(
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
-        maybeTimerTask.foreach(_.cancel)
         cleanMDCForTask(taskName, mdcProperties)
         runningTasks.remove(taskId)
         if (taskStarted) {
@@ -944,21 +933,17 @@ private[spark] class Executor(
   }
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    try {
+    if (Executor.mdcIsSupported) {
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
       MDC.put(taskNameMDCKey, taskName)
-    } catch {
-      case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
   }
 
   private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    try {
+    if (Executor.mdcIsSupported) {
       mdc.foreach { case (key, _) => MDC.remove(key) }
       MDC.remove(taskNameMDCKey)
-    } catch {
-      case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
   }
 
@@ -1086,7 +1071,8 @@ private[spark] class Executor(
    */
   private def createClassLoader(
       currentJars: HashMap[String, Long],
-      useStub: Boolean): MutableURLClassLoader = {
+      useStub: Boolean,
+      isDefaultSession: Boolean): MutableURLClassLoader = {
     // Bootstrap the list of jars with the user class path.
     val now = System.currentTimeMillis()
     userClassPath.foreach { url =>
@@ -1098,10 +1084,12 @@ private[spark] class Executor(
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
-    createClassLoader(urls, useStub)
+    createClassLoader(urls, useStub, isDefaultSession)
   }
 
-  private def createClassLoader(urls: Array[URL], useStub: Boolean): MutableURLClassLoader = {
+  private def createClassLoader(urls: Array[URL],
+                                useStub: Boolean,
+                                isDefaultSession: Boolean): MutableURLClassLoader = {
     logInfo(
       log"Starting executor with user classpath" +
         log" (userClassPathFirst =" +
@@ -1110,33 +1098,45 @@ private[spark] class Executor(
     )
 
     if (useStub) {
-      createClassLoaderWithStub(urls, conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES))
+      createClassLoaderWithStub(urls, conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES), isDefaultSession)
     } else {
-      createClassLoader(urls)
+      createClassLoader(urls, isDefaultSession)
     }
   }
 
-  private def createClassLoader(urls: Array[URL]): MutableURLClassLoader = {
+  private def createClassLoader(urls: Array[URL],
+                                isDefaultSession: Boolean): MutableURLClassLoader = {
+    // SPARK-51537: The isolated session must *inherit* the classloader from the default session,
+    // which has already included the global JARs specified via --jars. For Spark plugins, we
+    // cannot simply add the plugin JARs to the classpath of the isolated session, as this may
+    // cause the plugin to be reloaded, leading to potential conflicts or unexpected behavior.
+    val loader = if (isDefaultSession) systemLoader else defaultSessionState.replClassLoader
     if (userClassPathFirst) {
-      new ChildFirstURLClassLoader(urls, systemLoader)
+      new ChildFirstURLClassLoader(urls, loader)
     } else {
-      new MutableURLClassLoader(urls, systemLoader)
+      new MutableURLClassLoader(urls, loader)
     }
   }
 
   private def createClassLoaderWithStub(
       urls: Array[URL],
-      binaryName: Seq[String]): MutableURLClassLoader = {
+      binaryName: Seq[String],
+      isDefaultSession: Boolean): MutableURLClassLoader = {
+    // SPARK-51537: The isolated session must *inherit* the classloader from the default session,
+    // which has already included the global JARs specified via --jars. For Spark plugins, we
+    // cannot simply add the plugin JARs to the classpath of the isolated session, as this may
+    // cause the plugin to be reloaded, leading to potential conflicts or unexpected behavior.
+    val loader = if (isDefaultSession) systemLoader else defaultSessionState.replClassLoader
     if (userClassPathFirst) {
       // user -> (sys -> stub)
       val stubClassLoader =
-        StubClassLoader(systemLoader, binaryName)
+        StubClassLoader(loader, binaryName)
       new ChildFirstURLClassLoader(urls, stubClassLoader)
     } else {
       // sys -> user -> stub
       val stubClassLoader =
         StubClassLoader(null, binaryName)
-      new ChildFirstURLClassLoader(urls, stubClassLoader, systemLoader)
+      new ChildFirstURLClassLoader(urls, stubClassLoader, loader)
     }
   }
 
@@ -1243,7 +1243,8 @@ private[spark] class Executor(
       }
       if (renewClassLoader) {
         // Recreate the class loader to ensure all classes are updated.
-        state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs, useStub = true)
+        state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs,
+          useStub = true, isDefaultState(state.sessionUUID))
         state.replClassLoader =
           addReplClassLoaderIfNeeded(state.urlClassLoader, state.replClassDirUri, state.sessionUUID)
       }
@@ -1313,7 +1314,7 @@ private[spark] class Executor(
   }
 }
 
-private[spark] object Executor {
+private[spark] object Executor extends Logging {
   // This is reserved for internal use by components that need to read task properties before a
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
@@ -1321,6 +1322,21 @@ private[spark] object Executor {
 
   // Used to store executorSource, for local mode only
   var executorSourceLocalModeOnly: ExecutorSource = null
+
+  lazy val mdcIsSupported: Boolean = {
+    try {
+      // This tests if any class initialization error is thrown
+      val testKey = System.nanoTime().toString
+      MDC.put(testKey, "testValue")
+      MDC.remove(testKey)
+
+      true
+    } catch {
+      case t: Throwable =>
+        logInfo("MDC is not supported.", t)
+        false
+    }
+  }
 
   /**
    * Whether a `Throwable` thrown from a task is a fatal error. We will use this to decide whether

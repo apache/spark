@@ -210,6 +210,15 @@ object StaticSQLConf {
       .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
       .createWithDefault(16)
 
+  val RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.resultQueryStage.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to execute ResultQueryStageExec in AQE")
+      .version("4.0.0")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")
+      .createWithDefault(1024)
+
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
       "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")

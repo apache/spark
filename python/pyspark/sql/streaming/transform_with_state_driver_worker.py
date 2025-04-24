@@ -31,7 +31,7 @@ from pyspark.util import handle_worker_exception
 from typing import IO
 from pyspark.worker_util import check_python_version
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
-from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPySparkFuncMode
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ def main(infile: IO, outfile: IO) -> None:
 
     def process(
         processor: StatefulProcessorApiClient,
-        mode: TransformWithStateInPandasFuncMode,
+        mode: TransformWithStateInPySparkFuncMode,
         key: Any,
         input: Iterator["PandasDataFrameLike"],
     ) -> None:
@@ -72,16 +72,18 @@ def main(infile: IO, outfile: IO) -> None:
         # This driver runner will only be used on the first batch of a query,
         # and the following code block should be only run once for each query run
         state_server_port = read_int(infile)
+        if state_server_port == -1:
+            state_server_port = utf8_deserializer.loads(infile)
         key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
         print(
-            f"{log_name} received parameters for UDF. State server port: {state_server_port}, "
+            f"{log_name} received parameters for UDF. State server port/path: {state_server_port}, "
             f"key schema: {key_schema}.\n"
         )
 
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
         process(
             stateful_processor_api_client,
-            TransformWithStateInPandasFuncMode.PRE_INIT,
+            TransformWithStateInPySparkFuncMode.PRE_INIT,
             None,
             iter([]),
         )
@@ -94,9 +96,11 @@ def main(infile: IO, outfile: IO) -> None:
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, sock) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, sock) = local_connect_and_auth(conn_info, auth_secret)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     main(sock_file, sock_file)

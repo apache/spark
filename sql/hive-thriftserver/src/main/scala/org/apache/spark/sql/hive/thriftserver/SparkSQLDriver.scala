@@ -31,6 +31,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.COMMAND
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}

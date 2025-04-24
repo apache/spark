@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**

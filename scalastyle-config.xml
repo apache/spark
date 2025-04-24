@@ -364,18 +364,6 @@ This file is divided into 3 sections:
   <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
 
   <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
-    <parameters><parameter name="illegalImports"><![CDATA[scala.collection.Seq,scala.collection.IndexedSeq]]></parameter></parameters>
-    <customMessage><![CDATA[
-      Don't import scala.collection.Seq and scala.collection.IndexedSeq as it may bring some problems with cross-build between Scala 2.12 and 2.13.
-
-      Please refer below page to see the details of changes around Seq / IndexedSeq.
-      https://docs.scala-lang.org/overviews/core/collections-migration-213.html
-
-      If you really need to use scala.collection.Seq or scala.collection.IndexedSeq, please use the fully-qualified name instead.
-    ]]></customMessage>
-  </check>
-
-  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
     <parameters><parameter name="illegalImports"><![CDATA[collection]]></parameter></parameters>
     <customMessage>Please use scala.collection instead.</customMessage>
   </check>
@@ -476,5 +464,10 @@ This file is divided into 3 sections:
   <check customId="URLConstructor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new URL\(</parameter></parameters>
     <customMessage>Use URI.toURL or URL.of instead of URL constructors.</customMessage>
+  </check>
+
+  <check customId="configName" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">buildConf\("spark.databricks.</parameter></parameters>
+    <customMessage>Use Apache Spark config namespace.</customMessage>
   </check>
 </scalastyle>

@@ -39,7 +39,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
+import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -363,7 +363,7 @@ object SparkConnectService extends Logging {
    * Starts the GRPC Service.
    */
   private def startGRPCService(): Unit = {
-    val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
+    val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", false)
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sparkConnectService = new SparkConnectService(debugMode)
@@ -380,6 +380,10 @@ object SparkConnectService extends Logging {
       }
       sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
         .addService(sparkConnectService)
+
+      getAuthenticateToken.foreach { token =>
+        sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))
+      }
 
       // Add all registered interceptors to the server builder.
       SparkConnectInterceptorRegistry.chainInterceptors(sb, configuredInterceptors)

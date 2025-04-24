@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OUT_OF_MEMORY" : {
+    "message" : [
+      "No enough memory for aggregation"
+    ],
+    "sqlState" : "82001"
+  },
   "ALL_PARAMETERS_MUST_BE_NAMED" : {
     "message" : [
       "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
@@ -82,6 +88,18 @@
     ],
     "sqlState" : "22003"
   },
+  "ARROW_TYPE_MISMATCH" : {
+    "message" : [
+      "Invalid schema from <operation>: expected <outputTypes>, got <actualDataTypes>."
+    ],
+    "sqlState" : "42K0G"
+  },
+  "ARTIFACT_ALREADY_EXISTS" : {
+    "message" : [
+      "The artifact <normalizedRemoteRelativePath> already exists. Please choose a different name for the new artifact because it cannot be overwritten."
+    ],
+    "sqlState" : "42713"
+  },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
       "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
@@ -110,6 +128,13 @@
       }
     },
     "sqlState" : "42604"
+  },
+  "AVRO_CANNOT_WRITE_NULL_FIELD" : {
+    "message" : [
+      "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
+      "To allow null value for this field, specify its avro schema as a union type with \"null\" using `avroSchema` option."
+    ],
+    "sqlState" : "22004"
   },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
@@ -279,6 +304,11 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "FAILED_TO_GET_CHANGELOG_WRITER" : {
+        "message" : [
+          "Failed to get the changelog writer for state store at version <version>."
+        ]
+      },
       "HDFS_STORE_PROVIDER_OUT_OF_MEMORY" : {
         "message" : [
           "Could not load HDFS state store with id <stateStoreId> because of an out of memory exception."
@@ -374,6 +404,12 @@
       "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
     ],
     "sqlState" : "22018"
+  },
+  "CANNOT_PARSE_TIME" : {
+    "message" : [
+      "The input string <input> cannot be parsed to a TIME value because it does not match to the datetime format <format>."
+    ],
+    "sqlState" : "22010"
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
@@ -759,7 +795,12 @@
     "subClass" : {
       "ATTRIBUTE_NOT_ALLOWED" : {
         "message" : [
-          "<attribute> is not allowed to be accessed."
+          "<attribute> in <className> is not allowed to be accessed."
+        ]
+      },
+      "CACHE_INVALID" : {
+        "message" : [
+          "Cannot retrieve <objectName> from the ML cache. It is probably because the entry has been evicted."
         ]
       },
       "UNSUPPORTED_EXCEPTION" : {
@@ -769,6 +810,20 @@
       }
     },
     "sqlState" : "XX000"
+  },
+  "CONSTRAINT_ALREADY_EXISTS" : {
+    "message" : [
+      "Constraint '<constraintName>' already exists. Please delete the existing constraint first.",
+      "Existing constraint:",
+      "<oldConstraint>"
+    ],
+    "sqlState" : "42710"
+  },
+  "CONSTRAINT_DOES_NOT_EXIST" : {
+    "message" : [
+      "Cannot drop nonexistent constraint <constraintName> from table <tableName>."
+    ],
+    "sqlState" : "42704"
   },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
@@ -951,6 +1006,11 @@
       "INVALID_XML_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
+      "INVALID_XML_SCHEMA" : {
+        "message" : [
+          "Input schema <schema> must be a struct or a variant."
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -1149,8 +1209,20 @@
   },
   "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<rangeMessage>."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "If necessary set <ansiConfig> to \"false\" to bypass this error."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {
@@ -1240,6 +1312,30 @@
       "Found duplicate clauses: <clauseName>. Please, remove one of them."
     ],
     "sqlState" : "42614"
+  },
+  "DUPLICATE_CONDITION_IN_SCOPE" : {
+    "message" : [
+      "Found duplicate condition <condition> in the scope. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
+  "DUPLICATE_EXCEPTION_HANDLER" : {
+    "message" : [
+      "Found duplicate handlers. Please, remove one of them."
+    ],
+    "subClass" : {
+      "CONDITION" : {
+        "message" : [
+          "Found duplicate handlers for the same condition <condition>."
+        ]
+      },
+      "SQLSTATE" : {
+        "message" : [
+          "Found duplicate handlers for the same SQLSTATE <sqlState>."
+        ]
+      }
+    },
+    "sqlState" : "42734"
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -1692,6 +1788,12 @@
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ],
+    "sqlState" : "42822"
+  },
+  "HINT_UNSUPPORTED_FOR_JDBC_DIALECT" : {
+    "message" : [
+      "The option `hint` is not supported for <jdbcDialect> in JDBC data source. Supported dialects are `MySQLDialect`, `OracleDialect` and `DatabricksDialect`."
     ],
     "sqlState" : "42822"
   },
@@ -2272,16 +2374,6 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
-      "DEFAULT_COLLATION" : {
-        "message" : [
-          "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
-        ]
-      },
-      "DEFAULT_COLLATION_NOT_SUPPORTED" : {
-        "message" : [
-          "Setting default session collation other than UTF8_BINARY is currently not supported."
-        ]
-      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
@@ -2289,6 +2381,12 @@
       }
     },
     "sqlState" : "22022"
+  },
+  "INVALID_CONSTRAINT_CHARACTERISTICS" : {
+    "message" : [
+      "Constraint characteristics [<characteristics>] are duplicated or conflict with each other."
+    ],
+    "sqlState" : "42613"
   },
   "INVALID_CORRUPT_RECORD_TYPE" : {
     "message" : [
@@ -2342,6 +2440,11 @@
       "SECONDS_FRACTION" : {
         "message" : [
           "Cannot detect a seconds fraction pattern of variable length. Please make sure the pattern contains 'S', and does not contain illegal characters."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       }
     },
@@ -2420,6 +2523,29 @@
       "The location name cannot be empty string, but `<location>` was given."
     ],
     "sqlState" : "42K05"
+  },
+  "INVALID_ERROR_CONDITION_DECLARATION" : {
+    "message" : [
+      "Invalid condition declaration."
+    ],
+    "subClass" : {
+      "ONLY_AT_BEGINNING" : {
+        "message" : [
+          "Condition <conditionName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_CONDITION_NAME" : {
+        "message" : [
+          "Condition <conditionName> cannot be qualified."
+        ]
+      },
+      "SPECIAL_CHARACTER_FOUND" : {
+        "message" : [
+          "Special character found in condition name <conditionName>. Only alphanumeric characters and underscores are allowed."
+        ]
+      }
+    },
+    "sqlState" : "42K0R"
   },
   "INVALID_ESC" : {
     "message" : [
@@ -2589,6 +2715,39 @@
     },
     "sqlState" : "HY000"
   },
+  "INVALID_HANDLER_DECLARATION" : {
+    "message" : [
+      "Invalid handler declaration."
+    ],
+    "subClass" : {
+      "CONDITION_NOT_FOUND" : {
+        "message" : [
+          "Condition <condition> not found."
+        ]
+      },
+      "DUPLICATE_CONDITION_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate condition <condition> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION" : {
+        "message" : [
+          "Found duplicate sqlState <sqlState> in the handler declaration. Please, remove one of them."
+        ]
+      },
+      "INVALID_CONDITION_COMBINATION" : {
+        "message" : [
+          "Invalid combination of conditions in the handler declaration. SQLEXCEPTION and NOT FOUND cannot be used together with other condition/sqlstate values."
+        ]
+      },
+      "WRONG_PLACE_OF_DECLARATION" : {
+        "message" : [
+          "Handlers must be declared after variable/condition declaration, and before other statements."
+        ]
+      }
+    },
+    "sqlState" : "42K0Q"
+  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The unquoted identifier <ident> is invalid and must be back quoted as: `<ident>`.",
@@ -2737,7 +2896,7 @@
   },
   "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
     "message" : [
-      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Cannot add an interval to a date because its microseconds part is not 0. To resolve this, cast the input date to a timestamp, which supports the addition of intervals with non-zero microseconds."
     ],
     "sqlState" : "22006"
   },
@@ -2790,6 +2949,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_KRYO_SERIALIZER_NO_DATA" : {
+    "message" : [
+      "The object '<obj>' is invalid or malformed to <serdeOp> using <serdeClass>."
+    ],
+    "sqlState" : "22002"
+  },
   "INVALID_LABEL_USAGE" : {
     "message" : [
       "The usage of the label <labelName> is invalid."
@@ -2831,6 +2996,11 @@
       "NUM_ARGS_MISMATCH" : {
         "message" : [
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
+        ]
+      },
+      "PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION" : {
+        "message" : [
+          "You passed a lambda function to a parameter that does not accept it. Please check if lambda function argument is in the correct position."
         ]
       }
     },
@@ -3129,6 +3299,24 @@
     ],
     "sqlState" : "42836"
   },
+  "INVALID_RECURSIVE_REFERENCE" : {
+    "message" : [
+      "Invalid recursive reference found inside WITH RECURSIVE clause."
+    ],
+    "subClass" : {
+      "NUMBER" : {
+        "message" : [
+          "Multiple self-references to one recursive CTE are not allowed."
+        ]
+      },
+      "PLACE" : {
+        "message" : [
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+        ]
+      }
+    },
+    "sqlState" : "42836"
+  },
   "INVALID_REGEXP_REPLACE" : {
     "message" : [
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
@@ -3185,7 +3373,7 @@
   },
   "INVALID_SINGLE_VARIANT_COLUMN" : {
     "message" : [
-      "The `singleVariantColumn` option cannot be used if there is also a user specified schema."
+      "User specified schema <schema> is invalid when the `singleVariantColumn` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
     ],
     "sqlState" : "42613"
   },
@@ -3227,6 +3415,12 @@
     },
     "sqlState" : "42616"
   },
+  "INVALID_SQLSTATE" : {
+    "message" : [
+      "Invalid SQLSTATE value: '<sqlState>'. SQLSTATE must be exactly 5 characters long and contain only A-Z and 0-9. SQLSTATE must not start with '00', '01', or 'XX'."
+    ],
+    "sqlState" : "428B3"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
@@ -3248,6 +3442,16 @@
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
+        ]
+      },
+      "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
+        "message" : [
+          "CREATE FUNCTION with constraints on parameters is not allowed."
+        ]
+      },
+      "CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS" : {
+        "message" : [
+          "CREATE FUNCTION with generated columns as parameters is not allowed."
         ]
       },
       "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
@@ -3375,6 +3579,11 @@
         "message" : [
           "Scalar subquery must return only one column, but got <number>."
         ]
+      },
+      "STREAMING_QUERY" : {
+        "message" : [
+          "Streaming query is not allowed in subquery expressions."
+        ]
       }
     },
     "sqlState" : "42823"
@@ -3468,6 +3677,16 @@
       "ONLY_AT_BEGINNING" : {
         "message" : [
           "Variable <varName> can only be declared at the beginning of the compound."
+        ]
+      },
+      "QUALIFIED_LOCAL_VARIABLE" : {
+        "message" : [
+          "The variable <varName> must be declared without a qualifier, as qualifiers are not allowed for local variable declarations."
+        ]
+      },
+      "REPLACE_LOCAL_VARIABLE" : {
+        "message" : [
+          "The variable <varName> does not support DECLARE OR REPLACE, as local variables cannot be replaced."
         ]
       }
     },
@@ -3615,6 +3834,12 @@
     ],
     "sqlState" : "42K0L"
   },
+  "LABEL_NAME_FORBIDDEN" : {
+    "message" : [
+      "The label name <label> is forbidden."
+    ],
+    "sqlState" : "42K0L"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -3680,6 +3905,25 @@
       }
     },
     "sqlState" : "22023"
+  },
+  "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE" : {
+    "message" : [
+      "Malformed state in RatePerMicroBatch source."
+    ],
+    "subClass" : {
+      "INVALID_OFFSET" : {
+        "message" : [
+          "The offset value is invalid: startOffset should less than or equal to the endOffset, but startOffset(<startOffset>) > endOffset(<endOffset>)."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp value is invalid: startTimestamp should less than or equal to the endTimestamp, but startTimestamp(<startTimestamp>) > endTimestamp(<endTimestamp>).",
+          "This could happen when the streaming query is restarted with a newer `startingTimestamp` and reprocess the first batch (i.e. batch 0). Please consider using a new checkpoint location."
+        ]
+      }
+    },
+    "sqlState" : "22000"
   },
   "MALFORMED_VARIANT" : {
     "message" : [
@@ -3750,6 +3994,12 @@
     ],
     "sqlState" : "42P20"
   },
+  "MULTIPLE_PRIMARY_KEYS" : {
+    "message" : [
+      "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
+    ],
+    "sqlState" : "42P16"
+  },
   "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
     "message" : [
       "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
@@ -3797,6 +4047,12 @@
       "Cannot call function <functionName> because named argument references are not enabled here.",
       "In this case, the named argument reference was <argument>.",
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NEGATIVE_SCALE_DISALLOWED" : {
+    "message" : [
+      "Negative scale is not allowed: '<scale>'. Set the config <sqlConf> to \"true\" to allow it."
     ],
     "sqlState" : "0A000"
   },
@@ -3959,6 +4215,12 @@
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
       "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NOT_SUPPORTED_CHANGE_SAME_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <fieldName> including its nested fields multiple times in the same command."
     ],
     "sqlState" : "0A000"
   },
@@ -4235,6 +4497,12 @@
     ],
     "sqlState" : "XXKD0"
   },
+  "POINTER_ARRAY_OUT_OF_MEMORY" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ],
+    "sqlState" : "82002"
+  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
@@ -4295,6 +4563,18 @@
       "Failed when Python streaming data source perform <action>: <msg>"
     ],
     "sqlState" : "38000"
+  },
+  "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing 'spark.sql.cteRecursionLevelLimit'"
+    ],
+    "sqlState" : "42836"
+  },
+  "RECURSION_ROW_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Recursion row limit <rowLimit> reached but query has not exhausted, try increasing 'spark.sql.cteRecursionRowLimit'"
+    ],
+    "sqlState" : "42836"
   },
   "RECURSIVE_CTE_IN_LEGACY_MODE" : {
     "message" : [
@@ -4488,11 +4768,23 @@
     ],
     "sqlState" : "42601"
   },
+  "SPILL_OUT_OF_MEMORY" : {
+    "message" : [
+      "Error while calling spill() on <consumerToSpill> : <message>"
+    ],
+    "sqlState" : "82003"
+  },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
       "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
     ],
     "sqlState" : "42K0I"
+  },
+  "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script. Make sure the sql_string is a well-formed SQL statement and does not contain BEGIN and END."
+    ],
+    "sqlState" : "07501"
   },
   "STAR_GROUP_BY_POS" : {
     "message" : [
@@ -4625,6 +4917,12 @@
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_OPERATION_OUT_OF_ORDER" : {
+    "message" : [
+      "Streaming stateful operator attempted to access state store out of order. This is a bug, please retry. error_msg=<errorMsg>"
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY" : {
     "message" : [
@@ -4807,9 +5105,21 @@
     },
     "sqlState" : "42KDE"
   },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_COMMUNICATION_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed during initial config communication. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_PYTHON_RUNNER_INITIALIZATION_FAILURE" : {
     "message" : [
       "Streaming Runner initialization failed, returned <resFromPython>. Cause: <msg>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_PYTHON_RUNNER_INITIALIZATION_TIMEOUT_FAILURE" : {
+    "message" : [
+      "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
     ],
     "sqlState" : "XXKST"
   },
@@ -4925,6 +5235,14 @@
     ],
     "sqlState" : "42601"
   },
+  "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE" : {
+    "message" : [
+      "If Avro encoding is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable",
+      "when using the TransformWithState operator.",
+      "Please make the schema nullable. Current schema: <schema>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
@@ -5028,6 +5346,12 @@
       "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
     ],
     "sqlState" : "42846"
+  },
+  "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE" : {
+    "message" : [
+      "The UNION operator is not yet supported within recursive common table expressions (WITH clauses that refer to themselves, directly or indirectly). Please use UNION ALL instead."
+    ],
+    "sqlState" : "42836"
   },
   "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
     "message" : [
@@ -5252,11 +5576,6 @@
           "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
         ]
       },
-      "SESSION_EXECUTE_COMMAND" : {
-        "message" : [
-          "Invoking SparkSession 'executeCommand'."
-        ]
-      },
       "SESSION_EXPERIMENTAL_METHODS" : {
         "message" : [
           "Access to SparkSession Experimental (methods). This is server side developer API"
@@ -5283,6 +5602,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC" : {
+    "message" : [
+      "Constraint characteristic '<characteristic>' is not supported for constraint type '<constraintType>'."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
@@ -5442,6 +5767,11 @@
       "COMMENT_NAMESPACE" : {
         "message" : [
           "Attach a comment to the namespace <namespace>."
+        ]
+      },
+      "CONTINUE_EXCEPTION_HANDLER" : {
+        "message" : [
+          "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
       "DESC_TABLE_COLUMN_JSON" : {
@@ -5649,6 +5979,11 @@
       "SQL_SCRIPTING" : {
         "message" : [
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
+      "SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE" : {
+        "message" : [
+          "DROP TEMPORARY VARIABLE is not supported within SQL scripts. To bypass this, use `EXECUTE IMMEDIATE 'DROP TEMPORARY VARIABLE ...'` ."
         ]
       },
       "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
@@ -6012,6 +6347,12 @@
       "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
     ],
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_TIME_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
+    ],
+    "sqlState" : "0A001"
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
@@ -6479,7 +6820,7 @@
   },
   "_LEGACY_ERROR_TEMP_1047" : {
     "message" : [
-      "<hintName> Hint parameter should include columns, but <invalidParams> found."
+      "<hintName> Hint parameters should include an optional integral partitionNum and/or columns, but <invalidParams> can not be recognized as either partitionNum or columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1048" : {
@@ -7656,11 +7997,6 @@
   "_LEGACY_ERROR_TEMP_2129" : {
     "message" : [
       "Conflict found: Field <field> <actual> differs from <field> <expected> derived from <candidate>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2130" : {
-    "message" : [
-      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2131" : {
@@ -9131,21 +9467,6 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3300" : {
-    "message" : [
-      "error while calling spill() on <consumerToSpill> : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3301" : {
-    "message" : [
-      "Not enough memory to grow pointer array"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3302" : {
-    "message" : [
-      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

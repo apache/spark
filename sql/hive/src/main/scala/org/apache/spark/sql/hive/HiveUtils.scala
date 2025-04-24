@@ -38,8 +38,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.classic.SQLContext
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.hive.client._

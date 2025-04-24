@@ -50,6 +50,8 @@ message Command {
     RemoveCachedRemoteRelationCommand remove_cached_remote_relation_command = 15;
     MergeIntoTableCommand merge_into_table_command = 16;
     MlCommand ml_command = 17;
+    ExecuteExternalCommand execute_external_command = 18;
+
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
@@ -534,4 +536,16 @@ message MergeIntoTableCommand {
 
   // (Required) Whether to enable schema evolution.
   bool with_schema_evolution = 7;
+}
+
+// Execute an arbitrary string command inside an external execution engine
+message ExecuteExternalCommand {
+  // (Required) The class name of the runner that implements `ExternalCommandRunner`
+  string runner = 1;
+
+  // (Required) The target command to be executed.
+  string command = 2;
+
+  // (Optional) The options for the runner.
+  map<string, string> options = 3;
 }

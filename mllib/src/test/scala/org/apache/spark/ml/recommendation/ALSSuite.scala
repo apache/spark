@@ -1128,6 +1128,24 @@ class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     levels.foreach(level => assert(level == StorageLevel.MEMORY_ONLY))
     nonDefaultListener.storageLevels.foreach(level => assert(level == StorageLevel.DISK_ONLY))
   }
+
+  test("saved model size estimation") {
+    import testImplicits._
+
+    val als = new ALS().setMaxIter(1).setRank(8)
+    val estimatedDFSize = (3 + 2) * (8 + 1) * 4
+    val df = sc.parallelize(Seq(
+      (123, 1, 0.5),
+      (123, 2, 0.7),
+      (123, 3, 0.6),
+      (111, 2, 1.0),
+      (111, 1, 0.1)
+    )).toDF("item", "user", "rating")
+    assert(als.estimateModelSize(df) === estimatedDFSize)
+
+    val model = als.fit(df)
+    assert(model.estimatedSize == estimatedDFSize)
+  }
 }
 
 private class IntermediateRDDStorageListener extends SparkListener {

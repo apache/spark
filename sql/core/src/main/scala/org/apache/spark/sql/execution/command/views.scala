@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -136,7 +137,8 @@ case class CreateViewCommand(
         originalText,
         analyzedPlan,
         aliasedPlan,
-        referredTempFunctions)
+        referredTempFunctions,
+        collation)
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
@@ -674,7 +676,7 @@ object ViewHelper extends SQLConfHelper with Logging {
       val tempVars = collectTemporaryVariables(child)
       tempVars.foreach { nameParts =>
         throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
-          name, nameParts.quoted)
+          name.nameParts, nameParts)
       }
     }
   }
@@ -738,8 +740,10 @@ object ViewHelper extends SQLConfHelper with Logging {
       originalText: Option[String],
       analyzedPlan: LogicalPlan,
       aliasedPlan: LogicalPlan,
-      referredTempFunctions: Seq[String]): TemporaryViewRelation = {
-    val uncache = getRawTempView(name.table).map { r =>
+      referredTempFunctions: Seq[String],
+      collation: Option[String] = None): TemporaryViewRelation = {
+    val rawTempView = getRawTempView(name.table)
+    val uncache = rawTempView.map { r =>
       needsToUncache(r, aliasedPlan)
     }.getOrElse(false)
     val storeAnalyzedPlanForView = session.sessionState.conf.storeAnalyzedPlanForView ||
@@ -753,6 +757,16 @@ object ViewHelper extends SQLConfHelper with Logging {
       }
       CommandUtils.uncacheTableOrView(session, name)
     }
+    // When called from CreateViewCommand, this function determines the collation from the
+    // DEFAULT COLLATION clause in the query or assigns None if unspecified.
+    // When called from AlterViewAsCommand, it retrieves the collation from the view's metadata.
+    val defaultCollation = if (collation.isDefined) {
+      collation
+    } else if (rawTempView.isDefined) {
+      rawTempView.get.tableMeta.collation
+    } else {
+      None
+    }
     if (!storeAnalyzedPlanForView) {
       TemporaryViewRelation(
         prepareTemporaryView(
@@ -761,10 +775,11 @@ object ViewHelper extends SQLConfHelper with Logging {
           analyzedPlan,
           aliasedPlan.schema,
           originalText.get,
-          referredTempFunctions))
+          referredTempFunctions,
+          defaultCollation))
     } else {
       TemporaryViewRelation(
-        prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan),
+        prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan, defaultCollation),
         Some(aliasedPlan))
     }
   }
@@ -794,7 +809,8 @@ object ViewHelper extends SQLConfHelper with Logging {
       analyzedPlan: LogicalPlan,
       viewSchema: StructType,
       originalText: String,
-      tempFunctions: Seq[String]): CatalogTable = {
+      tempFunctions: Seq[String],
+      collation: Option[String]): CatalogTable = {
 
     val tempViews = collectTemporaryViews(analyzedPlan)
     val tempVariables = collectTemporaryVariables(analyzedPlan)
@@ -811,7 +827,8 @@ object ViewHelper extends SQLConfHelper with Logging {
       schema = viewSchema,
       viewText = Some(originalText),
       createVersion = org.apache.spark.SPARK_VERSION,
-      properties = newProperties)
+      properties = newProperties,
+      collation = collation)
   }
 
   /**
@@ -820,12 +837,14 @@ object ViewHelper extends SQLConfHelper with Logging {
    */
   private def prepareTemporaryViewStoringAnalyzedPlan(
       viewName: TableIdentifier,
-      analyzedPlan: LogicalPlan): CatalogTable = {
+      analyzedPlan: LogicalPlan,
+      collation: Option[String]): CatalogTable = {
     CatalogTable(
       identifier = viewName,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = analyzedPlan.schema,
-      properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")))
+      properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")),
+      collation = collation)
   }
 }

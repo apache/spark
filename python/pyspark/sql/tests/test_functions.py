@@ -18,7 +18,7 @@
 from contextlib import redirect_stdout
 import datetime
 from enum import Enum
-from inspect import getmembers, isfunction
+from inspect import getmembers, isfunction, isclass
 import io
 from itertools import chain
 import math
@@ -88,6 +88,81 @@ class FunctionsTestsMixin:
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
+        )
+
+    def test_wildcard_import(self):
+        all_set = set(F.__all__)
+
+        # {
+        #     "abs",
+        #     "acos",
+        #     "acosh",
+        #     "add_months",
+        #     "aes_decrypt",
+        #     "aes_encrypt",
+        #     ...,
+        # }
+        fn_set = {
+            name
+            for (name, value) in getmembers(F, isfunction)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
+
+        expected_fn_all_diff = {
+            "approxCountDistinct",  # deprecated
+            "bitwiseNOT",  # deprecated
+            "countDistinct",  # deprecated
+            "shiftLeft",  # deprecated
+            "shiftRight",  # deprecated
+            "shiftRightUnsigned",  # deprecated
+            "sumDistinct",  # deprecated
+            "toDegrees",  # deprecated
+            "toRadians",  # deprecated
+        }
+
+        self.assertEqual(
+            expected_fn_all_diff,
+            fn_set - all_set,
+            "some functions are not registered in __all__",
+        )
+
+        # {
+        #     "AnalyzeArgument",
+        #     "AnalyzeResult",
+        #     ...,
+        #     "UserDefinedFunction",
+        #     "UserDefinedTableFunction",
+        # }
+        clz_set = {
+            name
+            for (name, value) in getmembers(F, isclass)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
+
+        expected_clz_all_diff = {
+            "ArrayType",  # should be imported from pyspark.sql.types
+            "ByteType",  # should be imported from pyspark.sql.types
+            "Column",  # should be imported from pyspark.sql
+            "DataType",  # should be imported from pyspark.sql.types
+            "NumericType",  # should be imported from pyspark.sql.types
+            "ParentDataFrame",  # internal class
+            "PySparkTypeError",  # should be imported from pyspark.errors
+            "PySparkValueError",  # should be imported from pyspark.errors
+            "StringType",  # should be imported from pyspark.sql.types
+            "StructType",  # should be imported from pyspark.sql.types
+        }
+
+        self.assertEqual(
+            expected_clz_all_diff,
+            clz_set - all_set,
+            "some classes are not registered in __all__",
+        )
+
+        unknonw_set = all_set - (fn_set | clz_set)
+        self.assertEqual(
+            unknonw_set,
+            set(),
+            "some unknown items are registered in __all__",
         )
 
     def test_explode(self):
@@ -1496,7 +1571,9 @@ class FunctionsTestsMixin:
         self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
 
     def test_variant_expressions(self):
-        df = self.spark.createDataFrame([Row(json="""{ "a" : 1 }"""), Row(json="""{ "b" : 2 }""")])
+        df = self.spark.createDataFrame(
+            [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]
+        )
         v = F.parse_json(df.json)
 
         def check(resultDf, expected):
@@ -1509,6 +1586,10 @@ class FunctionsTestsMixin:
         check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
         check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
         check(df.select(F.variant_get(v, "$.a", "double")), [1.0, None])
+
+        # non-literal variant_get
+        check(df.select(F.variant_get(v, df.path, "int")), [1, 2])
+        check(df.select(F.try_variant_get(v, df.path, "binary")), [None, None])
 
         with self.assertRaises(SparkRuntimeException) as ex:
             df.select(F.variant_get(v, "$.a", "binary")).collect()

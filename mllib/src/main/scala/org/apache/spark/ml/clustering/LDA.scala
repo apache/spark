@@ -617,6 +617,9 @@ class LocalLDAModel private[ml] (
     sparkSession: SparkSession)
   extends LDAModel(uid, vocabSize, sparkSession) {
 
+  // For ml connect only
+  private[ml] def this() = this("", -1, null, null)
+
   oldLocalModel.setSeed(getSeed)
 
   @Since("1.6.0")
@@ -713,6 +716,9 @@ class DistributedLDAModel private[ml] (
     private var oldLocalModelOption: Option[OldLocalLDAModel])
   extends LDAModel(uid, vocabSize, sparkSession) {
 
+  // For ml connect only
+  private[ml] def this() = this("", -1, null, null, None)
+
   override private[clustering] def oldLocalModel: OldLocalLDAModel = {
     if (oldLocalModelOption.isEmpty) {
       oldLocalModelOption = Some(oldDistributedModel.toLocal)
@@ -798,6 +804,11 @@ class DistributedLDAModel private[ml] (
   @Since("3.0.0")
   override def toString: String = {
     s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
+  }
+
+  override def estimatedSize: Long = {
+    // TODO: Implement this method.
+    throw new UnsupportedOperationException
   }
 }
 

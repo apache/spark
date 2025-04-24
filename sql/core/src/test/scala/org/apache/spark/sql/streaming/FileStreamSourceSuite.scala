@@ -235,14 +235,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   override val streamingTimeout = 80.seconds
 
-  /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
-  private def createFileStreamSource(
-      format: String,
-      path: String,
-      schema: Option[StructType] = None): FileStreamSource = {
-    getSourceFromFileStream(createFileStream(format, path, schema))
-  }
-
   private def createFileStreamSourceAndGetSchema(
       format: Option[String],
       path: Option[String],

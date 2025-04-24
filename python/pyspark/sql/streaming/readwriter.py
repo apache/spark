@@ -1562,7 +1562,8 @@ class DataStreamWriter:
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         assert self._spark._sc._jvm is not None
         jForeachWriter = getattr(
-            self._spark._sc._jvm, "org.apache.spark.sql.execution.python.PythonForeachWriter"
+            self._spark._sc._jvm,
+            "org.apache.spark.sql.execution.python.streaming.PythonForeachWriter",
         )(wrapped_func, self._df._jdf.schema())
         self._jwrite.foreach(jForeachWriter)
         return self

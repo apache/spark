@@ -800,9 +800,13 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes wi
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 
+  protected def sameType(left: DataType, right: DataType): Boolean = {
+    DataTypeUtils.sameType(left, right)
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
-    if (!DataTypeUtils.sameType(left.dataType, right.dataType)) {
+    if (!sameType(left.dataType, right.dataType)) {
       DataTypeMismatch(
         errorSubClass = "BINARY_OP_DIFF_TYPES",
         messageParameters = Map(
@@ -1467,5 +1471,5 @@ case class MultiCommutativeOp(
  * Trait for expressions whose data type should be a default string type.
  */
 trait DefaultStringProducingExpression extends Expression {
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
 }

@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 
-from typing import Any, TypeVar, Callable, List, Tuple, Union, Iterable
+from typing import Any, TypeVar, Callable, List, Tuple, Union, Iterable, TYPE_CHECKING
 
 import pandas as pd
 
 from pyspark import cloudpickle
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, pandas_udf
-import pyspark.sql.connect.proto as pb2
+
+if TYPE_CHECKING:
+    import pyspark.sql.connect.proto as pb2
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
@@ -180,6 +182,8 @@ def transform_dataframe_column(
 
 def _extract_id_methods(obj_identifier: str) -> Tuple[List["pb2.Fetch.Method"], str]:
     """Extract the obj reference id and the methods. Eg, model.summary"""
+    import pyspark.sql.connect.proto as pb2
+
     method_chain = obj_identifier.split(".")
     obj_ref = method_chain[0]
     methods: List["pb2.Fetch.Method"] = []

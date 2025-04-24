@@ -23,7 +23,7 @@ import java.time._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, FractionTimeFormatter, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
@@ -37,13 +37,14 @@ import org.apache.spark.util.ArrayImplicits._
  * Runs a query returning the result in Hive compatible form.
  */
 object HiveResult extends SQLConfHelper {
-  case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
+  case class TimeFormatters(date: DateFormatter, time: TimeFormatter, timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
     val dateFormatter = DateFormatter()
+    val timeFormatter = new FractionTimeFormatter()
     val timestampFormatter = TimestampFormatter.getFractionFormatter(
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-    TimeFormatters(dateFormatter, timestampFormatter)
+    TimeFormatters(dateFormatter, timeFormatter, timestampFormatter)
   }
 
   type BinaryFormatter = Array[Byte] => String
@@ -113,6 +114,7 @@ object HiveResult extends SQLConfHelper {
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
     case (ld: LocalDate, DateType) => formatters.date.format(ld)
+    case (lt: LocalTime, _: TimeType) => formatters.time.format(lt)
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)

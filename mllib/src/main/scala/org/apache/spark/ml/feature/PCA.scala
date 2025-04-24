@@ -127,6 +127,9 @@ class PCAModel private[ml] (
 
   import PCAModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", Matrices.empty, Vectors.empty)
+
   /** @group setParam */
   @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

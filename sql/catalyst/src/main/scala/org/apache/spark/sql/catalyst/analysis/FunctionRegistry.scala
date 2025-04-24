@@ -463,6 +463,7 @@ object FunctionRegistry {
     expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
+    expressionBuilder("try_to_time", TryToTimeExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
     expression[TryUrlDecode]("try_url_decode"),
@@ -613,6 +614,7 @@ object FunctionRegistry {
     expression[MakeValidUTF8]("make_valid_utf8"),
     expression[ValidateUTF8]("validate_utf8"),
     expression[TryValidateUTF8]("try_validate_utf8"),
+    expression[Quote]("quote"),
 
     // url functions
     expression[UrlEncode]("url_encode"),
@@ -625,6 +627,7 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expressionBuilder("curdate", CurDateExpressionBuilder, setAlias = true),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTime]("current_time"),
     expression[CurrentTimeZone]("current_timezone"),
     expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),
@@ -638,17 +641,18 @@ object FunctionRegistry {
     expression[DayOfMonth]("dayofmonth"),
     expression[FromUnixTime]("from_unixtime"),
     expression[FromUTCTimestamp]("from_utc_timestamp"),
-    expression[Hour]("hour"),
+    expressionBuilder("hour", HourExpressionBuilder),
     expression[LastDay]("last_day"),
-    expression[Minute]("minute"),
+    expressionBuilder("minute", MinuteExpressionBuilder),
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
     expression[Now]("now"),
     expression[Quarter]("quarter"),
-    expression[Second]("second"),
+    expressionBuilder("second", SecondExpressionBuilder),
     expression[ParseToTimestamp]("to_timestamp"),
     expression[ParseToDate]("to_date"),
+    expression[ToTime]("to_time"),
     expression[ToBinary]("to_binary"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
@@ -667,6 +671,7 @@ object FunctionRegistry {
     expression[SessionWindow]("session_window"),
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
+    expression[MakeTime]("make_time"),
     expression[MakeTimestamp]("make_timestamp"),
     expression[TryMakeTimestamp]("try_make_timestamp"),
     expression[MonthName]("monthname"),
@@ -905,7 +910,7 @@ object FunctionRegistry {
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 
-  private def registerInternalExpression[T <: Expression : ClassTag](
+  private[spark] def registerInternalExpression[T <: Expression : ClassTag](
       name: String,
       setAlias: Boolean = false): Unit = {
     val (info, builder) = FunctionRegistryBase.build[T](name, None)

@@ -482,7 +482,7 @@ class RecoverySuite extends MasterSuiteBase {
     var master: Master = null
     try {
       master = makeAliveMaster(conf)
-      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      val e = master.persistenceEngine.asInstanceOf[FileSystemPersistenceEngine]
       assert(e.codec.isEmpty)
     } finally {
       if (master != null) {
@@ -502,7 +502,7 @@ class RecoverySuite extends MasterSuiteBase {
     var master: Master = null
     try {
       master = makeAliveMaster(conf)
-      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      val e = master.persistenceEngine.asInstanceOf[FileSystemPersistenceEngine]
       assert(e.codec.get.isInstanceOf[LZ4CompressionCodec])
     } finally {
       if (master != null) {
@@ -521,7 +521,7 @@ class RecoverySuite extends MasterSuiteBase {
     var master: Master = null
     try {
       master = makeAliveMaster(conf)
-      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[RocksDBPersistenceEngine]
+      val e = master.persistenceEngine.asInstanceOf[RocksDBPersistenceEngine]
       assert(e.serializer.isInstanceOf[JavaSerializer])
     } finally {
       if (master != null) {

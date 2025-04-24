@@ -111,19 +111,24 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     while os.path.isdir(tmp_dir):
         tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
     os.mkdir(tmp_dir)
+    sock_dir = os.getenv('TMPDIR') or os.getenv('TEMP') or os.getenv('TMP') or '/tmp'
     env["TMPDIR"] = tmp_dir
     metastore_dir = os.path.join(tmp_dir, str(uuid.uuid4()))
     while os.path.isdir(metastore_dir):
         metastore_dir = os.path.join(metastore_dir, str(uuid.uuid4()))
     os.mkdir(metastore_dir)
 
-    # Also override the JVM's temp directory by setting driver and executor options.
-    java_options = "-Djava.io.tmpdir={0}".format(tmp_dir)
+    # Also override the JVM's temp directory and log4j conf by setting driver and executor options.
+    log4j2_path = os.path.join(SPARK_HOME, "python/test_support/log4j2.properties")
+    java_options = "-Djava.io.tmpdir={0} -Dlog4j.configurationFile={1}".format(
+        tmp_dir, log4j2_path
+    )
     java_options = java_options + " -Xss4M"
     spark_args = [
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
+        "--conf", "spark.python.unix.domain.socket.dir={0}".format(sock_dir),
         "pyspark-shell",
     ]
 

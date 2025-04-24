@@ -68,7 +68,7 @@ object ApplyCharTypePaddingHelper {
   private[sql] def paddingForStringComparison(
       plan: LogicalPlan,
       padCharCol: Boolean): LogicalPlan = {
-    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
+    plan.resolveOperatorsUpWithSubqueriesAndPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
       case operator =>
         operator.transformExpressionsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
           case e if !e.childrenResolved => e

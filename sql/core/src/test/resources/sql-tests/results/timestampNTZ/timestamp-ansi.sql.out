@@ -154,7 +154,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -186,7 +186,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -202,7 +202,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -394,7 +394,9 @@ org.apache.spark.SparkDateTimeException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "to_timestamp(1)"
   } ]
 }
 
@@ -901,7 +903,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'yyyy-MM-dd GGGGG'"
@@ -916,7 +919,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEEE'"
@@ -931,7 +935,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2130",
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
   "messageParameters" : {
     "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'dd MM yyyy EEEEE'"

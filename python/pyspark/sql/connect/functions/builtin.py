@@ -1270,7 +1270,7 @@ mode.__doc__ = pysparkfuncs.mode.__doc__
 
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     if not isinstance(frequency, (int, Column)):
@@ -1291,7 +1291,7 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
@@ -1303,7 +1303,7 @@ percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
@@ -2161,15 +2161,23 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
 
 
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("variant_get", _to_col(v), path, lit(targetType))
 
 
 variant_get.__doc__ = pysparkfuncs.variant_get.__doc__
 
 
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("try_variant_get", _to_col(v), path, lit(targetType))
 
 
 try_variant_get.__doc__ = pysparkfuncs.try_variant_get.__doc__
@@ -3096,6 +3104,13 @@ def collation(col: "ColumnOrName") -> Column:
 
 
 collation.__doc__ = pysparkfuncs.collation.__doc__
+
+
+def quote(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("quote", col)
+
+
+quote.__doc__ = pysparkfuncs.quote.__doc__
 
 
 # Date/Timestamp functions

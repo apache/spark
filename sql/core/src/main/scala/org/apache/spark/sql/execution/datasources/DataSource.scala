@@ -29,11 +29,14 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command.DataWritingCommand
@@ -117,6 +120,11 @@ case class DataSource(
 
   private def newHadoopConfiguration(): Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(options)
+
+  private def makeQualified(path: Path): Path = {
+    val fs = path.getFileSystem(newHadoopConfiguration())
+    path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+  }
 
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
@@ -254,8 +262,12 @@ case class DataSource(
 
         val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
+        val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
+          providingClass == classOf[csv.CSVFileFormat]) &&
+          caseInsensitiveOptions.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)
         // If the schema inference is disabled, only text sources require schema to be specified
-        if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
+        if (!isSchemaInferenceEnabled && !isTextSource && !isSingleVariantColumn &&
+            userSpecifiedSchema.isEmpty) {
           throw QueryExecutionErrors.createStreamingSourceNotSpecifySchemaError()
         }
 
@@ -317,9 +329,9 @@ case class DataSource(
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = makeQualified(new Path(caseInsensitiveOptions.getOrElse("path", {
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
-        })
+        }))).toString
         if (outputMode != OutputMode.Append) {
           throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
         }
@@ -341,7 +353,7 @@ case class DataSource(
    *                        is considered as a non-streaming file based data source. Since we know
    *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
+  def resolveRelation(checkFilesExist: Boolean = true, readOnly: Boolean = false): BaseRelation = {
     val relation = (providingInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -432,7 +444,7 @@ case class DataSource(
         SchemaUtils.checkSchemaColumnNameDuplication(
           hs.partitionSchema,
           equality)
-        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
+        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema, readOnly)
       case _ =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           relation.schema,
@@ -454,9 +466,7 @@ case class DataSource(
     //  3. It's OK that the output path doesn't exist yet;
     val allPaths = paths ++ caseInsensitiveOptions.get("path")
     val outputPath = if (allPaths.length == 1) {
-      val path = new Path(allPaths.head)
-      val fs = path.getFileSystem(newHadoopConfiguration())
-      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      makeQualified(new Path(allPaths.head))
     } else {
       throw QueryExecutionErrors.multiplePathsSpecifiedError(allPaths)
     }

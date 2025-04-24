@@ -48,8 +48,11 @@ except ImportError as e:
     graphviz_requirement_message = str(e)
 have_graphviz: bool = graphviz_requirement_message is None
 
-from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark.testing.sqlutils import pandas_requirement_message, pyarrow_requirement_message
+from pyspark.testing.utils import (
+    PySparkErrorTestUtils,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 
 connect_requirement_message = (

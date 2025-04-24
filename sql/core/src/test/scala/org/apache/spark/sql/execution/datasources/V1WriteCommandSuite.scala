@@ -22,13 +22,14 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{QueryExecution, SortExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
 
-trait V1WriteCommandSuiteBase extends SQLTestUtils {
+trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -218,7 +219,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             executedPlan.asInstanceOf[WriteFilesExecBase].child
           } else {
             executedPlan.transformDown {
-              case a: AdaptiveSparkPlanExec => a.executedPlan
+              case a: AdaptiveSparkPlanExec => stripAQEPlan(a)
             }
           }
 
@@ -265,7 +266,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           executedPlan.asInstanceOf[WriteFilesExecBase].child
         } else {
           executedPlan.transformDown {
-            case a: AdaptiveSparkPlanExec => a.executedPlan
+            case a: AdaptiveSparkPlanExec => stripAQEPlan(a)
           }
         }
 

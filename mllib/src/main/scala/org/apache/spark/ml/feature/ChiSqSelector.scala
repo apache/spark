@@ -137,6 +137,9 @@ final class ChiSqSelectorModel private[ml] (
 
   import ChiSqSelectorModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyIntArray)
+
   override protected def isNumericAttribute = false
 
   /** @group setParam */

@@ -224,13 +224,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "invalidValue" -> toSQLExpr(invalidValue)))
   }
 
-  def nullDataSourceOption(option: String): Throwable = {
-    new AnalysisException(
-      errorClass = "NULL_DATA_SOURCE_OPTION",
-      messageParameters = Map("option" -> option)
-    )
-  }
-
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -299,6 +292,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
       messageParameters = Map("tableName" -> toSQLId(tableName)))
+  }
+
+  def unsupportedSetOperationOnMapType(mapCol: Attribute, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(mapCol.name),
+        "dataType" -> toSQLType(mapCol.dataType)
+      ),
+      origin = origin
+    )
+  }
+
+  def unsupportedSetOperationOnVariantType(variantCol: Attribute, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      messageParameters = Map(
+        "colName" -> toSQLId(variantCol.name),
+        "dataType" -> toSQLType(variantCol.dataType)
+      ),
+      origin = origin
+    )
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
@@ -956,21 +971,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def joinStrategyHintParameterNotSupportedError(unsupported: Any): Throwable = {
+  def joinStrategyHintParameterNotSupportedError(unsupported: Expression): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1046",
       messageParameters = Map(
-        "unsupported" -> unsupported.toString,
+        "unsupported" -> toSQLExpr(unsupported),
         "class" -> unsupported.getClass.toString))
   }
 
   def invalidHintParameterError(
-      hintName: String, invalidParams: Seq[Any]): Throwable = {
+      hintName: String, invalidParams: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1047",
       messageParameters = Map(
         "hintName" -> hintName,
-        "invalidParams" -> invalidParams.mkString(", ")))
+        "invalidParams" -> invalidParams.map(toSQLExpr).mkString(", ")))
   }
 
   def invalidCoalesceHintParameterError(hintName: String): Throwable = {
@@ -3186,13 +3201,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempVarError(
-      name: TableIdentifier,
-      varName: String): Throwable = {
+      nameParts: Seq[String],
+      varName: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "VIEW",
-        "objName" -> toSQLId(name.nameParts),
+        "objName" -> toSQLId(nameParts),
         "tempObj" -> "VARIABLE",
         "tempObjName" -> toSQLId(varName)))
   }
@@ -3340,10 +3355,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
-  def invalidSingleVariantColumn(): Throwable = {
+  def invalidSingleVariantColumn(schema: DataType): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SINGLE_VARIANT_COLUMN",
-      messageParameters = Map.empty)
+      messageParameters = Map("schema" -> toSQLType(schema)))
   }
 
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
@@ -4108,6 +4123,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     throw new AnalysisException(
       errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
+  }
+
+  def sqlScriptInExecuteImmediate(sqlScriptString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",
+      messageParameters = Map("sqlString" -> toSQLStmt(sqlScriptString)))
   }
 
   def dataSourceTableSchemaMismatchError(

@@ -28,7 +28,7 @@ import com.google.common.base.Objects
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
@@ -63,13 +63,29 @@ abstract class InMemoryBaseTable(
   protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType
+    override def isNullable: Boolean = false
     override def comment: String = "Partition key used to store the row"
+    override def metadataInJSON(): String = {
+      val metadata = new MetadataBuilder()
+        .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = true)
+        .putBoolean(MetadataColumn.PRESERVE_ON_REINSERT, value = true)
+        .build()
+      metadata.json
+    }
   }
 
-  private object IndexColumn extends MetadataColumn {
+  protected object IndexColumn extends MetadataColumn {
     override def name: String = "index"
     override def dataType: DataType = IntegerType
+    override def isNullable: Boolean = false
     override def comment: String = "Metadata column used to conflict with a data column"
+    override def metadataInJSON(): String = {
+      val metadata = new MetadataBuilder()
+        .putBoolean(MetadataColumn.PRESERVE_ON_DELETE, value = false)
+        .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = false)
+        .build()
+      metadata.json
+    }
   }
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
@@ -125,7 +141,8 @@ abstract class InMemoryBaseTable(
         schema: StructType,
         row: InternalRow): (Any, DataType) = {
       val index = schema.fieldIndex(fieldNames(0))
-      val value = row.toSeq(schema).apply(index)
+      val field = schema(index)
+      val value = row.get(index, field.dataType)
       if (fieldNames.length > 1) {
         (value, schema(index).dataType) match {
           case (row: InternalRow, nestedSchema: StructType) =>
@@ -384,18 +401,23 @@ abstract class InMemoryBaseTable(
       val sizeInBytes = numRows * rowSizeInBytes
 
       val numOfCols = tableSchema.fields.length
-      val dataTypes = tableSchema.fields.map(_.dataType)
-      val colValueSets = new Array[util.HashSet[Object]](numOfCols)
+      val colValueSets = new Array[util.HashSet[Any]](numOfCols)
       val numOfNulls = new Array[Long](numOfCols)
       for (i <- 0 until numOfCols) {
-        colValueSets(i) = new util.HashSet[Object]
+        colValueSets(i) = new util.HashSet[Any]
       }
 
       inputPartitions.foreach(inputPartition =>
         inputPartition.rows.foreach(row =>
           for (i <- 0 until numOfCols) {
-            colValueSets(i).add(row.get(i, dataTypes(i)))
-            if (row.isNullAt(i)) {
+            val field = tableSchema(i)
+            val colValue = if (i < row.numFields) {
+              row.get(i, field.dataType)
+            } else {
+              ResolveDefaultColumns.getExistenceDefaultValue(field)
+            }
+            colValueSets(i).add(colValue)
+            if (colValue == null) {
               numOfNulls(i) += 1
             }
           }
@@ -617,6 +639,7 @@ object InMemoryBaseTable {
 
 class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
     with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
+  val log = new mutable.ArrayBuffer[InternalRow]()
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
 
@@ -701,6 +724,11 @@ private class BufferedRowsReader(
       schema: StructType,
       row: InternalRow): Any = {
     val index = schema.fieldIndex(field.name)
+
+    if (index >= row.numFields) {
+      return ResolveDefaultColumns.getExistenceDefaultValue(field)
+    }
+
     field.dataType match {
       case StructType(fields) =>
         if (row.isNullAt(index)) {
@@ -734,9 +762,22 @@ private object BufferedRowsWriterFactory extends DataWriterFactory with Streamin
 }
 
 private class BufferWriter extends DataWriter[InternalRow] {
+
+  private final val WRITE = UTF8String.fromString(Write.toString)
+
   protected val buffer = new BufferedRows
 
-  override def write(row: InternalRow): Unit = buffer.rows.append(row.copy())
+  override def write(metadata: InternalRow, row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](WRITE, null, metadata.copy(), row.copy()))
+    buffer.log.append(logEntry)
+  }
+
+  override def write(row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](WRITE, null, null, row.copy()))
+    buffer.log.append(logEntry)
+  }
 
   override def commit(): WriterCommitMessage = buffer
 
@@ -771,3 +812,10 @@ class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
   override def name(): String = "number_of_rows_from_driver"
   override def value(): Long = value
 }
+
+sealed trait Operation
+case object Write extends Operation
+case object Delete extends Operation
+case object Update extends Operation
+case object Reinsert extends Operation
+case object Insert extends Operation

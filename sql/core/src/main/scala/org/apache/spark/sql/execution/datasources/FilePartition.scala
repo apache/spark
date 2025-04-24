@@ -24,6 +24,7 @@ import org.apache.spark.Partition
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CONFIG, DESIRED_NUM_PARTITIONS, MAX_NUM_PARTITIONS, NUM_PARTITIONS}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.ScanFileListing
 import org.apache.spark.sql.internal.SQLConf

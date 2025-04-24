@@ -23,10 +23,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * The [[ResolverExtension]] is a main interface for single-pass analysis extensions in Catalyst.
  * External code that needs specific node types to be resolved has to implement this trait and
  * inject the implementation into the [[Analyzer.singlePassResolverExtensions]].
- *
- * Note that resolver extensions are responsible for creating attribute references with IDs that
- * are unique from any other subplans. This should be straightforward in most cases because
- * creating new attribute references will assign [[NamedExpression.newExprId]] by default.
  */
 trait ResolverExtension {
 
@@ -35,9 +31,11 @@ trait ResolverExtension {
    * single-pass [[Resolver]] on all the configured extensions when it exhausted its match list
    * for the known node types.
    *
-   * Guarantees:
-   * - The implementation can rely on children being resolved
-   * - We commit to performing the partial function check only at most once per unresolved operator
+   *  - The implementation can rely on children being resolved.
+   *  - The implementation can introduce new unresolved subtrees, but has to invoke `resolver` on
+   *    them.
    */
-  def resolveOperator: PartialFunction[LogicalPlan, LogicalPlan]
+  def resolveOperator(
+      operator: LogicalPlan,
+      resolver: TreeNodeResolver[LogicalPlan, LogicalPlan]): Option[LogicalPlan]
 }

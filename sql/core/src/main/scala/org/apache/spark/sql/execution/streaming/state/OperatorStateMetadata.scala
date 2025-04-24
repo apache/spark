@@ -24,7 +24,8 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path, PathFilter}
-import org.json4s.{Formats, NoTypeHints}
+import org.json4s.{Formats, JBool, JObject, NoTypeHints}
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
@@ -462,5 +463,18 @@ class OperatorStateMetadataV2FileManager(
     // TODO: Implement state schema file purging logic once we have
     // enabled full-rewrite.
     0
+  }
+}
+
+/**
+ * Case class used to store additional properties for join operation.
+ * This is only used for unit tests, which verify that the properties in
+ * the corresponding OperatorStateMetadataV2 result are non-empty.
+ */
+case class StreamingJoinOperatorProperties(useVirtualColumnFamilies: Boolean) {
+  def json: String = {
+    val json =
+      JObject("useVirtualColumnFamilies" -> JBool(useVirtualColumnFamilies))
+    compact(render(json))
   }
 }

@@ -48,6 +48,9 @@ class MinHashLSHModel private[ml](
     private[ml] val randCoefficients: Array[(Int, Int)])
   extends LSHModel[MinHashLSHModel] {
 
+  // For ml connect only
+  private[ml] def this() = this("", Array.empty)
+
   /** @group setParam */
   @Since("2.4.0")
   override def setInputCol(value: String): this.type = super.set(inputCol, value)

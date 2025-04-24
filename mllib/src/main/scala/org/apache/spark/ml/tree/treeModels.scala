@@ -122,13 +122,15 @@ private[spark] trait DecisionTreeModel {
  * Abstraction for models which are ensembles of decision trees
  * @tparam M  Type of tree model in this ensemble
  */
-private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
+private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
   //       DecisionTreeModel.
 
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
   def trees: Array[M]
+
+  private[ml] def getTree(i: Int): M = trees(i)
 
   /** Weights for each tree, zippable with [[trees]] */
   def treeWeights: Array[Double]

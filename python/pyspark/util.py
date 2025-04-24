@@ -63,6 +63,8 @@ if typing.TYPE_CHECKING:
         ArrowCogroupedMapUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
+        GroupedMapUDFTransformWithStateType,
+        GroupedMapUDFTransformWithStateInitStateType,
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
@@ -395,6 +397,12 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
+                # Propagates the active remote spark session to the current thread.
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                RemoteSparkSession._set_default_and_active_session(
+                    session  # type: ignore[arg-type]
+                )
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
@@ -462,22 +470,40 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         return f  # type: ignore[return-value]
 
 
-def handle_worker_exception(e: BaseException, outfile: IO) -> None:
+def handle_worker_exception(
+    e: BaseException, outfile: IO, hide_traceback: Optional[bool] = None
+) -> None:
     """
     Handles exception for Python worker which writes SpecialLengths.PYTHON_EXCEPTION_THROWN (-2)
     and exception traceback info to outfile. JVM could then read from the outfile and perform
     exception handling there.
+
+    Parameters
+    ----------
+    e : BaseException
+        Exception handled
+    outfile : IO
+        IO object to write the exception info
+    hide_traceback : bool, optional
+        Whether to hide the traceback in the output.
+        By default, hides the traceback if environment variable SPARK_HIDE_TRACEBACK is set.
     """
-    try:
-        exc_info = None
+
+    if hide_traceback is None:
+        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
+
+    def format_exception() -> str:
+        if hide_traceback:
+            return "".join(traceback.format_exception_only(type(e), e))
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
             tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
             if tb is not None:
                 e.__cause__ = None
-                exc_info = "".join(traceback.format_exception(type(e), e, tb))
-        if exc_info is None:
-            exc_info = traceback.format_exc()
+                return "".join(traceback.format_exception(type(e), e, tb))
+        return traceback.format_exc()
 
+    try:
+        exc_info = format_exception()
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
         write_with_length(exc_info.encode("utf-8"), outfile)
     except IOError:
@@ -615,6 +641,10 @@ class PythonEvalType:
     SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
         212
     )
+    SQL_TRANSFORM_WITH_STATE_UDF: "GroupedMapUDFTransformWithStateType" = 213
+    SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+        214
+    )
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
 
@@ -634,9 +664,9 @@ def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
     """
     sockfile: "io.BufferedRWPair"
     sock: "socket.socket"
-    port: int = sock_info[0]
+    conn_info: int = sock_info[0]
     auth_secret: str = sock_info[1]
-    sockfile, sock = local_connect_and_auth(port, auth_secret)
+    sockfile, sock = local_connect_and_auth(conn_info, auth_secret)
     # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
@@ -713,7 +743,9 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) -> Tuple:
+def local_connect_and_auth(
+    conn_info: Optional[Union[str, int]], auth_secret: Optional[str]
+) -> Tuple:
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
@@ -721,26 +753,49 @@ def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) ->
     Parameters
     ----------
     port : str or int, optional
-    auth_secret : str
+    auth_secret : str, optional
 
     Returns
     -------
     tuple
         with (sockfile, sock)
     """
+    is_unix_domain_socket = isinstance(conn_info, str) and auth_secret is None
+    if is_unix_domain_socket:
+        sock_path = conn_info
+        assert isinstance(sock_path, str)
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
+            sock.connect(sock_path)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            return (sockfile, sock)
+        except socket.error as e:
+            if sock is not None:
+                sock.close()
+            raise PySparkRuntimeError(
+                errorClass="CANNOT_OPEN_SOCKET",
+                messageParameters={
+                    "errors": "tried to connect to %s, but an error occurred: %s"
+                    % (sock_path, str(e)),
+                },
+            )
+
     sock = None
     errors = []
     # Support for both IPv4 and IPv6.
     addr = "127.0.0.1"
     if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
         addr = "::1"
-    for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+    for res in socket.getaddrinfo(addr, conn_info, socket.AF_UNSPEC, socket.SOCK_STREAM):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)
             sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sa)
             sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            assert isinstance(auth_secret, str)
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:
@@ -779,7 +834,7 @@ _is_remote_only = None
 def is_remote_only() -> bool:
     """
     Returns if the current running environment is only for Spark Connect.
-    If users install pyspark-connect alone, RDD API does not exist.
+    If users install pyspark-client alone, RDD API does not exist.
 
     .. versionadded:: 4.0.0
 
@@ -815,6 +870,34 @@ def is_remote_only() -> bool:
     except ImportError:
         _is_remote_only = True
         return _is_remote_only
+
+
+# This function will be called in `pyspark` script as well,
+# so this should be available without a running Spark.
+# If move or rename, please update the script too.
+def spark_connect_mode() -> str:
+    """
+    Return the env var SPARK_CONNECT_MODE; otherwise "1" if `pyspark_connect` is available.
+    """
+    connect_by_default = os.environ.get("SPARK_CONNECT_MODE")
+    if connect_by_default is not None:
+        return connect_by_default
+    try:
+        import pyspark_connect  # noqa: F401
+
+        return "1"
+    except ImportError:
+        return "0"
+
+
+def default_api_mode() -> str:
+    """
+    Return the default API mode.
+    """
+    if spark_connect_mode() == "1":
+        return "connect"
+    else:
+        return "classic"
 
 
 if __name__ == "__main__":

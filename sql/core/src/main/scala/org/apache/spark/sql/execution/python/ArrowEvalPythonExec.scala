@@ -23,10 +23,11 @@ import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, UserDefinedType}
 
 /**
  * Grouped a iterator into batches.
@@ -106,12 +107,13 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType)
+    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+      case udt: UserDefinedType[_] => udt.sqlType
+    })
 
-    // DO NOT use iter.grouped(). See BatchIterator.
-    val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
+    val batchIter = Iterator(iter)
 
-    val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
+    val pyRunner = new ArrowPythonWithNamedArgumentRunner(
       funcs,
       evalType,
       argMetas,
@@ -121,12 +123,15 @@ class ArrowEvalPythonEvaluatorFactory(
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
-      profiler).compute(batchIter, context.partitionId(), context)
+      profiler) with BatchedPythonArrowInput
+    val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
-        s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+      if (outputTypes != actualDataTypes) {
+        throw QueryExecutionErrors.arrowDataTypeMismatchError(
+          "pandas_udf()", outputTypes, actualDataTypes)
+      }
       batch.rowIterator.asScala
     }
   }

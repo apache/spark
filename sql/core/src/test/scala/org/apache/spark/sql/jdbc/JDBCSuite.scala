@@ -29,7 +29,7 @@ import scala.util.Random
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkException, SparkSQLException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -78,10 +78,18 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
+  object JdbcClientTypes {
+    val INTEGER = "INTEGER"
+    val STRING = "CHARACTER VARYING"
+  }
+
+  def defaultMetadata(
+      dataType: DataType,
+      jdbcClientType: String): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+    .putString("jdbcClientType", jdbcClientType)
     .build()
 
   override def beforeAll(): Unit = {
@@ -1107,7 +1115,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         .withLimit(123)
         .build()
         .trim() ==
-      "SELECT a,b FROM test      FETCH FIRST 123 ROWS ONLY")
+      "SELECT a,b FROM test     FETCH FIRST 123 ROWS ONLY")
   }
 
   test("table exists query by jdbc dialect") {
@@ -1429,8 +1437,18 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
-    val schema = StructType(Seq(StructField("name", StringType, false, defaultMetadata(StringType)),
-      StructField("theid", IntegerType, false, defaultMetadata(IntegerType))))
+    val schema = StructType(Seq(
+      StructField(
+        "name",
+        StringType,
+        false,
+        defaultMetadata(StringType, JdbcClientTypes.STRING)),
+      StructField(
+        "theid",
+        IntegerType,
+        false,
+        defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
+    ))
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
@@ -1451,8 +1469,17 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
     val structType = CatalystSqlParser.parseTableSchema(customSchema)
+    val sparkToRemoteDataType: Map[DataType, String] = Map(
+      IntegerType -> JdbcClientTypes.INTEGER,
+      StringType -> JdbcClientTypes.STRING,
+      VarcharType(32) -> JdbcClientTypes.STRING)
     val expectedSchema = new StructType(structType.map(
-      f => StructField(f.name, f.dataType, f.nullable, defaultMetadata(f.dataType))).toArray)
+      f => StructField(
+        f.name,
+        f.dataType,
+        f.nullable,
+        defaultMetadata(f.dataType, sparkToRemoteDataType(f.dataType)))
+    ).toArray)
     assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     assert(df.count() === 3)
   }
@@ -1469,8 +1496,17 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         """.stripMargin.replaceAll("\n", " "))
       val df = sql("select * from people_view")
       assert(df.schema.length === 2)
+      val sparkToRemoteDataType: Map[DataType, String] = Map(
+        IntegerType -> JdbcClientTypes.INTEGER,
+        StringType -> JdbcClientTypes.STRING,
+        VarcharType(32) -> JdbcClientTypes.STRING)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
-        .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata(f.dataType))).toArray)
+        .map(f => StructField(
+          f.name,
+          f.dataType,
+          f.nullable,
+          defaultMetadata(f.dataType, sparkToRemoteDataType(f.dataType)))
+        ).toArray)
 
       assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
       assert(df.count() === 3)
@@ -1616,9 +1652,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    var schema = StructType(
-      Seq(StructField("NAME", VarcharType(32), true, defaultMetadata(VarcharType(32))),
-      StructField("THEID", IntegerType, true, defaultMetadata(IntegerType))))
+    var schema = StructType(Seq(
+      StructField(
+        "NAME",
+        VarcharType(32),
+        true,
+        defaultMetadata(VarcharType(32), JdbcClientTypes.STRING)),
+      StructField("THEID",
+        IntegerType,
+        true,
+        defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))))
     schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
@@ -2205,5 +2248,46 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val schemaStr =
       JdbcUtils.schemaString(dialect, schema, caseSensitive = false, Some("b boolean"))
     assert(schemaStr === """"b" NUMBER(1) """)
+  }
+
+  test("SPARK-50666: reading hint test") {
+    // hint format check
+    Seq("INDEX(test idx1) */", "/*+ INDEX(test idx1)", "").foreach { hint =>
+      val e = intercept[IllegalArgumentException] {
+        val options = new JDBCOptions(Map("url" -> url, "dbtable" -> "test",
+          "hint" -> hint))
+      }.getMessage
+      assert(e.contains(s"Invalid value `$hint` for option `hint`." +
+        s" It should start with `/*+ ` and end with ` */`."))
+    }
+
+    // dialect supported check
+    val baseParameters = CaseInsensitiveMap(
+      Map("dbtable" -> "test", "hint" -> "/*+ INDEX(test idx1) */"))
+    // supported
+    Seq("jdbc:oracle:thin:@", "jdbc:mysql:", "jdbc:databricks:").foreach { prefix =>
+      val url = s"$prefix//host:port"
+      val options = new JDBCOptions(baseParameters + ("url" -> url))
+      val dialect = JdbcDialects.get(url)
+      assert(dialect.getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .build().trim() == "SELECT /*+ INDEX(test idx1) */ a,b FROM test")
+    }
+    // not supported
+    Seq(
+      "jdbc:db2://host:port", "jdbc:derby:memory", "jdbc:h2://host:port",
+      "jdbc:sqlserver://host:port", "jdbc:postgresql://host:5432/postgres",
+      "jdbc:snowflake://host:443?account=test", "jdbc:teradata://host:port").foreach { url =>
+      val options = new JDBCOptions(baseParameters + ("url" -> url))
+      val dialect = JdbcDialects.get(url)
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          dialect.getJdbcSQLQueryBuilder(options)
+            .withColumns(Array("a", "b"))
+            .build().trim()
+        },
+        condition = "HINT_UNSUPPORTED_FOR_JDBC_DIALECT",
+        parameters = Map("jdbcDialect" -> dialect.getClass.getSimpleName))
+    }
   }
 }

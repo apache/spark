@@ -36,25 +36,26 @@ trait DelegatesResolutionToExtensions {
    * We match the extension once to reduce the number of
    * [[ResolverExtension.resolveOperator.isDefinedAt]] calls, because those can be expensive.
    *
-   * @returns `Some(resolutionResult)` if the extension was found and `unresolvedOperator` was
+   * @return `Some(resolutionResult)` if the extension was found and `unresolvedOperator` was
    * resolved, `None` otherwise.
    *
    * @throws `AMBIGUOUS_RESOLVER_EXTENSION` if there were several matched extensions for this
    * operator.
    */
-  def tryDelegateResolutionToExtension(unresolvedOperator: LogicalPlan): Option[LogicalPlan] = {
+  protected def tryDelegateResolutionToExtension(
+      unresolvedOperator: LogicalPlan,
+      resolver: LogicalPlanResolver): Option[LogicalPlan] = {
     var resolutionResult: Option[LogicalPlan] = None
     var matchedExtension: Option[ResolverExtension] = None
     extensions.foreach { extension =>
       matchedExtension match {
         case None =>
-          resolutionResult = extension.resolveOperator.lift(unresolvedOperator)
-
+          resolutionResult = extension.resolveOperator(unresolvedOperator, resolver)
           if (resolutionResult.isDefined) {
             matchedExtension = Some(extension)
           }
         case Some(matchedExtension) =>
-          if (extension.resolveOperator.isDefinedAt(unresolvedOperator)) {
+          if (extension.resolveOperator(unresolvedOperator, resolver).isDefined) {
             throw QueryCompilationErrors
               .ambiguousResolverExtension(
                 unresolvedOperator,

@@ -200,7 +200,15 @@ case class AQEShuffleReadExec private(
       val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
       val x = partitionSpecs.count(isCoalescedSpec)
       numCoalescedPartitionsMetric.set(x)
-      driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
+      val numEmptyPartitionsMetric = metrics("numEmptyPartitions")
+      val y = child match {
+        case s: ShuffleQueryStageExec =>
+          s.mapStats.map(stats => stats.bytesByPartitionId.count(_ == 0)).getOrElse(0)
+        case _ => 0
+      }
+      numEmptyPartitionsMetric.set(y)
+      driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x,
+        numEmptyPartitionsMetric.id -> y)
     }
 
     partitionDataSizes.foreach { dataSizes =>
@@ -236,7 +244,9 @@ case class AQEShuffleReadExec private(
       } ++ {
         if (hasCoalescedPartition) {
           Map("numCoalescedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
+            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"),
+            "numEmptyPartitions" ->
+              SQLMetrics.createMetric(sparkContext, "number of empty partitions"))
         } else {
           Map.empty
         }

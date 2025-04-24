@@ -22,8 +22,9 @@ import scala.util.Random
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax
 import org.scalatest.matchers.must.Matchers._
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Column, QueryTest, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.functions.{col, count_distinct, first, lit, max, percentile_approx => pa}

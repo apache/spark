@@ -39,7 +39,6 @@ from pyspark.ml.param.shared import (
     HasFeaturesCol,
     HasPredictionCol,
 )
-from pyspark.ml.connect.util import transform_dataframe_column
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
@@ -188,6 +187,8 @@ class Transformer(Params, metaclass=ABCMeta):
                 return self._transform(dataset)
 
     def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
+        from pyspark.ml.connect.util import transform_dataframe_column
+
         input_cols = self._input_columns()
         transform_fn = self._get_transform_fn()
         output_cols = self._output_columns()

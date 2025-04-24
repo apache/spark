@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter, ProtoDataTypes}
+import org.apache.spark.sql.connect.common.{LiteralValueProtoConverter, ProtoDataTypes}
 import org.apache.spark.sql.connect.service.SessionHolder
 
 private[ml] object Serializer {
@@ -37,7 +37,7 @@ private[ml] object Serializer {
     data match {
       case v: SparseVector =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(VectorUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.VectorUDT)
         // type = 0
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(0))
         // size
@@ -50,7 +50,7 @@ private[ml] object Serializer {
 
       case v: DenseVector =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(VectorUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.VectorUDT)
         // type = 1
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(1))
         // size = null
@@ -65,7 +65,7 @@ private[ml] object Serializer {
 
       case m: SparseMatrix =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(MatrixUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.MatrixUDT)
         // type = 0
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(0))
         // numRows
@@ -84,7 +84,7 @@ private[ml] object Serializer {
 
       case m: DenseMatrix =>
         val builder = proto.Expression.Literal.Struct.newBuilder()
-        builder.setStructType(DataTypeProtoConverter.toConnectProtoType(MatrixUDT.sqlType))
+        builder.setStructType(ProtoDataTypes.MatrixUDT)
         // type = 1
         builder.addElements(proto.Expression.Literal.newBuilder().setByte(1))
         // numRows
@@ -146,13 +146,13 @@ private[ml] object Serializer {
         literal.getLiteralTypeCase match {
           case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
             val struct = literal.getStruct
-            val schema = DataTypeProtoConverter.toCatalystType(struct.getStructType)
-            if (schema == VectorUDT.sqlType) {
-              (MLUtils.deserializeVector(struct), classOf[Vector])
-            } else if (schema == MatrixUDT.sqlType) {
-              (MLUtils.deserializeMatrix(struct), classOf[Matrix])
-            } else {
-              throw MlUnsupportedException(s"$schema not supported")
+            struct.getStructType.getUdt.getJvmClass match {
+              case "org.apache.spark.ml.linalg.VectorUDT" =>
+                (MLUtils.deserializeVector(struct), classOf[Vector])
+              case "org.apache.spark.ml.linalg.MatrixUDT" =>
+                (MLUtils.deserializeMatrix(struct), classOf[Matrix])
+              case _ =>
+                throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct}")
             }
           case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
             (literal.getInteger.asInstanceOf[Object], classOf[Int])
@@ -164,6 +164,24 @@ private[ml] object Serializer {
             (literal.getDouble.asInstanceOf[Object], classOf[Double])
           case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
             (literal.getBoolean.asInstanceOf[Object], classOf[Boolean])
+          case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+            val array = literal.getArray
+            array.getElementType.getKindCase match {
+              case proto.DataType.KindCase.DOUBLE =>
+                (parseDoubleArray(array), classOf[Array[Double]])
+              case proto.DataType.KindCase.STRING =>
+                (parseStringArray(array), classOf[Array[String]])
+              case proto.DataType.KindCase.ARRAY =>
+                array.getElementType.getArray.getElementType.getKindCase match {
+                  case proto.DataType.KindCase.STRING =>
+                    (parseStringArrayArray(array), classOf[Array[Array[String]]])
+                  case _ =>
+                    throw MlUnsupportedException(s"Unsupported inner array $array")
+                }
+              case _ =>
+                throw MlUnsupportedException(s"Unsupported array $literal")
+            }
+
           case other =>
             throw MlUnsupportedException(s"$other not supported")
         }
@@ -173,6 +191,37 @@ private[ml] object Serializer {
         throw MlUnsupportedException(s"$arg not supported")
       }
     }
+  }
+
+  private def parseDoubleArray(array: proto.Expression.Literal.Array): Array[Double] = {
+    val values = new Array[Double](array.getElementsCount)
+    var i = 0
+    while (i < array.getElementsCount) {
+      values(i) = array.getElements(i).getDouble
+      i += 1
+    }
+    values
+  }
+
+  private def parseStringArray(array: proto.Expression.Literal.Array): Array[String] = {
+    val values = new Array[String](array.getElementsCount)
+    var i = 0
+    while (i < array.getElementsCount) {
+      values(i) = array.getElements(i).getString
+      i += 1
+    }
+    values
+  }
+
+  private def parseStringArrayArray(
+      array: proto.Expression.Literal.Array): Array[Array[String]] = {
+    val values = new Array[Array[String]](array.getElementsCount)
+    var i = 0
+    while (i < array.getElementsCount) {
+      values(i) = parseStringArray(array.getElements(i).getArray)
+      i += 1
+    }
+    values
   }
 
   /**

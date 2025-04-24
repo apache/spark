@@ -137,3 +137,39 @@ select timestamp_ntz'2022-01-01 00:00:00' > timestamp_ltz'2022-01-01 00:00:00'
 select timestamp_ntz'2022-01-01 00:00:00' < timestamp_ltz'2022-01-01 00:00:00'
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+CREATE TABLE a (a timestamp_ntz, b int) using parquet PARTITIONED BY(a)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`a`, false
+
+
+-- !query
+INSERT INTO a PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/a, [a=2018-11-17 13:33:33], false, [a#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/a], Append, `spark_catalog`.`default`.`a`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/a), [b, a]
++- Project [b#x, cast(2018-11-17 13:33:33 as timestamp_ntz) AS a#x]
+   +- Project [cast(col1#x as int) AS b#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+DESC FORMATTED a
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`a`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+SELECT * FROM a
+-- !query analysis
+Project [b#x, a#x]
++- SubqueryAlias spark_catalog.default.a
+   +- Relation spark_catalog.default.a[b#x,a#x] parquet
+
+
+-- !query
+DROP TABLE a
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.a

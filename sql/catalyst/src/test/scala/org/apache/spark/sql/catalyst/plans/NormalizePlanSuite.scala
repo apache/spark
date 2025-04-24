@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{
   AssertTrue,
@@ -98,6 +101,18 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     assert(baselinePlanDef != testPlanDef)
     assert(NormalizePlan(baselinePlanDef) == NormalizePlan(testPlanDef))
+  }
+
+  test("Normalize non-deterministic expressions") {
+    val random = new Random()
+    val baselineExpression = rand(random.nextLong())
+    val testExpression = rand(random.nextLong())
+
+    val baselinePlan = LocalRelation().select(baselineExpression)
+    val testPlan = LocalRelation().select(testExpression)
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
   }
 
   private def setTimezoneForAllExpression(plan: LogicalPlan): LogicalPlan = {

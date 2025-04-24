@@ -127,11 +127,13 @@ object CurrentOrigin {
     }
   }
 
-  private val sparkCodePattern = Pattern.compile("(org\\.apache\\.spark\\.sql\\." +
-    "(?:api\\.)?" +
-    "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder)" +
-    "(?:|\\..*|\\$.*))" +
-    "|(scala\\.collection\\..*)")
+  private val sparkCodePattern = Pattern.compile(
+    "(org\\.apache\\.spark\\.sql\\." +
+      "(?:(classic|connect)\\.)?" +
+      "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder" +
+      "|SparkSession|ColumnNodeToProtoConverter)" +
+      "(?:|\\..*|\\$.*))" +
+      "|(scala\\.collection\\..*)")
 
   private def sparkCode(ste: StackTraceElement): Boolean = {
     sparkCodePattern.matcher(ste.getClassName).matches()

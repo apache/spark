@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.GetViewColumnByNameAndOrdinal
+import org.apache.spark.sql.catalyst.analysis.{
+  DeduplicateRelations,
+  GetViewColumnByNameAndOrdinal,
+  NormalizeableRelation
+}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
@@ -40,11 +44,16 @@ object NormalizePlan extends PredicateHelper {
    */
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
-    withNormalizedRuntimeReplaceable transformAllExpressions {
-      case c: CommonExpressionDef =>
-        c.copy(id = new CommonExpressionId(id = 0))
-      case c: CommonExpressionRef =>
-        c.copy(id = new CommonExpressionId(id = 0))
+    withNormalizedRuntimeReplaceable.transformAllExpressions {
+      case subqueryExpression: SubqueryExpression =>
+        val normalizedPlan = normalizeExpressions(subqueryExpression.plan)
+        subqueryExpression.withNewPlan(normalizedPlan)
+      case commonExpressionDef: CommonExpressionDef =>
+        commonExpressionDef.copy(id = new CommonExpressionId(id = 0))
+      case commonExpressionRef: CommonExpressionRef =>
+        commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
+      case expressionWithRandomSeed: ExpressionWithRandomSeed =>
+        expressionWithRandomSeed.withNewSeed(0)
     }
   }
 
@@ -71,7 +80,7 @@ object NormalizePlan extends PredicateHelper {
    * we must normalize them to check if two different queries are identical.
    */
   def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
-    plan transformAllExpressions {
+    plan.transformAllExpressions {
       case s: ScalarSubquery =>
         s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case s: LateralSubquery =>
@@ -115,7 +124,7 @@ object NormalizePlan extends PredicateHelper {
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     val cteIdNormalizer = new CteIdNormalizer
-    plan transform {
+    plan.transformUpWithSubqueries {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
           splitConjunctivePredicates(condition)
@@ -140,6 +149,11 @@ object NormalizePlan extends PredicateHelper {
             .sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
+      case project: Project
+          if project
+            .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
+            .isDefined =>
+        project.child
       case Project(projectList, child) =>
         val projList = projectList
           .map { e =>
@@ -163,6 +177,8 @@ object NormalizePlan extends PredicateHelper {
         cteIdNormalizer.normalizeDef(cteRelationDef)
       case cteRelationRef: CTERelationRef =>
         cteIdNormalizer.normalizeRef(cteRelationRef)
+      case normalizeableRelation: NormalizeableRelation =>
+        normalizeableRelation.normalize()
     }
   }
 

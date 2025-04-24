@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.util
 
 import java.util.concurrent.CountDownLatch
 
-import org.apache.spark.sql.{SQLContext, _}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.OutputMode
@@ -49,8 +49,7 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
       override def schema: StructType = fakeSchema
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        import spark.sparkSession.implicits._
-        Seq[Int]().toDS().toDF()
+        spark.sparkSession.emptyDataFrame
       }
       override def stop(): Unit = {}
     }
@@ -64,5 +63,5 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
 }
 
 object BlockingSource {
-  var latch: CountDownLatch = null
+  var latch: CountDownLatch = _
 }

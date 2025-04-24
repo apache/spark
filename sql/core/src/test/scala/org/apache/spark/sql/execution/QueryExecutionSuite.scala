@@ -20,7 +20,7 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.spark.sql.{AnalysisException, Dataset, ExtendedExplainGenerator, FastOperator}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, UnsafeRow}
@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
@@ -421,6 +422,23 @@ class QueryExecutionSuite extends SharedSparkSession {
     mockCallback.assertAnalyzed()
   }
 
+  test("SPARK-51265: IncrementalExecution should set the command execution code correctly") {
+    withTempView("s") {
+      val streamDf = spark.readStream.format("rate").load()
+      streamDf.createOrReplaceTempView("s")
+      withTable("output") {
+        val ex = intercept[AnalysisException] {
+          // Creates a table from streaming source with batch query. This should fail.
+          spark.sql("CREATE TABLE output USING csv AS SELECT * FROM s")
+        }
+        assert(
+          ex.getMessage.contains("Queries with streaming sources must be executed with " +
+            "writeStream.start()")
+        )
+      }
+    }
+  }
+
   case class MockCallbackEagerCommand(
       var trackerAnalyzed: QueryPlanningTracker = null,
       var trackerReadyForExecution: QueryPlanningTracker = null)
@@ -520,7 +538,7 @@ class ExtendedInfo extends ExtendedExplainGenerator {
 
   def getActualPlan(plan: SparkPlan): SparkPlan = {
     plan match {
-      case p : AdaptiveSparkPlanExec => p.executedPlan
+      case p : AdaptiveSparkPlanExec => getActualPlan(p.executedPlan)
       case p : QueryStageExec => p.plan
       case p : WholeStageCodegenExec => p.child
       case p => p

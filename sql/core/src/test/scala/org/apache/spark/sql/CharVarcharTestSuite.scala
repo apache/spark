@@ -18,10 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Project}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
@@ -796,6 +796,38 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         ),
         queryContext = Array(ExpectedContext(fragment = "IN (ARRAY('a'))", start = 32, stop = 46))
       )
+    }
+  }
+
+  test(
+    "SPARK-51732: rpad should be applied on attributes with same ExprId if those attributes " +
+      "should be deduplicated 2"
+  ) {
+    withSQLConf(
+      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+      SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE.key -> "false"
+    ) {
+      withTable("mytable") {
+        sql(s"CREATE TABLE mytable(col CHAR(10))")
+        val plan = sql(
+          """
+            |SELECT t1.col
+            |FROM mytable t1
+            |WHERE (SELECT count(*) AS cnt FROM mytable t2 WHERE (t1.col = t2.col)) > 0
+          """.stripMargin).queryExecution.analyzed
+        val subquery = plan.asInstanceOf[Project]
+          .child.asInstanceOf[Filter]
+          .condition.asInstanceOf[GreaterThan]
+          .left.asInstanceOf[ScalarSubquery]
+        val subqueryFilterCondition = subquery.plan.asInstanceOf[Aggregate]
+          .child.asInstanceOf[Filter]
+          .condition.asInstanceOf[EqualTo]
+
+        // rpad should  be applied to both left and right hand side of t1.col = t2.col because the
+        // attributes are deduplicated.
+        assert(subqueryFilterCondition.left.isInstanceOf[StringRPad])
+        assert(subqueryFilterCondition.right.isInstanceOf[StringRPad])
+      }
     }
   }
 }

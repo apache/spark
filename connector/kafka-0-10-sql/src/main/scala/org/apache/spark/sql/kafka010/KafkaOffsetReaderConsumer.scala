@@ -213,9 +213,12 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     : KafkaSourceOffset = {
 
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
-      assert(partitions.asScala == partitionTimestamps.keySet,
-        "If starting/endingOffsetsByTimestamp contains specific offsets, you must specify all " +
-          s"topics. Specified: ${partitionTimestamps.keySet} Assigned: ${partitions.asScala}")
+      val specifiedPartitions = partitionTimestamps.keySet
+      val assignedPartitions = partitions.asScala.toSet
+      if (specifiedPartitions != assignedPartitions) {
+        throw KafkaExceptions.timestampOffsetDoesNotMatchAssigned(
+          isStartingOffsets, specifiedPartitions, assignedPartitions)
+      }
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionTimestamps")
     }
 
