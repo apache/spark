@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
-import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
@@ -129,9 +128,7 @@ class AstBuilder extends DataTypeAstBuilder
    * @return The original input text, including all whitespaces and formatting.
    */
   private def getOriginalText(ctx: ParserRuleContext): String = {
-    ctx.getStart.getInputStream.getText(
-      new Interval(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex)
-    )
+    SparkParserUtils.source(ctx)
   }
 
   /**
@@ -3897,6 +3894,30 @@ class AstBuilder extends DataTypeAstBuilder
    * DataType parsing
    * ******************************************************************************************** */
 
+  override def visitSingleRoutineParamList(
+      ctx: SingleRoutineParamListContext): StructType = withOrigin(ctx) {
+    val (cols, constraints) = visitColDefinitionList(ctx.colDefinitionList())
+    // Constraints and generated columns should have been rejected by the parser.
+    assert(constraints.isEmpty)
+    for (col <- cols) {
+      assert(col.generationExpression.isEmpty)
+      assert(col.identityColumnSpec.isEmpty)
+    }
+    // Build fields from the columns, converting comments and default values
+    val fields = for (col <- cols) yield {
+      val metadataBuilder = new MetadataBuilder().withMetadata(col.metadata)
+      col.comment.foreach { c =>
+        metadataBuilder.putString("comment", c)
+      }
+      col.defaultValue.foreach { default =>
+        metadataBuilder.putString(
+          StructType.SQL_FUNCTION_DEFAULT_METADATA_KEY, default.originalSQL)
+      }
+      StructField(col.name, col.dataType, col.nullable, metadataBuilder.build())
+    }
+    StructType(fields.toArray)
+  }
+
   /**
    * Create top level table schema.
    */
@@ -4061,12 +4082,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (expr.containsPattern(PARAMETER)) {
       throw QueryParsingErrors.parameterMarkerNotAllowed(place, expr.origin)
     }
-    // Extract the raw expression text so that we can save the user provided text. We don't
-    // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
-    // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
-    // get the text from the underlying char stream instead.
-    val originalSQL = getOriginalText(exprCtx)
-    DefaultValueExpression(expr, originalSQL)
+    DefaultValueExpression(expr, getOriginalText(exprCtx))
   }
 
   /**

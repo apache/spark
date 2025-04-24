@@ -387,4 +387,25 @@ class ConfigEntrySuite extends SparkFunSuite {
     ConfigBuilder(testKey("oc5")).onCreate(_ => onCreateCalled = true).fallbackConf(fallback)
     assert(onCreateCalled)
   }
+
+
+  test("SPARK-51874: Add Enum support to ConfigBuilder") {
+    object MyTestEnum extends Enumeration {
+      val X, Y, Z = Value
+    }
+    val conf = new SparkConf()
+    val enumConf = ConfigBuilder("spark.test.enum.key")
+      .enumConf(MyTestEnum)
+      .createWithDefault(MyTestEnum.X)
+    assert(conf.get(enumConf) === MyTestEnum.X)
+    conf.set(enumConf, MyTestEnum.Y)
+    assert(conf.get(enumConf) === MyTestEnum.Y)
+    conf.set(enumConf.key, "Z")
+    assert(conf.get(enumConf) === MyTestEnum.Z)
+    val e = intercept[IllegalArgumentException] {
+      conf.set(enumConf.key, "A")
+      conf.get(enumConf)
+    }
+    assert(e.getMessage === s"${enumConf.key} should be one of X, Y, Z, but was A")
+  }
 }
