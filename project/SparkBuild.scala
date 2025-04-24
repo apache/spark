@@ -254,7 +254,8 @@ object SparkBuild extends PomBuild {
         // SPARK-46938 to prevent enum scan on pmml-model, under spark-mllib module.
         "-Wconf:cat=other&site=org.dmg.pmml.*:w",
         // SPARK-49937 ban call the method `SparkThrowable#getErrorClass`
-        "-Wconf:cat=deprecation&msg=method getErrorClass in trait SparkThrowable is deprecated:e"
+        "-Wconf:cat=deprecation&msg=method getErrorClass in trait SparkThrowable is deprecated:e",
+        "-Wconf:cat=deprecation&msg=The auto insertion will be deprecated:e"
       )
     }
   )
