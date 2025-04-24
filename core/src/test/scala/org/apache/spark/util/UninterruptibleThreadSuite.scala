@@ -150,7 +150,7 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
       }
     }
     task.start()
-    assert(latch.await(100, TimeUnit.SECONDS), "await timeout")
+    assert(latch.await(10, TimeUnit.SECONDS), "await timeout")
     task.interrupt()
     task.join()
   }
@@ -188,9 +188,20 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
       }
     }
     t.start()
-    for (i <- 0 until 400) {
-      Thread.sleep(Random.nextInt(10))
-      t.interrupt()
+    val threads = new Array[Thread](10)
+    for (j <- 0 until 10) {
+      threads(j) = new Thread() {
+        override def run(): Unit = {
+          for (i <- 0 until 400) {
+            Thread.sleep(Random.nextInt(10))
+            t.interrupt()
+          }
+        }
+      }
+      threads(j).start()
+    }
+    for (j <- 0 until 10) {
+      threads(j).join()
     }
     t.join()
     assert(hasInterruptedException === false)

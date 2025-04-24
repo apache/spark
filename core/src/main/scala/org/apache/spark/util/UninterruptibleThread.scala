@@ -112,8 +112,18 @@ private[spark] class UninterruptibleThread(
   override def interrupt(): Unit = {
     if (uninterruptibleLock.synchronized {
       shouldInterruptThread = uninterruptible
-      awaitInterruptThread = !shouldInterruptThread
-      awaitInterruptThread
+      // as we are releasing uninterruptibleLock before calling super.interrupt() there is a
+      // possibility that runUninterruptibly() would be called after lock is released but before
+      // super.interrupt() is called. In this case to prevent runUninterruptibly() from being
+      // interrupted, we use awaitInterruptThread flag. We need to set it only if
+      // runUninterruptibly() is not yet set uninterruptible to true (!shouldInterruptThread) and
+      // there is no other threads that called interrupt (awaitInterruptThread is already true)
+      if (!shouldInterruptThread && !awaitInterruptThread) {
+        awaitInterruptThread = true
+        true
+      } else {
+        false
+      }
     }) {
       try {
         super.interrupt()
