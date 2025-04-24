@@ -20,10 +20,8 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.UUID
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
-
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.json4s.{JInt, JString}
@@ -31,8 +29,8 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.internal.{LogKeys, Logging, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1013,14 +1011,17 @@ object StateStore extends Logging {
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
       val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+      val taskContext = TaskContext.get()
       providerIdsToUnload.foreach(id => {
         loadedProviders.remove(id).foreach( provider => {
           // Trigger maintenance thread to immediately do maintenance on and close the provider.
           // Doing maintenance first allows us to do maintenance for a constantly-moving state
           // store.
-          logInfo(log"Task thread trigger maintenance on " +
-            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}")
-          doMaintenanceOnProvider(id, provider, alreadyRemovedFromLoadedProviders = true)
+          logInfo(log"Task thread trigger maintenance to close " +
+            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}, " +
+            log"task=${MDC(LogKeys.TASK_ID, taskContext.taskAttemptId())}. " +
+            log"Removed provider from loadedProviders")
+          submitMaintenanceWorkForProvider(id, provider, alreadyRemovedFromLoadedProviders = true)
         })
       })
       provider
@@ -1035,23 +1036,18 @@ object StateStore extends Logging {
    * using passed in provider.
    * WARNING: CAN ONLY BE CALLED FROM MAINTENANCE THREAD!
    */
-  def unload(storeProviderId: StateStoreProviderId,
-             alreadyRemovedStoreFromLoadedProviders: Option[StateStoreProvider] = None): Unit = {
-    var toCloseProviders: List[StateStoreProvider] = Nil
+  def unload(
+      storeProviderId: StateStoreProviderId,
+      alreadyRemovedProvider: Option[StateStoreProvider] = None): Unit = {
+    // If we already have the provider, close it directly
+    alreadyRemovedProvider.foreach(_.close())
 
-    alreadyRemovedStoreFromLoadedProviders match {
-      case Some(provider) =>
-        toCloseProviders = provider :: toCloseProviders
-      case None =>
-        // Copy provider to a local list so we can release loadedProviders lock when closing.
-        loadedProviders.synchronized {
-          loadedProviders.remove(storeProviderId).foreach { provider =>
-            toCloseProviders = provider :: toCloseProviders
-          }
-        }
+    // Otherwise, remove from loadedProviders and close if found
+    if (alreadyRemovedProvider.isEmpty) {
+      loadedProviders.synchronized {
+        loadedProviders.remove(storeProviderId).foreach(_.close())
+      }
     }
-
-    toCloseProviders.foreach(_.close())
   }
 
   /** Unload all state store providers: unit test purpose */
@@ -1151,7 +1147,7 @@ object StateStore extends Logging {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
       if (processThisPartition(id)) {
-        doMaintenanceOnProvider(id, provider)
+        submitMaintenanceWorkForProvider(id, provider)
       } else {
         logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
           log"for maintenance because it is currently " +
@@ -1160,13 +1156,27 @@ object StateStore extends Logging {
     }
   }
 
-  private def doMaintenanceOnProvider(id: StateStoreProviderId, provider: StateStoreProvider,
-    alreadyRemovedFromLoadedProviders: Boolean = false): Unit = {
+  /**
+   * Submits maintenance work for a provider to the maintenance thread pool.
+   *
+   * @param id The StateStore provider ID to perform maintenance on
+   * @param provider The StateStore provider instance
+   * @param alreadyRemovedFromLoadedProviders If true, provider was already removed from
+   *                                          loadedProviders. If false, we must already
+   *                                          have acquired the lock to process this partition.
+   */
+  private def submitMaintenanceWorkForProvider(
+      id: StateStoreProviderId,
+      provider: StateStoreProvider,
+      alreadyRemovedFromLoadedProviders: Boolean = false): Unit = {
     maintenanceThreadPool.execute(() => {
       val startTime = System.currentTimeMillis()
       if (alreadyRemovedFromLoadedProviders) {
-        // If provider is already removed from loadedProviders, we MUST process
-        // this partition to close it, so we block until we can.
+        // If provider is already removed from loadedProviders (which can happen when a task thread
+        // triggers unloading of an old provider), we MUST process this partition to
+        // close it properly.
+        // We block here until we can acquire the lock for this partition, waiting for any
+        // possible ongoing maintenance on this partition to complete first.
         awaitProcessThisPartition(id)
       }
       val awaitingPartitionDuration = System.currentTimeMillis() - startTime
@@ -1184,7 +1194,7 @@ object StateStore extends Logging {
         }
       } catch {
         case NonFatal(e) =>
-          logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
+          logWarning(log"Error ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
             log"unloading state store provider", e)
           // When we get a non-fatal exception, we just unload the provider.
           //
