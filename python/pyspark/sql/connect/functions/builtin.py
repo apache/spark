@@ -37,7 +37,7 @@ from typing import (
     ValuesView,
     cast,
 )
-import random
+import random as py_random
 import sys
 
 import numpy as np
@@ -411,17 +411,20 @@ def rand(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("rand", lit(seed))
     else:
-        return _invoke_function("rand", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("rand", lit(py_random.randint(0, sys.maxsize)))
 
 
 rand.__doc__ = pysparkfuncs.rand.__doc__
+
+
+random = rand
 
 
 def randn(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("randn", lit(seed))
     else:
-        return _invoke_function("randn", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("randn", lit(py_random.randint(0, sys.maxsize)))
 
 
 randn.__doc__ = pysparkfuncs.randn.__doc__
@@ -1009,7 +1012,7 @@ def uniform(
 ) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "uniform", lit(min), lit(max), lit(random.randint(0, sys.maxsize))
+            "uniform", lit(min), lit(max), lit(py_random.randint(0, sys.maxsize))
         )
     else:
         return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
@@ -1198,7 +1201,7 @@ def count_min_sketch(
     confidence: Union[Column, float],
     seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
@@ -2282,7 +2285,7 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
-    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function("shuffle", _to_col(col), _seed)
 
 
@@ -2706,7 +2709,7 @@ regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
 def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "randstr", lit(length), lit(random.randint(0, sys.maxsize))
+            "randstr", lit(length), lit(py_random.randint(0, sys.maxsize))
         )
     else:
         return _invoke_function_over_columns("randstr", lit(length), lit(seed))
@@ -2997,6 +3000,13 @@ def character_length(str: "ColumnOrName") -> Column:
 
 
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
+
+
+def chr(n: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("chr", n)
+
+
+chr.__doc__ = pysparkfuncs.chr.__doc__
 
 
 def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
@@ -4011,6 +4021,10 @@ def session_user() -> Column:
 
 
 session_user.__doc__ = pysparkfuncs.session_user.__doc__
+
+
+def uuid() -> Column:
+    return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
