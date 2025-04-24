@@ -1504,20 +1504,25 @@ case class UnresolvedTableSpec(
     collation: Option[String],
     serde: Option[SerdeInfo],
     external: Boolean,
-    constraints: Seq[TableConstraint])
-  extends UnaryExpression with Unevaluable with TableSpecBase {
+    constraints: Constraints)
+  extends BinaryExpression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3113")
 
-  override def child: Expression = optionExpression
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(optionExpression = newChild.asInstanceOf[OptionList])
-
   override def simpleString(maxFields: Int): String = {
     this.copy(properties = Utils.redact(properties).toMap).toString
   }
+
+  override def left: Expression = optionExpression
+
+  override def right: Expression = constraints
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression =
+    copy(optionExpression = newLeft.asInstanceOf[OptionList],
+      constraints = newRight.asInstanceOf[Constraints])
 }
 
 /**

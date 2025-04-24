@@ -18,14 +18,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.UUID
 
+import org.apache.spark.SparkUnsupportedOperationException
+
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
-trait TableConstraint {
+trait TableConstraint extends Expression with Unevaluable {
   // Convert to a data source v2 constraint
   def toV2Constraint(isCreateTable: Boolean): Constraint
 
@@ -97,6 +99,11 @@ trait TableConstraint {
       )
     }
   }
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType =
+    throw new SparkUnsupportedOperationException("CONSTRAINT_DOES_NOT_HAVE_DATA_TYPE")
 }
 
 case class ConstraintCharacteristic(enforced: Option[Boolean], rely: Option[Boolean])
@@ -113,7 +120,6 @@ case class CheckConstraint(
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
   extends UnaryExpression
-  with Unevaluable
   with TableConstraint {
 // scalastyle:on line.size.limit
 
@@ -147,8 +153,6 @@ case class CheckConstraint(
 
   override def sql: String = s"CONSTRAINT $userProvidedName CHECK ($condition)"
 
-  override def dataType: DataType = StringType
-
   override def withUserProvidedName(name: String): TableConstraint = copy(userProvidedName = name)
 
   override def withTableName(tableName: String): TableConstraint = copy(tableName = tableName)
@@ -163,7 +167,8 @@ case class PrimaryKeyConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends TableConstraint {
+  extends LeafExpression
+    with TableConstraint {
 // scalastyle:on line.size.limit
 
   override def toV2Constraint(isCreateTable: Boolean): Constraint = {
@@ -195,7 +200,8 @@ case class UniqueConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-    extends TableConstraint {
+  extends LeafExpression
+    with TableConstraint {
 // scalastyle:on line.size.limit
 
   override def toV2Constraint(isCreateTable: Boolean): Constraint = {
@@ -231,7 +237,8 @@ case class ForeignKeyConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends TableConstraint {
+  extends LeafExpression
+    with TableConstraint {
 // scalastyle:on line.size.limit
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -261,4 +268,15 @@ case class ForeignKeyConstraint(
     failIfEnforced(c, "FOREIGN KEY")
     copy(userProvidedCharacteristic = c)
   }
+}
+
+case class Constraints(children: Seq[Expression]) extends Expression with Unevaluable {
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType =
+    throw new SparkUnsupportedOperationException("CONSTRAINTS_DO_NOT_HAVE_DATA_TYPE")
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
 }

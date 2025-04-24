@@ -825,6 +825,12 @@
     ],
     "sqlState" : "42704"
   },
+  "CONSTRAINT_DOES_NOT_HAVE_DATA_TYPE" : {
+    "message" : [
+      "Table constraint expressions do not have a data type."
+    ],
+    "sqlState" : "0A000"
+  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
