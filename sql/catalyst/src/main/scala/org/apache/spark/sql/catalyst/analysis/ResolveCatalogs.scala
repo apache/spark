@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
@@ -77,14 +78,16 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
 
+    case c @ CreateTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
+      c.copy(name = resolvedIdentifier)
+
+    case r @ ReplaceTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
+      r.copy(name = resolvedIdentifier)
+
     case UnresolvedIdentifier(nameParts, allowTemp) =>
-      if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
-        val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else {
-        val CatalogAndIdentifier(catalog, identifier) = nameParts
-        ResolvedIdentifier(catalog, identifier)
-      }
+      resolveIdentifier(nameParts, allowTemp, Seq.empty)
 
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
@@ -92,6 +95,22 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns), fetchMetadata) =>
       resolveNamespace(catalog, ns, fetchMetadata)
+  }
+
+  private def resolveIdentifier(
+      nameParts: Seq[String],
+      allowTemp: Boolean,
+      columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
+    val columnOutput = columns.map { col =>
+      AttributeReference(col.name, col.dataType, col.nullable, col.metadata)()
+    }
+    if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
+      val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
+      ResolvedIdentifier(FakeSystemCatalog, ident, columnOutput)
+    } else {
+      val CatalogAndIdentifier(catalog, identifier) = nameParts
+      ResolvedIdentifier(catalog, identifier, columnOutput)
+    }
   }
 
   private def resolveNamespace(

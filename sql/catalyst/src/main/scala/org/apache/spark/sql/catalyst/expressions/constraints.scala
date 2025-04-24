@@ -19,13 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.UUID
 
 import org.apache.spark.SparkUnsupportedOperationException
-
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.DataType
 
 trait TableConstraint extends Expression with Unevaluable {
   // Convert to a data source v2 constraint
@@ -271,6 +270,12 @@ case class ForeignKeyConstraint(
 }
 
 case class Constraints(children: Seq[Expression]) extends Expression with Unevaluable {
+  assert(children.forall(_.isInstanceOf[TableConstraint]),
+    "All children of Constraints must be TableConstraints")
+
+  def tableConstraints: Seq[TableConstraint] = {
+    children.map(_.asInstanceOf[TableConstraint])
+  }
 
   override def nullable: Boolean = true
 
@@ -279,4 +284,8 @@ case class Constraints(children: Seq[Expression]) extends Expression with Uneval
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
+}
+
+object Constraints {
+  val empty: Constraints = Constraints(Seq.empty)
 }

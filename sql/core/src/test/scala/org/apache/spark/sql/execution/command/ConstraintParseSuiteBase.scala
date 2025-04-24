@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{ConstraintCharacteristic, TableConstraint}
+import org.apache.spark.sql.catalyst.expressions.{ConstraintCharacteristic, Constraints, TableConstraint}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LogicalPlan, OptionList, ReplaceTable, UnresolvedTableSpec}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -56,12 +56,12 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
 
   protected def createExpectedPlan(
       columns: Seq[ColumnDefinition],
-      constraints: Seq[TableConstraint],
+      tableConstraints: Seq[TableConstraint],
       isCreateTable: Boolean = true): LogicalPlan = {
     val tableId = UnresolvedIdentifier(Seq("t"))
     val tableSpec = UnresolvedTableSpec(
       Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
-      None, None, None, None, false, constraints)
+      None, None, None, None, false, Constraints(tableConstraints))
     if (isCreateTable) {
       CreateTable(tableId, columns, Seq.empty, tableSpec, false)
     } else {
@@ -79,7 +79,7 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
       ColumnDefinition("b", StringType)
     )
     val expected = createExpectedPlan(
-      columns = columns, constraints = constraints, isCreateTable = isCreateTable)
+      columns = columns, tableConstraints = constraints, isCreateTable = isCreateTable)
     comparePlans(parsed, expected)
   }
 }

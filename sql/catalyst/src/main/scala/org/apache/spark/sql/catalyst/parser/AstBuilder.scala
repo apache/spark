@@ -4876,7 +4876,7 @@ class AstBuilder extends DataTypeAstBuilder
       val namedConstraints =
         constraints.map(c => c.withTableName(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
-        collation, serdeInfo, external, namedConstraints)
+        collation, serdeInfo, external, Constraints(namedConstraints))
       val identifier = withOrigin(identifierContext) {
         UnresolvedIdentifier(identifiers)
       }
@@ -4955,7 +4955,7 @@ class AstBuilder extends DataTypeAstBuilder
       val namedConstraints =
         constraints.map(c => c.withTableName(identifiers.last))
       val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
-        collation, serdeInfo, external = false, namedConstraints)
+        collation, serdeInfo, external = false, Constraints(namedConstraints))
       val identifier = withOrigin(identifierContext) {
         UnresolvedIdentifier(identifiers)
       }
