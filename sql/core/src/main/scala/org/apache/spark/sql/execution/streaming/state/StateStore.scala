@@ -31,7 +31,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -1013,13 +1013,17 @@ object StateStore extends Logging {
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
       val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+      val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
+        log"taskId=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, tc.taskAttemptId())}"
+      }.getOrElse(log"")
+
       providerIdsToUnload.foreach(id => {
         loadedProviders.remove(id).foreach( provider => {
           // Trigger maintenance thread to immediately do maintenance on and close the provider.
           // Doing maintenance first allows us to do maintenance for a constantly-moving state
           // store.
           logInfo(log"Task thread trigger maintenance to close " +
-            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." +
+            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
             log"Removed provider from loadedProviders")
           submitMaintenanceWorkForProvider(id, provider, submittedFromTaskThread = true)
         })
