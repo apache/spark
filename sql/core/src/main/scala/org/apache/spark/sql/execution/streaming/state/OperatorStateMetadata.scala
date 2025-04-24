@@ -332,6 +332,8 @@ class OperatorStateMetadataV2Reader(
     if (!fm.exists(offsetLog)) {
       return Array.empty
     }
+    // Offset Log files are numeric so we want to skip any files that don't
+    // conform to this
     fm.list(offsetLog)
       .filter(f => !f.getPath.getName.startsWith(".")) // ignore hidden files
       .flatMap(f => scala.util.Try(f.getPath.getName.toLong).toOption)
@@ -343,6 +345,8 @@ class OperatorStateMetadataV2Reader(
     if (!fm.exists(metadataDirPath)) {
       return Array.empty
     }
+
+    // filter for numeric filenames (OperatorStateMetadataV2 files) and ignore non-numeric ones
     fm.list(metadataDirPath)
       .flatMap(f => scala.util.Try(f.getPath.getName.toLong).toOption)
       .sorted
@@ -425,6 +429,7 @@ class OperatorStateMetadataV2FileManager(
     if (thresholdBatchId <= 0) {
       return
     }
+    // filter for numeric filenames (StateSchemaV3 files) and ignore non-numeric ones
     val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
     val filesBeforeThreshold = schemaFiles.filter { path =>
       scala.util.Try(path.getName.split("_").head.toLong)
