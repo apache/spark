@@ -207,7 +207,7 @@ case class MinutesOfTime(child: Expression)
   )
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -267,7 +267,7 @@ case class HoursOfTime(child: Expression)
   )
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -351,7 +351,7 @@ case class SecondsOfTime(child: Expression)
   )
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType: _*))
+    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
 
   override def children: Seq[Expression] = Seq(child)
 

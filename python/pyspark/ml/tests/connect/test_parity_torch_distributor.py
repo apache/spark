@@ -21,9 +21,10 @@ import unittest
 
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
+from pyspark.testing import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import have_torch, torch_requirement_message
 
-if not is_remote_only():
+if not is_remote_only() and should_test_connect:
     from pyspark.ml.torch.tests.test_distributor import (
         TorchDistributorBaselineUnitTestsMixin,
         TorchDistributorLocalUnitTestsMixin,
@@ -35,7 +36,8 @@ if not is_remote_only():
     )
 
     @unittest.skipIf(
-        not have_torch or is_remote_only(), torch_requirement_message or "Requires JVM access"
+        not should_test_connect or not have_torch or is_remote_only(),
+        connect_requirement_message or torch_requirement_message or "Requires JVM access",
     )
     class TorchDistributorBaselineUnitTestsOnConnect(
         TorchDistributorBaselineUnitTestsMixin, unittest.TestCase
@@ -142,7 +144,8 @@ if not is_remote_only():
             cls.spark.stop()
 
     @unittest.skipIf(
-        not have_torch or is_remote_only(), torch_requirement_message or "Requires JVM access"
+        not should_test_connect or not have_torch or is_remote_only(),
+        connect_requirement_message or torch_requirement_message or "Requires JVM access",
     )
     class TorchWrapperUnitTestsOnConnect(TorchWrapperUnitTestsMixin, unittest.TestCase):
         pass
