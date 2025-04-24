@@ -37,7 +37,7 @@ class ListStateClient:
             self.schema = schema
         # A dictionary to store the mapping between list state name and a tuple of data batch
         # and the index of the last row that was read.
-        self.data_batch_dict: Dict[str, Tuple[Any, int]] = {}
+        self.data_batch_dict: Dict[str, Tuple[Any, int, bool]] = {}
 
     def exists(self, state_name: str) -> bool:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -131,11 +131,13 @@ class ListStateClient:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         send_data_via_arrow = False
+
+        # To workaround mypy type assignment check.
+        values_as_bytes: Any = []
         if len(values) == 100:
             # TODO: Let's update this to be either flexible or more reasonable default value backed
             #   by various benchmarks.
             # Arrow codepath
-            values_as_bytes = []
             send_data_via_arrow = True
         else:
             values_as_bytes = map(
@@ -167,10 +169,11 @@ class ListStateClient:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         send_data_via_arrow = False
+        # To workaround mypy type assignment check.
+        values_as_bytes: Any = []
         if len(values) == 100:
             # TODO: Let's update this to be either flexible or more reasonable default value backed
             #   by various benchmarks.
-            values_as_bytes = []
             send_data_via_arrow = True
         else:
             values_as_bytes = map(
