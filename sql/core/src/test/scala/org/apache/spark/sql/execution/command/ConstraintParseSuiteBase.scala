@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{ConstraintCharacteristic, Constraints, TableConstraint}
+import org.apache.spark.sql.catalyst.expressions.{ConstraintCharacteristic, TableConstraint}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LogicalPlan, OptionList, ReplaceTable, UnresolvedTableSpec}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -61,7 +61,7 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
     val tableId = UnresolvedIdentifier(Seq("t"))
     val tableSpec = UnresolvedTableSpec(
       Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
-      None, None, None, None, false, Constraints(tableConstraints))
+      None, None, None, None, false, tableConstraints)
     if (isCreateTable) {
       CreateTable(tableId, columns, Seq.empty, tableSpec, false)
     } else {

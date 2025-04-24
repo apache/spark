@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Constraints}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, Table, TableCapability, TableCatalog}
@@ -31,7 +31,7 @@ import org.apache.spark.util.ArrayImplicits._
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
   val tableSpec =
     UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, None, false,
-      Constraints.empty)
+      Seq.empty)
   test("CreateTableAsSelect: fail missing top-level column") {
     val plan = CreateTableAsSelect(
       UnresolvedIdentifier(Array("table_name").toImmutableArraySeq),

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Constraints, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -701,7 +701,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
       collation = None,
       serde = None,
       external = tableType == CatalogTableType.EXTERNAL,
-      constraints = Constraints.empty)
+      constraints = Seq.empty)
 
     val plan = CreateTable(
       name = UnresolvedIdentifier(ident),

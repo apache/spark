@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Constraints, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
@@ -170,7 +170,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       collation = None,
       serde = None,
       external = false,
-      constraints = Constraints.empty)
+      constraints = Seq.empty)
   }
 
   /** @inheritdoc */

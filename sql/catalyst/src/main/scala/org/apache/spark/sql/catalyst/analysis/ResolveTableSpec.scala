@@ -61,7 +61,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
       input: LogicalPlan,
       tableSpec: TableSpecBase,
       withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
-    case u: UnresolvedTableSpec if u.optionExpression.resolved && u.constraints.resolved =>
+    case u: UnresolvedTableSpec if u.childrenResolved =>
       val newOptions: Seq[(String, String)] = u.optionExpression.options.map {
         case (key: String, null) =>
           (key, null)
@@ -87,7 +87,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
           (key, newValue)
       }
 
-      u.constraints.children.foreach {
+      u.constraints.foreach {
         case check: CheckConstraint =>
           if (!check.child.deterministic) {
             check.child.failAnalysis(
@@ -107,7 +107,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         collation = u.collation,
         serde = u.serde,
         external = u.external,
-        constraints = u.constraints.tableConstraints.map(_.toV2Constraint(isCreateTable = true)))
+        constraints = u.constraints.map(_.toV2Constraint(isCreateTable = true)))
       withNewSpec(newTableSpec)
     case _ =>
       input

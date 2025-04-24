@@ -27,7 +27,7 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Constraints, Literal}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog._
@@ -214,7 +214,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 collation = extraOptions.get(TableCatalog.PROP_COLLATION),
                 serde = None,
                 external = false,
-                constraints = Constraints.empty)
+                constraints = Seq.empty)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   UnresolvedIdentifier(
@@ -480,7 +480,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false,
-          constraints = Constraints.empty)
+          constraints = Seq.empty)
         ReplaceTableAsSelect(
           UnresolvedIdentifier(nameParts),
           partitioningAsV2,
@@ -502,7 +502,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           collation = extraOptions.get(TableCatalog.PROP_COLLATION),
           serde = None,
           external = false,
-          constraints = Constraints.empty)
+          constraints = Seq.empty)
 
         CreateTableAsSelect(
           UnresolvedIdentifier(nameParts),

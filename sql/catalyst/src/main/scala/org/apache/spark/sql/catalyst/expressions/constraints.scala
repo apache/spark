@@ -166,8 +166,7 @@ case class PrimaryKeyConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends LeafExpression
-    with TableConstraint {
+  extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
 
   override def toV2Constraint(isCreateTable: Boolean): Constraint = {
@@ -199,8 +198,7 @@ case class UniqueConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends LeafExpression
-    with TableConstraint {
+  extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
 
   override def toV2Constraint(isCreateTable: Boolean): Constraint = {
@@ -236,8 +234,7 @@ case class ForeignKeyConstraint(
     override val userProvidedName: String = null,
     override val tableName: String = null,
     override val userProvidedCharacteristic: ConstraintCharacteristic = ConstraintCharacteristic.empty)
-  extends LeafExpression
-    with TableConstraint {
+  extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -267,31 +264,4 @@ case class ForeignKeyConstraint(
     failIfEnforced(c, "FOREIGN KEY")
     copy(userProvidedCharacteristic = c)
   }
-}
-
-
-/** This class is used to represent a collection of constraints in a table.
- * It is used for analysis purposes only.
- *
- * @param children The list of constraint expressions
- */
-case class Constraints(children: Seq[Expression]) extends Expression with Unevaluable {
-  assert(children.forall(_.isInstanceOf[TableConstraint]),
-    "All children of Constraints must be TableConstraints")
-
-  def tableConstraints: Seq[TableConstraint] = {
-    children.map(_.asInstanceOf[TableConstraint])
-  }
-
-  override def nullable: Boolean = true
-
-  override def dataType: DataType =
-    throw new SparkUnsupportedOperationException("CONSTRAINTS_DO_NOT_HAVE_DATA_TYPE")
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(children = newChildren)
-}
-
-object Constraints {
-  val empty: Constraints = Constraints(Seq.empty)
 }

@@ -270,10 +270,10 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       plan match {
         case c: CreateTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
-          assert(tableSpec.constraints.tableConstraints.size == 1)
-          assert(tableSpec.constraints.tableConstraints.head ==
+          assert(tableSpec.constraints.size == 1)
+          assert(tableSpec.constraints.head ==
             constraint1.withUserProvidedName(null))
-          assert(tableSpec.constraints.tableConstraints.head.name.matches("t_chk_[0-9a-f]{7}"))
+          assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
           fail(s"Expected CreateTable, but got: $other")
@@ -290,10 +290,10 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       plan match {
         case c: ReplaceTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
-          assert(tableSpec.constraints.tableConstraints.size == 1)
-          assert(tableSpec.constraints.tableConstraints.head ==
+          assert(tableSpec.constraints.size == 1)
+          assert(tableSpec.constraints.head ==
             constraint1.withUserProvidedName(null))
-          assert(tableSpec.constraints.tableConstraints.head.name.matches("t_chk_[0-9a-f]{7}"))
+          assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
           fail(s"Expected ReplaceTable, but got: $other")
