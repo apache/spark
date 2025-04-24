@@ -1209,10 +1209,8 @@ object SQLConf {
       "Unix epoch. TIMESTAMP_MILLIS is also standard, but with millisecond precision, which " +
       "means Spark has to truncate the microsecond portion of its timestamp value.")
     .version("2.3.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+    .enumConf(ParquetOutputTimestampType)
+    .createWithDefault(ParquetOutputTimestampType.INT96)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
@@ -1551,10 +1549,8 @@ object SQLConf {
       "attempt to write it to the table properties) and NEVER_INFER (the default mode-- fallback " +
       "to using the case-insensitive metastore schema instead of inferring).")
     .version("2.1.1")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
-    .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
+    .enumConf(HiveCaseSensitiveInferenceMode)
+    .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER)
 
   val HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD =
     buildConf("spark.sql.hive.tablePropertyLengthThreshold")
@@ -1721,9 +1717,7 @@ object SQLConf {
     .doc("The output style used display binary data. Valid values are 'UTF-8', " +
       "'BASIC', 'BASE64', 'HEX', and 'HEX_DISCRETE'.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(BinaryOutputStyle.values.map(_.toString))
+    .enumConf(BinaryOutputStyle)
     .createOptional
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
@@ -2058,6 +2052,7 @@ object SQLConf {
     .createWithDefault(100)
 
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
+    .internal()
     .doc("This config determines the fallback behavior of several codegen generators " +
       "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
@@ -2065,10 +2060,8 @@ object SQLConf {
       "this configuration is only for the internal usage, and NOT supposed to be set by " +
       "end users.")
     .version("2.4.0")
-    .internal()
-    .stringConf
-    .checkValues(CodegenObjectFactoryMode.values.map(_.toString))
-    .createWithDefault(CodegenObjectFactoryMode.FALLBACK.toString)
+    .enumConf(CodegenObjectFactoryMode)
+    .createWithDefault(CodegenObjectFactoryMode.FALLBACK)
 
   val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()
@@ -3949,10 +3942,8 @@ object SQLConf {
         "dataframe.write.option(\"partitionOverwriteMode\", \"dynamic\").save(path)."
       )
       .version("2.3.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(PartitionOverwriteMode.values.map(_.toString))
-      .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+      .enumConf(PartitionOverwriteMode)
+      .createWithDefault(PartitionOverwriteMode.STATIC)
 
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
@@ -3974,10 +3965,8 @@ object SQLConf {
         "not allowed."
       )
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(StoreAssignmentPolicy.values.map(_.toString))
-      .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
+      .enumConf(StoreAssignmentPolicy)
+      .createWithDefault(StoreAssignmentPolicy.ANSI)
 
   val ANSI_ENABLED = buildConf(SqlApiConfHelper.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
@@ -4630,10 +4619,8 @@ object SQLConf {
         "Before the 3.4.0 release, Spark only supports the TIMESTAMP WITH " +
         "LOCAL TIME ZONE type.")
       .version("3.4.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(TimestampTypes.values.map(_.toString))
-      .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
+      .enumConf(TimestampTypes)
+      .createWithDefault(TimestampTypes.TIMESTAMP_LTZ)
 
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
@@ -4708,10 +4695,8 @@ object SQLConf {
       "fails if duplicated map keys are detected. When LAST_WIN, the map key that is inserted " +
       "at last takes precedence.")
     .version("3.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(MapKeyDedupPolicy.values.map(_.toString))
-    .createWithDefault(MapKeyDedupPolicy.EXCEPTION.toString)
+    .enumConf(MapKeyDedupPolicy)
+    .createWithDefault(MapKeyDedupPolicy.EXCEPTION)
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.doLooseUpcast")
     .internal()
@@ -4727,10 +4712,8 @@ object SQLConf {
       "The default is CORRECTED, inner CTE definitions take precedence. This config " +
       "will be removed in future versions and CORRECTED will be the only behavior.")
     .version("3.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-    .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+    .enumConf(LegacyBehaviorPolicy)
+    .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val CTE_RECURSION_LEVEL_LIMIT = buildConf("spark.sql.cteRecursionLevelLimit")
     .doc("Maximum level of recursion that is allowed while executing a recursive CTE definition." +
@@ -4765,10 +4748,8 @@ object SQLConf {
       "When set to EXCEPTION, RuntimeException is thrown when we will get different " +
       "results. The default is CORRECTED.")
     .version("3.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-    .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+    .enumConf(LegacyBehaviorPolicy)
+    .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
@@ -5056,10 +5037,8 @@ object SQLConf {
         "When EXCEPTION, Spark will fail the writing if it sees ancient " +
         "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val PARQUET_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.parquet.datetimeRebaseModeInWrite")
@@ -5073,10 +5052,8 @@ object SQLConf {
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val PARQUET_INT96_REBASE_MODE_IN_READ =
     buildConf("spark.sql.parquet.int96RebaseModeInRead")
@@ -5088,10 +5065,8 @@ object SQLConf {
         "timestamps that are ambiguous between the two calendars. This config is only effective " +
         "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val PARQUET_REBASE_MODE_IN_READ =
     buildConf("spark.sql.parquet.datetimeRebaseModeInRead")
@@ -5107,10 +5082,8 @@ object SQLConf {
         s"${PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
       .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val AVRO_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.avro.datetimeRebaseModeInWrite")
@@ -5121,10 +5094,8 @@ object SQLConf {
         "When EXCEPTION, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val AVRO_REBASE_MODE_IN_READ =
     buildConf("spark.sql.avro.datetimeRebaseModeInRead")
@@ -5136,10 +5107,8 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
+      .enumConf(LegacyBehaviorPolicy)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
@@ -5480,9 +5449,8 @@ object SQLConf {
       "STANDARD includes an additional JSON field `message`. This configuration property " +
       "influences on error messages of Thrift Server and SQL CLI while running queries.")
     .version("3.4.0")
-    .stringConf.transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(ErrorMessageFormat.values.map(_.toString))
-    .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+    .enumConf(ErrorMessageFormat)
+    .createWithDefault(ErrorMessageFormat.PRETTY)
 
   val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
     buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
@@ -6221,7 +6189,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
-    HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
+    getConf(HIVE_CASE_SENSITIVE_INFERENCE)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
@@ -6235,7 +6203,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
-  def codegenFactoryMode: String = getConf(CODEGEN_FACTORY_MODE)
+  def codegenFactoryMode: CodegenObjectFactoryMode.Value = getConf(CODEGEN_FACTORY_MODE)
 
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
@@ -6311,9 +6279,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyPostgresDatetimeMappingEnabled: Boolean =
     getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
 
-  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
-    LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
-  }
+  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
+    getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
@@ -6367,9 +6334,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def isParquetINT96TimestampConversion: Boolean = getConf(PARQUET_INT96_TIMESTAMP_CONVERSION)
 
-  def parquetOutputTimestampType: ParquetOutputTimestampType.Value = {
-    ParquetOutputTimestampType.withName(getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE))
-  }
+  def parquetOutputTimestampType: ParquetOutputTimestampType.Value =
+    getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
@@ -6647,10 +6613,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
-    PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+    getConf(PARTITION_OVERWRITE_MODE)
 
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
-    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
+    getConf(STORE_ASSIGNMENT_POLICY)
 
   override def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
@@ -6673,11 +6639,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def chunkBase64StringEnabled: Boolean = getConf(CHUNK_BASE64_STRING_ENABLED)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
-    case "TIMESTAMP_LTZ" =>
+    case TimestampTypes.TIMESTAMP_LTZ =>
       // For historical reason, the TimestampType maps to TIMESTAMP WITH LOCAL TIME ZONE
       TimestampType
 
-    case "TIMESTAMP_NTZ" =>
+    case TimestampTypes.TIMESTAMP_NTZ =>
       TimestampNTZType
   }
 
@@ -6827,8 +6793,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
 
-  def errorMessageFormat: ErrorMessageFormat.Value =
-    ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
+  def errorMessageFormat: ErrorMessageFormat.Value = getConf(SQLConf.ERROR_MESSAGE_FORMAT)
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 

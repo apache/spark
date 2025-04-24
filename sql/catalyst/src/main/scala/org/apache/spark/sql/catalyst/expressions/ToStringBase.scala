@@ -457,7 +457,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 object ToStringBase {
   def getBinaryFormatter: BinaryFormatter = {
     val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
-    style.map(BinaryOutputStyle.withName) match {
+    style match {
       case Some(BinaryOutputStyle.UTF8) =>
         (array: Array[Byte]) => UTF8String.fromBytes(array)
       case Some(BinaryOutputStyle.BASIC) =>
