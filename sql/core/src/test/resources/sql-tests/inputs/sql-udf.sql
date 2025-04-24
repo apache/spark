@@ -42,12 +42,114 @@ CREATE FUNCTION foo1c2(a INT, b INT, thisisaduplicate INT, c INT, d INT, e INT, 
     RETURNS TABLE (a INT) RETURN SELECT 1;
 
 -- 1.1.d DEFAULT parameters
--- TODO(SPARK-51439): Support default parameters in SQL UDF
--- DEFAULT in scalar function
+-- A NULL default
 CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT NULL) RETURNS INT RETURN a;
 
+-- Expect 5, NULL
+SELECT foo1d1(5), foo1d1();
+
+-- A literal default
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT 10) RETURNS INT RETURN a;
+
+-- Expect 5, 10
+SELECT foo1d1(5), foo1d1();
+
+-- A constant expression
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT length(substr(current_database(), 1, 1))) RETURNS INT RETURN a;
+
+-- Expect 5, 1
+SELECT foo1d1(5), foo1d1();
+
+-- An expression that needs a cast
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT '5' || length(substr(current_database(), 1, 1)))
+  RETURNS INT RETURN a;
+
+-- Expect 5, 51
+SELECT foo1d1(5), foo1d1();
+
+-- A non deterministic default
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT RAND()::INT) RETURNS INT RETURN a;
+
+-- Expect 5, 0
+SELECT foo1d1(5), foo1d1();
+
+-- Cannot cast
+-- Expect error
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT array(55, 17))
+  RETURNS INT RETURN a;
+
+-- A subquery
+CREATE OR REPLACE FUNCTION foo1d1(a INT DEFAULT (SELECT max(c1) FROM VALUES (1) AS T(c1)))
+  RETURNS INT RETURN a;
+
+-- Multiple parameters
+CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test')
+  RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d;
+
+-- Expect: (1 2 3 4), (1 2 3 9), (1 2 8 9), (1 7 8 9)
+SELECT foo1d2(1, 2, 3, 4), foo1d2(1, 2, 3), foo1d2(1, 2), foo1d2(1);
+
+-- Expect error a has no default
+SELECT foo1d2();
+
+-- Expect error, too many parameters
+SELECT foo1d2(1, 2, 3, 4, 5);
+
+-- Sparse default, expect error
+CREATE OR REPLACE FUNCTION foo1d2(a INT DEFAULT 5, b INT , c INT DEFAULT 8, d INT DEFAULT 9 COMMENT 'test')
+  RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d;
+
+CREATE OR REPLACE FUNCTION foo1d2(a INT, b INT DEFAULT 7, c INT DEFAULT 8, d INT COMMENT 'test')
+  RETURNS STRING RETURN a || ' ' || b || ' ' || c || ' ' || d;
+
+-- Temporary function
+CREATE OR REPLACE TEMPORARY FUNCTION foo1d3(a INT DEFAULT 7 COMMENT 'hello') RETURNS INT RETURN a;
+
+-- Expect 5, 7
+SELECT foo1d3(5), foo1d3();
+
+-- Dependent default
+-- Expect error
+CREATE OR REPLACE FUNCTION foo1d4(a INT, b INT DEFAULT a) RETURNS INT RETURN a + b;
+
+-- Defaults with SQL UDF
+CREATE OR REPLACE FUNCTION foo1d4(a INT, b INT DEFAULT 3) RETURNS INT RETURN a + b;
+
+CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT DEFAULT foo1d4(6)) RETURNS INT RETURN a + b;
+
+-- Expect 19, 12
+SELECT foo1d5(10), foo1d5(10, 2);
+
+-- Function invocation with default in SQL UDF
+CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT) RETURNS INT RETURN a + foo1d4(b);
+
+-- Expect 15
+SELECT foo1d5(10, 2);
+
 -- DEFAULT in table function
-CREATE OR REPLACE FUNCTION foo1d1(a INT, b INT DEFAULT 7) RETURNS TABLE(a INT, b INT) RETURN SELECT a, b;
+CREATE OR REPLACE FUNCTION foo1d6(a INT, b INT DEFAULT 7) RETURNS TABLE(a INT, b INT) RETURN SELECT a, b;
+
+-- Expect (5, 7)
+SELECT * FROM foo1d6(5);
+
+-- Expect (5, 2)
+SELECT * FROM foo1d6(5, 2);
+
+-- 1.1.e NOT NULL
+-- Expect failure
+CREATE FUNCTION foo1e1(x INT NOT NULL, y INT) RETURNS INT RETURN 1;
+CREATE FUNCTION foo1e2(x INT, y INT NOT NULL) RETURNS TABLE (x INT) RETURN SELECT 1;
+CREATE FUNCTION foo1e3(x INT, y INT) RETURNS TABLE (x INT NOT NULL) RETURN SELECT 1;
+
+-- 1.1.f GENERATED ALWAYS AS
+-- Expect failure
+CREATE FUNCTION foo1f1(x INT, y INT GENERATED ALWAYS AS (x + 10)) RETURNS INT RETURN y + 1;
+CREATE FUNCTION foo1f2(id BIGINT GENERATED ALWAYS AS IDENTITY) RETURNS BIGINT RETURN id + 1;
+
+-- 1.1.g Constraint
+-- Expect failure
+CREATE FUNCTION foo1g1(x INT, y INT UNIQUE) RETURNS INT RETURN y + 1;
+CREATE FUNCTION foo1g2(id BIGINT CHECK (true)) RETURNS BIGINT RETURN id + 1;
 
 -------------------------------
 -- 2. Scalar SQL UDF
