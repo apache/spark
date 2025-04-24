@@ -1013,15 +1013,13 @@ object StateStore extends Logging {
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
       val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
-      val taskContext = TaskContext.get()
       providerIdsToUnload.foreach(id => {
         loadedProviders.remove(id).foreach( provider => {
           // Trigger maintenance thread to immediately do maintenance on and close the provider.
           // Doing maintenance first allows us to do maintenance for a constantly-moving state
           // store.
           logInfo(log"Task thread trigger maintenance to close " +
-            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
-            log"task=${MDC(LogKeys.TASK_ID, taskContext.taskAttemptId())}. " +
+            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." +
             log"Removed provider from loadedProviders")
           submitMaintenanceWorkForProvider(id, provider, submittedFromTaskThread = true)
         })
