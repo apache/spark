@@ -277,6 +277,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appInfo = store.applicationInfo()
+    val appId = appInfo.id
+    val _ = checkJobRunStatus(appId, request)
     val startDate = appInfo.attempts.head.startTime
     val startTime = startDate.getTime()
     val endTime = appInfo.attempts.head.endTime.getTime()

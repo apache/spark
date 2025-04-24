@@ -22,9 +22,10 @@ import java.util.EnumSet
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.xml.Node
+import scala.jdk.CollectionConverters._
 
 import jakarta.servlet.DispatcherType
-import jakarta.servlet.http.{HttpServlet, HttpServletRequest}
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping, ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST.{JNothing, JValue}
 
@@ -220,6 +221,34 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
 private[spark] abstract class WebUIPage(var prefix: String) {
   def render(request: HttpServletRequest): Seq[Node]
   def renderJson(request: HttpServletRequest): JValue = JNothing
+  def checkJobRunStatus(appId: String, request: HttpServletRequest): Unit = {
+    val externalServiceUrl = sys.env.get("SFY_SERVER_URL")
+      .getOrElse(throw new NoSuchElementException("SFY_SERVER_URL environment variable not set"))
+
+    val url = s"$externalServiceUrl/v1/x/jobs/runs/external-id/$appId"
+
+    val connection = new java.net.URL(url).openConnection().asInstanceOf[java.net.HttpURLConnection]
+    connection.setRequestMethod("GET")
+
+    // Add all headers from the original request to the new request
+    val headerNames = request.getHeaderNames()
+    if (headerNames != null) {
+      headerNames.asScala.foreach { headerName =>
+        connection.setRequestProperty(headerName, request.getHeader(headerName))
+      }
+    }
+
+    connection.connect()
+    val statusCode = connection.getResponseCode
+    connection.disconnect()
+
+    if (statusCode != HttpServletResponse.SC_OK) {
+      throw new SecurityException(s"Forbidden to access $appId, received status code: $statusCode")
+    }
+
+    // The original code returned statusCode, but the method signature is Unit.
+    // Assuming the check is purely for side-effects (throwing exception on failure).
+  }
 }
 
 private[spark] class DelegatingServletContextHandler(handler: ServletContextHandler) {

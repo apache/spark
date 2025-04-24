@@ -34,6 +34,8 @@ private[ui] class EnvironmentPage(
     store: AppStatusStore) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val appId = store.applicationInfo().id
+    checkJobRunStatus(appId, request)
     val appEnv = store.environmentInfo()
     val jvmInformation = Map(
       "Java Version" -> appEnv.runtime.javaVersion,

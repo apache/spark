@@ -32,6 +32,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val subPath = "stages"
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val appId = parent.store.applicationInfo().id
+    checkJobRunStatus(appId, request)
     // For now, pool information is only accessible in live UIs
     val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable]).map { pool =>
       val uiPool = parent.store.asOption(parent.store.pool(pool.name)).getOrElse(
