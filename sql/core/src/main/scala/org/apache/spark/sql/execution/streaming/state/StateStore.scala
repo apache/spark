@@ -1020,7 +1020,7 @@ object StateStore extends Logging {
           // Doing maintenance first allows us to do maintenance for a constantly-moving state
           // store.
           logInfo(log"Task thread trigger maintenance to close " +
-            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}, " +
+            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
             log"task=${MDC(LogKeys.TASK_ID, taskContext.taskAttemptId())}. " +
             log"Removed provider from loadedProviders")
           submitMaintenanceWorkForProvider(id, provider, submittedFromTaskThread = true)
