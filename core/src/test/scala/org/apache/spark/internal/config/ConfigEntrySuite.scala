@@ -21,6 +21,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.SparkConfWithEnv
 
@@ -389,7 +390,7 @@ class ConfigEntrySuite extends SparkFunSuite {
   }
 
 
-  test("SPARK-51874: Add Enum support to ConfigBuilder") {
+  test("SPARK-51874: Add Scala Enumeration support to ConfigBuilder") {
     object MyTestEnum extends Enumeration {
       val X, Y, Z = Value
     }
@@ -407,5 +408,21 @@ class ConfigEntrySuite extends SparkFunSuite {
       conf.get(enumConf)
     }
     assert(e.getMessage === s"${enumConf.key} should be one of X, Y, Z, but was A")
+  }
+
+  test("SPARK-51896: Add Java enum support to ConfigBuilder") {
+    val conf = new SparkConf()
+    val enumConf = ConfigBuilder("spark.test.java.enum.key")
+      .enumConf(classOf[DBBackend])
+      .createWithDefault(DBBackend.LEVELDB)
+    assert(conf.get(enumConf) === DBBackend.LEVELDB)
+    conf.set(enumConf, DBBackend.ROCKSDB)
+    assert(conf.get(enumConf) === DBBackend.ROCKSDB)
+    val e = intercept[IllegalArgumentException] {
+      conf.set(enumConf.key, "ANYDB")
+      conf.get(enumConf)
+    }
+    assert(e.getMessage ===
+      s"${enumConf.key} should be one of ${DBBackend.values.mkString(", ")}, but was ANYDB")
   }
 }

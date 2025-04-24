@@ -57,6 +57,15 @@ private object ConfigHelpers {
     }
   }
 
+  def toEnum[E <: Enum[E]](s: String, enumClass: Class[E], key: String): E = {
+    enumClass.getEnumConstants.find(_.name().equalsIgnoreCase(s.trim)) match {
+      case Some(enum) => enum
+      case None =>
+        throw new IllegalArgumentException(
+          s"$key should be one of ${enumClass.getEnumConstants.mkString(", ")}, but was $s")
+    }
+  }
+
   def stringToSeq[T](str: String, converter: String => T): Seq[T] = {
     SparkStringUtils.stringToSeq(str).map(converter)
   }
@@ -283,6 +292,11 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def enumConf(e: Enumeration): TypedConfigBuilder[e.Value] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this, toEnum(_, e, key))
+  }
+
+  def enumConf[E <: Enum[E]](e: Class[E]): TypedConfigBuilder[E] = {
     checkPrependConfig
     new TypedConfigBuilder(this, toEnum(_, e, key))
   }
