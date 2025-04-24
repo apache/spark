@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
@@ -1830,6 +1831,19 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1")),
           StopStream
         )
+
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fm = CheckpointFileManager.create(new Path(checkpointDir.toString),
+          hadoopConf)
+        fm.mkdirs(new Path(new Path(checkpointDir.toString, DIR_NAME_OFFSETS),
+          "dummy_path_name"))
+        fm.mkdirs(
+          new Path(OperatorStateMetadataV2.metadataDirPath(
+            new Path(new Path(new Path(checkpointDir.toString), "state"), "0")
+          ),
+            "dummy_path_name")
+        )
+
         val result2 = inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
@@ -1886,13 +1900,13 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  private def getFiles(path: Path): Array[FileStatus] = {
+  private[sql] def getFiles(path: Path): Array[FileStatus] = {
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fileManager = CheckpointFileManager.create(path, hadoopConf)
     fileManager.list(path)
   }
 
-  private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
+  private[sql] def getStateSchemaPath(stateCheckpointPath: Path): Path = {
     new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
@@ -2096,79 +2110,6 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           "key.value AS groupingKey",
           "value.value AS valueId")
         checkAnswer(batch3AnsDf, Seq(Row("a", 1L)))
-      }
-    }
-  }
-
-  test("transformWithState - verify no OperatorStateMetadataV2 or StateSchemaV3 files are purged") {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2"
-    ) {
-      withTempDir { chkptDir =>
-        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
-        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
-        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
-
-        // Generate state data by running different processors that modify state
-        val inputData = MemoryStream[(String, String)]
-
-        // First run - create initial state variables
-        val result1 = inputData.toDS()
-          .groupByKey(x => x._1)
-          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result1, OutputMode.Update())(
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, ("a", "str1")),
-          CheckNewAnswer(("a", "1", "")),
-          AddData(inputData, ("a", "str2")),
-          CheckNewAnswer(("a", "2", "str1")),
-          StopStream
-        )
-
-        // Before second run, store file counts
-        val initialMetadataCount = getFiles(metadataPath).length
-        val initialSchemaCount = getFiles(stateSchemaPath).length
-        assert(initialMetadataCount > 0, "Expected at least one metadata file to be created")
-        assert(initialSchemaCount > 0, "Expected at least one schema file to be created")
-
-        // Second run - change state schema by deleting a state variable
-        val result2 = inputData.toDS()
-          .groupByKey(x => x._1)
-          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result2, OutputMode.Update())(
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, ("a", "str3")),
-          CheckNewAnswer(("a", "str2")),
-          AddData(inputData, ("b", "str4")),
-          CheckNewAnswer(("b", "")),
-          StopStream
-        )
-
-        // Multiple batch runs to trigger potential purging
-        for (i <- 0 to 4) {
-          testStream(result2, OutputMode.Update())(
-            StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-            AddData(inputData, ("a", s"str${i + 4}")),
-            CheckNewAnswer(("a", s"str${i + 3}")),
-            StopStream
-          )
-        }
-
-        // After all runs, verify files weren't purged
-        val finalMetadataCount = getFiles(metadataPath).length
-        val finalSchemaCount = getFiles(stateSchemaPath).length
-
-        assert(finalMetadataCount >= initialMetadataCount,
-          s"Metadata files were purged: $initialMetadataCount -> $finalMetadataCount")
-        assert(finalSchemaCount >= initialSchemaCount,
-          s"Schema files were purged: $initialSchemaCount -> $finalSchemaCount")
       }
     }
   }

@@ -865,6 +865,9 @@ class MicroBatchExecution(
 
     markMicroBatchExecutionStart(execCtx)
 
+    if (execCtx.previousContext.isEmpty) {
+      purgeStatefulMetadataAsync(execCtx.executionPlan.executedPlan)
+    }
     val nextBatch =
       new Dataset(execCtx.executionPlan, ExpressionEncoder(execCtx.executionPlan.analyzed.schema))
 

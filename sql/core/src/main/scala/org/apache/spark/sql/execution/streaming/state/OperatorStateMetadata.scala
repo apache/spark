@@ -334,7 +334,8 @@ class OperatorStateMetadataV2Reader(
     }
     fm.list(offsetLog)
       .filter(f => !f.getPath.getName.startsWith(".")) // ignore hidden files
-      .map(_.getPath.getName.toLong).sorted
+      .flatMap(f => scala.util.Try(f.getPath.getName.toLong).toOption)
+      .sorted
   }
 
   // List the available batches in the operator metadata directory
@@ -342,7 +343,9 @@ class OperatorStateMetadataV2Reader(
     if (!fm.exists(metadataDirPath)) {
       return Array.empty
     }
-    fm.list(metadataDirPath).map(_.getPath.getName.toLong).sorted
+    fm.list(metadataDirPath)
+      .flatMap(f => scala.util.Try(f.getPath.getName.toLong).toOption)
+      .sorted
   }
 
   override def read(): Option[OperatorStateMetadata] = {
@@ -419,10 +422,14 @@ class OperatorStateMetadataV2FileManager(
   }
 
   private def deleteSchemaFiles(thresholdBatchId: Long): Unit = {
+    if (thresholdBatchId <= 0) {
+      return
+    }
     val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
     val filesBeforeThreshold = schemaFiles.filter { path =>
-      val batchIdInPath = path.getName.split("_").head.toLong
-      batchIdInPath <= thresholdBatchId
+      scala.util.Try(path.getName.split("_").head.toLong)
+        .toOption
+        .exists(_ <= thresholdBatchId)
     }
     filesBeforeThreshold.foreach { path =>
       fm.delete(path)
