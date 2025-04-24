@@ -21,21 +21,23 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.classTag
+import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders, Row}
-import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScalaReflection, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, TransformingEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, EncoderField, IterableEncoder, MapEncoder, OptionEncoder, PrimitiveIntEncoder, ProductEncoder, TimestampEncoder, TransformingEncoder}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToMicros, microsToInstant}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -140,6 +142,38 @@ case class SeqNestedGeneric[T](list: Seq[T])
 case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
+
+// ADT encoding for TransformingEncoder test
+trait Base {
+  def name: String
+}
+
+case class A(name: String, number: Int) extends Base
+
+case class B(name: String, text: String) extends Base
+
+case class Struct(typ: String, name: String, number: Option[Int] = None,
+  text: Option[String] = None)
+// end ADT encoding
+
+case class V[A](v: A)
+
+class Wrapper[T](val value: T) {
+  override def hashCode(): Int = value.hashCode()
+  override def equals(obj: Any): Boolean = obj match {
+    case other: Wrapper[T @unchecked] => value == other.value
+    case _ => false
+  }
+}
+
+class WrapperCodec[T] extends Codec[Wrapper[T], T] {
+  override def encode(in: Wrapper[T]): T = in.value
+  override def decode(out: T): Wrapper[T] = new Wrapper(out)
+}
+
+class WrapperCodecProvider[T] extends (() => Codec[Wrapper[T], T]) {
+  override def apply(): Codec[Wrapper[T], T] = new WrapperCodec[T]
+}
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
   with QueryErrorsBase {
@@ -428,6 +462,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(Array(Set(1, 2), Set(2, 3)), "array of sets")
 
+  encodeDecodeTest(Array(mutable.Set(1, 2)), "SPARK-51070: array of mutable set")
+  encodeDecodeTest(Seq(mutable.Set(1, 2)), "SPARK-51070: seq of mutable set")
+  encodeDecodeTest(Map(0 -> mutable.Set(1, 2)), "SPARK-51070: map of mutable set")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("AnyVal class with Any fields") {
@@ -563,13 +601,16 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(FooEnum.E1, "scala Enum")
 
 
+  // TransformingEncoder tests ----------------------------------------------------------
+
   private def testTransformingEncoder(
       name: String,
       provider: () => Codec[Any, Array[Byte]]): Unit = test(name) {
     val encoder = ExpressionEncoder(TransformingEncoder(
       classTag[(Long, Long)],
       BinaryEncoder,
-      provider))
+      provider,
+      nullable = true))
       .resolveAndBind()
     assert(encoder.schema == new StructType().add("value", BinaryType))
     val toRow = encoder.createSerializer()
@@ -580,6 +621,179 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   testTransformingEncoder("transforming java serialization encoder", JavaSerializationCodec)
   testTransformingEncoder("transforming kryo encoder", KryoSerializationCodec)
 
+  test("transforming encoders ADT - Frameless Injections use case") {
+    val provider = () => new Codec[Base, Struct]{
+      override def encode(in: Base): Struct = in match {
+        case A(name, number) => Struct("A", name, number = Some(number))
+        case B(name, text) => Struct("B", name, text = Some(text))
+      }
+
+      override def decode(out: Struct): Base = out match {
+        case Struct("A", name, Some(number), None) => A(name, number)
+        case Struct("B", name, None, Some(text)) => B(name, text)
+        case _ => throw new Exception(f"Invalid Base structure {s}")
+      }
+    }
+    val encoder = ExpressionEncoder(TransformingEncoder(
+      classTag[Base],
+      ScalaReflection.encoderFor[Struct],
+      provider))
+      .resolveAndBind()
+
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+
+    assert(fromRow(toRow(A("anA", 1))) == A("anA", 1))
+    assert(fromRow(toRow(B("aB", "text"))) == B("aB", "text"))
+  }
+
+  test("transforming row encoder") {
+    val schema = new StructType().add("a", LongType).add("b", StringType)
+    val encoder = ExpressionEncoder(TransformingEncoder(
+      classTag[Wrapper[Row]],
+      RowEncoder.encoderFor(schema),
+      new WrapperCodecProvider[Row]))
+      .resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    assert(fromRow(toRow(new Wrapper(Row(9L, "x")))) == new Wrapper(Row(9L, "x")))
+  }
+
+  // below tests are related to SPARK-49960 and TransformingEncoder usage
+  test("""Encoder with OptionEncoder of transformation""".stripMargin) {
+    type T = Option[V[V[Int]]]
+    val data: Seq[T] = Seq(None, Some(V(V(1))))
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      OptionEncoder(
+        transforming(
+          V_OF_INT,
+          true
+        )
+      )
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  def testDataTransformingEnc[T](enc: AgnosticEncoder[T], data: Seq[T]): Unit = {
+    val encoder = ExpressionEncoder[T](enc).resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    data.foreach{ row =>
+      assert(fromRow(toRow(data.head)) === data.head)
+    }
+  }
+
+  def provider[A]: () => Codec[V[A], A] = () =>
+    new Codec[V[A], A]{
+      override def encode(in: V[A]): A = in.v
+      override def decode(out: A): V[A] = if (out == null) null else V(out)
+    }
+
+  def transforming[A](underlying: AgnosticEncoder[A],
+                      useUnderyling: Boolean = false): TransformingEncoder[V[A], A] =
+    TransformingEncoder[V[A], A](
+      implicitly[ClassTag[V[A]]],
+      underlying,
+      provider,
+      if (useUnderyling) {
+        underlying.nullable
+      } else {
+        false
+      }
+    )
+
+  val V_INT = StructType(Seq(StructField("v", IntegerType, nullable = true)))
+
+  // product encoder for a non-nullable V
+  val V_OF_INT =
+    ProductEncoder(
+      classTag[V[Int]],
+      Seq(EncoderField("v", PrimitiveIntEncoder, nullable = false, Metadata.empty)),
+      None
+    )
+
+  test("""Encoder derivation with nested TransformingEncoder of OptionEncoder""".stripMargin) {
+    type T = V[V[Option[V[Int]]]]
+    val data: Seq[T] = Seq(V(V(None)), V(V(Some(V(1)))))
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      transforming(
+        transforming(
+          OptionEncoder(
+            V_OF_INT
+          )
+        )
+      )
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  test("""Encoder derivation with TransformingEncoder of OptionEncoder""".stripMargin) {
+    type T = V[Option[V[Int]]]
+    val data: Seq[T] = Seq(V(None), V(Some(V(1))))
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      transforming(
+        OptionEncoder(
+          V_OF_INT
+        )
+      )
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  val longEncForTimestamp: AgnosticEncoder[V[Long]] =
+    TransformingEncoder[V[Long], java.sql.Timestamp](
+      classTag,
+      TimestampEncoder(true),
+      () =>
+        new Codec[V[Long], java.sql.Timestamp] with Serializable {
+          override def encode(in: V[Long]): Timestamp = Timestamp.from(microsToInstant(in.v))
+
+          override def decode(out: Timestamp): V[Long] = V[Long](instantToMicros(out.toInstant))
+        }
+    )
+
+  test("""TransformingEncoder as Iterable""".stripMargin) {
+    type T = Seq[V[Long]]
+    val data: Seq[T] = Seq(Seq(V(0)), Seq(V(1), V(2)))
+
+    /* requires validateAndSerializeElement to test for TransformingEncoder */
+    val enc: AgnosticEncoder[T] =
+      IterableEncoder[Seq[V[Long]], V[Long]](
+        implicitly[ClassTag[Seq[V[Long]]]],
+        longEncForTimestamp,
+        containsNull = false,
+        lenientSerialization = false)
+
+    assert(enc.dataType === new ArrayType(TimestampType, false))
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  test("""TransformingEncoder as Map Key/Value""".stripMargin) {
+    type T = Map[V[Long], V[Long]]
+    val data: Seq[T] = Seq(Map(V(0L) -> V(0L)), Map(V(1L) -> V(1L)), Map(V(2L) -> V(2L)))
+
+    /* requires validateAndSerializeElement to test for TransformingEncoder */
+    val enc: AgnosticEncoder[T] =
+      MapEncoder[T, V[Long], V[Long]](
+        implicitly[ClassTag[T]],
+        longEncForTimestamp,
+        longEncForTimestamp,
+        valueContainsNull = false)
+
+    assert(enc.dataType === new MapType(TimestampType, TimestampType, false))
+
+    testDataTransformingEnc(enc, data)
+  }
   // Scala / Java big decimals ----------------------------------------------------------
 
   encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18),

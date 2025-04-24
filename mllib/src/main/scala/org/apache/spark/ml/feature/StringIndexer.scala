@@ -302,8 +302,7 @@ class StringIndexerModel (
   def this(labelsArray: Array[Array[String]]) = this(Identifiable.randomUID("strIdx"), labelsArray)
 
   // For ml connect only
-  @Since("4.0.0")
-  private[ml] def this() = this(labels = Array.empty)
+  private[ml] def this() = this("", Array.empty[Array[String]])
 
   @deprecated("`labels` is deprecated and will be removed in 3.1.0. Use `labelsArray` " +
     "instead.", "3.0.0")

@@ -1,0 +1,61 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+option java_multiple_files = true;
+option java_package = "org.apache.connect.examples.serverlibrary.proto";
+
+import "base.proto";
+
+message CustomCommand {
+  oneof command_type {
+    CreateTable create_table = 1;
+    CloneTable clone_table = 2;
+  }
+}
+
+message CreateTable {
+
+  // Column in the schema of the table.
+  message Column {
+    // (Required) Name of the column.
+    string name = 1;
+    // (Required) Data type of the column.
+    enum DataType {
+      DATA_TYPE_UNSPECIFIED = 0; // Default value
+      INT = 1;                  // Integer data type
+      STRING = 2;               // String data type
+      FLOAT = 3;                // Float data type
+      BOOLEAN = 4;              // Boolean data type
+    }
+    DataType data_type = 2;
+  }
+  // (Required) Table properties.
+  CustomTable table = 1;
+  // (Required) List of columns in the schema of the table.
+  repeated Column columns = 2;
+}
+
+message CloneTable {
+  // (Required) The source table to clone.
+  CustomTable table = 1;
+  // (Required) Path to the location where the data of the cloned table should be stored.
+  CustomTable clone = 2;
+  // (Required) Overwrites the target location when true.
+  bool replace = 3;
+}

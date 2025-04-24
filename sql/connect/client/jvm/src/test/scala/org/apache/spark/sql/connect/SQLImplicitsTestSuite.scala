@@ -64,7 +64,8 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
           input = Iterator.single(expected),
           enc = encoder,
           allocator = allocator,
-          timeZoneId = "UTC")
+          timeZoneId = "UTC",
+          largeVarTypes = false)
         val fromArrow = ArrowDeserializers.deserializeFromArrow(
           input = Iterator.single(batch.toByteArray),
           encoder = encoder,

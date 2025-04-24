@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{withPosition, RelationResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.LookupCatalog
 import org.apache.spark.util.ArrayImplicits._
@@ -46,6 +46,13 @@ trait RelationMetadataProvider extends LookupCatalog {
    * [[getRelationWithResolvedMetadata]].
    */
   protected val relationsWithResolvedMetadata: RelationsWithResolvedMetadata
+
+  /**
+   * Resolve metadata for the given `unresolvedPlan`. This method is called once per unresolved
+   * logical plan by the [[Resolver]] (for each SQL query/ DataFrame program and for each
+   * nested [[View]] operator).
+   */
+  def resolve(unresolvedPlan: LogicalPlan): Unit
 
   /**
    * Get the [[LogicalPlan]] with resolved metadata for the given [[UnresolvedRelation]].
@@ -78,9 +85,11 @@ trait RelationMetadataProvider extends LookupCatalog {
           isStreaming = unresolvedRelation.isStreaming
         )
       case _ =>
-        withPosition(unresolvedRelation) {
-          unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier)
-        }
+        RelationId(
+          multipartIdentifier = unresolvedRelation.multipartIdentifier,
+          options = unresolvedRelation.options,
+          isStreaming = unresolvedRelation.isStreaming
+        )
     }
   }
 }

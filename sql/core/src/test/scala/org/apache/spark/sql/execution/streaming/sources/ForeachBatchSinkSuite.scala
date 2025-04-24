@@ -215,6 +215,45 @@ class ForeachBatchSinkSuite extends StreamTest {
     assert(ex.getCause == sparkEx)
   }
 
+  test("SPARK-51265: IncrementalExecution should set the command execution code correctly") {
+    val mem = MemoryStream[Int]
+    val ds = mem.toDS().map(_ + 1)
+
+    def foreachBatchFn(df: Dataset[Int], batchId: Long): Unit = {
+      withTempView("param", "s") {
+        df.createOrReplaceTempView("param")
+        val streamDf = df.sparkSession.readStream.format("rate").load()
+        streamDf.createOrReplaceTempView("s")
+        withTable("output") {
+          val ex = intercept[AnalysisException] {
+            // Creates a table from streaming source with batch query. This should fail.
+            df.sparkSession.sql("CREATE TABLE output USING csv AS SELECT * FROM s")
+          }
+          assert(
+            ex.getMessage.contains("Queries with streaming sources must be executed with " +
+              "writeStream.start()")
+          )
+
+          // Creates a table from batch source (materialized RDD plan of streaming query).
+          // This should be work properly.
+          df.sparkSession.sql("CREATE TABLE output USING csv AS SELECT * from param")
+
+          checkAnswer(
+            df.sparkSession.sql("SELECT value FROM output"),
+            Seq(Row(2), Row(3), Row(4), Row(5), Row(6)))
+        }
+      }
+    }
+
+    mem.addData(1, 2, 3, 4, 5)
+
+    val query = ds.writeStream
+      .trigger(Trigger.AvailableNow())
+      .foreachBatch(foreachBatchFn _)
+      .start()
+    query.awaitTermination()
+  }
+
   // ============== Helper classes and methods =================
 
   private class ForeachBatchTester[T: Encoder](memoryStream: MemoryStream[Int]) {

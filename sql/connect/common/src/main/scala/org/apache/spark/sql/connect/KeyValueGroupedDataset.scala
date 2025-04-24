@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connect
 
-import java.util.Arrays
-
 import scala.annotation.unused
 import scala.jdk.CollectionConverters._
 
@@ -27,14 +25,15 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
-import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
+import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toExprWithTransformation, toTypedExpr}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfUtils}
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
+import org.apache.spark.sql.expressions.{ReduceAggregator, SparkUserDefinedFunction}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.UDFAdaptors
+import org.apache.spark.sql.internal.{ColumnNode, InvokeInlineUserDefinedFunction, UDFAdaptors, UnresolvedAttribute, UnresolvedFunction, UnresolvedStar}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -142,7 +141,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] =
-    unsupported()
+    transformWithStateHelper(statefulProcessor, timeMode, outputMode)
 
   /** @inheritdoc */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
@@ -150,20 +149,40 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
       timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
-    unsupported()
+    transformWithStateHelper(statefulProcessor, timeMode, outputMode, Some(initialState))
 
   /** @inheritdoc */
   override private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       eventTimeColumnName: String,
-      outputMode: OutputMode): Dataset[U] = unsupported()
+      outputMode: OutputMode): Dataset[U] =
+    transformWithStateHelper(
+      statefulProcessor,
+      TimeMode.EventTime(),
+      outputMode,
+      eventTimeColumnName = eventTimeColumnName)
 
   /** @inheritdoc */
   override private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] = unsupported()
+      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
+    transformWithStateHelper(
+      statefulProcessor,
+      TimeMode.EventTime(),
+      outputMode,
+      Some(initialState),
+      eventTimeColumnName)
+
+  // This is an interface, and it should not be used. The real implementation is in the
+  // inherited class.
+  protected[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeMode: TimeMode,
+      outputMode: OutputMode,
+      initialState: Option[sql.KeyValueGroupedDataset[K, S]] = None,
+      eventTimeColumnName: String = ""): Dataset[U] = unsupported()
 
   // Overrides...
   /** @inheritdoc */
@@ -390,10 +409,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val kEncoder: AgnosticEncoder[K],
     private val ivEncoder: AgnosticEncoder[IV],
     private val vEncoder: AgnosticEncoder[V],
-    private val groupingExprs: java.util.List[proto.Expression],
+    private val groupingColumns: Seq[Column],
     private val valueMapFunc: Option[IV => V],
     private val keysFunc: () => Dataset[IK])
     extends KeyValueGroupedDataset[K, V] {
+
+  lazy val groupingExprs = groupingColumns.map(toExpr).asJava
 
   override def keyAs[L: Encoder]: KeyValueGroupedDataset[L, V] = {
     new KeyValueGroupedDatasetImpl[L, V, IK, IV](
@@ -402,7 +423,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       agnosticEncoderFor[L],
       ivEncoder,
       vEncoder,
-      groupingExprs,
+      groupingColumns,
       valueMapFunc,
       keysFunc)
   }
@@ -414,7 +435,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       kEncoder,
       ivEncoder,
       agnosticEncoderFor[W],
-      groupingExprs,
+      groupingColumns,
       valueMapFunc
         .map(_.andThen(valueFunc))
         .orElse(Option(valueFunc.asInstanceOf[IV => W])),
@@ -461,7 +482,17 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    // TODO(SPARK-43415): For each column, apply the valueMap func first...
+    // The proto Aggregate message does not support passing in a value map function, so we need to
+    // to transformation on the client side. We check if a value map function is defined and only
+    // if so we do some additional transformations.
+    if (valueMapFunc.isDefined) {
+      aggUntypedWithValueMapFunc(columns: _*)
+    } else {
+      aggUntypedWithoutValueMapFunc(columns: _*)
+    }
+  }
+
+  private def aggUntypedWithoutValueMapFunc(columns: TypedColumn[_, _]*): Dataset[_] = {
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
@@ -472,16 +503,111 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
   }
 
+  private def aggUntypedWithValueMapFunc(columns: TypedColumn[_, _]*): Dataset[_] = {
+    val originalDs = sparkSession.newDataset(ivEncoder, plan)
+
+    // Apply the value transformation, get a DS of two columns "iv" and "v".
+    // If any of "iv" or "v" consists of a single primitive field, wrap it with a struct so it
+    // would not be flattened.
+    // Also here we detect if the input "iv" is a single field struct. If yes, we rename the field
+    // to "key" to align with Spark behaviour.
+    val valueTransformedDf = renamePrimitiveIV(applyValueMapFunc(originalDs))
+    val ivFields = extractColumnNamesFromEnc(ivEncoder)
+    val vFields = extractColumnNamesFromEnc(vEncoder, namePrimitiveAsKey = false)
+
+    // Rewrite grouping expressions to use "iv" as input.
+    val updatedGroupingExprs = groupingColumns
+      .filterNot(c => KeyValueGroupedDatasetImpl.containsDummyUDF(c.node))
+      .map(c =>
+        toExprWithTransformation(c.node, encoder = None, rewriteInputColumnHook("iv", ivFields)))
+    // Rewrite aggregate columns to use "v" as input.
+    val updatedAggTypedExprs = columns.map(c =>
+      toExprWithTransformation(
+        c.node,
+        encoder = Some(vEncoder), // Pass encoder to convert it to a typed column.
+        rewriteInputColumnHook("v", vFields)))
+
+    val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
+    sparkSession.newDataset(rEnc) { builder =>
+      builder.getAggregateBuilder
+        .setInput(valueTransformedDf.plan.getRoot)
+        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+        .addAllGroupingExpressions(updatedGroupingExprs.asJava)
+        .addAllAggregateExpressions(updatedAggTypedExprs.asJava)
+    }
+  }
+
+  private def applyValueMapFunc(ds: Dataset[IV]): DataFrame = {
+    require(valueMapFunc.isDefined, "valueMapFunc is not defined")
+
+    val ivIsStruct = ivEncoder.isInstanceOf[StructEncoder[_]]
+    val vIsStruct = vEncoder.isInstanceOf[StructEncoder[_]]
+    val transformEncoder = {
+      val wrappedIvEncoder =
+        (if (ivIsStruct) ivEncoder else ProductEncoder.tuple(Seq(ivEncoder)))
+          .asInstanceOf[AgnosticEncoder[Any]]
+      val wrappedVEncoder =
+        (if (vIsStruct) vEncoder else ProductEncoder.tuple(Seq(vEncoder)))
+          .asInstanceOf[AgnosticEncoder[Any]]
+      ProductEncoder
+        .tuple(Seq(wrappedIvEncoder, wrappedVEncoder))
+        .asInstanceOf[AgnosticEncoder[(Any, Any)]]
+    }
+    val transformFunc = UDFAdaptors.mapValues(valueMapFunc.get, ivIsStruct, vIsStruct)
+    ds.mapPartitions(transformFunc)(transformEncoder).toDF("iv", "v")
+  }
+
+  /**
+   * Rename the field name in the "iv" column to "key" if the "iv" column is actually a primitive
+   * field.
+   */
+  private def renamePrimitiveIV(df: DataFrame): DataFrame = if (ivEncoder.isPrimitive) {
+    val ivSchema = StructType(Seq(StructField("key", ivEncoder.dataType, nullable = false)))
+    df.select(col("iv").cast(ivSchema), col("v"))
+  } else {
+    df
+  }
+
+  private def extractColumnNamesFromEnc(
+      enc: AgnosticEncoder[_],
+      namePrimitiveAsKey: Boolean = true): Seq[String] = enc match {
+    case e if e.isPrimitive => if (namePrimitiveAsKey) Seq("key") else Seq("_1")
+    case se: StructEncoder[_] => se.schema.fieldNames.toSeq
+    case _ => throw new IllegalArgumentException(s"Unsupported encoder type: ${enc}")
+  }
+
+  private def rewriteInputColumnHook(
+      prepend: String,
+      expand: Seq[String]): ColumnNode => ColumnNode = {
+    // Prefix column names: "col1" to "prepend.col1".
+    case n @ UnresolvedAttribute(nameParts, _, _, _) =>
+      n.copy(nameParts = prepend +: nameParts)
+    // UDAF aggregator: Attach to the outside struct column.
+    case f @ InvokeInlineUserDefinedFunction(_, Nil, _, _) =>
+      f.copy(arguments = expand.map(UnresolvedAttribute(_)))
+    // Other inline UDFs...
+    case f @ InvokeInlineUserDefinedFunction(
+          function: SparkUserDefinedFunction,
+          Seq(UnresolvedStar(None, _, _)),
+          _,
+          _) =>
+      function.inputEncoders match {
+        // Attach to the outside struct column when struct input is expected.
+        case Seq(Some(_: StructEncoder[_])) =>
+          f.copy(arguments = Seq(UnresolvedAttribute(Nil)))
+        // Attach to the inner struct fields when leaf/primitive inputs are expected.
+        case _ =>
+          f.copy(arguments = expand.map(UnresolvedAttribute(_)))
+      }
+    // Build-in/registered functions: Attach to the outside struct column.
+    case f @ UnresolvedFunction(_, Seq(UnresolvedStar(None, _, _)), _, _, _, _) =>
+      f.copy(arguments = Seq(UnresolvedAttribute(Nil)))
+    case col => col
+  }
+
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
-    val inputEncoders = Seq(vEncoder, vEncoder)
-    val udf = SparkUserDefinedFunction(
-      function = f,
-      inputEncoders = inputEncoders,
-      outputEncoder = vEncoder)
-    val input = udf.apply(inputEncoders.map(_ => col("*")): _*)
-    val expr = Column.fn("reduce", input)
-    val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr.node, vEncoder)
-    agg(aggregator)
+    val r = ReduceAggregator(f)(vEncoder)
+    agg(r.toColumn)
   }
 
   override protected[sql] def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
@@ -496,7 +622,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
 
     val initialStateImpl = if (initialState.isDefined) {
-      assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
       initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
     } else {
       null
@@ -520,6 +645,53 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
       if (initialStateImpl != null) {
         groupMapBuilder
+          .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
+          .setInitialInput(initialStateImpl.plan.getRoot)
+      }
+    }
+  }
+
+  override protected[sql] def transformWithStateHelper[U: Encoder, S: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeMode: TimeMode,
+      outputMode: OutputMode,
+      initialState: Option[sql.KeyValueGroupedDataset[K, S]] = None,
+      eventTimeColumnName: String = ""): Dataset[U] = {
+    val outputEncoder = agnosticEncoderFor[U]
+    val stateEncoder = agnosticEncoderFor[S]
+    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, stateEncoder, ivEncoder)
+
+    // SparkUserDefinedFunction is creating a udfPacket where the input function are
+    // being java serialized into bytes; we pass in `statefulProcessor` as function so it can be
+    // serialized into bytes and deserialized back on connect server
+    val sparkUserDefinedFunc =
+      SparkUserDefinedFunction(statefulProcessor, inputEncoders, outputEncoder)
+    val funcProto = UdfToProtoUtils.toProto(sparkUserDefinedFunc)
+
+    val initialStateImpl = if (initialState.isDefined) {
+      initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
+    } else {
+      null
+    }
+
+    sparkSession.newDataset[U](outputEncoder) { builder =>
+      val twsBuilder = builder.getGroupMapBuilder
+      val twsInfoBuilder = proto.TransformWithStateInfo.newBuilder()
+      if (!eventTimeColumnName.isEmpty) {
+        twsInfoBuilder.setEventTimeColumnName(eventTimeColumnName)
+      }
+      twsBuilder
+        .setInput(plan.getRoot)
+        .addAllGroupingExpressions(groupingExprs)
+        .setFunc(funcProto)
+        .setOutputMode(outputMode.toString)
+        .setTransformWithStateInfo(
+          twsInfoBuilder
+            // we pass time mode as string here and deterministically restored on server
+            .setTimeMode(timeMode.toString)
+            .build())
+      if (initialStateImpl != null) {
+        twsBuilder
           .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
           .setInitialInput(initialStateImpl.plan.getRoot)
       }
@@ -575,7 +747,7 @@ private object KeyValueGroupedDatasetImpl {
       kEncoder,
       ds.agnosticEncoder,
       ds.agnosticEncoder,
-      Arrays.asList(toExpr(gf.apply(col("*")))),
+      Seq(gf.apply(col("*"))),
       None,
       () => ds.map(groupingFunc)(kEncoder))
   }
@@ -597,8 +769,14 @@ private object KeyValueGroupedDatasetImpl {
       kEncoder,
       vEncoder,
       vEncoder,
-      (Seq(dummyGroupingFunc) ++ groupingExprs).map(toExpr).asJava,
+      Seq(dummyGroupingFunc) ++ groupingExprs,
       None,
       () => df.select(groupingExprs: _*).as(kEncoder))
+  }
+
+  def containsDummyUDF[K, V](col: ColumnNode): Boolean = col match {
+    case InvokeInlineUserDefinedFunction(udf: SparkUserDefinedFunction, _, _, _) =>
+      udf.f == UdfUtils.noOp[V, K]()
+    case _ => false
   }
 }

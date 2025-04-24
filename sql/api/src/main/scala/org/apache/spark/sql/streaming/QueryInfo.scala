@@ -28,15 +28,31 @@ import org.apache.spark.annotation.Evolving
 @Evolving
 trait QueryInfo extends Serializable {
 
-  /** Returns the streaming query id associated with stateful operator */
+  /**
+   * Function to return unique streaming query id associated with stateful operator.
+   *
+   * @return - the unique query id.
+   */
   def getQueryId: UUID
 
-  /** Returns the streaming query runId associated with stateful operator */
+  /**
+   * Function to return unique streaming query run id associated with stateful operator.
+   *
+   * @return - the unique query run id.
+   */
   def getRunId: UUID
 
-  /** Returns the batch id associated with stateful operator */
+  /**
+   * Function to return unique batch id associated with stateful operator.
+   *
+   * @return - the unique batch id.
+   */
   def getBatchId: Long
 
-  /** Returns the string representation of QueryInfo object */
+  /**
+   * Function to return string representation of the query info.
+   *
+   * @return - query info as string.
+   */
   def toString: String
 }

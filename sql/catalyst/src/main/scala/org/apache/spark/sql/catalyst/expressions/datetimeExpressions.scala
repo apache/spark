@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -399,15 +400,6 @@ trait GetTimeField extends UnaryExpression
   }
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('2009-07-30 12:58:59');
-       12
-  """,
-  group = "datetime_funcs",
-  since = "1.5.0")
 case class Hour(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
   override def withTimeZone(timeZoneId: String): Hour = copy(timeZoneId = Option(timeZoneId))
@@ -2104,11 +2096,13 @@ case class ParseToDate(
     ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
-  override lazy val replacement: Expression = format.map { f =>
-    Cast(GetTimestamp(left, f, TimestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
-      timeZoneId, EvalMode.fromBoolean(ansiEnabled))
-  }.getOrElse(Cast(left, DateType, timeZoneId,
-    EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
+  override lazy val replacement: Expression = withOrigin(origin) {
+    format.map { f =>
+      Cast(GetTimestamp(left, f, TimestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
+        timeZoneId, EvalMode.fromBoolean(ansiEnabled))
+    }.getOrElse(Cast(left, DateType, timeZoneId,
+      EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
+  }
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format))
@@ -2183,9 +2177,11 @@ case class ParseToTimestamp(
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
-  override lazy val replacement: Expression = format.map { f =>
-    GetTimestamp(left, f, dataType, "try_to_timestamp", timeZoneId, failOnError = failOnError)
-  }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
+  override lazy val replacement: Expression = withOrigin(origin) {
+    format.map { f =>
+      GetTimestamp(left, f, dataType, "try_to_timestamp", timeZoneId, failOnError = failOnError)
+    }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
+  }
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format), SQLConf.get.timestampType)
@@ -3097,7 +3093,7 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(field FROM source) - Extracts a part of the date/timestamp or interval source.",
+  usage = "_FUNC_(field FROM source) - Extracts a part of the date or timestamp or time or interval source.",
   arguments = """
     Arguments:
       * field - selects which part of the source should be extracted
@@ -3121,7 +3117,11 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
               - "HOUR", ("H", "HOURS", "HR", "HRS") - how many hours the `microseconds` contains
               - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - how many minutes left after taking hours from `microseconds`
               - "SECOND", ("S", "SEC", "SECONDS", "SECS") - how many second with fractions left after taking hours and minutes from `microseconds`
-      * source - a date/timestamp or interval column from where `field` should be extracted
+          - Supported string values of `field` for time (which consists of `hour`, `minute`, `second`) are(case insensitive):
+              - "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23)
+              - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59)
+              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts up to micro second precision. Returns a DECIMAL(8, 6) precision value.
+      * source - a date or timestamp or time or interval column from where `field` should be extracted
   """,
   examples = """
     Examples:
@@ -3141,6 +3141,12 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
        11
       > SELECT _FUNC_(MINUTE FROM INTERVAL '123 23:55:59.002001' DAY TO SECOND);
        55
+      > SELECT _FUNC_(HOUR FROM time '09:08:01.000001');
+       9
+      > SELECT _FUNC_(MINUTE FROM time '09:08:01.000001');
+       8
+      > SELECT _FUNC_(SECOND FROM time '09:08:01.000001');
+       1.000001
   """,
   note = """
     The _FUNC_ function is equivalent to `date_part(field, source)`.
@@ -3179,6 +3185,8 @@ object Extract {
         source.dataType match {
           case _: AnsiIntervalType | CalendarIntervalType =>
             ExtractIntervalPart.parseExtractField(fieldStr.toString, source)
+          case _: TimeType =>
+            TimePart.parseExtractField(fieldStr.toString, source)
           case _ =>
             DatePart.parseExtractField(fieldStr.toString, source)
         }

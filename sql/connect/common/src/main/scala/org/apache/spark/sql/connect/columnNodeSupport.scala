@@ -25,11 +25,13 @@ import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering.{SORT_NU
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection.{SORT_DIRECTION_ASCENDING, SORT_DIRECTION_DESCENDING}
 import org.apache.spark.connect.proto.Expression.Window.WindowFrame.{FrameBoundary, FrameType}
 import org.apache.spark.sql.{functions, Column, Encoder}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
-import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, SubqueryExpression, SubqueryType, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 
 /**
  * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.
@@ -45,9 +47,24 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
   override def apply(node: ColumnNode): Expression = apply(node, None)
 
-  private def apply(node: ColumnNode, e: Option[Encoder[_]]): proto.Expression = {
+  /**
+   * Transform a column into an expression, with additional transformation rules that will be
+   * applied to each ColumnNode before converting it.
+   */
+  private[sql] def toExprWithTransformation(
+      node: ColumnNode,
+      encoder: Option[Encoder[_]],
+      additionalTransformation: ColumnNode => ColumnNode): proto.Expression = {
+    apply(node, encoder, Some(additionalTransformation))
+  }
+
+  private def apply(
+      node: ColumnNode,
+      e: Option[Encoder[_]],
+      additionalTransformation: Option[ColumnNode => ColumnNode] = None): proto.Expression = {
     val builder = proto.Expression.newBuilder()
-    node match {
+    val n = additionalTransformation.map(_(node)).getOrElse(node)
+    n match {
       case Literal(value, None, _) =>
         builder.setLiteral(toLiteralProtoBuilder(value))
 
@@ -86,17 +103,17 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
           .setFunctionName(functionName)
           .setIsUserDefinedFunction(isUserDefinedFunction)
           .setIsDistinct(isDistinct)
-          .addAllArguments(arguments.map(apply(_, e)).asJava)
+          .addAllArguments(arguments.map(apply(_, e, additionalTransformation)).asJava)
           .setIsInternal(isInternal)
 
       case Alias(child, name, metadata, _) =>
-        val b = builder.getAliasBuilder.setExpr(apply(child, e))
+        val b = builder.getAliasBuilder.setExpr(apply(child, e, additionalTransformation))
         name.foreach(b.addName)
         metadata.foreach(m => b.setMetadata(m.json))
 
       case Cast(child, dataType, evalMode, _) =>
         val b = builder.getCastBuilder
-          .setExpr(apply(child, e))
+          .setExpr(apply(child, e, additionalTransformation))
           .setType(DataTypeProtoConverter.toConnectProtoType(dataType))
         evalMode.foreach { mode =>
           val convertedMode = mode match {
@@ -115,8 +132,9 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case Window(windowFunction, windowSpec, _) =>
         val b = builder.getWindowBuilder
-          .setWindowFunction(apply(windowFunction, e))
-          .addAllPartitionSpec(windowSpec.partitionColumns.map(apply(_, e)).asJava)
+          .setWindowFunction(apply(windowFunction, e, additionalTransformation))
+          .addAllPartitionSpec(
+            windowSpec.partitionColumns.map(apply(_, e, additionalTransformation)).asJava)
           .addAllOrderSpec(windowSpec.sortColumns.map(convertSortOrder(_, e)).asJava)
         windowSpec.frame.foreach { frame =>
           b.getFrameSpecBuilder
@@ -130,57 +148,86 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
 
       case UnresolvedExtractValue(child, extraction, _) =>
         builder.getUnresolvedExtractValueBuilder
-          .setChild(apply(child, e))
-          .setExtraction(apply(extraction, e))
+          .setChild(apply(child, e, additionalTransformation))
+          .setExtraction(apply(extraction, e, additionalTransformation))
 
       case UpdateFields(structExpression, fieldName, valueExpression, _) =>
         val b = builder.getUpdateFieldsBuilder
-          .setStructExpression(apply(structExpression, e))
+          .setStructExpression(apply(structExpression, e, additionalTransformation))
           .setFieldName(fieldName)
-        valueExpression.foreach(v => b.setValueExpression(apply(v, e)))
+        valueExpression.foreach(v => b.setValueExpression(apply(v, e, additionalTransformation)))
 
       case v: UnresolvedNamedLambdaVariable =>
         builder.setUnresolvedNamedLambdaVariable(convertNamedLambdaVariable(v))
 
       case LambdaFunction(function, arguments, _) =>
         builder.getLambdaFunctionBuilder
-          .setFunction(apply(function, e))
+          .setFunction(apply(function, e, additionalTransformation))
           .addAllArguments(arguments.map(convertNamedLambdaVariable).asJava)
 
+      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
       case InvokeInlineUserDefinedFunction(
             a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
             Nil,
-            false,
+            isDistinct,
             _) =>
         // TODO we should probably 'just' detect this particular scenario
         //  in the planner instead of wrapping it in a separate method.
-        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get))
+        val protoUdf = UdfToProtoUtils.toProto(UserDefinedAggregator(a, e.get), Nil, isDistinct)
         builder.getTypedAggregateExpressionBuilder.setScalarScalaUdf(protoUdf.getScalarScalaUdf)
 
-      case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, false, _) =>
+      // TODO(SPARK-50846): Consolidate Aggregator handling with and without arguments.
+      case f @ InvokeInlineUserDefinedFunction(
+            a: Aggregator[Any @unchecked, Any @unchecked, Any @unchecked],
+            args,
+            false,
+            _) if args.nonEmpty =>
+        // Translate Aggregator (UserDefinedFunctionLike) into UserDefinedFunction, and
+        // send it over to the next "match" to process.
+        builder.mergeFrom(
+          apply(f.copy(function = UserDefinedAggregator(a, e.get)), e, additionalTransformation))
+
+      case InvokeInlineUserDefinedFunction(
+            udaf: UserDefinedAggregateFunction,
+            arguments,
+            isDistinct,
+            _) =>
+        val wrapped = UserDefinedAggregator(
+          aggregator = new UserDefinedAggregateFunctionWrapper(udaf),
+          inputEncoder = RowEncoder.encoderFor(udaf.inputSchema),
+          deterministic = udaf.deterministic)
         builder.setCommonInlineUserDefinedFunction(
-          UdfToProtoUtils.toProto(udf, args.map(apply(_, e))))
+          UdfToProtoUtils.toProto(wrapped, arguments.map(apply(_, e)), isDistinct))
+
+      case InvokeInlineUserDefinedFunction(udf: UserDefinedFunction, args, isDistinct, _) =>
+        builder.setCommonInlineUserDefinedFunction(
+          UdfToProtoUtils
+            .toProto(udf, args.map(apply(_, e, additionalTransformation)), isDistinct))
 
       case CaseWhenOtherwise(branches, otherwise, _) =>
         val b = builder.getUnresolvedFunctionBuilder
           .setFunctionName("when")
           .setIsInternal(false)
         branches.foreach { case (condition, value) =>
-          b.addArguments(apply(condition, e))
-          b.addArguments(apply(value, e))
+          b.addArguments(apply(condition, e, additionalTransformation))
+          b.addArguments(apply(value, e, additionalTransformation))
         }
         otherwise.foreach { value =>
-          b.addArguments(apply(value, e))
+          b.addArguments(apply(value, e, additionalTransformation))
         }
 
       case LazyExpression(child, _) =>
-        builder.getLazyExpressionBuilder.setChild(apply(child, e))
+        return apply(child, e)
 
-      case SubqueryExpressionNode(relation, subqueryType, _) =>
+      case SubqueryExpression(ds, subqueryType, _) =>
+        val relation = ds.plan.getRoot
         val b = builder.getSubqueryExpressionBuilder
         b.setSubqueryType(subqueryType match {
           case SubqueryType.SCALAR => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR
           case SubqueryType.EXISTS => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS
+          case SubqueryType.IN(values) =>
+            b.addAllInSubqueryValues(values.map(value => apply(value, e)).asJava)
+            proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN
         })
         assert(relation.hasCommon && relation.getCommon.hasPlanId)
         b.setPlanId(relation.getCommon.getPlanId)
@@ -267,24 +314,5 @@ case class ProtoColumnNode(
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
-  override def children: Seq[ColumnNodeLike] = Seq.empty
-}
-
-sealed trait SubqueryType
-
-object SubqueryType {
-  case object SCALAR extends SubqueryType
-  case object EXISTS extends SubqueryType
-}
-
-case class SubqueryExpressionNode(
-    relation: proto.Relation,
-    subqueryType: SubqueryType,
-    override val origin: Origin = CurrentOrigin.get)
-    extends ColumnNode {
-  override def sql: String = subqueryType match {
-    case SubqueryType.SCALAR => s"($relation)"
-    case _ => s"$subqueryType ($relation)"
-  }
   override def children: Seq[ColumnNodeLike] = Seq.empty
 }

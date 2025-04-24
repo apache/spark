@@ -17,111 +17,76 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{AliasResolution, UnresolvedAlias}
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Cast,
-  CreateNamedStruct,
-  Expression,
-  NamedExpression
-}
+import org.apache.spark.sql.catalyst.analysis.{AliasResolution, MultiAlias, UnresolvedAlias}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
 
 /**
  * Resolver class that resolves unresolved aliases and handles user-specified aliases.
  */
-class AliasResolver(expressionResolver: ExpressionResolver, scopes: NameScopeStack)
+class AliasResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[UnresolvedAlias, Expression]
     with ResolvesExpressionChildren {
+  private val scopes = expressionResolver.getNameScopes
 
   /**
-   * Resolves [[UnresolvedAlias]] by handling two specific cases:
-   *  - Alias(CreateNamedStruct(...)) - instead of calling [[CreateNamedStructResolver]] which will
-   *  clean up its inner aliases, we manually resolve [[CreateNamedStruct]]'s children, because we
-   *  need to preserve inner aliases until after the alias name is computed. This is a hack because
-   *  fixed-point analyzer computes [[Alias]] name before removing inner aliases.
-   *  - Alias(...) - recursively call [[ExpressionResolver]] to resolve the child expression.
-   *
-   * After the children are resolved, call [[AliasResolution]] to compute the alias name. Finally,
-   * clean up inner aliases from [[CreateNamedStruct]].
+   * Resolves [[UnresolvedAlias]] by resolving its child and computing the alias name by calling
+   * [[AliasResolution]] on the result. After resolving it, we assign a correct exprId to the
+   * resulting [[Alias]]. Here we allow inner aliases to persist until the end of single-pass
+   * resolution, after which they will be removed in the post-processing phase.
    */
-  override def resolve(unresolvedAlias: UnresolvedAlias): NamedExpression = {
-    val aliasWithResolvedChildren = withResolvedChildren(
-      unresolvedAlias, {
-        case createNamedStruct: CreateNamedStruct =>
-          withResolvedChildren(createNamedStruct, expressionResolver.resolve)
-        case other => expressionResolver.resolve(other)
+  override def resolve(unresolvedAlias: UnresolvedAlias): NamedExpression =
+    scopes.current.lcaRegistry.withNewLcaScope {
+      val aliasWithResolvedChildren =
+        withResolvedChildren(unresolvedAlias, expressionResolver.resolve _)
+          .asInstanceOf[UnresolvedAlias]
+
+      val resolvedAlias =
+        AliasResolution.resolve(aliasWithResolvedChildren).asInstanceOf[NamedExpression]
+
+      resolvedAlias match {
+        case multiAlias: MultiAlias =>
+          throw new ExplicitlyUnsupportedResolverFeature(
+            s"unsupported expression: ${multiAlias.getClass.getName}"
+          )
+        case alias: Alias =>
+          expressionResolver.getExpressionIdAssigner.mapExpression(alias)
       }
-    )
-
-    val resolvedAlias =
-      AliasResolution.resolve(aliasWithResolvedChildren).asInstanceOf[NamedExpression]
-
-    scopes.top.addAlias(resolvedAlias.name)
-    AliasResolver.cleanupAliases(resolvedAlias)
-  }
+    }
 
   /**
-   * Handle already resolved [[Alias]] nodes, i.e. user-specified aliases. We disallow stacking
-   * of [[Alias]] nodes by collapsing them so that only the top node remains.
-   *
-   * For an example query like:
-   *
-   * {{{ SELECT 1 AS a }}}
-   *
-   * parsed plan will be:
-   *
-   * Project [Alias(1, a)]
-   * +- OneRowRelation
-   *
+   * Handle already resolved [[Alias]] nodes, i.e. user-specified aliases. Here we only need to
+   * resolve its children and afterwards reassign exprId to the resulting [[Alias]].
    */
   def handleResolvedAlias(alias: Alias): Alias = {
-    val aliasWithResolvedChildren = withResolvedChildren(alias, expressionResolver.resolve)
-    scopes.top.addAlias(aliasWithResolvedChildren.name)
-    AliasResolver.collapseAlias(aliasWithResolvedChildren)
+    val resolvedAlias = scopes.current.lcaRegistry.withNewLcaScope {
+      val aliasWithResolvedChildren =
+        withResolvedChildren(alias, expressionResolver.resolve _).asInstanceOf[Alias]
+
+      expressionResolver.getExpressionIdAssigner.mapExpression(aliasWithResolvedChildren)
+    }
+
+    collapseAlias(resolvedAlias)
   }
-}
-
-object AliasResolver {
 
   /**
-   * For a query like:
+   * In case where there are two explicit [[Alias]]es, one on top of the other, remove the bottom
+   * one. For the example bellow:
    *
-   * {{{ SELECT STRUCT(1 AS a, 2 AS b) AS st }}}
+   * - df.select($"column".as("alias_1").as("alias_2"))
    *
-   * After resolving [[CreateNamedStruct]] the plan will be:
-   *     CreateNamedStruct(Seq("a", Alias(1, "a"), "b", Alias(2, "b")))
+   * the plan is:
    *
-   * For a query like:
+   *   Project[
+   *     Alias("alias_2")(
+   *       Alias("alias_1")(id)
+   *     )
+   *   ]( ... )
    *
-   * {{{ df.select($"col1".cast("int").cast("double")) }}}
+   * and after the `collapseAlias` call (removing the bottom one) it would be:
    *
-   * After resolving top-most [[Alias]] the plan will be:
-   *     Alias(Cast(Alias(Cast(col1, int), col1)), double), col1)
-   *
-   * Both examples contain inner aliases that are not expected in the analyzed logical plan,
-   * therefore need to be removed. However, in both examples inner aliases are necessary in order
-   * for the outer alias to compute its name. To achieve this, we delay removal of inner aliases
-   * until after the outer alias name is computed.
-   *
-   * For cases where there are no dependencies on inner alias, inner alias should be removed by the
-   * resolver that produces it.
-   */
-  private def cleanupAliases(namedExpression: NamedExpression): NamedExpression =
-    namedExpression
-      .withNewChildren(namedExpression.children.map {
-        case cast @ Cast(alias: Alias, _, _, _) =>
-          cast.copy(child = alias.child)
-        case createNamedStruct: CreateNamedStruct =>
-          CreateNamedStructResolver.cleanupAliases(createNamedStruct)
-        case other => other
-      })
-      .asInstanceOf[NamedExpression]
-
-  /**
-   * If an [[Alias]] node appears on top of another [[Alias]], remove the bottom one. Here we don't
-   * handle a case where a node of different type appears between two [[Alias]] nodes: in this
-   * case, removal of inner alias (if it is unnecessary) should be handled by respective node's
-   * resolver, in order to preserve the bottom-up contract.
+   *   Project[
+   *     Alias("alias_2")(id)
+   *   ]( ... )
    */
   private def collapseAlias(alias: Alias): Alias =
     alias.child match {

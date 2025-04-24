@@ -99,7 +99,7 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
       assert(!builder.sslEnabled)
       assert(builder.token.isEmpty)
       assert(builder.userId.contains("Q12"))
-      assert(builder.userName.isEmpty)
+      assert(builder.userName.contains(System.getProperty("user.name", null)))
       assert(builder.options.isEmpty)
     }
     {
@@ -116,7 +116,7 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
       assert(builder.userAgent.contains("_SPARK_CONNECT_SCALA"))
       assert(builder.sslEnabled)
       assert(builder.token.isEmpty)
-      assert(builder.userId.isEmpty)
+      assert(builder.userId.contains(System.getProperty("user.name", null)))
       assert(builder.userName.contains("Nico"))
       assert(builder.options === Map(("mode", "turbo"), ("cluster", "mycl")))
     }
@@ -125,10 +125,10 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
       assert(builder.host === "localhost")
       assert(builder.port === 15002)
       assert(builder.userAgent.contains("_SPARK_CONNECT_SCALA"))
-      assert(builder.sslEnabled)
+      assert(!builder.sslEnabled)
       assert(builder.token.contains("thisismysecret"))
-      assert(builder.userId.isEmpty)
-      assert(builder.userName.isEmpty)
+      assert(builder.userId.contains(System.getProperty("user.name", null)))
+      assert(builder.userName.contains(System.getProperty("user.name", null)))
       assert(builder.options.isEmpty)
     }
   }

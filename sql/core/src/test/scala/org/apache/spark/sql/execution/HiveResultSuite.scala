@@ -46,6 +46,21 @@ class HiveResultSuite extends SharedSparkSession {
     }
   }
 
+  test("time formatting in hive result") {
+    val times = Seq(
+      "00:00:00",
+      "00:01:02.003004",
+      "12:13:14.999999",
+      "23:59:59.1234")
+    val df = times.toDF("a").selectExpr("cast(a as time) as b")
+    val executedPlan1 = df.queryExecution.executedPlan
+    val result = hiveResultString(executedPlan1)
+    assert(result == times)
+    val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
+    val result2 = hiveResultString(executedPlan2)
+    assert(result2 == times.map(x => s"[$x]"))
+  }
+
   test("timestamp formatting in hive result") {
     val timestamps = Seq(
       "2018-12-28 01:02:03",

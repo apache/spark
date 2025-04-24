@@ -296,7 +296,15 @@ def spark_type_to_pandas_dtype(
     elif isinstance(spark_type, (types.TimestampType, types.TimestampNTZType)):
         return np.dtype("datetime64[ns]")
     else:
-        return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())
+        from pyspark.pandas.utils import default_session
+
+        prefers_large_var_types = (
+            default_session()
+            .conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
+            .lower()
+            == "true"
+        )
+        return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:

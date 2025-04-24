@@ -26,6 +26,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -73,6 +74,14 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     val spark = builder.getOrCreate()
     try f(spark) finally {
       stop(spark)
+    }
+  }
+
+  private def withTable(spark: SparkSession, tableNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name")
+      }
     }
   }
 
@@ -244,7 +253,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
           columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
         plan match {
           case a: AdaptiveSparkPlanExec =>
-            findColumnStats(a.executedPlan, columnStats)
+            findColumnStats(stripAQEPlan(a), columnStats)
           case qs: ShuffleQueryStageExec =>
             columnStats += qs.computeStats().get.attributeStats
             findColumnStats(qs.plan, columnStats)
@@ -489,7 +498,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
     def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      stripAQEPlan(df.queryExecution.executedPlan)
     }
     val extensions = create { extensions =>
       extensions.injectRuntimeOptimizerRule(_ => AddLimit)
@@ -571,6 +580,28 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(res.collect {case s: Sort => s}.isEmpty)
     }
   }
+
+  test("early batch rule is applied on resolved IDENTIFIER") {
+    var ruleApplied = false
+
+    case class UnresolvedRelationRule(spark: SparkSession) extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+        case r: UnresolvedRelation =>
+          ruleApplied = true
+          r
+      }
+    }
+
+    withSession(Seq(_.injectHintResolutionRule(UnresolvedRelationRule))) { session =>
+      withTable(session, "my_table") {
+        session.sql("CREATE TABLE IF NOT EXISTS my_table (col1 INT)")
+        ruleApplied = false
+
+        session.sql("SELECT * FROM IDENTIFIER('my_' || 'table')").collect()
+        assert(ruleApplied)
+      }
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -609,6 +640,10 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseQuery(sqlText: String): LogicalPlan =
     delegate.parseQuery(sqlText)
+
+  override def parseRoutineParam(sqlText: String): StructType = {
+    delegate.parseRoutineParam(sqlText)
+  }
 }
 
 object MyExtensions {

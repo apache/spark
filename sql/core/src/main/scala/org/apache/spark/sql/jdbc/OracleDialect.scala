@@ -50,6 +50,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     supportedFunctions.contains(funcName)
 
   class OracleSQLBuilder extends JDBCSQLBuilder {
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -64,10 +65,10 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {
-        case (lhs: Literal[_], rhs: Expression) if lhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
-        case (lhs: Expression, rhs: Literal[_]) if rhs.dataType == BinaryType =>
-          compareBlob(lhs, name, rhs)
+        case (lit: Literal[_], _) if lit.dataType == BinaryType =>
+          compareBlob(lit, name, re)
+        case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
+          compareBlob(le, name, lit)
         case _ =>
           super.visitBinaryComparison(name, le, re);
       }
@@ -259,20 +260,20 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
-          case 955 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+          case 955 if condition == "FAILED_JDBC.RENAME_TABLE" =>
             val newTable = messageParameters("newName")
             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ =>
-            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 }

@@ -25,6 +25,7 @@ import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 
 trait FakeArrayParams extends Params {
@@ -250,10 +251,39 @@ class MLSuite extends MLHelper {
                 .newBuilder()
                 .setName("org.apache.spark.ml.NotExistingML")
                 .setUid("FakedUid")
-                .setType(proto.MlOperator.OperatorType.ESTIMATOR)))
+                .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)))
         .build()
       MLHandler.handleMlCommand(sessionHolder, command)
     }
+  }
+
+  test("Exception: cannot retrieve object") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val modelId = trainLogisticRegressionModel(sessionHolder)
+
+    // Fetch summary attribute
+    val accuracyCommand = proto.MlCommand
+      .newBuilder()
+      .setFetch(
+        proto.Fetch
+          .newBuilder()
+          .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
+          .addMethods(proto.Fetch.Method.newBuilder().setMethod("accuracy")))
+      .build()
+
+    // Successfully fetch summary.accuracy from the cached model
+    MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
+
+    // Remove the model from cache
+    sessionHolder.mlCache.clear()
+
+    // No longer able to retrieve the model from cache
+    val e = intercept[MLCacheInvalidException] {
+      MLHandler.handleMlCommand(sessionHolder, accuracyCommand)
+    }
+    val msg = e.getMessage
+    assert(msg.contains(s"$modelId from the ML cache"))
   }
 
   test("access the attribute which is not in allowed list") {
@@ -261,9 +291,12 @@ class MLSuite extends MLHelper {
     val modelId = trainLogisticRegressionModel(sessionHolder)
 
     val fakeAttributeCmd = fetchCommand(modelId, "notExistingAttribute")
-    intercept[MLAttributeNotAllowedException] {
+    val e = intercept[MLAttributeNotAllowedException] {
       MLHandler.handleMlCommand(sessionHolder, fakeAttributeCmd)
     }
+    val msg = e.getMessage
+    assert(msg.contains("notExistingAttribute"))
+    assert(msg.contains("org.apache.spark.ml.classification.LogisticRegressionModel"))
   }
 
   test("Model must be registered into ServiceLoader when loading") {
@@ -277,7 +310,7 @@ class MLSuite extends MLHelper {
             .setOperator(proto.MlOperator
               .newBuilder()
               .setName("org.apache.spark.sql.connect.ml.NotImplementingMLReadble")
-              .setType(proto.MlOperator.OperatorType.ESTIMATOR))
+              .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR))
             .setPath("/tmp/fake"))
         .build()
       MLHandler.handleMlCommand(sessionHolder, readCmd)
@@ -346,5 +379,33 @@ class MLSuite extends MLHelper {
         .asScala
         .map(_.getString)
         .toArray sameElements Array("a", "b", "c"))
+  }
+
+  test("Memory limitation of MLCache works") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val memorySizeBytes = 1024 * 16
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MAX_SIZE.key, memorySizeBytes)
+    trainLogisticRegressionModel(sessionHolder)
+    assert(sessionHolder.mlCache.cachedModel.size() == 1)
+    assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
+    val modelSizeBytes = sessionHolder.mlCache.totalSizeBytes.get()
+    val maxNumModels = memorySizeBytes / modelSizeBytes.toInt
+
+    // All models will be kept if the total size is less than the memory limit.
+    for (i <- 1 until maxNumModels) {
+      trainLogisticRegressionModel(sessionHolder)
+      assert(sessionHolder.mlCache.cachedModel.size() == i + 1)
+      assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalSizeBytes.get() <= memorySizeBytes)
+    }
+
+    // Old models will be removed if new ones are added and the total size exceeds the memory limit.
+    for (_ <- 0 until 3) {
+      trainLogisticRegressionModel(sessionHolder)
+      assert(sessionHolder.mlCache.cachedModel.size() == maxNumModels)
+      assert(sessionHolder.mlCache.totalSizeBytes.get() > 0)
+      assert(sessionHolder.mlCache.totalSizeBytes.get() <= memorySizeBytes)
+    }
   }
 }

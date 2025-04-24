@@ -95,13 +95,19 @@ case class CTERelationDef(
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
+  override def maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {
+    child.maxRows
+  } else {
+    None
+  }
+
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 
   lazy val hasSelfReferenceAsCTERef: Boolean = child.exists{
-    case CTERelationRef(this.id, _, _, _, _, true) => true
+    case CTERelationRef(this.id, _, _, _, _, true, _) => true
     case _ => false
   }
   lazy val hasSelfReferenceAsUnionLoopRef: Boolean = child.exists{
@@ -132,7 +138,8 @@ case class CTERelationRef(
     override val output: Seq[Attribute],
     override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None,
-    recursive: Boolean = false) extends LeafNode with MultiInstanceRelation {
+    recursive: Boolean = false,
+    override val maxRows: Option[Long] = None) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 

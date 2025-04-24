@@ -33,6 +33,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Locale;
+import java.util.UUID;
 
 import static org.apache.spark.types.variant.VariantUtil.*;
 
@@ -121,6 +122,11 @@ public final class Variant {
   // Get the value type of the variant.
   public Type getType() {
     return VariantUtil.getType(value, pos);
+  }
+
+  // Get a UUID value from the variant.
+  public UUID getUuid() {
+    return VariantUtil.getUuid(value, pos);
   }
 
   // Get the number of object fields in the variant.
@@ -332,6 +338,9 @@ public final class Variant {
         break;
       case BINARY:
         appendQuoted(sb, Base64.getEncoder().encodeToString(VariantUtil.getBinary(value, pos)));
+        break;
+      case UUID:
+        appendQuoted(sb, VariantUtil.getUuid(value, pos).toString());
         break;
     }
   }

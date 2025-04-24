@@ -19,6 +19,7 @@
 
 #
 # Shell script for starting the Spark SQL Thrift server
+export SPARK_CONNECT_MODE=0
 
 # Enter posix mode for bash
 set -o posix

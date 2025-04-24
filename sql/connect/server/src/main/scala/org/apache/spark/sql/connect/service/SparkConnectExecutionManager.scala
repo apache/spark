@@ -74,10 +74,10 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     .build[ExecuteKey, ExecuteInfo]()
 
   /** The time when the last execution was removed. */
-  private var lastExecutionTimeNs: AtomicLong = new AtomicLong(System.nanoTime())
+  private val lastExecutionTimeNs: AtomicLong = new AtomicLong(System.nanoTime())
 
   /** Executor for the periodic maintenance */
-  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+  private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
   /**
@@ -249,7 +249,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   // Visible for testing.
   private[connect] def periodicMaintenance(timeoutNs: Long): Unit = {
     // Find any detached executions that expired and should be removed.
-    logInfo("Started periodic run of SparkConnectExecutionManager maintenance.")
+    logDebug("Started periodic run of SparkConnectExecutionManager maintenance.")
 
     val nowNs = System.nanoTime()
     executions.forEach((_, executeHolder) => {
@@ -266,7 +266,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       }
     })
 
-    logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")
+    logDebug("Finished periodic run of SparkConnectExecutionManager maintenance.")
   }
 
   // For testing.

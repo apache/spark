@@ -14,9 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
+
 from typing import Any, List, TYPE_CHECKING, Mapping, Dict
 
 import pyspark.sql.connect.proto as pb2
+from pyspark.sql.types import DataType
 from pyspark.ml.linalg import (
     DenseVector,
     SparseVector,
@@ -131,11 +136,19 @@ def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Expression.
 
 def serialize(client: "SparkConnectClient", *args: Any) -> List[Any]:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.sql.connect.expressions import LiteralExpression
 
     result = []
     for arg in args:
         if isinstance(arg, ConnectDataFrame):
             result.append(pb2.Fetch.Method.Args(input=arg._plan.plan(client)))
+        elif isinstance(arg, tuple) and len(arg) == 2 and isinstance(arg[1], DataType):
+            # explicitly specify the data type, for cases like empty list[str]
+            result.append(
+                pb2.Fetch.Method.Args(
+                    param=LiteralExpression(value=arg[0], dataType=arg[1]).to_plan(client).literal
+                )
+            )
         else:
             result.append(pb2.Fetch.Method.Args(param=serialize_param(arg, client)))
     return result
@@ -201,5 +214,14 @@ def deserialize(ml_command_result_properties: Dict[str, Any]) -> Any:
 def serialize_ml_params(instance: "Params", client: "SparkConnectClient") -> pb2.MlParams:
     params: Mapping[str, pb2.Expression.Literal] = {
         k.name: serialize_param(v, client) for k, v in instance._paramMap.items()
+    }
+    return pb2.MlParams(params=params)
+
+
+def serialize_ml_params_values(
+    values: Dict[str, Any], client: "SparkConnectClient"
+) -> pb2.MlParams:
+    params: Mapping[str, pb2.Expression.Literal] = {
+        k: serialize_param(v, client) for k, v in values.items()
     }
     return pb2.MlParams(params=params)

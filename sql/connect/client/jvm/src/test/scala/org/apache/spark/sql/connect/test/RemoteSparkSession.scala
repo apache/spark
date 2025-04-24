@@ -23,10 +23,12 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
-import org.scalatest.time.SpanSugar._
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.scalatest.time.SpanSugar._ // scalastyle:ignore
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.connect.SparkSession
@@ -64,10 +66,15 @@ object SparkConnectServerUtils {
     val connectJar =
       findJar("sql/connect/server", "spark-connect-assembly", "spark-connect").getCanonicalPath
 
+    // To find InMemoryTableCatalog for V2 writer tests
+    val catalystTestJar =
+      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
+
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"
     command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
+    command += "--jars" += catalystTestJar
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
     command ++= debugConfigs
@@ -94,10 +101,6 @@ object SparkConnectServerUtils {
    * configs, we add them here
    */
   private def testConfigs: Seq[String] = {
-    // To find InMemoryTableCatalog for V2 writer tests
-    val catalystTestJar =
-      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
-
     val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
     } else {
@@ -114,7 +117,7 @@ object SparkConnectServerUtils {
       IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
       "in-memory"
     }
-    val confs = Seq(
+    Seq(
       // Use InMemoryTableCatalog for V2 writer tests
       "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
       // Try to use the hive catalog, fallback to in-memory if it is not there.
@@ -126,8 +129,7 @@ object SparkConnectServerUtils {
       // Testing SPARK-49673, setting maxBatchSize to 10MiB
       s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
       // Disable UI
-      "spark.ui.enabled=false")
-    Seq("--jars", catalystTestJar) ++ confs.flatMap(v => "--conf" :: v :: Nil)
+      "spark.ui.enabled=false").flatMap(v => "--conf" :: v :: Nil)
   }
 
   def start(): Unit = {
@@ -170,7 +172,8 @@ object SparkConnectServerUtils {
       .filter { e: String =>
         val fileName = e.substring(e.lastIndexOf(File.separatorChar) + 1)
         fileName.endsWith(".jar") &&
-        (fileName.startsWith("scalatest") || fileName.startsWith("scalactic"))
+        (fileName.startsWith("scalatest") || fileName.startsWith("scalactic") ||
+          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")))
       }
       .map(e => Paths.get(e).toUri)
     spark.client.artifactManager.addArtifacts(jars.toImmutableArraySeq)
@@ -204,23 +207,43 @@ object SparkConnectServerUtils {
   }
 }
 
-trait RemoteSparkSession extends BeforeAndAfterAll { self: Suite =>
+trait RemoteSparkSession
+    extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll { self: Suite =>
   import SparkConnectServerUtils._
   var spark: SparkSession = _
   protected lazy val serverPort: Int = port
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark = createSparkSession()
+    if (IntegrationTestUtils.isAssemblyJarsDirExists) {
+      spark = createSparkSession()
+    }
   }
 
   override def afterAll(): Unit = {
+    def isArrowAllocatorIssue(message: String): Boolean = {
+      Option(message).exists(m =>
+        m.contains("closed with outstanding") ||
+          m.contains("Memory leaked"))
+    }
     try {
       if (spark != null) spark.stop()
     } catch {
+      case e: IllegalStateException if isArrowAllocatorIssue(e.getMessage) =>
+        throw e
       case e: Throwable => debug(e)
     }
     spark = null
     super.afterAll()
+  }
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
+    if (IntegrationTestUtils.isAssemblyJarsDirExists) {
+      super.test(testName, testTags: _*)(testFun)
+    } else {
+      super.ignore(testName, testTags: _*)(testFun)
+    }
   }
 }

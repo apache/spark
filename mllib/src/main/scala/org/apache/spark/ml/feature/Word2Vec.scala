@@ -211,7 +211,8 @@ class Word2VecModel private[ml] (
 
   import Word2VecModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("w2v"), null)
+  // For ml connect only
+  private[ml] def this() = this("", null)
 
   /**
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and

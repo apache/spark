@@ -631,6 +631,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(cols: Column*): Column = Column.fn("grouping_id", cols: _*)
 
   /**
@@ -646,6 +647,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(colName: String, colNames: String*): Column = {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)): _*)
   }
@@ -1742,6 +1744,7 @@ object functions {
    * @group struct_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def named_struct(cols: Column*): Column = Column.fn("named_struct", cols: _*)
 
   /**
@@ -3784,6 +3787,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def reflect(cols: Column*): Column = Column.fn("reflect", cols: _*)
 
   /**
@@ -3792,6 +3796,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
 
   /**
@@ -3801,6 +3806,7 @@ object functions {
    * @group misc_funcs
    * @since 4.0.0
    */
+  @scala.annotation.varargs
   def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
 
   /**
@@ -3827,6 +3833,7 @@ object functions {
    * @group generator_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
 
   /**
@@ -4818,6 +4825,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def printf(format: Column, arguments: Column*): Column =
     Column.fn("printf", (format +: arguments): _*)
 
@@ -5073,6 +5081,15 @@ object functions {
    * @since 3.5.0
    */
   def right(str: Column, len: Column): Column = Column.fn("right", str, len)
+
+  /**
+   * Returns `str` enclosed by single quotes and each instance of single quote in it is preceded
+   * by a backslash.
+   *
+   * @group string_funcs
+   * @since 4.1.0
+   */
+  def quote(str: Column): Column = Column.fn("quote", str)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
@@ -6893,7 +6910,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = {
-    from_json(e, lit(schema.json), options.iterator)
+    from_json(e, lit(schema.sql), options.iterator)
   }
 
   // scalastyle:off line.size.limit
@@ -7115,7 +7132,7 @@ object functions {
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
   /**
-   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *
    * @param v
@@ -7132,7 +7149,25 @@ object functions {
     Column.fn("variant_get", v, lit(path), lit(targetType))
 
   /**
-   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * Extracts a sub-variant from `v` according to `path` column, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def variant_get(v: Column, path: Column, targetType: String): Column =
+    Column.fn("variant_get", v, path, lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist or the cast fails..
    *
    * @param v
@@ -7146,6 +7181,24 @@ object functions {
    * @since 4.0.0
    */
   def try_variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("try_variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path` column, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist or the cast fails..
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the extraction path strings. A valid path string should start with
+   *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
 
   /**
@@ -7729,7 +7782,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(schema.json), options.asScala.iterator)
+    from_xml(e, lit(schema.sql), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**

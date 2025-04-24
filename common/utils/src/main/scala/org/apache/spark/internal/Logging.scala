@@ -26,6 +26,7 @@ import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.event.{Level => Slf4jLevel}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.internal.LogKeys
@@ -87,7 +88,7 @@ object MDC {
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.
  */
-case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
+case class MessageWithContext(message: String, context: java.util.Map[String, String]) {
   def +(mdc: MessageWithContext): MessageWithContext = {
     val resultMap = new java.util.HashMap(context)
     resultMap.putAll(mdc.context)
@@ -105,7 +106,7 @@ class LogEntry(messageWithContext: => MessageWithContext) {
 
   def message: String = cachedMessageWithContext.message
 
-  def context: java.util.HashMap[String, String] = cachedMessageWithContext.context
+  def context: java.util.Map[String, String] = cachedMessageWithContext.context
 }
 
 /**
@@ -166,7 +167,7 @@ trait Logging {
     }
   }
 
-  protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+  protected def withLogContext(context: java.util.Map[String, String])(body: => Unit): Unit = {
     // put into thread context only when structured logging is enabled
     val closeableThreadContextOpt = if (Logging.isStructuredLoggingEnabled) {
       Some(CloseableThreadContext.putAll(context))
@@ -305,6 +306,16 @@ trait Logging {
 
   protected def isTraceEnabled(): Boolean = {
     log.isTraceEnabled
+  }
+
+  protected def logBasedOnLevel(level: Slf4jLevel)(f: => MessageWithContext): Unit = {
+    level match {
+      case Slf4jLevel.TRACE => logTrace(f.message)
+      case Slf4jLevel.DEBUG => logDebug(f.message)
+      case Slf4jLevel.INFO => logInfo(f)
+      case Slf4jLevel.WARN => logWarning(f)
+      case Slf4jLevel.ERROR => logError(f)
+    }
   }
 
   protected def initializeLogIfNecessary(isInterpreter: Boolean): Unit = {

@@ -86,10 +86,6 @@ class UnsupportedFeaturesSuite extends ConnectFunSuite {
     _.baseRelationToDataFrame(new BaseRelation)
   }
 
-  testUnsupportedFeature("SparkSession.executeCommand", "SESSION_EXECUTE_COMMAND") {
-    _.executeCommand("ds", "exec", Map.empty)
-  }
-
   testUnsupportedFeature("Dataset.queryExecution", "DATASET_QUERY_EXECUTION") {
     _.range(1).queryExecution
   }

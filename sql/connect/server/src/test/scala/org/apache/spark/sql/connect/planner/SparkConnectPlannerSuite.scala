@@ -101,7 +101,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue,
         timeZoneId,
-        true)
+        true,
+        false)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
@@ -478,7 +479,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true, false)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(

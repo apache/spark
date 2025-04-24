@@ -234,7 +234,8 @@ class OneHotEncoderModel private[ml] (
 
   import OneHotEncoderModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("oneHotEncoder)"), Array.emptyIntArray)
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyIntArray)
 
   // Returns the category size for each index with `dropLast` and `handleInvalid`
   // taken into account.

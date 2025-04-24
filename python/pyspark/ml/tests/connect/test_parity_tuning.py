@@ -17,31 +17,12 @@
 
 import unittest
 
-from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.connect.readwrite import RemoteCrossValidatorModelWriter
-from pyspark.ml.linalg import Vectors
 from pyspark.ml.tests.test_tuning import TuningTestsMixin
-from pyspark.ml.tuning import CrossValidatorModel
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TuningParityTests(TuningTestsMixin, ReusedConnectTestCase):
-    def test_remote_cross_validator_model_writer(self):
-        df = self.spark.createDataFrame(
-            [
-                (1.0, 1.0, Vectors.dense(0.0, 5.0)),
-                (0.0, 2.0, Vectors.dense(1.0, 2.0)),
-                (1.0, 3.0, Vectors.dense(2.0, 1.0)),
-                (0.0, 4.0, Vectors.dense(3.0, 3.0)),
-            ],
-            ["label", "weight", "features"],
-        )
-
-        lor = LogisticRegression()
-        lor_model = lor.fit(df)
-        cv_model = CrossValidatorModel(lor_model)
-        writer = RemoteCrossValidatorModelWriter(cv_model, {"a": "b"}, self.spark)
-        self.assertEqual(writer.optionMap["a"], "b")
+    pass
 
 
 if __name__ == "__main__":

@@ -34,7 +34,11 @@ jobs:
     with:
       java: 21
       os: macos-15
+      arch: arm64
       envs: >-
         {
-          "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"
+          "SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "256",
+          "SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "256",
+          "SPARK_TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "48",
+          "SPARK_TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "48"
         }

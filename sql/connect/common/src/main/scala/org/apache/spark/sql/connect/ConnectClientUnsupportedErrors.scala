@@ -33,9 +33,6 @@ private[sql] object ConnectClientUnsupportedErrors {
   def queryExecution(): SparkUnsupportedOperationException =
     unsupportedFeatureException("DATASET_QUERY_EXECUTION")
 
-  def executeCommand(): SparkUnsupportedOperationException =
-    unsupportedFeatureException("SESSION_EXECUTE_COMMAND")
-
   def baseRelationToDataFrame(): SparkUnsupportedOperationException =
     unsupportedFeatureException("SESSION_BASE_RELATION_TO_DATAFRAME")
 
@@ -53,10 +50,4 @@ private[sql] object ConnectClientUnsupportedErrors {
 
   def sparkContext(): SparkUnsupportedOperationException =
     unsupportedFeatureException("SESSION_SPARK_CONTEXT")
-
-  def sqlContext(): SparkUnsupportedOperationException =
-    unsupportedFeatureException("SESSION_SQL_CONTEXT")
-
-  def registerUdaf(): SparkUnsupportedOperationException =
-    unsupportedFeatureException("REGISTER_UDAF")
 }

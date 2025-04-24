@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
-import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery => ScalarSubqueryExpr, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -69,8 +69,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.util.{NextIterator, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -929,7 +929,18 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
+    // Replace top-level integer literals in grouping expressions with ordinals, if
+    // `groupByOrdinal` is enabled.
+    val groupingExpressionsWithOrdinals = cols.map { col => col.expr match {
+      case Literal(value: Int, IntegerType) if sparkSession.sessionState.conf.groupByOrdinal =>
+        UnresolvedOrdinal(value)
+      case other => other
+    }}
+    RelationalGroupedDataset(
+      df = toDF(),
+      groupingExprs = groupingExpressionsWithOrdinals,
+      groupType = RelationalGroupedDataset.GroupByType
+    )
   }
 
   /** @inheritdoc */
@@ -955,7 +966,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def reduce(func: (T, T) => T): T = withNewRDDExecutionId("reduce") {
-    rdd.reduce(func)
+    materializedRdd.reduce(func)
   }
 
   /** @inheritdoc */
@@ -1060,16 +1071,6 @@ class Dataset[T] private[sql](
       FunctionTableSubqueryArgumentExpression(plan = logicalPlan),
       sparkSession
     )
-  }
-
-  /** @inheritdoc */
-  def scalar(): Column = {
-    Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))
-  }
-
-  /** @inheritdoc */
-  def exists(): Column = {
-    Column(ExpressionColumnNode(Exists(logicalPlan)))
   }
 
   /** @inheritdoc */
@@ -1471,7 +1472,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId("foreachPartition") {
-    rdd.foreachPartition(f)
+    materializedRdd.foreachPartition(f)
   }
 
   /** @inheritdoc */
@@ -1573,11 +1574,17 @@ class Dataset[T] private[sql](
     sparkSession.sessionState.executePlan(deserialized)
   }
 
-  /** @inheritdoc */
-  lazy val rdd: RDD[T] = {
+  private[sql] lazy val materializedRdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
     rddQueryExecution.toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
+    }
+  }
+
+  /** @inheritdoc */
+  lazy val rdd: RDD[T] = {
+    withNewRDDExecutionId("rdd") {
+      materializedRdd
     }
   }
 
@@ -1671,21 +1678,19 @@ class Dataset[T] private[sql](
       val gen = new JacksonGenerator(rowSchema, writer,
         new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
 
-      new Iterator[String] {
+      new NextIterator[String] {
         private val toRow = exprEnc.createSerializer()
-        override def hasNext: Boolean = iter.hasNext
-        override def next(): String = {
+        override def close(): Unit = { gen.close() }
+        override def getNext(): String = {
+          if (!iter.hasNext) {
+            finished = true
+            return ""
+          }
+          writer.reset()
           gen.write(toRow(iter.next()))
           gen.flush()
 
-          val json = writer.toString
-          if (hasNext) {
-            writer.reset()
-          } else {
-            gen.close()
-          }
-
-          json
+          writer.toString
         }
       }
     } (Encoders.STRING)
@@ -2089,7 +2094,8 @@ class Dataset[T] private[sql](
         val buffer = new ByteArrayOutputStream()
         val out = new DataOutputStream(outputStream)
         val batchWriter =
-          new ArrowBatchStreamWriter(schema, buffer, timeZoneId, errorOnDuplicatedFieldNames = true)
+          new ArrowBatchStreamWriter(
+            schema, buffer, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
@@ -2140,12 +2146,14 @@ class Dataset[T] private[sql](
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
+    val largeVarTypes = sparkSession.sessionState.conf.arrowUseLargeVarTypes
 
     PythonRDD.serveToStream("serve-Arrow") { outputStream =>
       withAction("collectAsArrowToPython", queryExecution) { plan =>
         val out = new DataOutputStream(outputStream)
         val batchWriter =
-          new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
+          new ArrowBatchStreamWriter(
+            schema, out, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
         val batchOrder = ArrayBuffer.empty[(Int, Int)]
@@ -2294,10 +2302,18 @@ class Dataset[T] private[sql](
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
+    val largeVarTypes =
+      sparkSession.sessionState.conf.arrowUseLargeVarTypes
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       ArrowConverters.toBatchIterator(
-        iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, context)
+        iter,
+        schemaCaptured,
+        maxRecordsPerBatch,
+        timeZoneId,
+        errorOnDuplicatedFieldNames,
+        largeVarTypes,
+        context)
     }
   }
 

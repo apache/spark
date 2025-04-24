@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import os
 import tempfile
 import unittest
 
@@ -108,14 +107,12 @@ class OneVsRestTestsMixin:
 
         # Model save & load
         with tempfile.TemporaryDirectory(prefix="linear_svc") as d:
-            path1 = os.path.join(d, "ovr")
-            ovr.write().overwrite().save(path1)
-            ovr2 = OneVsRest.load(path1)
+            ovr.write().overwrite().save(d)
+            ovr2 = OneVsRest.load(d)
             self.assertEqual(str(ovr), str(ovr2))
 
-            path2 = os.path.join(d, "ovr_model")
-            model.write().overwrite().save(path2)
-            model2 = OneVsRestModel.load(path2)
+            model.write().overwrite().save(d)
+            model2 = OneVsRestModel.load(d)
             self.assertEqual(str(model), str(model2))
 
 

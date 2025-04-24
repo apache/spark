@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -169,7 +170,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "CTEs with one reference should all be inlined after optimization.")
@@ -254,7 +255,7 @@ abstract class CTEInlineSuiteBase
         }.head.length == 2,
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
-        df.queryExecution.optimizedPlan.collect {
+        df.queryExecution.optimizedPlan.collectFirst {
           case r: RepartitionOperation => r
         }.isEmpty,
         "Deterministic CTEs should all be inlined after optimization.")
@@ -333,14 +334,14 @@ abstract class CTEInlineSuiteBase
 
   test("CTE Predicate push-down and column pruning - combined predicate") {
     withTempView("t") {
-      Seq((0, 1, 2), (1, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t")
+      Seq((0, 1, 2, 3), (1, 2, 3, 4)).toDF("c1", "c2", "c3", "c4").createOrReplaceTempView("t")
       val df = sql(
         s"""with
            |v as (
-           |  select c1, c2, c3, rand() c4 from t
+           |  select c1, c2, c3, c4, rand() c5 from t
            |),
            |vv as (
-           |  select v1.c1, v1.c2, rand() c5 from v v1, v v2
+           |  select v1.c1, v1.c2, rand() c6 from v v1, v v2
            |  where v1.c1 > 0 and v2.c3 < 5 and v1.c2 = v2.c2
            |)
            |select vv1.c1, vv1.c2, vv2.c1, vv2.c2 from vv vv1, vv vv2
@@ -815,6 +816,35 @@ abstract class CTEInlineSuiteBase
     val query = WithCTE(Union(r1Ref, r2Ref), Seq(r1, r2))
     val inlined = InlineCTE().apply(query)
     assert(!inlined.exists(_.isInstanceOf[WithCTE]))
+  }
+
+  test("SPARK-51109: CTE in subquery expression as grouping column") {
+    withTable("t") {
+      Seq(1 -> 1).toDF("c1", "c2").write.saveAsTable("t")
+      withView("v") {
+        sql(
+          """
+            |CREATE VIEW v AS
+            |WITH r AS (SELECT c1 + c2 AS c FROM t)
+            |SELECT * FROM r
+            |""".stripMargin)
+        checkAnswer(
+          sql("SELECT (SELECT max(c) FROM v WHERE c > id) FROM range(1) GROUP BY 1"),
+          Row(2)
+        )
+      }
+    }
+  }
+
+  test("SPARK-51625: command in CTE relations should trigger inline") {
+    val plan = UnresolvedWith(
+      child = UnresolvedRelation(Seq("t")),
+      cteRelations = Seq("t" -> SubqueryAlias("t", ShowTables(CurrentNamespace, pattern = None)))
+    )
+    assert(!spark.sessionState.analyzer.execute(plan).exists {
+      case _: WithCTE => true
+      case _ => false
+    })
   }
 }
 

@@ -85,7 +85,8 @@ class ArrowRRunner(
       override protected def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         if (inputIterator.hasNext) {
           val arrowSchema =
-            ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+            ArrowUtils.toArrowSchema(
+              schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
           val allocator = ArrowUtils.rootAllocator.newChildAllocator(
             "stdout writer for R", 0, Long.MaxValue)
           val root = VectorSchemaRoot.create(arrowSchema, allocator)

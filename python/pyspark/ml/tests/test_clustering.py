@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 
 from pyspark.ml.linalg import Vectors, SparseVector
-from pyspark.sql import SparkSession
 from pyspark.ml.clustering import (
     KMeans,
     KMeansModel,
@@ -36,7 +35,10 @@ from pyspark.ml.clustering import (
     LDAModel,
     LocalLDAModel,
     DistributedLDAModel,
+    PowerIterationClustering,
 )
+from pyspark.sql import is_remote
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ClusteringTestsMixin:
@@ -72,11 +74,9 @@ class ClusteringTestsMixin:
 
         centers = model.clusterCenters()
         self.assertEqual(len(centers), 2)
+        self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(centers[0], [-0.372, -0.338], atol=1e-3), centers[0])
         self.assertTrue(np.allclose(centers[1], [0.8625, 0.83375], atol=1e-3), centers[1])
-
-        # TODO: support KMeansModel.numFeatures in Python
-        # self.assertEqual(model.numFeatures, 2)
 
         output = model.transform(df)
         expected_cols = ["weight", "features", "prediction"]
@@ -147,11 +147,9 @@ class ClusteringTestsMixin:
 
         centers = model.clusterCenters()
         self.assertEqual(len(centers), 2)
+        self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(centers[0], [-0.372, -0.338], atol=1e-3), centers[0])
         self.assertTrue(np.allclose(centers[1], [0.8625, 0.83375], atol=1e-3), centers[1])
-
-        # TODO: support KMeansModel.numFeatures in Python
-        # self.assertEqual(model.numFeatures, 2)
 
         output = model.transform(df)
         expected_cols = ["weight", "features", "prediction"]
@@ -192,8 +190,9 @@ class ClusteringTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_gaussian_mixture(self):
+        spark = self.spark
         df = (
-            self.spark.createDataFrame(
+            spark.createDataFrame(
                 [
                     (1, 1.0, Vectors.dense([-0.1, -0.05])),
                     (2, 2.0, Vectors.dense([-0.01, -0.1])),
@@ -222,15 +221,49 @@ class ClusteringTestsMixin:
 
         model = gmm.fit(df)
         self.assertEqual(gmm.uid, model.uid)
-        # TODO: support GMM.numFeatures in Python
-        # self.assertEqual(model.numFeatures, 2)
+        self.assertEqual(model.numFeatures, 2)
         self.assertEqual(len(model.weights), 2)
         self.assertTrue(
             np.allclose(model.weights, [0.541014115744985, 0.4589858842550149], atol=1e-4),
             model.weights,
         )
-        # TODO: support GMM.gaussians on connect
-        # self.assertEqual(model.gaussians, xxx)
+
+        # check the gaussians
+        gaussians = model.gaussians
+        self.assertEqual(len(gaussians), 2)
+        self.assertTrue(
+            np.allclose(
+                gaussians[0].mean.toArray(),
+                [0.28586084899633746, 0.28513455726904297],
+                atol=1e-4,
+            ),
+            gaussians[0].mean,
+        )
+        self.assertTrue(
+            np.allclose(
+                gaussians[0].cov.toArray(),
+                [[0.41732752, 0.38378601], [0.38378601, 0.36454957]],
+                atol=1e-4,
+            ),
+            gaussians[0].cov,
+        )
+        self.assertTrue(
+            np.allclose(
+                gaussians[1].mean.toArray(),
+                [0.04795771063097124, 0.06212817950777127],
+                atol=1e-4,
+            ),
+            gaussians[1].mean,
+        )
+        self.assertTrue(
+            np.allclose(
+                gaussians[1].cov.toArray(),
+                [[0.50359595, 0.44696663], [0.44696663, 0.40424231]],
+                atol=1e-4,
+            ),
+            gaussians[1].cov,
+        )
+
         self.assertEqual(model.gaussiansDF.columns, ["mean", "cov"])
         self.assertEqual(model.gaussiansDF.count(), 2)
 
@@ -345,6 +378,8 @@ class ClusteringTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_distributed_lda(self):
+        if is_remote():
+            self.skipTest("Do not support Spark Connect.")
         spark = self.spark
         df = (
             spark.createDataFrame(
@@ -371,6 +406,8 @@ class ClusteringTestsMixin:
         self.assertIsInstance(model, LDAModel)
         self.assertNotIsInstance(model, LocalLDAModel)
         self.assertIsInstance(model, DistributedLDAModel)
+        self.assertTrue(model.isDistributed())
+        self.assertEqual(model.vocabSize(), 2)
 
         dc = model.estimatedDocConcentration()
         self.assertTrue(np.allclose(dc.toArray(), [26.0, 26.0], atol=1e-4), dc)
@@ -403,6 +440,17 @@ class ClusteringTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 2)
 
+        # Test toLocal()
+        localModel = model.toLocal()
+        self.assertIsInstance(localModel, LDAModel)
+        self.assertIsInstance(localModel, LocalLDAModel)
+        self.assertNotIsInstance(localModel, DistributedLDAModel)
+        self.assertFalse(localModel.isDistributed())
+        output = localModel.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
         # save & load
         with tempfile.TemporaryDirectory(prefix="distributed_lda") as d:
             lda.write().overwrite().save(d)
@@ -413,13 +461,52 @@ class ClusteringTestsMixin:
             model2 = DistributedLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    def test_power_iteration_clustering(self):
+        spark = self.spark
 
-class ClusteringTests(ClusteringTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[4]").getOrCreate()
+        data = [
+            (1, 0, 0.5),
+            (2, 0, 0.5),
+            (2, 1, 0.7),
+            (3, 0, 0.5),
+            (3, 1, 0.7),
+            (3, 2, 0.9),
+            (4, 0, 0.5),
+            (4, 1, 0.7),
+            (4, 2, 0.9),
+            (4, 3, 1.1),
+            (5, 0, 0.5),
+            (5, 1, 0.7),
+            (5, 2, 0.9),
+            (5, 3, 1.1),
+            (5, 4, 1.3),
+        ]
+        df = spark.createDataFrame(data, ["src", "dst", "weight"]).repartition(1)
 
-    def tearDown(self) -> None:
-        self.spark.stop()
+        pic = PowerIterationClustering(k=2, weightCol="weight")
+        pic.setMaxIter(40)
+
+        self.assertEqual(pic.getK(), 2)
+        self.assertEqual(pic.getMaxIter(), 40)
+        self.assertEqual(pic.getWeightCol(), "weight")
+
+        assignments = pic.assignClusters(df)
+        self.assertEqual(assignments.columns, ["id", "cluster"])
+        self.assertEqual(assignments.count(), 6)
+
+        # save & load
+        with tempfile.TemporaryDirectory(prefix="power_iteration_clustering") as d:
+            pic.write().overwrite().save(d)
+            pic2 = PowerIterationClustering.load(d)
+            self.assertEqual(str(pic), str(pic2))
+            self.assertEqual(pic.uid, pic2.uid)
+            self.assertEqual(pic.getK(), pic2.getK())
+            self.assertEqual(pic.getMaxIter(), pic2.getMaxIter())
+            self.assertEqual(pic.getWeightCol(), pic2.getWeightCol())
+
+
+class ClusteringTests(ClusteringTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

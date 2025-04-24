@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.lang.reflect.InvocationTargetException
 import java.util.{Optional, ServiceLoader}
 import java.util.stream.Collectors
 
@@ -36,7 +37,7 @@ import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable, MLWritable}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
@@ -415,10 +416,15 @@ private[ml] object MLUtils {
     if (operators.isEmpty || !operators.contains(name)) {
       throw MlUnsupportedException(s"Unsupported read for $name")
     }
-    operators(name)
-      .getMethod("load", classOf[String])
-      .invoke(null, path)
-      .asInstanceOf[T]
+    try {
+      operators(name)
+        .getMethod("load", classOf[String])
+        .invoke(null, path)
+        .asInstanceOf[T]
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   /**
@@ -450,7 +456,16 @@ private[ml] object MLUtils {
 
   // Since we're using reflection way to get the attribute, in order not to
   // leave a security hole, we define an allowed attribute list that can be accessed.
-  // The attributes could be retrieved from the corresponding python class
+  // The attributes could be retrieved from the Connect clients.
+  // Before each invocation, both the object type and method name need to be checked here.
+  // Class inheritance is also considered.
+  // For example, if the object is a subclass of 'ProbabilisticClassificationModel',
+  // methods defined in the superclass ('ClassificationModel', 'PredictionModel' and
+  // 'Identifiable') are also allowed.
+  // So if a 3-rd party model extends 'ProbabilisticClassificationModel', then
+  // 'model.predictRaw' defined in 'ClassificationModel' is allowed to invoke.
+  // If the object is not the expected type or the method is not allowed,
+  // we throw an exception 'MLAttributeNotAllowedException'.
   private lazy val ALLOWED_ATTRIBUTES = Seq(
     (classOf[Identifiable], Set("toString")),
 
@@ -512,7 +527,6 @@ private[ml] object MLUtils {
         "predictLeaf",
         "trees",
         "treeWeights",
-        "javaTreeWeights",
         "getNumTrees",
         "totalNumNodes",
         "toDebugString")),
@@ -602,7 +616,7 @@ private[ml] object MLUtils {
     (classOf[BisectingKMeansSummary], Set("trainingCost")),
     (
       classOf[GaussianMixtureModel],
-      Set("predict", "numFeatures", "weights", "gaussians", "predictProbability", "gaussiansDF")),
+      Set("predict", "numFeatures", "weights", "predictProbability", "gaussiansDF")),
     (classOf[GaussianMixtureSummary], Set("probability", "probabilityCol", "logLikelihood")),
     (
       classOf[LDAModel],
@@ -612,11 +626,11 @@ private[ml] object MLUtils {
         "isDistributed",
         "logLikelihood",
         "logPerplexity",
-        "describeTopics")),
-    (classOf[LocalLDAModel], Set("vocabSize")),
+        "describeTopics",
+        "vocabSize")),
     (
       classOf[DistributedLDAModel],
-      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles")),
+      Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),
 
     // Recommendation Models
     (
@@ -634,21 +648,39 @@ private[ml] object MLUtils {
     (classOf[FPGrowthModel], Set("associationRules", "freqItemsets")),
 
     // Feature Models
+    (classOf[Bucketizer], Set("getSplits", "getSplitsArray")),
     (classOf[ImputerModel], Set("surrogateDF")),
     (classOf[StandardScalerModel], Set("mean", "std")),
     (classOf[MaxAbsScalerModel], Set("maxAbs")),
     (classOf[MinMaxScalerModel], Set("originalMax", "originalMin")),
     (classOf[RobustScalerModel], Set("range", "median")),
-    (classOf[VectorIndexerModel], Set("numFeatures")),
+    (classOf[VectorIndexerModel], Set("numFeatures", "categoryMapsDF")),
     (classOf[ChiSqSelectorModel], Set("selectedFeatures")),
     (classOf[UnivariateFeatureSelectorModel], Set("selectedFeatures")),
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
     (classOf[PCAModel], Set("pc", "explainedVariance")),
-    (classOf[Word2VecModel], Set("getVectors", "findSynonyms", "findSynonymsArray")),
+    (classOf[Word2VecModel], Set("getVectors", "findSynonyms")),
     (classOf[CountVectorizerModel], Set("vocabulary")),
     (classOf[OneHotEncoderModel], Set("categorySizes")),
     (classOf[StringIndexerModel], Set("labels", "labelsArray")),
-    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")))
+    (classOf[RFormulaModel], Set("resolvedFormulaString")),
+    (classOf[IDFModel], Set("idf", "docFreq", "numDocs")),
+
+    // Utils
+    (
+      classOf[ConnectHelper],
+      Set(
+        "handleOverwrite",
+        "stringIndexerModelFromLabels",
+        "stringIndexerModelFromLabelsArray",
+        "countVectorizerModelFromVocabulary",
+        "stopWordsRemoverLoadDefaultStopWords",
+        "stopWordsRemoverGetDefaultOrUS",
+        "chiSquareTest",
+        "correlation",
+        "kolmogorovSmirnovTest",
+        "powerIterationClusteringAssignClusters",
+        "prefixSpanFindFrequentSequentialPatterns")))
 
   private def validate(obj: Any, method: String): Unit = {
     assert(obj != null)
@@ -656,13 +688,18 @@ private[ml] object MLUtils {
       cls.isInstance(obj) && methods.contains(method)
     }
     if (!valid) {
-      throw MLAttributeNotAllowedException(method)
+      throw MLAttributeNotAllowedException(obj.getClass.getName, method)
     }
   }
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName)
+    try {
+      invokeMethod(obj, methodName)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def invokeMethodAllowed(
@@ -671,11 +708,16 @@ private[ml] object MLUtils {
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName, args, parameterTypes)
+    try {
+      invokeMethod(obj, methodName, args, parameterTypes)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {
-    val writer = if (writeProto.getShouldOverwrite) {
+    val writer = if (writeProto.hasShouldOverwrite && writeProto.getShouldOverwrite) {
       instance.write.overwrite()
     } else {
       instance.write

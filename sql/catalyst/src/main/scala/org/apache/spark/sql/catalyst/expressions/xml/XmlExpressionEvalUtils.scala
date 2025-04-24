@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.xml
 
-import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.catalyst.xml.XmlInferSchema
-import org.apache.spark.sql.internal.SQLConf
+import java.io.CharArrayWriter
+
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
+import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 object XmlExpressionEvalUtils {
 
@@ -35,7 +39,7 @@ object XmlExpressionEvalUtils {
           .map(ArrayType(_, containsNull = at.containsNull))
           .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
       case other: DataType =>
-        xmlInferSchema.canonicalizeType(other).getOrElse(SQLConf.get.defaultStringType)
+        xmlInferSchema.canonicalizeType(other).getOrElse(StringType)
     }
 
     UTF8String.fromString(dataType.sql)
@@ -118,5 +122,90 @@ case class XPathListEvaluator(path: UTF8String) extends XPathEvaluator {
     } else {
       null
     }
+  }
+}
+
+case class XmlToStructsEvaluator(
+    options: Map[String, String],
+    nullableSchema: DataType,
+    nameOfCorruptRecord: String,
+    timeZoneId: Option[String],
+    child: Expression
+) {
+  @transient lazy val parsedOptions = new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord)
+
+  // This converts parsed rows to the desired output by the given schema.
+  @transient
+  private lazy val converter =
+    (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+
+  // Parser that parse XML strings as internal rows
+  @transient
+  private lazy val parser = {
+    val mode = parsedOptions.parseMode
+    if (mode != PermissiveMode && mode != FailFastMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
+    }
+
+    // The parser is only used when the input schema is StructType
+    val schema = nullableSchema.asInstanceOf[StructType]
+    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    val rawParser = new StaxXmlParser(schema, parsedOptions)
+
+    val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+
+    new FailureSafeParser[String](
+      input => rawParser.doParseColumn(input, mode, xsdSchema),
+      mode,
+      schema,
+      parsedOptions.columnNameOfCorruptRecord)
+  }
+
+  final def evaluate(xml: UTF8String): Any = {
+    if (xml == null) return null
+    nullableSchema match {
+      case _: VariantType => StaxXmlParser.parseVariant(xml.toString, parsedOptions)
+      case _: StructType => converter(parser.parse(xml.toString))
+    }
+  }
+}
+
+case class StructsToXmlEvaluator(
+    options: Map[String, String],
+    inputSchema: DataType,
+    timeZoneId: Option[String]) {
+
+  @transient
+  lazy val writer = new CharArrayWriter()
+
+  @transient
+  lazy val gen =
+    new StaxXmlGenerator(inputSchema, writer, new XmlOptions(options, timeZoneId.get), false)
+
+  // This converts rows to the XML output according to the given schema.
+  @transient
+  lazy val converter: Any => UTF8String = {
+    def getAndReset(): UTF8String = {
+      gen.flush()
+      val xmlString = writer.toString
+      writer.reset()
+      UTF8String.fromString(xmlString)
+    }
+
+    inputSchema match {
+      case _: StructType =>
+        (row: Any) =>
+          gen.write(row.asInstanceOf[InternalRow])
+          getAndReset()
+      case _: VariantType =>
+        (v: Any) =>
+          gen.write(v.asInstanceOf[VariantVal])
+          getAndReset()
+    }
+  }
+
+  final def evaluate(value: Any): Any = {
+    if (value == null) return null
+    converter(value)
   }
 }

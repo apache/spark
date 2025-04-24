@@ -978,9 +978,8 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
  * scenario, setActive could set a SQLContext for current thread, which will be returned by
  * getOrCreate instead of the global one.
  */
-trait SQLContextCompanion {
+private[sql] trait SQLContextCompanion {
   private[sql] type SQLContextImpl <: SQLContext
-  private[sql] type SparkContextImpl <: SparkContext
 
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
@@ -994,7 +993,7 @@ trait SQLContextCompanion {
    * @since 1.5.0
    */
   @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def getOrCreate(sparkContext: SparkContextImpl): SQLContextImpl
+  def getOrCreate(sparkContext: SparkContext): SQLContextImpl
 
   /**
    * Changes the SQLContext that will be returned in this thread and its children when
@@ -1017,5 +1016,15 @@ trait SQLContextCompanion {
   @deprecated("Use SparkSession.clearActiveSession instead", "2.0.0")
   def clearActive(): Unit = {
     SparkSession.clearActiveSession()
+  }
+}
+
+object SQLContext extends SQLContextCompanion {
+  private[sql] type SQLContextImpl = SQLContext
+
+  /** @inheritdoc */
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
+  def getOrCreate(sparkContext: SparkContext): SQLContext = {
+    SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
   }
 }

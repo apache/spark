@@ -27,6 +27,7 @@ import org.apache.kafka.common.header.internals.RecordHeader
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, UnsafeProjection}
+import org.apache.spark.sql.kafka010.KafkaExceptions.nullTopicInData
 import org.apache.spark.sql.kafka010.producer.{CachedKafkaProducer, InternalKafkaProducerPool}
 import org.apache.spark.sql.types.BinaryType
 
@@ -95,8 +96,7 @@ private[kafka010] abstract class KafkaRowWriter(
     val key = projectedRow.getBinary(1)
     val value = projectedRow.getBinary(2)
     if (topic == null) {
-      throw new NullPointerException(s"null topic present in the data. Use the " +
-        s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
+      throw nullTopicInData()
     }
     val partition: Integer =
       if (projectedRow.isNullAt(4)) null else projectedRow.getInt(4)

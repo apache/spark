@@ -91,8 +91,9 @@ class RowMatrix @Since("1.0.0") (
   private[mllib] def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
     val n = numCols().toInt
     val vbr = rows.context.broadcast(v)
-    rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
-      seqOp = (U, r) => {
+    rows.treeAggregate[BDV[Double]](
+      zeroValue = null.asInstanceOf[BDV[Double]],
+      seqOp = (U: BDV[Double], r: Vector) => {
         val rBrz = r.asBreeze
         val a = rBrz.dot(vbr.value)
         val theU =
@@ -109,7 +110,8 @@ class RowMatrix @Since("1.0.0") (
             s"Do not support vector operation from type ${rBrz.getClass.getName}.")
         }
         theU
-      }, combOp = (U1, U2) => {
+      },
+      combOp = (U1: BDV[Double], U2: BDV[Double]) => {
         if (U1 == null) {
           U2
         } else if (U2 == null) {
@@ -118,7 +120,10 @@ class RowMatrix @Since("1.0.0") (
           U1 += U2
           U1
         }
-      })
+      },
+      depth = 2,
+      finalAggregateOnExecutor = true
+    )
   }
 
   /**
@@ -136,8 +141,9 @@ class RowMatrix @Since("1.0.0") (
     val gramianSizeInBytes = nt * 8L
 
     // Compute the upper triangular part of the gram matrix.
-    val GU = rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
-      seqOp = (maybeU, v) => {
+    val GU = rows.treeAggregate[BDV[Double]](
+      zeroValue = null.asInstanceOf[BDV[Double]],
+      seqOp = (maybeU: BDV[Double], v: Vector) => {
         val U =
           if (maybeU == null) {
             new BDV[Double](nt)
@@ -146,7 +152,8 @@ class RowMatrix @Since("1.0.0") (
           }
         BLAS.spr(1.0, v, U.data)
         U
-      }, combOp = (U1, U2) =>
+      },
+      combOp = (U1: BDV[Double], U2: BDV[Double]) =>
         if (U1 == null) {
           U2
         } else if (U2 == null) {
@@ -154,7 +161,8 @@ class RowMatrix @Since("1.0.0") (
         } else {
           U1 += U2
         },
-      depth = getTreeAggregateIdealDepth(gramianSizeInBytes)
+      depth = getTreeAggregateIdealDepth(gramianSizeInBytes),
+      finalAggregateOnExecutor = true
     )
 
     RowMatrix.triuToFull(n, GU.data)
@@ -168,8 +176,9 @@ class RowMatrix @Since("1.0.0") (
     // This succeeds when n <= 65535, which is checked above
     val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
 
-    val MU = rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
-      seqOp = (maybeU, v) => {
+    val MU = rows.treeAggregate[BDV[Double]](
+      zeroValue = null.asInstanceOf[BDV[Double]],
+      seqOp = (maybeU: BDV[Double], v: Vector) => {
         val U =
           if (maybeU == null) {
             new BDV[Double](nt)
@@ -188,14 +197,17 @@ class RowMatrix @Since("1.0.0") (
 
         BLAS.spr(1.0, new DenseVector(na), U.data)
         U
-      }, combOp = (U1, U2) =>
+      },
+      combOp = (U1: BDV[Double], U2: BDV[Double]) =>
         if (U1 == null) {
           U2
         } else if (U2 == null) {
           U1
         } else {
           U1 += U2
-        }
+        },
+      depth = 2,
+      finalAggregateOnExecutor = true
     )
 
     bc.destroy()
@@ -533,9 +545,13 @@ class RowMatrix @Since("1.0.0") (
    */
   @Since("1.0.0")
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
-    val summary = rows.treeAggregate(new MultivariateOnlineSummarizer)(
-      (aggregator, data) => aggregator.add(data),
-      (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+    val summary = rows.treeAggregate[MultivariateOnlineSummarizer](
+      zeroValue = new MultivariateOnlineSummarizer,
+      seqOp = (aggregator: MultivariateOnlineSummarizer, data: Vector) => aggregator.add(data),
+      combOp = (aggregator1: MultivariateOnlineSummarizer,
+                aggregator2: MultivariateOnlineSummarizer) => aggregator1.merge(aggregator2),
+      depth = 2,
+      finalAggregateOnExecutor = true)
     updateNumRows(summary.count)
     summary
   }

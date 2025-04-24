@@ -51,6 +51,7 @@ org.apache.spark.ml.recommendation.ALS
 org.apache.spark.ml.fpm.FPGrowth
 
 # feature
+org.apache.spark.ml.feature.QuantileDiscretizer
 org.apache.spark.ml.feature.RFormula
 org.apache.spark.ml.feature.Imputer
 org.apache.spark.ml.feature.StandardScaler

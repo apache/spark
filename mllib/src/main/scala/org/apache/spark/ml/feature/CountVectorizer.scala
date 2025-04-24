@@ -277,7 +277,8 @@ class CountVectorizerModel(
 
   import CountVectorizerModel._
 
-  private[ml] def this() = this(Identifiable.randomUID("cntVecModel"), Array.empty)
+  // For ml connect only
+  private[ml] def this() = this("", Array.empty)
 
   @Since("1.5.0")
   def this(vocabulary: Array[String]) = {

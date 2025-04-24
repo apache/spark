@@ -41,6 +41,11 @@ on:
         required: false
         type: string
         default: ubuntu-latest
+      arch:
+        description: The target architecture (x86, x64, arm64) of the Python or PyPy interpreter.
+        required: false
+        type: string
+        default: x64
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -169,14 +174,12 @@ jobs:
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
-        # macos (14) already has its Python installed, see also SPARK-47096 and
-        # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-Readme.md
-        if: contains(inputs.os, 'ubuntu') && (contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect'))
+        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         with:
           python-version: '3.11'
-          architecture: x64
+          architecture: ${{ inputs.arch }}
       - name: Install Python packages (Python 3.11)
-        if: (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
+        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
           python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
           python3.11 -m pip list
@@ -191,6 +194,12 @@ jobs:
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
+          
+          if [ "$MODULES_TO_TEST" != "connect" ]; then
+            echo "Clean up the assembly module before maven testing"
+            ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
+          fi
+          
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then

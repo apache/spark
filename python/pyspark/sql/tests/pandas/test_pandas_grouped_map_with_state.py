@@ -24,7 +24,6 @@ import tempfile
 import unittest
 from typing import cast
 
-from pyspark import SparkConf
 from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
 from pyspark.sql.types import (
     LongType,
@@ -56,7 +55,7 @@ if have_pyarrow:
 class GroupedApplyInPandasWithStateTestsMixin:
     @classmethod
     def conf(cls):
-        cfg = SparkConf()
+        cfg = super().conf()
         cfg.set("spark.sql.shuffle.partitions", "5")
         return cfg
 

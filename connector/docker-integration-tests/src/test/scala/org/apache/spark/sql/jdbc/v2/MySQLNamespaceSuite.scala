@@ -28,9 +28,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.1.0):
+ * To run this test suite for a specific version (e.g., mysql:9.2.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.1.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLNamespaceSuite"
  * }}}
  */

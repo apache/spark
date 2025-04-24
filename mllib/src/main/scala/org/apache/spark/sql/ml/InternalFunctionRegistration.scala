@@ -17,6 +17,7 @@
 package org.apache.spark.sql.ml
 
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.ml.stat._
 import org.apache.spark.mllib.linalg.{SparseVector => OldSparseVector, Vector => OldVector}
 import org.apache.spark.sql.{SparkSessionExtensions, SparkSessionExtensionsProvider}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -96,6 +97,9 @@ object InternalFunctionRegistration {
     case exprs =>
       throw QueryCompilationErrors.wrongNumArgsError("array_to_vector", "1", exprs.size)
   }
+
+  FunctionRegistry
+    .registerInternalExpression[SummaryBuilderImpl.MetricsAggregate]("aggregate_metrics")
 }
 
 class InternalFunctionRegistration extends SparkSessionExtensionsProvider {

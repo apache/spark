@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, TimeZoneAwareExpression}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, TimeZoneAwareExpression}
 
 /**
  * Resolves [[TimeZoneAwareExpressions]] by applying the session's local timezone.
@@ -32,17 +32,24 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, TimeZoneAwareExpre
 class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expression, Expression])
     extends TreeNodeResolver[TimeZoneAwareExpression, Expression]
     with ResolvesExpressionChildren {
+  val typeCoercionResolver = new TypeCoercionResolver(this)
 
   /**
    * Resolves a [[TimeZoneAwareExpression]] by resolving its children and applying a timezone.
+   * If the resolved expression is a [[Cast]], type coercion is not needed. Otherwise we apply
+   * [[TypeCoercionResolver]] to the resolved expression.
    *
    * @param unresolvedTimezoneExpression The [[TimeZoneAwareExpression]] to resolve.
-   * @return A resolved [[Expression]] with the session's local timezone applied.
+   * @return A resolved [[Expression]] with the session's local timezone applied, and optionally
+   *   type coerced.
    */
   override def resolve(unresolvedTimezoneExpression: TimeZoneAwareExpression): Expression = {
     val expressionWithResolvedChildren =
-      withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve)
-    withResolvedTimezoneCopyTags(expressionWithResolvedChildren, conf.sessionLocalTimeZone)
+      withResolvedChildren(unresolvedTimezoneExpression, expressionResolver.resolve _)
+    withResolvedTimezone(expressionWithResolvedChildren, conf.sessionLocalTimeZone) match {
+      case cast: Cast => cast
+      case other => typeCoercionResolver.resolve(other)
+    }
   }
 
   /**
@@ -55,19 +62,12 @@ class TimezoneAwareExpressionResolver(expressionResolver: TreeNodeResolver[Expre
    * @param timeZoneId The timezone ID to apply.
    * @return A new [[TimeZoneAwareExpression]] with the specified timezone and original tags.
    */
-  def withResolvedTimezoneCopyTags(expression: Expression, timeZoneId: String): Expression = {
-    val withTimeZone = withResolvedTimezone(expression, timeZoneId)
-    withTimeZone.copyTagsFrom(expression)
-    withTimeZone
-  }
-
-  /**
-   * Apply timezone to [[TimeZoneAwareExpression]] expressions.
-   */
   def withResolvedTimezone(expression: Expression, timeZoneId: String): Expression =
     expression match {
       case timezoneExpression: TimeZoneAwareExpression if timezoneExpression.timeZoneId.isEmpty =>
-        timezoneExpression.withTimeZone(timeZoneId)
+        val withTimezone = timezoneExpression.withTimeZone(timeZoneId)
+        withTimezone.copyTagsFrom(timezoneExpression)
+        withTimezone
       case other => other
     }
 }

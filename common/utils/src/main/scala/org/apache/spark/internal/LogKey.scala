@@ -139,6 +139,7 @@ private[spark] object LogKeys {
   case object CLUSTER_LABEL extends LogKey
   case object CLUSTER_LEVEL extends LogKey
   case object CLUSTER_WEIGHT extends LogKey
+  case object CODE extends LogKey
   case object CODEC_LEVEL extends LogKey
   case object CODEC_NAME extends LogKey
   case object CODEGEN_STAGE_ID extends LogKey
@@ -331,6 +332,7 @@ private[spark] object LogKeys {
   case object INPUT extends LogKey
   case object INPUT_SPLIT extends LogKey
   case object INTEGRAL extends LogKey
+  case object INTERRUPT_THREAD extends LogKey
   case object INTERVAL extends LogKey
   case object INVALID_PARAMS extends LogKey
   case object ISOLATION_LEVEL extends LogKey
@@ -509,6 +511,7 @@ private[spark] object LogKeys {
   case object NUM_ITERATIONS extends LogKey
   case object NUM_KAFKA_PULLS extends LogKey
   case object NUM_KAFKA_RECORDS_PULLED extends LogKey
+  case object NUM_LAGGING_STORES extends LogKey
   case object NUM_LEADING_SINGULAR_VALUES extends LogKey
   case object NUM_LEFT_PARTITION_VALUES extends LogKey
   case object NUM_LOADED_ENTRIES extends LogKey
@@ -634,8 +637,16 @@ private[spark] object LogKeys {
   case object PYTHON_EXEC extends LogKey
   case object PYTHON_PACKAGES extends LogKey
   case object PYTHON_VERSION extends LogKey
+  case object PYTHON_WORKER_CHANNEL_IS_BLOCKING_MODE extends LogKey
+  case object PYTHON_WORKER_CHANNEL_IS_CONNECTED extends LogKey
+  case object PYTHON_WORKER_HAS_INPUTS extends LogKey
+  case object PYTHON_WORKER_IDLE_TIMEOUT extends LogKey
+  case object PYTHON_WORKER_IS_ALIVE extends LogKey
   case object PYTHON_WORKER_MODULE extends LogKey
   case object PYTHON_WORKER_RESPONSE extends LogKey
+  case object PYTHON_WORKER_SELECTION_KEY_INTERESTS extends LogKey
+  case object PYTHON_WORKER_SELECTION_KEY_IS_VALID extends LogKey
+  case object PYTHON_WORKER_SELECTOR_IS_OPEN extends LogKey
   case object QUANTILES extends LogKey
   case object QUERY_CACHE_VALUE extends LogKey
   case object QUERY_HINT extends LogKey
@@ -695,6 +706,7 @@ private[spark] object LogKeys {
   case object RIGHT_EXPR extends LogKey
   case object RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES extends LogKey
   case object RMSE extends LogKey
+  case object ROCKS_DB_FILE_MAPPING extends LogKey
   case object ROCKS_DB_LOG_LEVEL extends LogKey
   case object ROCKS_DB_LOG_MESSAGE extends LogKey
   case object RPC_ADDRESS extends LogKey
@@ -740,6 +752,9 @@ private[spark] object LogKeys {
   case object SLEEP_TIME extends LogKey
   case object SLIDE_DURATION extends LogKey
   case object SMALLEST_CLUSTER_INDEX extends LogKey
+  case object SNAPSHOT_EVENT extends LogKey
+  case object SNAPSHOT_EVENT_TIME_DELTA extends LogKey
+  case object SNAPSHOT_EVENT_VERSION_DELTA extends LogKey
   case object SNAPSHOT_VERSION extends LogKey
   case object SOCKET_ADDRESS extends LogKey
   case object SOURCE extends LogKey

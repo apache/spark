@@ -14,17 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import warnings
-from typing import cast, Type, TYPE_CHECKING, Union, Dict, Any, Optional
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
+
+from typing import cast, Type, TYPE_CHECKING, Union, Dict, Any
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.connect.serialize import serialize_ml_params, deserialize, deserialize_param
-from pyspark.ml.tuning import (
-    CrossValidatorModelWriter,
-    CrossValidatorModel,
-    TrainValidationSplitModel,
-    TrainValidationSplitModelWriter,
-)
 from pyspark.ml.util import MLWriter, MLReader, RL
 from pyspark.ml.wrapper import JavaWrapper
 
@@ -32,32 +29,6 @@ if TYPE_CHECKING:
     from pyspark.core.context import SparkContext
     from pyspark.sql.connect.session import SparkSession
     from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-
-
-class RemoteCrossValidatorModelWriter(CrossValidatorModelWriter):
-    def __init__(
-        self,
-        instance: "CrossValidatorModel",
-        optionMap: Dict[str, Any] = {},
-        session: Optional["SparkSession"] = None,
-    ):
-        super(RemoteCrossValidatorModelWriter, self).__init__(instance)
-        self.instance = instance
-        self.optionMap = optionMap
-        self.session(session)  # type: ignore[arg-type]
-
-
-class RemoteTrainValidationSplitModelWriter(TrainValidationSplitModelWriter):
-    def __init__(
-        self,
-        instance: "TrainValidationSplitModel",
-        optionMap: Dict[str, Any] = {},
-        session: Optional["SparkSession"] = None,
-    ):
-        super(RemoteTrainValidationSplitModelWriter, self).__init__(instance)
-        self.instance = instance
-        self.optionMap = optionMap
-        self.session(session)  # type: ignore[arg-type]
 
 
 class RemoteMLWriter(MLWriter):
@@ -94,8 +65,14 @@ class RemoteMLWriter(MLWriter):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
+        from pyspark.ml.clustering import PowerIterationClustering
+        from pyspark.ml.tuning import (
+            CrossValidator,
+            CrossValidatorModel,
+            TrainValidationSplit,
+            TrainValidationSplitModel,
+        )
 
         # Spark Connect ML is built on scala Spark.ML, that means we're only
         # supporting JavaModel or JavaEstimator or JavaEvaluator
@@ -117,13 +94,13 @@ class RemoteMLWriter(MLWriter):
         elif isinstance(instance, (JavaEstimator, JavaTransformer, JavaEvaluator)):
             operator: Union[JavaEstimator, JavaTransformer, JavaEvaluator]
             if isinstance(instance, JavaEstimator):
-                ml_type = pb2.MlOperator.ESTIMATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
                 operator = cast("JavaEstimator", instance)
             elif isinstance(instance, JavaEvaluator):
-                ml_type = pb2.MlOperator.EVALUATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
                 operator = cast("JavaEvaluator", instance)
             else:
-                ml_type = pb2.MlOperator.TRANSFORMER
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
                 operator = cast("JavaTransformer", instance)
 
             params = serialize_ml_params(operator, session.client)
@@ -142,74 +119,85 @@ class RemoteMLWriter(MLWriter):
         elif isinstance(instance, Pipeline):
             from pyspark.ml.pipeline import PipelineWriter
 
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for Pipeline")
-
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             pl_writer = PipelineWriter(instance)
             pl_writer.session(session)  # type: ignore[arg-type]
             pl_writer.save(path)
         elif isinstance(instance, PipelineModel):
             from pyspark.ml.pipeline import PipelineModelWriter
 
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for PipelineModel")
-
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             plm_writer = PipelineModelWriter(instance)
             plm_writer.session(session)  # type: ignore[arg-type]
             plm_writer.save(path)
         elif isinstance(instance, CrossValidator):
             from pyspark.ml.tuning import CrossValidatorWriter
 
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for CrossValidator")
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             cv_writer = CrossValidatorWriter(instance)
             cv_writer.session(session)  # type: ignore[arg-type]
             cv_writer.save(path)
         elif isinstance(instance, CrossValidatorModel):
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for CrossValidatorModel")
-            cvm_writer = RemoteCrossValidatorModelWriter(instance, optionMap, session)
+            from pyspark.ml.tuning import CrossValidatorModelWriter
+
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
+            cvm_writer = CrossValidatorModelWriter(instance)
+            cvm_writer.optionMap = optionMap
+            cvm_writer.session(session)  # type: ignore[arg-type]
             cvm_writer.save(path)
         elif isinstance(instance, TrainValidationSplit):
             from pyspark.ml.tuning import TrainValidationSplitWriter
 
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for TrainValidationSplit")
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             tvs_writer = TrainValidationSplitWriter(instance)
             tvs_writer.save(path)
         elif isinstance(instance, TrainValidationSplitModel):
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for TrainValidationSplitModel")
-            tvsm_writer = RemoteTrainValidationSplitModelWriter(instance, optionMap, session)
+            from pyspark.ml.tuning import TrainValidationSplitModelWriter
+
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
+            tvsm_writer = TrainValidationSplitModelWriter(instance)
+            tvsm_writer.optionMap = optionMap
+            tvsm_writer.session(session)  # type: ignore[arg-type]
             tvsm_writer.save(path)
         elif isinstance(instance, OneVsRest):
             from pyspark.ml.classification import OneVsRestWriter
 
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for OneVsRest")
-
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             ovr_writer = OneVsRestWriter(instance)
             ovr_writer.session(session)  # type: ignore[arg-type]
             ovr_writer.save(path)
         elif isinstance(instance, OneVsRestModel):
             from pyspark.ml.classification import OneVsRestModelWriter
 
-            if shouldOverwrite:
-                # TODO(SPARK-50954): Support client side model path overwrite
-                warnings.warn("Overwrite doesn't take effect for OneVsRestModel")
-
+            RemoteMLWriter.handleOverwrite(path, shouldOverwrite)
             ovrm_writer = OneVsRestModelWriter(instance)
             ovrm_writer.session(session)  # type: ignore[arg-type]
             ovrm_writer.save(path)
+
+        elif isinstance(instance, PowerIterationClustering):
+            transformer = JavaTransformer(
+                "org.apache.spark.ml.clustering.PowerIterationClusteringWrapper"
+            )
+            transformer._resetUid(instance.uid)
+            transformer._paramMap = instance._paramMap
+            RemoteMLWriter.saveInstance(
+                transformer,  # type: ignore[arg-type]
+                path,
+                session,
+                shouldOverwrite,
+                optionMap,
+            )
+
         else:
             raise NotImplementedError(f"Unsupported write for {instance.__class__}")
+
+    @staticmethod
+    def handleOverwrite(path: str, shouldOverwrite: bool) -> None:
+        from pyspark.ml.util import ML_CONNECT_HELPER_ID
+
+        if shouldOverwrite:
+            helper = JavaWrapper(java_obj=ML_CONNECT_HELPER_ID)
+            helper._call_java("handleOverwrite", path, shouldOverwrite)
 
 
 class RemoteMLReader(MLReader[RL]):
@@ -234,8 +222,14 @@ class RemoteMLReader(MLReader[RL]):
         from pyspark.ml.wrapper import JavaModel, JavaEstimator, JavaTransformer
         from pyspark.ml.evaluation import JavaEvaluator
         from pyspark.ml.pipeline import Pipeline, PipelineModel
-        from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
+        from pyspark.ml.clustering import PowerIterationClustering
+        from pyspark.ml.tuning import (
+            CrossValidator,
+            CrossValidatorModel,
+            TrainValidationSplit,
+            TrainValidationSplitModel,
+        )
 
         if (
             issubclass(clazz, JavaModel)
@@ -244,13 +238,13 @@ class RemoteMLReader(MLReader[RL]):
             or issubclass(clazz, JavaTransformer)
         ):
             if issubclass(clazz, JavaModel):
-                ml_type = pb2.MlOperator.MODEL
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_MODEL
             elif issubclass(clazz, JavaEstimator):
-                ml_type = pb2.MlOperator.ESTIMATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_ESTIMATOR
             elif issubclass(clazz, JavaEvaluator):
-                ml_type = pb2.MlOperator.EVALUATOR
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_EVALUATOR
             else:
-                ml_type = pb2.MlOperator.TRANSFORMER
+                ml_type = pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER
 
             # to get the java corresponding qualified class name
             java_qualified_class_name = (
@@ -276,7 +270,7 @@ class RemoteMLReader(MLReader[RL]):
             py_type = _get_class()
             # It must be JavaWrapper, since we're passing the string to the _java_obj
             if issubclass(py_type, JavaWrapper):
-                if ml_type == pb2.MlOperator.MODEL:
+                if ml_type == pb2.MlOperator.OPERATOR_TYPE_MODEL:
                     session.client.add_ml_cache(result.obj_ref.id)
                     instance = py_type(result.obj_ref.id)
                 else:
@@ -343,6 +337,30 @@ class RemoteMLReader(MLReader[RL]):
             ovrm_reader = OneVsRestModelReader(OneVsRestModel)
             ovrm_reader.session(session)
             return ovrm_reader.load(path)
+
+        elif issubclass(clazz, PowerIterationClustering):
+            java_qualified_class_name = (
+                "org.apache.spark.ml.clustering.PowerIterationClusteringWrapper"
+            )
+
+            command = pb2.Command()
+            command.ml_command.read.CopyFrom(
+                pb2.MlCommand.Read(
+                    operator=pb2.MlOperator(
+                        name=java_qualified_class_name,
+                        type=pb2.MlOperator.OPERATOR_TYPE_TRANSFORMER,
+                    ),
+                    path=path,
+                )
+            )
+            (_, properties, _) = session.client.execute_command(command)
+            result = deserialize(properties)
+
+            instance = PowerIterationClustering()
+            instance._resetUid(result.uid)
+            params = {k: deserialize_param(v) for k, v in result.params.params.items()}
+            instance._set(**params)
+            return instance  # type: ignore[return-value]
 
         else:
             raise RuntimeError(f"Unsupported read for {clazz}")

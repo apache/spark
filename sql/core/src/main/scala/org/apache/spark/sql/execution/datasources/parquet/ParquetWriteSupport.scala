@@ -83,8 +83,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private val decimalBuffer =
     new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
 
-  private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
-    SQLConf.get.getConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE))
+  private val datetimeRebaseMode = SQLConf.get.getConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE)
 
   private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
@@ -92,8 +91,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
-  private val int96RebaseMode = LegacyBehaviorPolicy.withName(
-    SQLConf.get.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE))
+  private val int96RebaseMode = SQLConf.get.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE)
 
   private val int96RebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     int96RebaseMode, "Parquet INT96")
@@ -211,7 +209,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getInt(ordinal))
 
-      case LongType | _: DayTimeIntervalType =>
+      case LongType | _: DayTimeIntervalType | _: TimeType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addLong(row.getLong(ordinal))
 

@@ -44,7 +44,7 @@ class ArrowPythonUDTFRunner(
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
       jobArtifactUUID, pythonMetrics)
-  with BasicPythonArrowInput
+  with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
@@ -56,6 +56,8 @@ class ArrowPythonUDTFRunner(
       funcs.head.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 

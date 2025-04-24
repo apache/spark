@@ -29,7 +29,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
+import org.apache.spark.annotation.{ClassicOnly, DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
@@ -66,8 +66,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * The Spark context associated with this Spark session.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    */
+  @ClassicOnly
   def sparkContext: SparkContext
 
   /**
@@ -88,9 +89,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * This is internal to Spark and there is no guarantee on interface stability.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.2.0
    */
+  @ClassicOnly
   @Unstable
   @transient
   def sharedState: SharedState
@@ -103,9 +105,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * This is internal to Spark and there is no guarantee on interface stability.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.2.0
    */
+  @ClassicOnly
   @Unstable
   @transient
   def sessionState: SessionState
@@ -113,8 +116,6 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * A wrapped version of this session in the form of a `SQLContext`, for backward compatibility.
    *
-   * @note
-   *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
   @transient
@@ -136,9 +137,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * listen for execution metrics.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def listenerManager: ExecutionListenerManager
 
   /**
@@ -146,9 +148,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * to hook into the query planner for advanced functionality.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   @Experimental
   @Unstable
   def experimental: ExperimentalMethods
@@ -242,9 +245,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * Creates a `DataFrame` from an RDD of Product (e.g. case classes, tuples).
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame
 
   /**
@@ -276,9 +280,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * }}}
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame
 
@@ -289,9 +294,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * schema. Otherwise, there will be runtime exception.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame
 
@@ -301,8 +307,11 @@ abstract class SparkSession extends Serializable with Closeable {
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
    * will return the columns in an undefined order.
    *
+   * @note
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame
 
   /**
@@ -312,18 +321,20 @@ abstract class SparkSession extends Serializable with Closeable {
    * will return the columns in an undefined order.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame
 
   /**
    * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame
 
   /* ------------------------------- *
@@ -393,6 +404,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
+  @ClassicOnly
   def createDataset[T: Encoder](data: RDD[T]): Dataset[T]
 
   /**
@@ -535,8 +547,6 @@ abstract class SparkSession extends Serializable with Closeable {
    * @param options
    *   The options for the runner.
    *
-   * @note
-   *   this method is not supported in Spark Connect.
    * @since 3.0.0
    */
   @Unstable
@@ -844,12 +854,15 @@ object SparkSession extends SparkSessionCompanion {
     private var companion: SparkSessionCompanion = DEFAULT_COMPANION
 
     /** @inheritdoc */
+    @ClassicOnly
     override def appName(name: String): this.type = super.appName(name)
 
     /** @inheritdoc */
+    @ClassicOnly
     override def master(master: String): this.type = super.master(master)
 
     /** @inheritdoc */
+    @ClassicOnly
     override def enableHiveSupport(): this.type = super.enableHiveSupport()
 
     /** @inheritdoc */
@@ -877,12 +890,14 @@ object SparkSession extends SparkSessionCompanion {
     override def remote(connectionString: String): this.type = super.remote(connectionString)
 
     /** @inheritdoc */
+    @ClassicOnly
     override def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
       extensionModifications += f
       this
     }
 
     /** @inheritdoc */
+    @ClassicOnly
     override private[spark] def sparkContext(sparkContext: SparkContext): this.type =
       synchronized {
         sc = Option(sparkContext)
@@ -1065,7 +1080,7 @@ private[sql] abstract class SparkSessionCompanion {
 /**
  * This object keeps track of the global (default) and the thread-local SparkSession.
  */
-object SparkSessionCompanion {
+private[sql] object SparkSessionCompanion {
 
   /** The active SparkSession for the current thread. */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]
@@ -1078,7 +1093,7 @@ object SparkSessionCompanion {
  * Builder for [[SparkSession]].
  */
 @Stable
-abstract class SparkSessionBuilder {
+private[sql] abstract class SparkSessionBuilder {
   import SparkSessionBuilder._
   protected val options = new scala.collection.mutable.HashMap[String, String]
 
@@ -1086,8 +1101,11 @@ abstract class SparkSessionBuilder {
    * Sets a name for the application, which will be shown in the Spark web UI. If no application
    * name is set, a randomly generated name will be used.
    *
+   * @note
+   *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def appName(name: String): this.type = config(APP_NAME_KEY, name)
 
   /**
@@ -1098,6 +1116,7 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def master(master: String): this.type = config(MASTER_KEY, master)
 
   /**
@@ -1108,6 +1127,7 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Classic.
    * @since 2.0.0
    */
+  @ClassicOnly
   def enableHiveSupport(): this.type = config(CATALOG_IMPL_KEY, "hive")
 
   /**
@@ -1207,17 +1227,19 @@ abstract class SparkSessionBuilder {
    * Optimizer rules, Planning Strategies or a customized parser.
    *
    * @note
-   *   this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    * @since 2.2.0
    */
+  @ClassicOnly
   def withExtensions(f: SparkSessionExtensions => Unit): this.type
 
   /**
    * Set the [[SparkContext]] to use for the [[SparkSession]].
    *
    * @note
-   *   * this method is not supported in Spark Connect.
+   *   this is only supported in Classic.
    */
+  @ClassicOnly
   private[spark] def sparkContext(sparkContext: SparkContext): this.type
 
   /**
@@ -1248,7 +1270,7 @@ abstract class SparkSessionBuilder {
   def create(): SparkSession
 }
 
-object SparkSessionBuilder {
+private[sql] object SparkSessionBuilder {
   val MASTER_KEY = "spark.master"
   val APP_NAME_KEY = "spark.app.name"
   val CATALOG_IMPL_KEY = "spark.sql.catalogImplementation"

@@ -25,11 +25,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.{AnalysisException, Encoder, Encoders, Row}
 import org.apache.spark.sql.api.java.UDF2
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder, StringEncoder}
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
-import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.functions.{col, struct, udaf, udf}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.functions.{call_function, col, count, lit, struct, udaf, udf}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
 
 /**
  * All tests in this class requires client UDF defined in this test class synced with the server.
@@ -433,6 +433,50 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     assert(ds.select(RowAggregator.toColumn).head() == 405)
     assert(ds.agg(RowAggregator.toColumn).head().getLong(0) == 405)
   }
+
+  test("registerJavaUdf") {
+    spark.udf.registerJava("sconcat", classOf[StringConcat].getName, StringType)
+    val ds = spark
+      .range(2)
+      .select(call_function("sconcat", col("id").cast("string"), (col("id") + 1).cast("string")))
+      .as(StringEncoder)
+    checkDataset(ds, "01", "12")
+  }
+
+  test("inline UserDefinedAggregateFunction") {
+    val summer0 = new LongSummer(0)
+    val summer1 = new LongSummer(1)
+    val summer3 = new LongSummer(3)
+    val ds = spark
+      .range(10)
+      .select(
+        count(lit(1)),
+        summer0(),
+        summer1(col("id")),
+        summer3(col("id"), col("id") + 1, col("id") + 2))
+    checkDataset(ds, Row(10L, 10L, Row(45L, 10L), Row(45L, 55L, 65L, 10L)))
+  }
+
+  test("inline UserDefinedAggregateFunction distinct") {
+    val summer1 = new LongSummer(1)
+    val ds =
+      spark.range(10).union(spark.range(10)).select(count(lit(1)), summer1.distinct(col("id")))
+    checkDataset(ds, Row(20L, Row(45L, 10L)))
+  }
+
+  test("register UserDefinedAggregateFunction") {
+    spark.udf.register("s0", new LongSummer(0))
+    spark.udf.register("s2", new LongSummer(2))
+    spark.udf.register("s4", new LongSummer(4))
+    val ds = spark
+      .range(10)
+      .select(
+        count(lit(1)),
+        call_function("s0"),
+        call_function("s2", col("id"), col("id") + 1),
+        call_function("s4", col("id"), col("id") + 1, col("id") + 2, col("id") + 3))
+    checkDataset(ds, Row(10L, 10L, Row(45L, 55L, 10L), Row(45L, 55L, 65L, 75L, 10L)))
+  }
 }
 
 case class UdafTestInput(id: Long, extra: Long)
@@ -489,4 +533,61 @@ object RowAggregator extends Aggregator[Row, (Long, Long), Long] {
   override def bufferEncoder: Encoder[(Long, Long)] =
     Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
   override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
+class StringConcat extends UDF2[String, String, String] {
+  override def call(t1: String, t2: String): String = t1 + t2
+}
+
+class LongSummer(size: Int) extends UserDefinedAggregateFunction {
+  assert(size >= 0)
+
+  override def inputSchema: StructType = {
+    StructType(Array.tabulate(size)(i => StructField(s"val_$i", LongType)))
+  }
+
+  override def bufferSchema: StructType = inputSchema.add("counter", LongType)
+
+  override def dataType: DataType = {
+    if (size == 0) {
+      LongType
+    } else {
+      bufferSchema
+    }
+  }
+
+  override def deterministic: Boolean = true
+
+  override def initialize(buffer: MutableAggregationBuffer): Unit = {
+    var i = 0
+    while (i < size + 1) {
+      buffer.update(i, 0L)
+      i += 1
+    }
+  }
+
+  override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    var i = 0
+    while (i < size) {
+      buffer.update(i, buffer.getLong(i) + input.getLong(i))
+      i += 1
+    }
+    buffer.update(size, buffer.getLong(size) + 1)
+  }
+
+  override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    var i = 0
+    while (i < size + 1) {
+      buffer1.update(i, buffer1.getLong(i) + buffer2.getLong(i))
+      i += 1
+    }
+  }
+
+  override def evaluate(buffer: Row): Any = {
+    if (size == 0) {
+      buffer.getLong(0)
+    } else {
+      buffer
+    }
+  }
 }

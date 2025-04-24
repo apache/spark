@@ -1614,7 +1614,7 @@ abstract class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBa
     testStream(kafka)(
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
-        query.logicalPlan.collect {
+        query.logicalPlan.collectFirst {
           case StreamingExecutionRelation(_: KafkaSource, _, _) => true
         }.nonEmpty
       }

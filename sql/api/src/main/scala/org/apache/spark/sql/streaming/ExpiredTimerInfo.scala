@@ -28,7 +28,9 @@ import org.apache.spark.annotation.Evolving
 trait ExpiredTimerInfo extends Serializable {
 
   /**
-   * Get the expired timer's expiry time as milliseconds in epoch time.
+   * Function to return the expired timer's expiry time as milliseconds in epoch time.
+   *
+   * @return - the expired timer's expiry time in milliseconds
    */
   def getExpiryTimeInMs(): Long
 }

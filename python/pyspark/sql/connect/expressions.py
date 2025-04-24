@@ -1233,33 +1233,26 @@ class NamedArgumentExpression(Expression):
         return f"{self._key} => {self._value}"
 
 
-class LazyExpression(Expression):
-    def __init__(self, expr: Expression):
-        assert isinstance(expr, Expression)
-        super().__init__()
-        self._expr = expr
-
-    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = self._create_proto_expression()
-        expr.lazy_expression.child.CopyFrom(self._expr.to_plan(session))
-        return expr
-
-    @property
-    def children(self) -> Sequence["Expression"]:
-        return [self._expr]
-
-    def __repr__(self) -> str:
-        return f"lazy({self._expr})"
-
-
 class SubqueryExpression(Expression):
-    def __init__(self, plan: "LogicalPlan", subquery_type: str) -> None:
+    def __init__(
+        self,
+        plan: "LogicalPlan",
+        subquery_type: str,
+        partition_spec: Optional[Sequence["Expression"]] = None,
+        order_spec: Optional[Sequence["SortOrder"]] = None,
+        with_single_partition: Optional[bool] = None,
+        in_subquery_values: Optional[Sequence["Expression"]] = None,
+    ) -> None:
         assert isinstance(subquery_type, str)
-        assert subquery_type in ("scalar", "exists")
+        assert subquery_type in ("scalar", "exists", "table_arg", "in")
 
         super().__init__()
         self._plan = plan
         self._subquery_type = subquery_type
+        self._partition_spec = partition_spec or []
+        self._order_spec = order_spec or []
+        self._with_single_partition = with_single_partition
+        self._in_subquery_values = in_subquery_values or []
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         expr = self._create_proto_expression()
@@ -1268,7 +1261,42 @@ class SubqueryExpression(Expression):
             expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_SCALAR
         elif self._subquery_type == "exists":
             expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_EXISTS
+        elif self._subquery_type == "table_arg":
+            expr.subquery_expression.subquery_type = (
+                proto.SubqueryExpression.SUBQUERY_TYPE_TABLE_ARG
+            )
+
+            # Populate TableArgOptions
+            table_arg_options = expr.subquery_expression.table_arg_options
+            if len(self._partition_spec) > 0:
+                table_arg_options.partition_spec.extend(
+                    [p.to_plan(session) for p in self._partition_spec]
+                )
+            if len(self._order_spec) > 0:
+                table_arg_options.order_spec.extend(
+                    [o.to_plan(session).sort_order for o in self._order_spec]
+                )
+            if self._with_single_partition is not None:
+                table_arg_options.with_single_partition = self._with_single_partition
+        elif self._subquery_type == "in":
+            expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_IN
+            expr.subquery_expression.in_subquery_values.extend(
+                [expr.to_plan(session) for expr in self._in_subquery_values]
+            )
+
         return expr
 
     def __repr__(self) -> str:
-        return f"SubqueryExpression({self._plan}, {self._subquery_type})"
+        repr_parts = [f"plan={self._plan}", f"type={self._subquery_type}"]
+
+        if self._subquery_type == "table_arg":
+            if self._partition_spec:
+                repr_parts.append(f"partition_spec={self._partition_spec}")
+            if self._order_spec:
+                repr_parts.append(f"order_spec={self._order_spec}")
+            if self._with_single_partition is not None:
+                repr_parts.append(f"with_single_partition={self._with_single_partition}")
+        elif self._subquery_type == "in":
+            repr_parts.append(f"values={self._in_subquery_values}")
+
+        return f"SubqueryExpression({', '.join(repr_parts)})"
