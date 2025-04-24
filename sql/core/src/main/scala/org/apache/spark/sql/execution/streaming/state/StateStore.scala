@@ -1040,16 +1040,17 @@ object StateStore extends Logging {
    */
   def unload(
       storeProviderId: StateStoreProviderId,
-      alreadyRemovedProvider: Option[StateStoreProvider] = None): Unit = {
-    // If we already have the provider, close it directly
-    alreadyRemovedProvider.foreach(_.close())
-
-    // Otherwise, remove from loadedProviders and close if found
-    if (alreadyRemovedProvider.isEmpty) {
+      alreadyRemovedProvider: Option[StateStoreProvider] = None
+  ): Unit = {
+    // Get the provider to close - either the one passed in or one we remove from loadedProviders
+    val providerToClose = alreadyRemovedProvider.orElse {
       loadedProviders.synchronized {
-        loadedProviders.remove(storeProviderId).foreach(_.close())
+        loadedProviders.remove(storeProviderId)
       }
     }
+
+    // Close the provider if we found one
+    providerToClose.foreach(_.close())
   }
 
   /** Unload all state store providers: unit test purpose */
