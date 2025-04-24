@@ -1023,7 +1023,7 @@ object StateStore extends Logging {
             log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}, " +
             log"task=${MDC(LogKeys.TASK_ID, taskContext.taskAttemptId())}. " +
             log"Removed provider from loadedProviders")
-          submitMaintenanceWorkForProvider(id, provider, alreadyRemovedFromLoadedProviders = true)
+          submitMaintenanceWorkForProvider(id, provider, submittedFromTaskThread = true)
         })
       })
       provider
@@ -1164,17 +1164,17 @@ object StateStore extends Logging {
    *
    * @param id The StateStore provider ID to perform maintenance on
    * @param provider The StateStore provider instance
-   * @param alreadyRemovedFromLoadedProviders If true, provider was already removed from
-   *                                          loadedProviders. If false, we must already
-   *                                          have acquired the lock to process this partition.
+   * @param submittedFromTaskThread If true, provider was already removed from
+   *                                loadedProviders. If false, we must already
+   *                                have acquired the lock to process this partition.
    */
   private def submitMaintenanceWorkForProvider(
       id: StateStoreProviderId,
       provider: StateStoreProvider,
-      alreadyRemovedFromLoadedProviders: Boolean = false): Unit = {
+      submittedFromTaskThread: Boolean = false): Unit = {
     maintenanceThreadPool.execute(() => {
       val startTime = System.currentTimeMillis()
-      if (alreadyRemovedFromLoadedProviders) {
+      if (submittedFromTaskThread) {
         // If provider is already removed from loadedProviders (which can happen when a task thread
         // triggers unloading of an old provider), we MUST process this partition to
         // close it properly.
@@ -1185,16 +1185,14 @@ object StateStore extends Logging {
       val awaitingPartitionDuration = System.currentTimeMillis() - startTime
       try {
         provider.doMaintenance()
-        // If shouldRemoveFromLoadedProviders is false, we don't need to verify
+        // If submittedFromTaskThread is false, we don't need to verify
         // with the coordinator as we know it definitely should be unloaded.
-        if (alreadyRemovedFromLoadedProviders || !verifyIfStoreInstanceActive(id)) {
-          if (alreadyRemovedFromLoadedProviders) {
+        if (submittedFromTaskThread) {
             unload(id, Some(provider))
-          } else {
+          } else if (!verifyIfStoreInstanceActive(id)) {
             unload(id)
           }
           logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}")
-        }
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
@@ -1211,7 +1209,7 @@ object StateStore extends Logging {
           // are rare. The benefit to unloading just the partition with an exception is that
           // transient issues on a given provider do not affect any other providers; so, in
           // most cases, this should be a more performant solution.
-          if (alreadyRemovedFromLoadedProviders) {
+          if (submittedFromTaskThread) {
             unload(id, Some(provider))
           } else {
             unload(id)
