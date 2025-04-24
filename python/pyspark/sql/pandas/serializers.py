@@ -32,6 +32,7 @@ from pyspark.serializers import (
     UTF8Deserializer,
     CPickleSerializer,
 )
+from pyspark.sql import Row
 from pyspark.sql.pandas.types import (
     from_arrow_type,
     is_variant,
@@ -1236,17 +1237,19 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
     def load_stream(self, stream):
         """
         Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunk, and
-        convert the data into a list of pandas.Series.
+        convert the data into Rows.
 
         Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.
         """
         import pyarrow as pa
-        from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPySparkFuncMode,
+        )
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+            Deserialize ArrowRecordBatches and return a generator of Rows.
 
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
@@ -1267,11 +1270,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, g)
 
-        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
 
-        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
+        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)
 
     def dump_stream(self, iterator, stream):
         """
@@ -1308,7 +1311,9 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
     def load_stream(self, stream):
         import pyarrow as pa
-        from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPySparkFuncMode,
+        )
 
         def generate_data_batches(batches):
             """
@@ -1369,8 +1374,212 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, g)
 
-        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
 
-        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
+        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)
+
+
+class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for
+    :meth:`pyspark.sql.GroupedData.transformWithState`.
+
+    Parameters
+    ----------
+    arrow_max_records_per_batch : int
+        Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
+    """
+
+    def __init__(self, arrow_max_records_per_batch):
+        super(TransformWithStateInPySparkRowSerializer, self).__init__()
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.key_offsets = None
+
+    def load_stream(self, stream):
+        """
+        Read ArrowRecordBatches from stream, deserialize them to populate a list of data chunks,
+        and convert the data into a list of pandas.Series.
+
+        Please refer the doc of inner function `generate_data_batches` for more details how
+        this function works in overall.
+        """
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPySparkFuncMode,
+        )
+        import itertools
+
+        def generate_data_batches(batches):
+            """
+            Deserialize ArrowRecordBatches and return a generator of Row.
+
+            The deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+
+            This function must avoid materializing multiple Arrow RecordBatches into memory at the
+            same time. And data chunks from the same grouping key should appear sequentially.
+            """
+            for batch in batches:
+                DataRow = Row(*(batch.schema.names))
+
+                # This is supposed to be the same.
+                batch_key = tuple(batch[o][0].as_py() for o in self.key_offsets)
+                for row_idx in range(batch.num_rows):
+                    row = DataRow(
+                        *(batch.column(i)[row_idx].as_py() for i in range(batch.num_columns))
+                    )
+                    yield (batch_key, row)
+
+        _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        data_batches = generate_data_batches(_batches)
+
+        for k, g in groupby(data_batches, key=lambda x: x[0]):
+            chained = itertools.chain(g)
+            chained_values = map(lambda x: x[1], chained)
+            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, chained_values)
+
+        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)
+
+    def dump_stream(self, iterator, stream):
+        """
+        Read through an iterator of (iterator of Row), serialize them to Arrow
+        RecordBatches, and write batches to stream.
+        """
+        import pyarrow as pa
+
+        def flatten_iterator():
+            # iterator: iter[list[(iter[Row], pdf_type)]]
+            for packed in iterator:
+                iter_row_with_type = packed[0]
+                iter_row = iter_row_with_type[0]
+                pdf_type = iter_row_with_type[1]
+
+                rows_as_dict = []
+                for row in iter_row:
+                    row_as_dict = row.asDict(True)
+                    rows_as_dict.append(row_as_dict)
+
+                pdf_schema = pa.schema(list(pdf_type))
+                record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
+
+                yield (record_batch, pdf_type)
+
+        return ArrowStreamUDFSerializer.dump_stream(self, flatten_iterator(), stream)
+
+
+class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySparkRowSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for
+    :meth:`pyspark.sql.GroupedData.transformWithStateInPySparkRowInitStateSerializer`.
+    Parameters
+    ----------
+    Same as input parameters in TransformWithStateInPySparkRowSerializer.
+    """
+
+    def __init__(self, arrow_max_records_per_batch):
+        super(TransformWithStateInPySparkRowInitStateSerializer, self).__init__(
+            arrow_max_records_per_batch
+        )
+        self.init_key_offsets = None
+
+    def load_stream(self, stream):
+        import itertools
+        import pyarrow as pa
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPySparkFuncMode,
+        )
+
+        def generate_data_batches(batches):
+            """
+            Deserialize ArrowRecordBatches and return a generator of Row.
+            The deserialization logic assumes that Arrow RecordBatches contain the data with the
+            ordering that data chunks for same grouping key will appear sequentially.
+            See `TransformWithStateInPySparkPythonInitialStateRunner` for arrow batch schema sent
+             from JVM.
+            This function flattens the columns of input rows and initial state rows and feed them
+             into the data generator.
+            """
+
+            def extract_rows(cur_batch, col_name, key_offsets):
+                data_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
+                data_field_names = [
+                    data_column.type[i].name for i in range(data_column.type.num_fields)
+                ]
+                data_field_arrays = [
+                    data_column.field(i) for i in range(data_column.type.num_fields)
+                ]
+
+                DataRow = Row(*data_field_names)
+
+                table = pa.Table.from_arrays(data_field_arrays, names=data_field_names)
+
+                if table.num_rows == 0:
+                    return (None, iter([]))
+                else:
+                    batch_key = tuple(table.column(o)[0].as_py() for o in key_offsets)
+
+                    rows = []
+                    for row_idx in range(table.num_rows):
+                        row = DataRow(
+                            *(table.column(i)[row_idx].as_py() for i in range(table.num_columns))
+                        )
+                        rows.append(row)
+
+                    return (batch_key, iter(rows))
+
+            """
+            The arrow batch is written in the schema:
+            schema: StructType = new StructType()
+                .add("inputData", dataSchema)
+                .add("initState", initStateSchema)
+            We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
+             data generator. All rows in the same batch have the same grouping key.
+            """
+            for batch in batches:
+                (input_batch_key, input_data_iter) = extract_rows(
+                    batch, "inputData", self.key_offsets
+                )
+                (init_batch_key, init_state_iter) = extract_rows(
+                    batch, "initState", self.init_key_offsets
+                )
+
+                if input_batch_key is None:
+                    batch_key = init_batch_key
+                else:
+                    batch_key = input_batch_key
+
+                for init_state_row in init_state_iter:
+                    yield (batch_key, None, init_state_row)
+
+                for input_data_row in input_data_iter:
+                    yield (batch_key, input_data_row, None)
+
+        _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        data_batches = generate_data_batches(_batches)
+
+        for k, g in groupby(data_batches, key=lambda x: x[0]):
+            # g: list(batch_key, input_data_iter, init_state_iter)
+
+            # they are sharing the iterator, hence need to copy
+            input_values_iter, init_state_iter = itertools.tee(g, 2)
+
+            chained_input_values = itertools.chain(map(lambda x: x[1], input_values_iter))
+            chained_init_state_values = itertools.chain(map(lambda x: x[2], init_state_iter))
+
+            chained_input_values_without_none = filter(
+                lambda x: x is not None, chained_input_values
+            )
+            chained_init_state_values_without_none = filter(
+                lambda x: x is not None, chained_init_state_values
+            )
+
+            ret_tuple = (chained_input_values_without_none, chained_init_state_values_without_none)
+
+            yield (TransformWithStateInPySparkFuncMode.PROCESS_DATA, k, ret_tuple)
+
+        yield (TransformWithStateInPySparkFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPySparkFuncMode.COMPLETE, None, None)

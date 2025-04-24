@@ -41,6 +41,7 @@ from pyspark import since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
+from pyspark.storagelevel import StorageLevel
 from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:
@@ -1138,7 +1139,15 @@ def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
 
 
 @contextmanager
-def _cache_spark_dataset(dataset: "DataFrame") -> Iterator[Any]:
+def _cache_spark_dataset(
+    dataset: "DataFrame",
+    storageLevel: "StorageLevel" = StorageLevel.MEMORY_AND_DISK_DESER,
+    enable: bool = True,
+) -> Iterator[Any]:
+    if not enable:
+        yield dataset
+        return
+
     spark_session = dataset._session
     tmp_dfs_path = os.environ.get(_SPARKML_TEMP_DFS_PATH)
 
@@ -1150,7 +1159,7 @@ def _cache_spark_dataset(dataset: "DataFrame") -> Iterator[Any]:
         finally:
             _remove_dfs_dir(tmp_cache_path, spark_session)
     else:
-        dataset.cache()
+        dataset.persist(storageLevel)
         try:
             yield dataset
         finally:

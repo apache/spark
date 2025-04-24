@@ -322,6 +322,11 @@ class FPGrowthModel private[ml] (
   override def toString: String = {
     s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
   }
+
+  override def estimatedSize: Long = {
+    // TODO: Implement this method.
+    throw new UnsupportedOperationException
+  }
 }
 
 @Since("2.2.0")

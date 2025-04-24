@@ -33,12 +33,12 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 
 /**
  * A helper class to deserialize state Arrow batches from the state socket in
- * TransformWithStateInPandas.
+ * TransformWithStateInPySpark.
  */
-class TransformWithStateInPandasDeserializer(deserializer: ExpressionEncoder.Deserializer[Row])
+class TransformWithStateInPySparkDeserializer(deserializer: ExpressionEncoder.Deserializer[Row])
   extends Logging {
   private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        s"stdin reader for transformWithStateInPandas state socket", 0, Long.MaxValue)
+        s"stdin reader for transformWithStateInPySpark state socket", 0, Long.MaxValue)
 
   /**
    * Read Arrow batches from the given stream and deserialize them into rows.

@@ -20,6 +20,8 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable
+
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
 
 import org.apache.spark.internal.Logging
@@ -104,14 +106,26 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    * @param refId
    *   the key used to look up the corresponding object
    */
-  def remove(refId: String): Unit = {
-    cachedModel.remove(refId)
+  def remove(refId: String): Boolean = {
+    val removed = cachedModel.remove(refId)
+    // remove returns null if the key is not present
+    removed != null
   }
 
   /**
    * Clear all the caches
    */
-  def clear(): Unit = {
+  def clear(): Int = {
+    val size = cachedModel.size()
     cachedModel.clear()
+    size
+  }
+
+  def getInfo(): Array[String] = {
+    val info = mutable.ArrayBuilder.make[String]
+    cachedModel.forEach { case (key, value) =>
+      info += s"id: $key, obj: ${value.obj.getClass}, size: ${value.sizeBytes}"
+    }
+    info.result()
   }
 }

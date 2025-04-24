@@ -355,7 +355,7 @@ if [[ "$1" == "package" ]]; then
 
     if [[ -n $SPARK_CONNECT_FLAG ]]; then
       echo "Copying and signing Spark Connect binary distribution"
-      SPARK_CONNECT_DIST_NAME=spark-$SPARK_VERSION-bin-$NAME-spark-connect.tgz
+      SPARK_CONNECT_DIST_NAME=spark-$SPARK_VERSION-bin-$NAME-connect.tgz
       cp spark-$SPARK_VERSION-bin-$NAME/$SPARK_CONNECT_DIST_NAME .
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
         --output $SPARK_CONNECT_DIST_NAME.asc \

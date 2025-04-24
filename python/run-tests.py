@@ -118,8 +118,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         metastore_dir = os.path.join(metastore_dir, str(uuid.uuid4()))
     os.mkdir(metastore_dir)
 
-    # Also override the JVM's temp directory by setting driver and executor options.
-    java_options = "-Djava.io.tmpdir={0}".format(tmp_dir)
+    # Also override the JVM's temp directory and log4j conf by setting driver and executor options.
+    log4j2_path = os.path.join(SPARK_HOME, "python/test_support/log4j2.properties")
+    java_options = "-Djava.io.tmpdir={0} -Dlog4j.configurationFile={1}".format(
+        tmp_dir, log4j2_path
+    )
     java_options = java_options + " -Xss4M"
     spark_args = [
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),

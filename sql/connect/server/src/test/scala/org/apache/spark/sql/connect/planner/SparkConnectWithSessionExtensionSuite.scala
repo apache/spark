@@ -55,6 +55,9 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
 
     override def parseQuery(sqlText: String): LogicalPlan =
       delegate.parseQuery(sqlText)
+
+    override def parseRoutineParam(sqlText: String): StructType =
+      delegate.parseRoutineParam(sqlText)
   }
 
   test("Parse table name with test parser") {

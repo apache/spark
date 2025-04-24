@@ -223,7 +223,6 @@ class SerializableClassWithStringException(val objectField: Object) extends Seri
   }
 }
 
-
 class SerializableArray(val arrayField: Array[Object]) extends Serializable
 
 

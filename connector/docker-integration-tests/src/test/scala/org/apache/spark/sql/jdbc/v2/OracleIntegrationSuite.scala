@@ -75,12 +75,24 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
 
-  override def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
-    .putLong("scale", 0)
-    .putBoolean("isTimestampNTZ", false)
-    .putBoolean("isSigned", dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
-    .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
-    .build()
+  object JdbcClientTypes {
+    val NUMBER = "NUMBER"
+    val STRING = "VARCHAR2"
+  }
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = JdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean(
+        "isSigned",
+        dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
+      .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
+
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
@@ -105,12 +117,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", DecimalType(10, 0), true, super.defaultMetadata(DecimalType(10, 0)))
+      .add(
+        "ID",
+        DecimalType(10, 0),
+        true,
+        super.defaultMetadata(DecimalType(10, 0), JdbcClientTypes.NUMBER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
     expectedSchema = new StructType()
-      .add("ID", DecimalType(19, 0), true, super.defaultMetadata(DecimalType(19, 0)))
+      .add(
+        "ID",
+        DecimalType(19, 0),
+        true,
+        super.defaultMetadata(DecimalType(19, 0), JdbcClientTypes.NUMBER))
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
