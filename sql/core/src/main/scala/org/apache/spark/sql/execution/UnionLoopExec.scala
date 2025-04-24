@@ -165,7 +165,7 @@ case class UnionLoopExec(
         case r: UnionLoopRef if r.loopId == loopId =>
           prevDF.queryExecution.optimizedPlan match {
             case l: LocalRelation =>
-              prevPlan = prevDF.queryExecution.optimizedPlan
+              prevPlan = l
               l.copy(output = r.output)
             case p @ Project(projectList, _: OneRowRelation) =>
               prevPlan = prevDF.queryExecution.optimizedPlan
