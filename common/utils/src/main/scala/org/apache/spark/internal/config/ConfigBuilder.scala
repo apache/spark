@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.regex.PatternSyntaxException
 
@@ -43,6 +44,16 @@ private object ConfigHelpers {
     } catch {
       case _: IllegalArgumentException =>
         throw new IllegalArgumentException(s"$key should be boolean, but was $s")
+    }
+  }
+
+  def toEnum[E <: Enumeration](s: String, enumClass: E, key: String): enumClass.Value = {
+    try {
+      enumClass.withName(s.trim.toUpperCase(Locale.ROOT))
+    } catch {
+      case _: NoSuchElementException =>
+        throw new IllegalArgumentException(
+          s"$key should be one of ${enumClass.values.mkString(", ")}, but was $s")
     }
   }
 
@@ -269,6 +280,11 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def stringConf: TypedConfigBuilder[String] = {
     new TypedConfigBuilder(this, v => v)
+  }
+
+  def enumConf(e: Enumeration): TypedConfigBuilder[e.Value] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this, toEnum(_, e, key))
   }
 
   def timeConf(unit: TimeUnit): TypedConfigBuilder[Long] = {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -128,8 +128,8 @@ private[sql] class AvroOptions(
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
-  val datetimeRebaseModeInRead: String = parameters
-    .get(DATETIME_REBASE_MODE)
+  val datetimeRebaseModeInRead: LegacyBehaviorPolicy.Value = parameters
+    .get(DATETIME_REBASE_MODE).map(LegacyBehaviorPolicy.withName)
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
 
   val useStableIdForUnionType: Boolean =

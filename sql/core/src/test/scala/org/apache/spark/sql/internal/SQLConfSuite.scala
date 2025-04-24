@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
 import org.apache.spark.sql.classic.{SparkSession, SQLContext}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec.{GZIP, LZO}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -351,10 +352,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
       SQLConf.ParquetOutputTimestampType.INT96)
 
-    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "timestamp_micros")
+    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE,
+      ParquetOutputTimestampType.TIMESTAMP_MICROS)
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
-    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "int96")
+      ParquetOutputTimestampType.TIMESTAMP_MICROS)
+    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, ParquetOutputTimestampType.INT96)
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
       SQLConf.ParquetOutputTimestampType.INT96)
 
@@ -513,5 +515,15 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkNoSuchElementException](spark.conf.get("some.conf")),
       condition = "SQL_CONF_NOT_FOUND",
       parameters = Map("sqlConf" -> "\"some.conf\""))
+  }
+
+  test("SPARK-51874: Add Enum support to ConfigBuilder") {
+    assert(spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY) === LegacyBehaviorPolicy.CORRECTED)
+    val e = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "invalid")
+    }
+    assert(e.getMessage ===
+      s"${SQLConf.LEGACY_TIME_PARSER_POLICY.key} should be one of " +
+      s"${LegacyBehaviorPolicy.values.mkString(", ")}, but was invalid")
   }
 }
