@@ -130,8 +130,6 @@ class JDBCTableCatalog extends TableCatalog
   }
 
   override def loadTable(ident: Identifier): Table = {
-    checkNamespace(ident.namespace())
-    // Check table existence.
     if (!tableExists(ident)) {
       throw QueryCompilationErrors.noSuchTableError(ident)
     }
