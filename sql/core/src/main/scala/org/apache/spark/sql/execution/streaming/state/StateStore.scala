@@ -1014,7 +1014,7 @@ object StateStore extends Logging {
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
       val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
       val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
-        log"taskId=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, tc.taskAttemptId())}"
+        log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
       }.getOrElse(log"")
 
       providerIdsToUnload.foreach(id => {
