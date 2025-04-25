@@ -35,6 +35,7 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.TfyHttpAuthUtils
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("") {
@@ -277,6 +278,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appInfo = store.applicationInfo()
+    val appId = appInfo.id
+    val _ = TfyHttpAuthUtils.checkJobRunStatus(appId, request)
     val startDate = appInfo.attempts.head.startTime
     val startTime = startDate.getTime()
     val endTime = appInfo.attempts.head.endTime.getTime()

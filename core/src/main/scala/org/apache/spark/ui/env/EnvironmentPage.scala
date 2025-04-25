@@ -27,6 +27,7 @@ import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.TfyHttpAuthUtils
 
 private[ui] class EnvironmentPage(
     parent: EnvironmentTab,
@@ -34,6 +35,8 @@ private[ui] class EnvironmentPage(
     store: AppStatusStore) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val appId = store.applicationInfo().id
+    val _ = TfyHttpAuthUtils.checkJobRunStatus(appId, request)
     val appEnv = store.environmentInfo()
     val jvmInformation = Map(
       "Java Version" -> appEnv.runtime.javaVersion,

@@ -46,4 +46,10 @@ fi
 . "${SPARK_HOME}/sbin/spark-config.sh"
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
+# Check if SFY_SERVER_URL is set
+if [ -z "${SFY_SERVER_URL}" ]; then
+    echo "SFY_SERVER_URL is not set. Please set it before starting the history server."
+    exit 1
+fi
+
 exec "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 "$@"

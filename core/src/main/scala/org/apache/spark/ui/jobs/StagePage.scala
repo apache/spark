@@ -31,7 +31,7 @@ import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils.formatImportJavaScript
 import org.apache.spark.util.Utils
-
+import org.apache.spark.util.TfyHttpAuthUtils
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends WebUIPage("stage") {
   import ApiHelper._
@@ -81,6 +81,8 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val appId = store.applicationInfo().id
+    val _ = TfyHttpAuthUtils.checkJobRunStatus(appId, request)
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 

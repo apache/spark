@@ -25,13 +25,15 @@ import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.{AppSummary, PoolData}
 import org.apache.spark.status.api.v1.{StageData, StageStatus}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
-
+import org.apache.spark.util.TfyHttpAuthUtils
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
   private val subPath = "stages"
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val appId = parent.store.applicationInfo().id
+    val _ = TfyHttpAuthUtils.checkJobRunStatus(appId, request)
     // For now, pool information is only accessible in live UIs
     val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable]).map { pool =>
       val uiPool = parent.store.asOption(parent.store.pool(pool.name)).getOrElse(

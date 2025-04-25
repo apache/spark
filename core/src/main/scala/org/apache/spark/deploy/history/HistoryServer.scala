@@ -34,7 +34,7 @@ import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
-import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
+import org.apache.spark.util.{TfyHttpAuthUtils, ShutdownHookManager, SystemClock, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -87,6 +87,7 @@ class HistoryServer(
       }
 
       val appId = parts(1)
+      val _ = TfyHttpAuthUtils.checkJobRunStatus(appId, req)
       var shouldAppendAttemptId = false
       val attemptId = if (parts.length >= 3) {
         Some(parts(2))
@@ -149,7 +150,7 @@ class HistoryServer(
    * this UI with the event logs in the provided base directory.
    */
   def initialize(): Unit = {
-    attachPage(new HistoryPage(this))
+    // attachPage(new HistoryPage(this))
     attachPage(new LogPage(conf))
 
     attachHandler(ApiRootResource.getServletHandler(this))
