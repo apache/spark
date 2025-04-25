@@ -57,14 +57,14 @@ class TransformWithStateInPySparkParityTests(
     TransformWithStateInPySparkTestsMixin, ReusedConnectTestCase
 ):
     """
-    Spark connect parity tests for TransformWithStateInPandas. Run every test case in
-     `TransformWithStateInPandasTestsMixin` in spark connect mode.
+    Spark connect parity tests for TransformWithStateInPySpark. Run every test case in
+     `TransformWithStateInPySparkTestsMixin` in spark connect mode.
     """
 
     @classmethod
     def conf(cls):
         # Due to multiple inheritance from the same level, we need to explicitly setting configs in
-        # both TransformWithStateInPandasTestsMixin and ReusedConnectTestCase here
+        # both TransformWithStateInPySparkTestsMixin and ReusedConnectTestCase here
         cfg = SparkConf(loadDefaults=False)
         for base in cls.__bases__:
             if hasattr(base, "conf"):
@@ -82,9 +82,6 @@ class TransformWithStateInPySparkParityTests(
     def test_schema_evolution_scenarios(self):
         pass
 
-
-# TODO(SPARK-51827): Need to copy the parity test when we implement transformWithState in
-#  Python Spark Connect
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state import *  # noqa: F401,E501

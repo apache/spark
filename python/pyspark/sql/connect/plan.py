@@ -2549,17 +2549,17 @@ class ApplyInPandasWithState(LogicalPlan):
 class BaseTransformWithStateInPySpark(LogicalPlan):
     """Base implementation of logical plan object for a TransformWithStateIn(PySpark/Pandas)."""
     def __init__(
-            self,
-            child: Optional["LogicalPlan"],
-            grouping_cols: Sequence[Column],
-            function: "UserDefinedFunction",
-            output_schema: Union[DataType, str],
-            output_mode: str,
-            time_mode: str,
-            event_time_col_name: str,
-            cols: List[str],
-            initial_state_plan: Optional["LogicalPlan"],
-            initial_state_grouping_cols: Optional[Sequence[Column]],
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        output_schema: Union[DataType, str],
+        output_mode: str,
+        time_mode: str,
+        event_time_col_name: str,
+        cols: List[str],
+        initial_state_plan: Optional["LogicalPlan"],
+        initial_state_grouping_cols: Optional[Sequence[Column]],
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
         if initial_state_plan is not None:
