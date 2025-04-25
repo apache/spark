@@ -1022,7 +1022,7 @@ object StateStore extends Logging {
           // Trigger maintenance thread to immediately do maintenance on and close the provider.
           // Doing maintenance first allows us to do maintenance for a constantly-moving state
           // store.
-          logInfo(log"Task thread trigger maintenance to close " +
+          logInfo(log"Submitted maintenance from task thread to close " +
             log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
             log"Removed provider from loadedProviders")
           submitMaintenanceWorkForProvider(id, provider, submittedFromTaskThread = true)
@@ -1132,12 +1132,13 @@ object StateStore extends Logging {
   }
 
   // Block until we can process this partition
-  private def awaitProcessThisPartition(id: StateStoreProviderId): Unit =
+  private def awaitProcessThisPartition(id: StateStoreProviderId): Unit = {
     maintenanceThreadPoolLock.synchronized {
       while (!processThisPartition(id)) {
         maintenanceThreadPoolLock.wait()
       }
     }
+  }
 
   /**
    * Execute background maintenance task in all the loaded store providers if they are still
@@ -1191,10 +1192,10 @@ object StateStore extends Logging {
         // with the coordinator as we know it definitely should be unloaded.
         if (submittedFromTaskThread) {
             unload(id, Some(provider))
-          } else if (!verifyIfStoreInstanceActive(id)) {
-            unload(id)
-          }
-          logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
+        } else if (!verifyIfStoreInstanceActive(id)) {
+          unload(id)
+        }
+        logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
