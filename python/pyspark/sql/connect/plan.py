@@ -2546,21 +2546,20 @@ class ApplyInPandasWithState(LogicalPlan):
         return self._with_relations(plan, session)
 
 
-class TransformWithStateInPandas(LogicalPlan):
-    """Logical plan object for a TransformWithStateInPandas."""
-
+class BaseTransformWithStateInPySpark(LogicalPlan):
+    """Base implementation of logical plan object for a TransformWithStateIn(PySpark/Pandas)."""
     def __init__(
-        self,
-        child: Optional["LogicalPlan"],
-        grouping_cols: Sequence[Column],
-        function: "UserDefinedFunction",
-        output_schema: Union[DataType, str],
-        output_mode: str,
-        time_mode: str,
-        event_time_col_name: str,
-        cols: List[str],
-        initial_state_plan: Optional["LogicalPlan"],
-        initial_state_grouping_cols: Optional[Sequence[Column]],
+            self,
+            child: Optional["LogicalPlan"],
+            grouping_cols: Sequence[Column],
+            function: "UserDefinedFunction",
+            output_schema: Union[DataType, str],
+            output_mode: str,
+            time_mode: str,
+            event_time_col_name: str,
+            cols: List[str],
+            initial_state_plan: Optional["LogicalPlan"],
+            initial_state_grouping_cols: Optional[Sequence[Column]],
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
         if initial_state_plan is not None:
@@ -2600,7 +2599,7 @@ class TransformWithStateInPandas(LogicalPlan):
                 [c.to_plan(session) for c in self._initial_state_grouping_cols]
             )
 
-        # fill in transformWithStateInPandas related fields
+        # fill in transformWithStateInPySpark/Pandas related fields
         tws_info = proto.TransformWithStateInfo()
         tws_info.time_mode = self._time_mode
         tws_info.event_time_column_name = self._event_time_col_name
@@ -2608,10 +2607,21 @@ class TransformWithStateInPandas(LogicalPlan):
 
         plan.group_map.transform_with_state_info.CopyFrom(tws_info)
 
-        # wrap transformWithStateInPandasUdf in a function
+        # wrap transformWithStateInPySparkUdf in a function
         plan.group_map.func.CopyFrom(self._function.to_plan_udf(session))
 
         return self._with_relations(plan, session)
+
+
+class TransformWithStateInPySpark(BaseTransformWithStateInPySpark):
+    """Logical plan object for a TransformWithStateInPySpark."""
+    pass
+
+
+# Retaining this to avoid breaking backward compatibility.
+class TransformWithStateInPandas(BaseTransformWithStateInPySpark):
+    """Logical plan object for a TransformWithStateInPandas."""
+    pass
 
 
 class PythonUDTF:
