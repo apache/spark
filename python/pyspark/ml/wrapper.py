@@ -356,9 +356,14 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         if extra is None:
             extra = dict()
         that = super(JavaParams, self).copy(extra)
-        if self._java_obj is not None and not isinstance(self._java_obj, str):
-            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-            that._transfer_params_to_java()
+        if self._java_obj is not None:
+            from pyspark.ml.util import RemoteModelRef
+            if isinstance(self._java_obj, RemoteModelRef):
+                that._java_obj = self._java_obj
+                self._java_obj.add_ref()
+            elif not isinstance(self._java_obj, str):
+                that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+                that._transfer_params_to_java()
         return that
 
     @try_remote_intercept
