@@ -102,9 +102,11 @@ private[deploy] class ExecutorRunner(
       logInfo("Killing process!")
       if (stdoutAppender != null) {
         stdoutAppender.stop()
+        stdoutAppender.awaitTermination()
       }
       if (stderrAppender != null) {
         stderrAppender.stop()
+        stderrAppender.awaitTermination()
       }
       exitCode = Utils.terminateProcess(process, EXECUTOR_TERMINATE_TIMEOUT_MS)
       if (exitCode.isEmpty) {
