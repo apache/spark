@@ -661,11 +661,11 @@ class SparkConnectPlanner(
 
           case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF |
               PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
-            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas=true)
+            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = true)
 
           case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF |
               PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
-            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas=false)
+            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = false)
 
           case _ =>
             throw InvalidPlanInput(
