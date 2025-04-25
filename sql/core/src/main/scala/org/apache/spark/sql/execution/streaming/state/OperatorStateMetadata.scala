@@ -414,6 +414,8 @@ class OperatorStateMetadataV2FileManager(
     if (thresholdBatchId != 0) {
       val earliestBatchIdKept = deleteMetadataFiles(thresholdBatchId)
       // we need to delete everything from 0 to (earliestBatchIdKept - 1), inclusive
+      // TODO: [SPARK-50845]: Currently, deleteSchemaFiles is a no-op since earliestBatchIdKept
+      // is always 0, and the earliest schema file to 'keep' is -1.
       deleteSchemaFiles(earliestBatchIdKept - 1)
     }
   }
@@ -425,6 +427,8 @@ class OperatorStateMetadataV2FileManager(
     commitLog.listBatchesOnDisk.headOption.getOrElse(0L)
   }
 
+  // TODO: [SPARK-50845]: Currently, deleteSchemaFiles is a no-op since thresholdBatchId
+  // is always -1
   private def deleteSchemaFiles(thresholdBatchId: Long): Unit = {
     if (thresholdBatchId <= 0) {
       return
@@ -473,8 +477,8 @@ class OperatorStateMetadataV2FileManager(
       }
     }
 
-    // TODO: Implement state schema file purging logic once we have
-    // enabled full-rewrite.
+    // TODO: [SPARK-50845]: Return earliest schema file we need after implementing
+    // full-rewrite
     0
   }
 }

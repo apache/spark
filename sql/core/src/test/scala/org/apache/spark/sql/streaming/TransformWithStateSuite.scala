@@ -1912,7 +1912,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
     new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
-  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
+  // TODO: [SPARK-50845] Re-enable tests after full-rewrite is enabled.
   ignore("transformWithState - verify that metadata and schema logs are purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
