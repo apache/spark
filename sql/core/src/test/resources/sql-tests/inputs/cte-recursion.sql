@@ -545,3 +545,10 @@ WITH RECURSIVE t1 AS (
     UNION ALL
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1;
+
+-- Recursive CTE with useless columns and filtering
+WITH RECURSIVE t1(a,b,c) AS (
+    SELECT 1,1,1
+    UNION ALL
+    SELECT a+1,a+1,a+1 FROM t1 WHERE b < 5)
+SELECT a FROM t1;

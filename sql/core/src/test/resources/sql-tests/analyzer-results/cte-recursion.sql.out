@@ -1468,3 +1468,27 @@ WithCTE
 +- Project [n#x]
    +- SubqueryAlias t1
       +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
+WITH RECURSIVE t1(a,b,c) AS (
+    SELECT 1,1,1
+    UNION ALL
+    SELECT a+1,a+1,a+1 FROM t1 WHERE b < 5)
+SELECT a FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS a#x, 1#x AS b#x, 1#x AS c#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x, 1 AS 1#x, 1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(a#x + 1) AS (a + 1)#x, (a#x + 1) AS (a + 1)#x, (a#x + 1) AS (a + 1)#x]
+:              +- Filter (b#x < 5)
+:                 +- SubqueryAlias t1
+:                    +- Project [1#x AS a#x, 1#x AS b#x, 1#x AS c#x]
+:                       +- UnionLoopRef xxxx, [1#x, 1#x, 1#x], false
++- Project [a#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [a#x, b#x, c#x], false, false
