@@ -278,8 +278,12 @@ def try_remote_call(f: FuncT) -> FuncT:
 
             session = SparkSession.getActiveSession()
             assert session is not None
-            assert isinstance(self._java_obj, RemoteModelRef)
-            methods, obj_ref = _extract_id_methods(self._java_obj.ref_id)
+            if self._java_obj == ML_CONNECT_HELPER_ID:
+                obj_id = ML_CONNECT_HELPER_ID
+            else:
+                assert isinstance(self._java_obj, RemoteModelRef)
+                obj_id = self._java_obj.ref_id
+            methods, obj_ref = _extract_id_methods(obj_id)
             methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
             command = pb2.Command()
             command.ml_command.fetch.CopyFrom(

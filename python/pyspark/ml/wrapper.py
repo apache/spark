@@ -457,6 +457,9 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         other ML classes).
         """
         super(JavaModel, self).__init__(java_model)
+        if is_remote():
+            from pyspark.ml.util import RemoteModelRef
+            assert isinstance(java_model, RemoteModelRef)
         if java_model is not None and not is_remote():
             # SPARK-10931: This is a temporary fix to allow models to own params
             # from estimators. Eventually, these params should be in models through
