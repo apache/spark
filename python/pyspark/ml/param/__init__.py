@@ -269,6 +269,9 @@ class Params(Identifiable, metaclass=ABCMeta):
         # Copy the params from the class to the object
         self._copy_params()
 
+        # connect only, to avoid eager model deletion when freeing copied models
+        self.__copies__: List[Params] = []
+
     def _copy_params(self) -> None:
         """
         Copy all params defined on the class to current object.
@@ -439,10 +442,7 @@ class Params(Identifiable, metaclass=ABCMeta):
             from pyspark.ml import Model
 
             if isinstance(self, Model):
-                if hasattr(self, "__copies__"):
-                    self.__copies__.append(copied)
-                else:
-                    self.__copies__ = [copied]
+                self.__copies__.append(copied)
 
         return copied
 
