@@ -61,7 +61,7 @@ def _test() -> None:
     from pyspark.testing import should_test_connect
 
     if not should_test_connect:
-        print(f"Skipping pyspark.ml.connect.functions doctests", file=sys.stderr)
+        print("Skipping pyspark.ml.connect.functions doctests", file=sys.stderr)
         sys.exit(0)
 
     import doctest
