@@ -27,7 +27,8 @@ import org.scalatest.time.{Seconds, Span}
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MicroBatchExecution}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream, MicroBatchExecution}
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV2, RocksDBStateStoreProvider, StateStoreInvalidValueSchemaEvolution, StateStoreValueSchemaEvolutionThresholdExceeded}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -301,6 +302,22 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           StopStream
         )
 
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fm = CheckpointFileManager.create(new Path(chkptDir.toString),
+          hadoopConf)
+        fm.mkdirs(new Path(new Path(chkptDir.toString, DIR_NAME_OFFSETS),
+          "dummy_path_name"))
+        fm.mkdirs(
+          new Path(OperatorStateMetadataV2.metadataDirPath(
+            new Path(new Path(new Path(chkptDir.toString), "state"), "0")
+          ),
+            "dummy_path_name")
+        )
+        val dummySchemaPath =
+          new Path(stateSchemaPath, "__dummy_file_path")
+        fm.mkdirs(dummySchemaPath)
+
+
         // Capture initial schema files (after first schema evolution)
         val initialSchemaFiles = getFiles(stateSchemaPath).length
         assert(initialSchemaFiles > 0, "Expected schema files after initial run")
@@ -404,14 +421,17 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
 
         // Verify metadata files were purged with MIN_BATCHES_TO_RETAIN=1
         val finalMetadataFiles = getFiles(metadataPath).length
-        assert(finalMetadataFiles <= 2,
-          s"Expected metadata files to be purged to at most 2, but found $finalMetadataFiles")
+        // We expect the dummy folder and 2 metadata files
+        assert(finalMetadataFiles <= 3,
+          s"Expected metadata files to be purged to at most 3, but found $finalMetadataFiles")
 
         // Verify schema files were NOT purged despite aggressive metadata purging
-        val finalSchemaFiles = getFiles(stateSchemaPath).length
+        val schemaFiles = getFiles(stateSchemaPath).map(_.getPath.getName)
+        val finalSchemaFiles = schemaFiles.length
         assert(finalSchemaFiles >= 5,
           s"Expected at least 5 schema files to be retained" +
             s" (one per schema evolution), but found $finalSchemaFiles")
+        assert(schemaFiles.contains(dummySchemaPath.getName))
 
         // Verify we can read historical state for different batches
         // This should work even though metadata may have been purged for earlier batches
