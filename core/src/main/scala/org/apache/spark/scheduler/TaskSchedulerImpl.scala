@@ -181,15 +181,7 @@ private[spark] class TaskSchedulerImpl(
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
-  private val schedulingModeConf = conf.get(SCHEDULER_MODE)
-  val schedulingMode: SchedulingMode =
-    try {
-      SchedulingMode.withName(schedulingModeConf)
-    } catch {
-      case e: java.util.NoSuchElementException =>
-        throw SparkCoreErrors.unrecognizedSchedulerModePropertyError(SCHEDULER_MODE_PROPERTY,
-          schedulingModeConf)
-    }
+  val schedulingMode: SchedulingMode = conf.get(SCHEDULER_MODE)
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 
