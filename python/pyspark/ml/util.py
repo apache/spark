@@ -152,10 +152,12 @@ class RemoteModelRef:
 
     def add_ref(self):
         with self._lock:
+            assert self._ref_count > 0
             self._ref_count += 1
 
     def release_ref(self):
         with self._lock:
+            assert self._ref_count > 0
             self._ref_count -= 1
             if self._ref_count == 0:
                 # Delete the model if possible
