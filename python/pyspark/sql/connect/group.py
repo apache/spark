@@ -414,7 +414,7 @@ class GroupedData:
 
     transformWithStateInPandas.__doc__ = PySparkGroupedData.transformWithStateInPandas.__doc__
 
-    def transformWithStateInPySpark(
+    def transformWithState(
         self,
         statefulProcessor: StatefulProcessor,
         outputStructType: Union[StructType, str],
@@ -464,7 +464,7 @@ class GroupedData:
             session=self._df._session,
         )
 
-    transformWithStateInPySpark.__doc__ = PySparkGroupedData.transformWithStateInPySpark.__doc__
+    transformWithState.__doc__ = PySparkGroupedData.transformWithState.__doc__
 
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
