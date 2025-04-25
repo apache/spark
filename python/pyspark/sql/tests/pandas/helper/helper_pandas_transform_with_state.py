@@ -1159,7 +1159,8 @@ class PandasMapStateLargeTTLProcessor(PandasMapStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        # Use a large timeout as long as 30 days
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 2592000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
@@ -1169,7 +1170,8 @@ class RowMapStateLargeTTLProcessor(RowMapStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        # Use a large timeout as long as 30 days
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 2592000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
