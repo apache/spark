@@ -3516,7 +3516,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  testWithChangelogCheckpointingEnabled("SPARK-51922: Changelog writer v1 with large key" +
+  testWithChangelogCheckpointingEnabled("SPARK-51922 - Changelog writer v1 with large key" +
     " does not cause UTFDataFormatException") {
     val remoteDir = Utils.createTempDir()
 
