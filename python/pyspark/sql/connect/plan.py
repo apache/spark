@@ -2548,6 +2548,7 @@ class ApplyInPandasWithState(LogicalPlan):
 
 class BaseTransformWithStateInPySpark(LogicalPlan):
     """Base implementation of logical plan object for a TransformWithStateIn(PySpark/Pandas)."""
+
     def __init__(
         self,
         child: Optional["LogicalPlan"],
@@ -2615,12 +2616,14 @@ class BaseTransformWithStateInPySpark(LogicalPlan):
 
 class TransformWithStateInPySpark(BaseTransformWithStateInPySpark):
     """Logical plan object for a TransformWithStateInPySpark."""
+
     pass
 
 
 # Retaining this to avoid breaking backward compatibility.
 class TransformWithStateInPandas(BaseTransformWithStateInPySpark):
     """Logical plan object for a TransformWithStateInPandas."""
+
     pass
 
 

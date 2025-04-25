@@ -53,6 +53,7 @@ class TransformWithStateInPandasParityTests(
     def test_schema_evolution_scenarios(self):
         pass
 
+
 class TransformWithStateInPySparkParityTests(
     TransformWithStateInPySparkTestsMixin, ReusedConnectTestCase
 ):
