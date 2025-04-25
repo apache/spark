@@ -109,13 +109,18 @@ def invoke_remote_attribute_relation(
     from pyspark.ml.connect.proto import AttributeRelation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.ml.wrapper import JavaModel
 
     session = SparkSession.getActiveSession()
     assert session is not None
 
-    assert isinstance(instance._java_obj, RemoteModelRef)
-
-    methods, obj_ref = _extract_id_methods(instance._java_obj.ref_id)
+    if isinstance(instance, JavaModel):
+        assert isinstance(instance._java_obj, RemoteModelRef)
+        object_id = instance._java_obj.ref_id
+    else:
+        # model summary
+        object_id = instance._java_obj
+    methods, obj_ref = _extract_id_methods(object_id)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
     plan = AttributeRelation(obj_ref, methods)
 
@@ -275,14 +280,19 @@ def try_remote_call(f: FuncT) -> FuncT:
             from pyspark.sql.connect.session import SparkSession
             from pyspark.ml.connect.util import _extract_id_methods
             from pyspark.ml.connect.serialize import serialize, deserialize
+            from pyspark.ml.wrapper import JavaModel
 
             session = SparkSession.getActiveSession()
             assert session is not None
             if self._java_obj == ML_CONNECT_HELPER_ID:
                 obj_id = ML_CONNECT_HELPER_ID
             else:
-                assert isinstance(self._java_obj, RemoteModelRef)
-                obj_id = self._java_obj.ref_id
+                if isinstance(self, JavaModel):
+                    assert isinstance(self._java_obj, RemoteModelRef)
+                    obj_id = self._java_obj.ref_id
+                else:
+                    # model summary
+                    obj_id = self._java_obj
             methods, obj_ref = _extract_id_methods(obj_id)
             methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
             command = pb2.Command()

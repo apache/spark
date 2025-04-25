@@ -64,6 +64,7 @@ from pyspark.ml.wrapper import (
     _jvm,
 )
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.util import RemoteModelRef
 from pyspark.sql.types import ArrayType, StringType
 from pyspark.sql.utils import is_remote
 
@@ -1224,11 +1225,11 @@ class CountVectorizerModel(
 
         if is_remote():
             model = CountVectorizerModel()
-            model._java_obj = invoke_helper_attr(
+            model._java_obj = RemoteModelRef(invoke_helper_attr(
                 "countVectorizerModelFromVocabulary",
                 model.uid,
                 list(vocabulary),
-            )
+            ))
 
         else:
             from pyspark.core.context import SparkContext
@@ -4843,11 +4844,11 @@ class StringIndexerModel(
         """
         if is_remote():
             model = StringIndexerModel()
-            model._java_obj = invoke_helper_attr(
+            model._java_obj = RemoteModelRef(invoke_helper_attr(
                 "stringIndexerModelFromLabels",
                 model.uid,
                 (list(labels), ArrayType(StringType())),
-            )
+            ))
 
         else:
             from pyspark.core.context import SparkContext
@@ -4882,14 +4883,14 @@ class StringIndexerModel(
         """
         if is_remote():
             model = StringIndexerModel()
-            model._java_obj = invoke_helper_attr(
+            model._java_obj = RemoteModelRef(invoke_helper_attr(
                 "stringIndexerModelFromLabelsArray",
                 model.uid,
                 (
                     [list(labels) for labels in arrayOfLabels],
                     ArrayType(ArrayType(StringType())),
                 ),
-            )
+            ))
 
         else:
             from pyspark.core.context import SparkContext

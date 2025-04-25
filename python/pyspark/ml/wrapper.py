@@ -457,7 +457,7 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         other ML classes).
         """
         super(JavaModel, self).__init__(java_model)
-        if is_remote():
+        if is_remote() and java_model is not None:
             from pyspark.ml.util import RemoteModelRef
             assert isinstance(java_model, RemoteModelRef)
         if java_model is not None and not is_remote():
