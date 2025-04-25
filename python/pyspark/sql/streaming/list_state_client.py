@@ -135,8 +135,8 @@ class ListStateClient:
         # To workaround mypy type assignment check.
         values_as_bytes: Any = []
         if len(values) == 100:
-            # TODO: Let's update this to be either flexible or more reasonable default value backed
-            #   by various benchmarks.
+            # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
+            #  value backed by various benchmarks.
             # Arrow codepath
             send_data_via_arrow = True
         else:
@@ -172,8 +172,8 @@ class ListStateClient:
         # To workaround mypy type assignment check.
         values_as_bytes: Any = []
         if len(values) == 100:
-            # TODO: Let's update this to be either flexible or more reasonable default value backed
-            #   by various benchmarks.
+            # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
+            #  value backed by various benchmarks.
             send_data_via_arrow = True
         else:
             values_as_bytes = map(

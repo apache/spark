@@ -942,6 +942,8 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
         elements = list(elements_iter)
 
         # Use the magic number 100 to test with both inline proto case and Arrow case.
+        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
+        #  value backed by various benchmarks.
         # Put 90 elements per batch:
         # 1st batch: read 0 element, and write 90 elements, read back 90 elements
         #   (both use inline proto)
@@ -1003,6 +1005,8 @@ class RowListStateLargeListProcessor(StatefulProcessor):
         elements = list(elements_iter)
 
         # Use the magic number 100 to test with both inline proto case and Arrow case.
+        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
+        #  value backed by various benchmarks.
         # Put 90 elements per batch:
         # 1st batch: read 0 element, and write 90 elements, read back 90 elements
         #   (both use inline proto)
