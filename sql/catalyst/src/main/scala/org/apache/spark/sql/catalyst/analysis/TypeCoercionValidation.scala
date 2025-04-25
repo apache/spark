@@ -27,14 +27,14 @@ import org.apache.spark.sql.types.DataType
 object TypeCoercionValidation extends QueryErrorsBase {
   private val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Unit]("dataTypeMismatchError")
 
-  def failOnTypeCheckResult(e: Expression, operator: LogicalPlan): Nothing = {
+  def failOnTypeCheckResult(e: Expression, operator: Option[LogicalPlan] = None): Nothing = {
     e.checkInputDataTypes() match {
       case checkRes: TypeCheckResult.DataTypeMismatch =>
         e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
         e.dataTypeMismatch(e, checkRes)
       case TypeCheckResult.TypeCheckFailure(message) =>
         e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
-        val extraHint = TypeCoercionValidation.getHintForExpressionCoercion(operator)
+        val extraHint = operator.map(getHintForExpressionCoercion(_)).getOrElse("")
         e.failAnalysis(
           errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
           messageParameters = Map("sqlExpr" -> toSQLExpr(e), "msg" -> message, "hint" -> extraHint)
