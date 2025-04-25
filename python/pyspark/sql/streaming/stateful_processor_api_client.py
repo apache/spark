@@ -440,6 +440,9 @@ class StatefulProcessorApiClient:
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
 
+    # Use name mapping of struct fields to guarantee fields in provided input state schema is properly
+    # serialized into Row type, and further serialized into bytes by pickler;
+    # This works with both primitive types, and composite type like ArrayType
     def _serialize_to_bytes(self, schema: StructType, data: Tuple) -> bytes:
         from pyspark.testing.utils import have_numpy
 
@@ -462,7 +465,8 @@ class StatefulProcessorApiClient:
         else:
             converted = list(data)
 
-        row_value = Row(*converted)
+        field_names = [f.name for f in schema.fields]
+        row_value = Row(**dict(zip(field_names, converted)))
         return self.pickleSer.dumps(schema.toInternal(row_value))
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:

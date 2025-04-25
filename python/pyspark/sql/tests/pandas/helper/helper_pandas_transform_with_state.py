@@ -31,6 +31,8 @@ from pyspark.sql.types import (
     LongType,
     BooleanType,
     FloatType,
+    ArrayType,
+    MapType
 )
 from pyspark.testing.sqlutils import have_pandas
 
@@ -225,6 +227,14 @@ class MinEventTimeStatefulProcessorFactory(StatefulProcessorFactory):
 
     def row(self):
         return RowMinEventTimeStatefulProcessor()
+
+
+class StatefulProcessorCompositeTypeFactory(StatefulProcessorFactory):
+    def row(self):
+        return RowStatefulProcessorCompositeType()
+
+    def pandas(self):
+        return StatefulProcessorCompositeType()
 
 
 # StatefulProcessor implementations
@@ -1610,6 +1620,194 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
         self.min_state.update((min_event_time,))
 
         yield Row(id=key[0], timestamp=min_event_time)
+
+    def close(self) -> None:
+        pass
+
+
+# A stateful processor that contains composite python type inside Value, List and Map state variable
+class StatefulProcessorCompositeType(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        super().init(handle)
+        array_schema = StructType([
+            StructField("id", ArrayType(IntegerType())),  # Array of primitive
+            StructField("tags", ArrayType(ArrayType(StringType()))),  # Array of Array
+            StructField("metadata", ArrayType(  # Array of struct
+                StructType([
+                    StructField("key", StringType()),
+                    StructField("value", StringType())
+                ])
+            ))
+        ])
+        map_schema = StructType([
+            StructField("id", IntegerType(), True),
+            # Map of String -> Array of Int
+            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True)
+        ])
+
+        self.array_state = handle.getValueState("array_state", array_schema)
+        self.list_state = handle.getListState("list_state", array_schema)
+        self.map_state = handle.getMapState("map_state", "name string", map_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        accumulated_value = 0
+        tag_field = [["dummy1", "dummy2"], ["dummy3"]]
+        metadata_field = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
+
+        for pdf in rows:
+            print(f"input rows type: {type(rows)}")
+            value = pdf["temperature"].astype(int).sum()
+            accumulated_value += int(value)
+        if self.array_state.exists():
+            existing_state = self.array_state.get()
+            # create array of nested type of map fields
+            expected_metadata = [Row(key=item["key"], value=item["value"]) for item in metadata_field]
+            # check "tags" and "metadata" field is correctly stored and read
+            assert existing_state[1] == tag_field, f"Received tag field is: {existing_state[1]}"
+            assert existing_state[2] == expected_metadata, f"Received metadata field is: {existing_state[2]}"
+            existing_arr = existing_state[0]
+            updated_arr = [int(x + accumulated_value) for x in existing_arr]
+        else:
+            updated_arr = [0]
+        obj = (
+            updated_arr,  # id
+            tag_field,  # tags
+            metadata_field  # metadata
+        )
+        # return id array with incremented accumulated values
+        self.array_state.update(obj)
+
+        # extend the array inside list state element by adding input row value
+        existing_arr = self.list_state.get()
+        new_obj_list_buffer = []
+        for i in existing_arr:
+            existing_list_arr = i[0]
+            assert(existing_list_arr is not None)
+            existing_list_arr.append(accumulated_value)
+            new_ele = (
+                existing_list_arr,  # id
+                [["dummy1", "dummy2"], ["dummy3"]],  # tags
+                [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]  # metadata
+            )
+            new_obj_list_buffer.append(new_ele)
+        if len(new_obj_list_buffer) == 0:
+            new_obj_list_buffer.append(obj)
+        self.list_state.put(new_obj_list_buffer)
+
+        # return flattened id array
+        flattened_ids = [item for new_ele in new_obj_list_buffer for item in new_ele[0]]
+
+        # tuple matching map schema
+        existing_map = {"key1": [1], "key2": [10]}
+        map_data_obj = (
+            0,  # id (Int)
+            existing_map  # (Map with String -> Integer)
+        )
+        if not self.map_state.containsKey(key):
+            self.map_state.updateValue(key, map_data_obj)
+        else:
+            existing_val = self.map_state.getValue(key)
+            existing_map = existing_val[1]
+            existing_map[key] = [accumulated_value]
+            new_map_val = (0, existing_map)
+            self.map_state.updateValue(key, new_map_val)
+        updated_map = str(existing_map)
+
+        yield pd.DataFrame({"id": key, "value_arr": ','.join(map(str, updated_arr)),
+                            "list_state_arr": ','.join(map(str, flattened_ids)),
+                            "map_state_arr": updated_map})
+
+    def close(self) -> None:
+        pass
+
+
+class RowStatefulProcessorCompositeType(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        array_schema = StructType([
+            StructField("id", ArrayType(IntegerType())),  # Array of primitive
+            StructField("tags", ArrayType(ArrayType(StringType()))),  # Array of Array
+            StructField("metadata", ArrayType(  # Array of struct
+                StructType([
+                    StructField("key", StringType()),
+                    StructField("value", StringType())
+                ])
+            ))
+        ])
+        map_schema = StructType([
+            StructField("id", IntegerType(), True),
+            # Map of String -> Array of Int
+            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True)
+        ])
+
+        self.array_state = handle.getValueState("array_state", array_schema)
+        self.list_state = handle.getListState("list_state", array_schema)
+        self.map_state = handle.getMapState("map_state", "name string", map_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        accumulated_value = 0
+        tag_field = [["dummy1", "dummy2"], ["dummy3"]]
+        metadata_field = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
+
+        for row in rows:
+            accumulated_value += int(row.temperature)
+        if self.array_state.exists():
+            existing_state = self.array_state.get()
+            # create array of nested type of map fields
+            expected_metadata = [Row(key=item["key"], value=item["value"]) for item in metadata_field]
+            # check "tags" and "metadata" field is correctly stored and read
+            assert existing_state[1] == tag_field, f"Received tag field is: {existing_state[1]}"
+            assert existing_state[2] == expected_metadata, f"Received metadata field is: {existing_state[2]}"
+            existing_arr = existing_state[0]
+            updated_arr = [int(x + accumulated_value) for x in existing_arr]
+        else:
+            updated_arr = [0]
+        obj = (
+            updated_arr,  # id
+            tag_field,  # tags
+            metadata_field  # metadata
+        )
+        # return id array with incremented accumulated values
+        self.array_state.update(obj)
+
+        # extend the array inside list state element by adding input row value
+        existing_arr = self.list_state.get()
+        new_obj_list_buffer = []
+        for i in existing_arr:
+            existing_list_arr = i[0]
+            assert(existing_list_arr is not None)
+            existing_list_arr.append(accumulated_value)
+            new_ele = (
+                existing_list_arr,  # id
+                [["dummy1", "dummy2"], ["dummy3"]],  # tags
+                [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]  # metadata
+            )
+            new_obj_list_buffer.append(new_ele)
+        if len(new_obj_list_buffer) == 0:
+            new_obj_list_buffer.append(obj)
+        self.list_state.put(new_obj_list_buffer)
+
+        # return flattened id array
+        flattened_ids = [item for new_ele in new_obj_list_buffer for item in new_ele[0]]
+
+        # tuple matching map schema
+        existing_map = {"key1": [1], "key2": [10]}
+        map_data_obj = (
+            0,  # id (Int)
+            existing_map  # (Map with String -> Integer)
+        )
+        if not self.map_state.containsKey(key):
+            self.map_state.updateValue(key, map_data_obj)
+        else:
+            existing_val = self.map_state.getValue(key)
+            existing_map = existing_val[1]
+            existing_map[key] = [accumulated_value]
+            new_map_val = (0, existing_map)
+            self.map_state.updateValue(key, new_map_val)
+        updated_map = str(existing_map)
+
+        yield Row(id=key[0], value_arr=','.join(map(str, updated_arr)),
+                  list_state_arr=','.join(map(str, flattened_ids)),
+                  map_state_arr = updated_map)
 
     def close(self) -> None:
         pass
