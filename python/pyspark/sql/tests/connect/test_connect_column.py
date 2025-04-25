@@ -70,9 +70,9 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
     def test_columns(self):
         # SPARK-41036: test `columns` API for python client.
-        rows = [Row(id=x, name=f"{x}") for x in range(100)]
-        df = self.connect.createDataFrame(rows)
-        df2 = self.spark.createDataFrame(rows)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        df = self.connect.sql(query)
+        df2 = self.spark.sql(query)
         self.assertEqual(["id", "name"], df.columns)
 
         self.assert_eq(
@@ -354,8 +354,8 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
     def test_simple_binary_expressions(self):
         """Test complex expression"""
-        rows = [Row(id=x, name=f"{x}") for x in range(100)]
-        cdf = self.connect.createDataFrame(rows)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        cdf = self.connect.sql(query)
         pdf = (
             cdf.select(cdf.id).where(cdf.id % CF.lit(30) == CF.lit(0)).sort(cdf.id.asc()).toPandas()
         )
@@ -517,9 +517,9 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
     def test_cast(self):
         # SPARK-41412: test basic Column.cast
-        rows = [Row(id=x, name=f"{x}") for x in range(100)]
-        df = self.connect.createDataFrame(rows)
-        df2 = self.spark.createDataFrame(rows)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        df = self.connect.sql(query)
+        df2 = self.spark.sql(query)
 
         self.assert_eq(
             df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
