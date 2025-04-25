@@ -21,7 +21,7 @@ name: "Build / Python-only Classic-only (master, Python 3.11)"
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 */3 * *'
   workflow_dispatch:
 
 jobs:
