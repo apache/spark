@@ -2190,18 +2190,20 @@ class DataFrame(ParentDataFrame):
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
         return checkpointed
 
-    def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "toJSON()"},
-        )
+    if not is_remote_only():
 
-    @property
-    def rdd(self) -> "RDD[Row]":
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "rdd"},
-        )
+        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={"feature": "toJSON()"},
+            )
+
+        @property
+        def rdd(self) -> "RDD[Row]":
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={"feature": "rdd"},
+            )
 
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
