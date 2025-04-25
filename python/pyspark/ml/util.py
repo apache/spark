@@ -158,7 +158,8 @@ class RemoteModelRef:
         with self._lock:
             self._ref_count -= 1
             if self._ref_count == 0:
-                del_remote_cache(self._ref_id)
+                # Delete the model if possible
+                del_remote_cache(self.ref_id)
 
     def __str__(self):
         return self.ref_id
@@ -328,9 +329,7 @@ def try_remote_del(f: FuncT) -> FuncT:
             return
 
         if in_remote and isinstance(self._java_obj, RemoteModelRef):
-            # Delete the model if possible
-            model_id = self._java_obj.ref_id
-            del_remote_cache(cast(str, model_id))
+            self._java_obj.release_ref()
             return
         else:
             return f(self)
