@@ -123,9 +123,12 @@ abstract class OffsetWindowFunctionFrameBase(
   protected val fillDefaultValue = {
     // Collect the expressions and bind them.
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toImmutableArraySeq.map { e =>
-      if (e.default == null || e.default.foldable && e.default.eval() == null) {
+      if (e.default == null) {
         // The default value is null.
         Literal.create(null, e.dataType)
+      } else if (e.default.foldable) {
+        // The default value is foldable.
+        Literal.create(e.default.eval(), e.dataType)
       } else {
         // The default value is an expression.
         BindReferences.bindReference(e.default, inputAttrs)
