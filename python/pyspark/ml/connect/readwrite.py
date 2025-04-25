@@ -78,6 +78,7 @@ class RemoteMLWriter(MLWriter):
         # supporting JavaModel or JavaEstimator or JavaEvaluator
         if isinstance(instance, JavaModel):
             from pyspark.ml.util import RemoteModelRef
+
             model = cast("JavaModel", instance)
             params = serialize_ml_params(model, session.client)
             assert isinstance(model._java_obj, RemoteModelRef)
@@ -272,6 +273,7 @@ class RemoteMLReader(MLReader[RL]):
             # It must be JavaWrapper, since we're passing the string to the _java_obj
             if issubclass(py_type, JavaWrapper):
                 from pyspark.ml.util import RemoteModelRef
+
                 if ml_type == pb2.MlOperator.OPERATOR_TYPE_MODEL:
                     session.client.add_ml_cache(result.obj_ref.id)
                     remote_model_ref = RemoteModelRef(result.obj_ref.id)

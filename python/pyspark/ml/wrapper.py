@@ -358,6 +358,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         that = super(JavaParams, self).copy(extra)
         if self._java_obj is not None:
             from pyspark.ml.util import RemoteModelRef
+
             if isinstance(self._java_obj, RemoteModelRef):
                 that._java_obj = self._java_obj
                 self._java_obj.add_ref()
@@ -459,6 +460,7 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         super(JavaModel, self).__init__(java_model)
         if is_remote() and java_model is not None:
             from pyspark.ml.util import RemoteModelRef
+
             assert isinstance(java_model, RemoteModelRef)
         if java_model is not None and not is_remote():
             # SPARK-10931: This is a temporary fix to allow models to own params

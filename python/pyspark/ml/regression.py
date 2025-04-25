@@ -1615,6 +1615,7 @@ class RandomForestRegressionModel(
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
             from pyspark.ml.util import RemoteModelRef
+
             return [
                 DecisionTreeRegressionModel(RemoteModelRef(m))
                 for m in self._call_java("trees").split(",")
@@ -2010,6 +2011,7 @@ class GBTRegressionModel(
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
             from pyspark.ml.util import RemoteModelRef
+
             return [
                 DecisionTreeRegressionModel(RemoteModelRef(m))
                 for m in self._call_java("trees").split(",")
