@@ -1025,7 +1025,7 @@ object StateStore extends Logging {
           logInfo(log"Submitted maintenance from task thread to close " +
             log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
             log"Removed provider from loadedProviders")
-          submitMaintenanceWorkForProvider(id, provider, submittedFromTaskThread = true)
+          submitMaintenanceWorkForProvider(id, provider, storeConf, submittedFromTaskThread = true)
         })
       })
       provider
@@ -1111,7 +1111,7 @@ object StateStore extends Logging {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { doMaintenance() }
+          task = { doMaintenance(storeConf) }
         )
         maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
           maintenanceShutdownTimeout)
@@ -1132,19 +1132,43 @@ object StateStore extends Logging {
   }
 
   // Block until we can process this partition
-  private def awaitProcessThisPartition(id: StateStoreProviderId): Unit = {
+  private def awaitProcessThisPartition(
+      id: StateStoreProviderId,
+      storeConf: StateStoreConf): Unit = {
     maintenanceThreadPoolLock.synchronized {
-      while (!processThisPartition(id)) {
-        maintenanceThreadPoolLock.wait()
+      val timeoutMs = storeConf.stateStoreMaintenanceProcessingTimeout * 1000
+      val endTime = System.currentTimeMillis() + timeoutMs
+
+      // Try to process immediately first
+      if (processThisPartition(id)) return
+
+      // Wait with timeout and process after notification
+      def timeRemaining: Long = endTime - System.currentTimeMillis()
+
+      while (timeRemaining > 0) {
+        maintenanceThreadPoolLock.wait(Math.min(timeRemaining, 10000))
+        if (processThisPartition(id)) return
       }
+
+      // Timeout reached without successfully processing the partition
+      throw new SparkException(
+        errorClass = "STATE_STORE_MAINTENANCE_TASK_TIMEOUT",
+        messageParameters = Map(
+          "timeoutMs" -> timeoutMs.toString,
+          "providerId" -> id.toString),
+        cause = null)
     }
   }
+
+  private def doMaintenance(): Unit = doMaintenance(StateStoreConf.empty)
 
   /**
    * Execute background maintenance task in all the loaded store providers if they are still
    * the active instances according to the coordinator.
    */
-  private def doMaintenance(): Unit = {
+  private def doMaintenance(
+      storeConf: StateStoreConf
+  ): Unit = {
     logDebug("Doing maintenance")
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
@@ -1153,7 +1177,7 @@ object StateStore extends Logging {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
       if (processThisPartition(id)) {
-        submitMaintenanceWorkForProvider(id, provider)
+        submitMaintenanceWorkForProvider(id, provider, storeConf)
       } else {
         logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
           log"for maintenance because it is currently " +
@@ -1174,6 +1198,7 @@ object StateStore extends Logging {
   private def submitMaintenanceWorkForProvider(
       id: StateStoreProviderId,
       provider: StateStoreProvider,
+      storeConf: StateStoreConf,
       submittedFromTaskThread: Boolean = false): Unit = {
     maintenanceThreadPool.execute(() => {
       val startTime = System.currentTimeMillis()
@@ -1183,7 +1208,7 @@ object StateStore extends Logging {
         // close it properly.
         // We block here until we can acquire the lock for this partition, waiting for any
         // possible ongoing maintenance on this partition to complete first.
-        awaitProcessThisPartition(id)
+        awaitProcessThisPartition(id, storeConf)
       }
       val awaitingPartitionDuration = System.currentTimeMillis() - startTime
       try {

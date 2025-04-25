@@ -4912,6 +4912,13 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STATE_STORE_MAINTENANCE_TASK_TIMEOUT" : {
+    "message" : [
+      "Timed out after <timeoutMs> ms waiting to acquire lock for state store provider <providerId>.",
+      "This may indicate contention or deadlock in state store maintenance."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
