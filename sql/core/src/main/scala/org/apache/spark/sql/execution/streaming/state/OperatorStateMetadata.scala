@@ -346,7 +346,7 @@ class OperatorStateMetadataV2Reader(
       return Array.empty
     }
 
-    // filter for numeric filenames (OperatorStateMetadataV2 files) and ignore non-numeric ones
+    // filter out non-numeric file names (as OperatorStateMetadataV2 file names are numeric)
     fm.list(metadataDirPath)
       .flatMap(f => scala.util.Try(f.getPath.getName.toLong).toOption)
       .sorted
@@ -429,7 +429,8 @@ class OperatorStateMetadataV2FileManager(
     if (thresholdBatchId <= 0) {
       return
     }
-    // filter for numeric filenames (StateSchemaV3 files) and ignore non-numeric ones
+    // StateSchemaV3 filenames are of the format {batchId}_{UUID}
+    // so we want to filter for files that do not have this format
     val schemaFiles = fm.list(stateSchemaPath).sorted.map(_.getPath)
     val filesBeforeThreshold = schemaFiles.filter { path =>
       scala.util.Try(path.getName.split("_").head.toLong)

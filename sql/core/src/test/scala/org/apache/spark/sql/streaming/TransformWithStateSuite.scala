@@ -1832,6 +1832,8 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
 
+        // Here we are writing non-metadata files to the operator metadata directory to ensure that
+        // they are ignored during restart.
         val hadoopConf = spark.sessionState.newHadoopConf()
         val fm = CheckpointFileManager.create(new Path(checkpointDir.toString),
           hadoopConf)
