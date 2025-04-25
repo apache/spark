@@ -59,7 +59,6 @@ from pyspark.ml.util import (
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql import functions as F
-from pyspark.sql import is_remote
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -113,13 +112,6 @@ def _parallelFitTasks(
 
     def singleTask() -> Tuple[int, float, Transformer]:
         index, model = next(modelIter)
-
-        if collectSubModel and is_remote():
-            # In remote mode, we need to explicitly disable the __del__ which
-            # seems to be triggered inside this thread.
-            tl = train._session.client.thread_local  # type: ignore[union-attr, operator]
-            tl.disable_ml_del = True
-
         # TODO: duplicate evaluator to take extra params from input
         #  Note: Supporting tuning params in evaluator need update method
         #  `MetaAlgorithmReadWrite.getAllNestedStages`, make it return

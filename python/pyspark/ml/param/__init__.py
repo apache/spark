@@ -31,6 +31,7 @@ from typing import (
 
 import numpy as np
 
+from pyspark.sql.utils import is_remote
 from pyspark.util import is_remote_only
 from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
@@ -432,7 +433,18 @@ class Params(Identifiable, metaclass=ABCMeta):
         that = copy.copy(self)
         that._paramMap = {}
         that._defaultParamMap = {}
-        return self._copyValues(that, extra)
+        copied = self._copyValues(that, extra)
+
+        if is_remote():
+            from pyspark.ml import Model
+
+            if isinstance(self, Model):
+                if hasattr(self, "__copies__"):
+                    self.__copies__.append(copied)
+                else:
+                    self.__copies__ = [copied]
+
+        return copied
 
     def set(self, param: Param, value: Any) -> None:
         """
