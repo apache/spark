@@ -77,13 +77,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val lock = new Object()
 
   @transient private val logOnLevel: ( => MessageWithContext) => Unit =
-    conf.adaptiveExecutionLogLevel match {
-      case "TRACE" => logTrace(_)
-      case "INFO" => logInfo(_)
-      case "WARN" => logWarning(_)
-      case "ERROR" => logError(_)
-      case _ => logDebug(_)
-    }
+    logBasedOnLevel(conf.adaptiveExecutionLogLevel)
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 

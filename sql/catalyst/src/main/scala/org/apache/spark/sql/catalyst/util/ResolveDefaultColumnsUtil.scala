@@ -376,7 +376,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val expr = Literal.fromSQL(defaultSQL) match {
       // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
       // hence we need to add timezone to the cast if necessary
-      case c: Cast if c.needsTimeZone =>
+      case c: Cast if c.child.resolved && c.needsTimeZone =>
         c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
       case e: Expression => e
     }

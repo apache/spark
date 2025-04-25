@@ -34,7 +34,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import sys
@@ -228,6 +230,44 @@ class StateResponseWithStringTypeVal(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StateResponseWithStringTypeVal = StateResponseWithStringTypeVal
+
+class StateResponseWithListGet(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    @property
+    def value(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    requireNextFetch: builtins.bool
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        value: collections.abc.Iterable[builtins.bytes] | None = ...,
+        requireNextFetch: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "errorMessage",
+            b"errorMessage",
+            "requireNextFetch",
+            b"requireNextFetch",
+            "statusCode",
+            b"statusCode",
+            "value",
+            b"value",
+        ],
+    ) -> None: ...
+
+global___StateResponseWithListGet = StateResponseWithListGet
 
 class StatefulProcessorCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1042,8 +1082,24 @@ global___ListStateGet = ListStateGet
 class ListStatePut(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    VALUE_FIELD_NUMBER: builtins.int
+    FETCHWITHARROW_FIELD_NUMBER: builtins.int
+    @property
+    def value(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    fetchWithArrow: builtins.bool
     def __init__(
         self,
+        *,
+        value: collections.abc.Iterable[builtins.bytes] | None = ...,
+        fetchWithArrow: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "fetchWithArrow", b"fetchWithArrow", "value", b"value"
+        ],
     ) -> None: ...
 
 global___ListStatePut = ListStatePut
@@ -1065,8 +1121,24 @@ global___AppendValue = AppendValue
 class AppendList(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    VALUE_FIELD_NUMBER: builtins.int
+    FETCHWITHARROW_FIELD_NUMBER: builtins.int
+    @property
+    def value(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    fetchWithArrow: builtins.bool
     def __init__(
         self,
+        *,
+        value: collections.abc.Iterable[builtins.bytes] | None = ...,
+        fetchWithArrow: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "fetchWithArrow", b"fetchWithArrow", "value", b"value"
+        ],
     ) -> None: ...
 
 global___AppendList = AppendList

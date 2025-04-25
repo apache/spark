@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.regex.PatternSyntaxException
 
@@ -43,6 +44,25 @@ private object ConfigHelpers {
     } catch {
       case _: IllegalArgumentException =>
         throw new IllegalArgumentException(s"$key should be boolean, but was $s")
+    }
+  }
+
+  def toEnum[E <: Enumeration](s: String, enumClass: E, key: String): enumClass.Value = {
+    try {
+      enumClass.withName(s.trim.toUpperCase(Locale.ROOT))
+    } catch {
+      case _: NoSuchElementException =>
+        throw new IllegalArgumentException(
+          s"$key should be one of ${enumClass.values.mkString(", ")}, but was $s")
+    }
+  }
+
+  def toEnum[E <: Enum[E]](s: String, enumClass: Class[E], key: String): E = {
+    enumClass.getEnumConstants.find(_.name().equalsIgnoreCase(s.trim)) match {
+      case Some(enum) => enum
+      case None =>
+        throw new IllegalArgumentException(
+          s"$key should be one of ${enumClass.getEnumConstants.mkString(", ")}, but was $s")
     }
   }
 
@@ -269,6 +289,16 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def stringConf: TypedConfigBuilder[String] = {
     new TypedConfigBuilder(this, v => v)
+  }
+
+  def enumConf(e: Enumeration): TypedConfigBuilder[e.Value] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this, toEnum(_, e, key))
+  }
+
+  def enumConf[E <: Enum[E]](e: Class[E]): TypedConfigBuilder[E] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this, toEnum(_, e, key))
   }
 
   def timeConf(unit: TimeUnit): TypedConfigBuilder[Long] = {

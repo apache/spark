@@ -425,6 +425,18 @@ class StatefulProcessorApiClient:
         message.ParseFromString(bytes)
         return message.statusCode, message.errorMessage, message.value
 
+    # The third return type is RepeatedScalarFieldContainer[bytes], which is protobuf's container
+    # type. We simplify it to Any here to avoid unnecessary complexity.
+    def _receive_proto_message_with_list_get(self) -> Tuple[int, str, Any, bool]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithListGet()
+        message.ParseFromString(bytes)
+
+        return message.statusCode, message.errorMessage, message.value, message.requireNextFetch
+
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
 

@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -1489,4 +1489,60 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)
+}
+
+trait SchemaValidationUtils extends Logging {
+
+  // Determines whether the operator should be able to evolve their schema
+  val schemaEvolutionEnabledForOperator: Boolean = false
+
+  // This method will return the column family schemas, and check whether the fields in the
+  // schema are nullable. If Avro encoding is used, we want to enforce nullability
+  def getColFamilySchemas(shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema]
+
+  def validateAndWriteStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int,
+      info: StatefulOperatorStateInfo,
+      stateSchemaDir: Path,
+      session: SparkSession,
+      operatorStateMetadataVersion: Int = 2,
+      stateStoreEncodingFormat: String = StateStoreEncoding.UnsafeRow.toString
+  ): List[StateSchemaValidationResult] = {
+    assert(stateSchemaVersion >= 3)
+    val usingAvro = stateStoreEncodingFormat == StateStoreEncoding.Avro.toString
+    val newSchemas = getColFamilySchemas(usingAvro)
+    val newStateSchemaFilePath =
+      new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
+    val metadataPath = new Path(info.checkpointLocation, s"${info.operatorId}")
+    val metadataReader = OperatorStateMetadataReader.createReader(
+      metadataPath, hadoopConf, operatorStateMetadataVersion, batchId)
+    val operatorStateMetadata = try {
+      metadataReader.read()
+    } catch {
+      // If this is the first time we are running the query, there will be no metadata
+      // and this error is expected. In this case, we return None.
+      case _: Exception if batchId == 0 =>
+        None
+    }
+
+    val oldStateSchemaFilePaths: List[Path] = operatorStateMetadata match {
+      case Some(metadata) =>
+        metadata match {
+          case v2: OperatorStateMetadataV2 =>
+            v2.stateStoreInfo.head.stateSchemaFilePaths.map(new Path(_))
+          case _ => List.empty
+        }
+      case None => List.empty
+    }
+    // state schema file written here, writing the new schema list we passed here
+    List(StateSchemaCompatibilityChecker.
+      validateAndMaybeEvolveStateSchema(info, hadoopConf,
+        newSchemas.values.toList, session.sessionState, stateSchemaVersion,
+        storeName = StateStoreId.DEFAULT_STORE_NAME,
+        oldSchemaFilePaths = oldStateSchemaFilePaths,
+        newSchemaFilePath = Some(newStateSchemaFilePath),
+        schemaEvolutionEnabled = usingAvro && schemaEvolutionEnabledForOperator))
+  }
 }

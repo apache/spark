@@ -89,6 +89,7 @@ from pyspark.ml.util import (
     try_remote_read,
     try_remote_write,
     try_remote_attribute_relation,
+    _cache_spark_dataset,
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
@@ -3603,46 +3604,47 @@ class OneVsRest(
 
         # persist if underlying dataset is not persistent.
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
-        if handlePersistence:
-            multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
-        def _oneClassFitTasks(numClasses: int) -> List[Callable[[], Tuple[int, CM]]]:
-            indices = iter(range(numClasses))
+        with _cache_spark_dataset(
+            multiclassLabeled,
+            storageLevel=StorageLevel.MEMORY_AND_DISK,
+            enable=handlePersistence,
+        ) as multiclassLabeled:
 
-            def trainSingleClass() -> Tuple[int, CM]:
-                index = next(indices)
+            def _oneClassFitTasks(numClasses: int) -> List[Callable[[], Tuple[int, CM]]]:
+                indices = iter(range(numClasses))
 
-                binaryLabelCol = "mc2b$" + str(index)
-                trainingDataset = multiclassLabeled.withColumn(
-                    binaryLabelCol,
-                    F.when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
-                )
-                paramMap = dict(
-                    [
-                        (classifier.labelCol, binaryLabelCol),
-                        (classifier.featuresCol, featuresCol),
-                        (classifier.predictionCol, predictionCol),
-                    ]
-                )
-                if weightCol:
-                    paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
-                return index, classifier.fit(trainingDataset, paramMap)
+                def trainSingleClass() -> Tuple[int, CM]:
+                    index = next(indices)
 
-            return [trainSingleClass] * numClasses
+                    binaryLabelCol = "mc2b$" + str(index)
+                    trainingDataset = multiclassLabeled.withColumn(
+                        binaryLabelCol,
+                        F.when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
+                    )
+                    paramMap = dict(
+                        [
+                            (classifier.labelCol, binaryLabelCol),
+                            (classifier.featuresCol, featuresCol),
+                            (classifier.predictionCol, predictionCol),
+                        ]
+                    )
+                    if weightCol:
+                        paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
+                    return index, classifier.fit(trainingDataset, paramMap)
 
-        tasks = map(
-            inheritable_thread_target(dataset.sparkSession),
-            _oneClassFitTasks(numClasses),
-        )
-        pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
+                return [trainSingleClass] * numClasses
 
-        subModels = [None] * numClasses
-        for j, subModel in pool.imap_unordered(lambda f: f(), tasks):
-            assert subModels is not None
-            subModels[j] = subModel
+            tasks = map(
+                inheritable_thread_target(dataset.sparkSession),
+                _oneClassFitTasks(numClasses),
+            )
+            pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
-        if handlePersistence:
-            multiclassLabeled.unpersist()
+            subModels = [None] * numClasses
+            for j, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                assert subModels is not None
+                subModels[j] = subModel
 
         return self._copyValues(OneVsRestModel(models=cast(List[ClassificationModel], subModels)))
 
@@ -3868,32 +3870,31 @@ class OneVsRestModel(
 
         # persist if underlying dataset is not persistent.
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
-        if handlePersistence:
-            newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+        with _cache_spark_dataset(
+            newDataset,
+            storageLevel=StorageLevel.MEMORY_AND_DISK,
+            enable=handlePersistence,
+        ) as newDataset:
+            # update the accumulator column with the result of prediction of models
+            aggregatedDataset = newDataset
+            for index, model in enumerate(self.models):
+                rawPredictionCol = self.getRawPredictionCol()
 
-        # update the accumulator column with the result of prediction of models
-        aggregatedDataset = newDataset
-        for index, model in enumerate(self.models):
-            rawPredictionCol = self.getRawPredictionCol()
+                columns = origCols + [rawPredictionCol, accColName]
 
-            columns = origCols + [rawPredictionCol, accColName]
+                # add temporary column to store intermediate scores and update
+                tmpColName = "mbc$tmp" + str(uuid.uuid4())
+                transformedDataset = model.transform(aggregatedDataset).select(*columns)
+                updatedDataset = transformedDataset.withColumn(
+                    tmpColName,
+                    F.array_append(accColName, SF.vector_get(F.col(rawPredictionCol), F.lit(1))),
+                )
+                newColumns = origCols + [tmpColName]
 
-            # add temporary column to store intermediate scores and update
-            tmpColName = "mbc$tmp" + str(uuid.uuid4())
-            transformedDataset = model.transform(aggregatedDataset).select(*columns)
-            updatedDataset = transformedDataset.withColumn(
-                tmpColName,
-                F.array_append(accColName, SF.vector_get(F.col(rawPredictionCol), F.lit(1))),
-            )
-            newColumns = origCols + [tmpColName]
-
-            # switch out the intermediate column with the accumulator column
-            aggregatedDataset = updatedDataset.select(*newColumns).withColumnRenamed(
-                tmpColName, accColName
-            )
-
-        if handlePersistence:
-            newDataset.unpersist()
+                # switch out the intermediate column with the accumulator column
+                aggregatedDataset = updatedDataset.select(*newColumns).withColumnRenamed(
+                    tmpColName, accColName
+                )
 
         if self.getRawPredictionCol():
             aggregatedDataset = aggregatedDataset.withColumn(

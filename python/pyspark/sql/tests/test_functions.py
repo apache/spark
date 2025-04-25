@@ -23,7 +23,6 @@ import io
 from itertools import chain
 import math
 import re
-import sys
 import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
@@ -66,9 +65,6 @@ class FunctionsTestsMixin:
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
-            "random",  # namespace conflict with python built-in module
-            "uuid",  # namespace conflict with python built-in module
-            "chr",  # namespace conflict with python built-in function
             "partitioning$",  # partitioning expressions for DSv2
         ]
 
@@ -91,7 +87,6 @@ class FunctionsTestsMixin:
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
         )
 
-    @unittest.skipIf(sys.version_info < (3, 11), "Only works with Python 3.11+")
     def test_wildcard_import(self):
         all_set = set(F.__all__)
 
@@ -104,28 +99,33 @@ class FunctionsTestsMixin:
         #     "aes_encrypt",
         #     ...,
         # }
-        fn_set = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
+        fn_set = {
+            name
+            for (name, value) in getmembers(F, isfunction)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
 
-        expected_fn_all_diff = {
+        deprecated_fn_list = [
             "approxCountDistinct",  # deprecated
             "bitwiseNOT",  # deprecated
-            "cast",  # typing
             "countDistinct",  # deprecated
-            "overload",  # typing
-            "quote",  # new function in 4.1
+            "chr",  # name conflict with builtin function
+            "random",  # name conflict with builtin function
             "shiftLeft",  # deprecated
             "shiftRight",  # deprecated
             "shiftRightUnsigned",  # deprecated
             "sumDistinct",  # deprecated
             "toDegrees",  # deprecated
             "toRadians",  # deprecated
-        }
-
-        self.assertEqual(
-            expected_fn_all_diff,
-            fn_set - all_set,
-            "some functions are not registered in __all__",
-        )
+            "uuid",  # name conflict with builtin module
+        ]
+        unregistered_fn_list = [
+            "chr",  # name conflict with builtin function
+            "random",  # name conflict with builtin function
+            "uuid",  # name conflict with builtin module
+        ]
+        expected_fn_all_diff = set(deprecated_fn_list + unregistered_fn_list)
+        self.assertEqual(expected_fn_all_diff, fn_set - all_set)
 
         # {
         #     "AnalyzeArgument",
@@ -134,10 +134,13 @@ class FunctionsTestsMixin:
         #     "UserDefinedFunction",
         #     "UserDefinedTableFunction",
         # }
-        clz_set = {name for (name, value) in getmembers(F, isclass) if name[0] != "_"}
+        clz_set = {
+            name
+            for (name, value) in getmembers(F, isclass)
+            if name[0] != "_" and value.__module__ != "typing"
+        }
 
         expected_clz_all_diff = {
-            "Any",  # typing
             "ArrayType",  # should be imported from pyspark.sql.types
             "ByteType",  # should be imported from pyspark.sql.types
             "Column",  # should be imported from pyspark.sql
@@ -149,19 +152,10 @@ class FunctionsTestsMixin:
             "StringType",  # should be imported from pyspark.sql.types
             "StructType",  # should be imported from pyspark.sql.types
         }
-
-        self.assertEqual(
-            expected_clz_all_diff,
-            clz_set - all_set,
-            "some classes are not registered in __all__",
-        )
+        self.assertEqual(expected_clz_all_diff, clz_set - all_set)
 
         unknonw_set = all_set - (fn_set | clz_set)
-        self.assertEqual(
-            unknonw_set,
-            set(),
-            "some unknown items are registered in __all__",
-        )
+        self.assertEqual(unknonw_set, set())
 
     def test_explode(self):
         d = [

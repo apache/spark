@@ -18,6 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.net.URI
+import java.util.HashMap
 
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
@@ -28,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -128,8 +129,8 @@ private[sql] class AvroOptions(
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
-  val datetimeRebaseModeInRead: String = parameters
-    .get(DATETIME_REBASE_MODE)
+  val datetimeRebaseModeInRead: LegacyBehaviorPolicy.Value = parameters
+    .get(DATETIME_REBASE_MODE).map(LegacyBehaviorPolicy.withName)
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
 
   val useStableIdForUnionType: Boolean =
@@ -145,6 +146,37 @@ private[sql] class AvroOptions(
     throw QueryCompilationErrors.avroOptionsException(
       RECURSIVE_FIELD_MAX_DEPTH,
       s"Should not be greater than $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.")
+  }
+
+  /**
+   * [[hadoop.conf.Configuration]] is not comparable so we turn it into a map for [[equals]] and
+   * [[hashCode]].
+   */
+  @transient private lazy val comparableConf = {
+    val iter = conf.iterator()
+    val result = new HashMap[String, String]
+    while (iter.hasNext()) {
+      val entry = iter.next()
+      result.put(entry.getKey(), entry.getValue())
+    }
+    result
+  }
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case that: AvroOptions =>
+        this.parameters == that.parameters &&
+        this.comparableConf == that.comparableConf
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    result = prime * result + parameters.hashCode
+    result = prime * result + comparableConf.hashCode
+    result
   }
 }
 
