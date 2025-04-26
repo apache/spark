@@ -119,7 +119,7 @@ def invoke_remote_attribute_relation(
         object_id = instance._java_obj.ref_id
     else:
         # model summary
-        object_id = instance._java_obj
+        object_id = instance._java_obj  # type: ignore
     methods, obj_ref = _extract_id_methods(object_id)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
     plan = AttributeRelation(obj_ref, methods)
