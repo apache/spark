@@ -395,7 +395,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ApplyDefaultCollationToStringType ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -531,7 +530,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = {
       val collatedPlan =
         if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
-          CollationTypeCasts(plan)
+          Seq(
+            ApplyDefaultCollationToStringType,
+            CollationTypeCasts
+          ).foldLeft(plan) { case (plan, rule) => rule(plan) }
         } else {
           plan
         }
