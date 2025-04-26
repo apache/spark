@@ -221,10 +221,9 @@ class GaussianMixtureModel private[ml] (
 
 }
 
-private case class Data(weights: Array[Double], mus: Array[OldVector], sigmas: Array[OldMatrix])
-
 @Since("2.0.0")
 object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
+  private case class Data(weights: Array[Double], mus: Array[OldVector], sigmas: Array[OldMatrix])
 
   @Since("2.0.0")
   override def read: MLReader[GaussianMixtureModel] = new GaussianMixtureModelReader

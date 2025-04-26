@@ -343,14 +343,13 @@ class FMClassificationModel private[classification] (
   }
 }
 
-private case class Data(
-  intercept: Double,
-  linear: Vector,
-  factors: Matrix
-)
-
 @Since("3.0.0")
 object FMClassificationModel extends MLReadable[FMClassificationModel] {
+  private case class Data(
+    intercept: Double,
+    linear: Vector,
+    factors: Matrix
+  )
 
   @Since("3.0.0")
   override def read: MLReader[FMClassificationModel] = new FMClassificationModelReader

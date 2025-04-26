@@ -233,7 +233,7 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
         ClusterData(idx, center)
     }
     val dataPath = new Path(path, "data").toString
-    ReadWriteUtils.saveArray(dataPath, data, sparkSession)
+    ReadWriteUtils.saveArray[ClusterData](dataPath, data, sparkSession)
   }
 }
 

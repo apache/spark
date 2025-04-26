@@ -596,10 +596,9 @@ class NaiveBayesModel private[ml] (
   override def write: MLWriter = new NaiveBayesModel.NaiveBayesModelWriter(this)
 }
 
-private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
-
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
+  private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader
@@ -624,7 +623,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       }
 
       val data = Data(instance.pi, instance.theta, instance.sigma)
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 

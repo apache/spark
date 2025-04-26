@@ -365,11 +365,10 @@ class MultilayerPerceptronClassificationModel private[ml] (
   }
 }
 
-private case class Data(weights: Vector)
-
 @Since("2.0.0")
 object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
+  private case class Data(weights: Vector)
 
   @Since("2.0.0")
   override def read: MLReader[MultilayerPerceptronClassificationModel] =

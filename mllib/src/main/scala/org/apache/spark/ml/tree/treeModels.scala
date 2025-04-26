@@ -542,7 +542,6 @@ private[ml] object EnsembleModelReadWrite {
       val newNodeDataCol = df.schema("nodeData").dataType match {
         case StructType(fields) =>
           val cols = fields.map(f => col(s"nodeData.${f.name}")) :+ lit(-1L).as("rawCount")
-          import org.apache.spark.util.ArrayImplicits._
           struct(cols.toImmutableArraySeq: _*)
       }
       df = df.withColumn("nodeData", newNodeDataCol)

@@ -43,7 +43,6 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
@@ -642,15 +641,14 @@ class LocalLDAModel private[ml] (
   }
 }
 
-private case class LocalModelData(
-   vocabSize: Int,
-   topicsMatrix: Matrix,
-   docConcentration: Vector,
-   topicConcentration: Double,
-   gammaShape: Double)
-
 @Since("1.6.0")
 object LocalLDAModel extends MLReadable[LocalLDAModel] {
+  private case class LocalModelData(
+    vocabSize: Int,
+    topicsMatrix: Matrix,
+    docConcentration: Vector,
+    topicConcentration: Double,
+    gammaShape: Double)
 
   private[LocalLDAModel]
   class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {

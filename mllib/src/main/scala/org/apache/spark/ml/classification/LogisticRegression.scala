@@ -1316,16 +1316,14 @@ class LogisticRegressionModel private[spark] (
   }
 }
 
-private case class Data(
-     numClasses: Int,
-     numFeatures: Int,
-     interceptVector: Vector,
-     coefficientMatrix: Matrix,
-     isMultinomial: Boolean
-)
-
 @Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
+  private case class Data(
+    numClasses: Int,
+    numFeatures: Int,
+    interceptVector: Vector,
+    coefficientMatrix: Matrix,
+    isMultinomial: Boolean)
 
   @Since("1.6.0")
   override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
@@ -1345,7 +1343,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val data = Data(instance.numClasses, instance.numFeatures, instance.interceptVector,
         instance.coefficientMatrix, instance.isMultinomial)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject(dataPath, data, sparkSession)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
     }
   }
 
