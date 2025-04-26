@@ -146,21 +146,21 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
 
 
 class RemoteModelRef:
-    def __init__(self, ref_id):
+    def __init__(self, ref_id: str) -> None:
         self._ref_id = ref_id
         self._ref_count = 1
         self._lock = threading.Lock()
 
     @property
-    def ref_id(self):
+    def ref_id(self) -> str:
         return self._ref_id
 
-    def add_ref(self):
+    def add_ref(self) -> None:
         with self._lock:
             assert self._ref_count > 0
             self._ref_count += 1
 
-    def release_ref(self):
+    def release_ref(self) -> None:
         with self._lock:
             assert self._ref_count > 0
             self._ref_count -= 1
@@ -168,7 +168,7 @@ class RemoteModelRef:
                 # Delete the model if possible
                 del_remote_cache(self.ref_id)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.ref_id
 
 
@@ -292,7 +292,7 @@ def try_remote_call(f: FuncT) -> FuncT:
                     obj_id = self._java_obj.ref_id
                 else:
                     # model summary
-                    obj_id = self._java_obj
+                    obj_id = self._java_obj  # type: ignore
             methods, obj_ref = _extract_id_methods(obj_id)
             methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
             command = pb2.Command()
