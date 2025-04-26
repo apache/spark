@@ -2701,46 +2701,61 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
 
 class ExtendedDataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
-    class _ExtendedBooleanType(BooleanType): ...
+    class _ExtendedBooleanType(BooleanType):
+        ...
 
-    class _ExtendedByteType(ByteType): ...
+    class _ExtendedByteType(ByteType):
+        ...
 
-    class _ExtendedShortType(ShortType): ...
+    class _ExtendedShortType(ShortType):
+        ...
 
-    class _ExtendedIntegerType(IntegerType): ...
+    class _ExtendedIntegerType(IntegerType):
+        ...
 
-    class _ExtendedLongType(LongType): ...
+    class _ExtendedLongType(LongType):
+        ...
 
-    class _ExtendedFloatType(FloatType): ...
+    class _ExtendedFloatType(FloatType):
+        ...
 
-    class _ExtendedDoubleType(DoubleType): ...
+    class _ExtendedDoubleType(DoubleType):
+        ...
 
-    class _ExtendedDecimalType(DecimalType): ...
+    class _ExtendedDecimalType(DecimalType):
+        ...
 
-    class _ExtendedStringType(StringType): ...
+    class _ExtendedStringType(StringType):
+        ...
 
-    class _ExtendedCharType(CharType): ...
+    class _ExtendedCharType(CharType):
+        ...
 
-    class _ExtendedVarcharType(VarcharType): ...
+    class _ExtendedVarcharType(VarcharType):
+        ...
 
-    class _ExtendedBinaryType(BinaryType): ...
+    class _ExtendedBinaryType(BinaryType):
+        ...
 
-    class _ExtendedDateType(DateType): ...
+    class _ExtendedDateType(DateType):
+        ...
 
-    class _ExtendedTimestampType(TimestampType): ...
+    class _ExtendedTimestampType(TimestampType):
+        ...
 
-    class _ExtendedArrayType(ArrayType): ...
+    class _ExtendedArrayType(ArrayType):
+        ...
 
-    class _ExtendedMapType(MapType): ...
+    class _ExtendedMapType(MapType):
+        ...
 
-    class _ExtendedStructType(StructType): ...
+    class _ExtendedStructType(StructType):
+        ...
 
     def test_verify_type_exception_msg(self):
         # tests similar to DataTypeVerificationTests.test_verify_type_exception_msg
         with self.assertRaises(PySparkValueError) as pe:
-            _make_type_verifier(
-                self._ExtendedStringType(), nullable=False, name="test_name"
-            )(None)
+            _make_type_verifier(self._ExtendedStringType(), nullable=False, name="test_name")(None)
 
         self.check_error(
             exception=pe.exception,
@@ -2865,15 +2880,11 @@ class ExtendedDataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils
             # Map
             (
                 {},
-                self._ExtendedMapType(
-                    self._ExtendedStringType(), self._ExtendedIntegerType()
-                ),
+                self._ExtendedMapType(self._ExtendedStringType(), self._ExtendedIntegerType()),
             ),
             (
                 {"a": 1},
-                self._ExtendedMapType(
-                    self._ExtendedStringType(), self._ExtendedIntegerType()
-                ),
+                self._ExtendedMapType(self._ExtendedStringType(), self._ExtendedIntegerType()),
             ),
             (
                 {"a": None},
@@ -2946,16 +2957,12 @@ class ExtendedDataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils
             # Map
             (
                 {"a": 1},
-                self._ExtendedMapType(
-                    self._ExtendedIntegerType(), self._ExtendedIntegerType()
-                ),
+                self._ExtendedMapType(self._ExtendedIntegerType(), self._ExtendedIntegerType()),
                 TypeError,
             ),
             (
                 {"a": "1"},
-                self._ExtendedMapType(
-                    self._ExtendedStringType(), self._ExtendedIntegerType()
-                ),
+                self._ExtendedMapType(self._ExtendedStringType(), self._ExtendedIntegerType()),
                 TypeError,
             ),
             (
