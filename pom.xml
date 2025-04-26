@@ -399,6 +399,20 @@
       </snapshots>
     </pluginRepository>
   </pluginRepositories>
+
+  <distributionManagement>
+    <repository>
+      <id>openai.release.artifactory</id>
+      <name>OpenAI Release Artifactory</name>
+      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-release-local</url>
+    </repository>
+    <snapshotRepository>
+      <id>openai.snapshot.artifactory</id>
+      <name>OpenAI Snapshot Artifactory</name>
+      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-snapshot-local</url>
+    </snapshotRepository>
+  </distributionManagement>
+
   <dependencies>
     <!--
       This is a dummy dependency that is used to trigger the maven-shade plugin so that Spark's

@@ -1,7 +1,7 @@
 <settings>
   <servers>
     <server>
-      <id>artifactory</id>
+      <id>openai.release.artifactory</id>
       <username>admin</username>
       <password>${env.ARTIFACTORY_TOKEN}</password>
     </server>

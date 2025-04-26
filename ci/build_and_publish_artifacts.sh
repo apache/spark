@@ -17,31 +17,6 @@ build/mvn -DskipTests clean package -Phive -Pkubernetes -Phadoop-cloud -Phive-th
 
 GROUP_ID=org.apache.spark
 SCALA_VERSION=2.12
-MODULES=(
-  "core,spark-core"
-  "common/network-common,spark-network-common"
-  "common/network-shuffle,spark-network-shuffle"
-  "launcher,spark-launcher"
-  "streaming,spark-streaming"
-  "connector/kafka-0-10,spark-streaming-kafka-0-10"
-  "connector/kafka-0-10-sql,spark-sql-kafka-0-10"
-  "connector/kafka-0-10-token-provider,spark-token-provider-kafka-0-10"
-  "connector/avro,spark-avro"
-  "connector/protobuf,spark-protobuf"
-  "connector/connect/common,spark-connect-common"
-  "connector/connect/client/jvm,spark-connect-client-jvm"
-  "connector/connect/server,spark-connect"
-  "sql/core,spark-sql"
-  "sql/hive,spark-hive"
-  "sql/catalyst,spark-catalyst"
-  "sql/hive-thriftserver,spark-hive-thriftserver"
-  "sql/api,spark-sql-api"
-  "resource-managers/kubernetes/core,spark-kubernetes"
-  "hadoop-cloud,spark-hadoop-cloud"
-  "tools,spark-tools"
-)
-for MODULE in "${MODULES[@]}"; do
-  IFS=',' read -r DIR NAME <<< $MODULE
-  echo $NAME
-  $SPARK_HOME/ci/upload-jar.sh $GROUP_ID ${NAME}_${SCALA_VERSION} $VERSION ${DIR}/target/${NAME}_${SCALA_VERSION}-${VERSION}.jar
-done
+
+echo "Deploying Spark artifacts for ${SPARK_VERSION}"
+build/mvn deploy -s $BUILDKITE_BUILD_CHECKOUT_PATH/ci/settings.xml -DskipTests
