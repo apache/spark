@@ -5,5 +5,10 @@
       <username>admin</username>
       <password>${env.ARTIFACTORY_TOKEN}</password>
     </server>
+    <server>
+      <id>openai.snapshot.artifactory</id>
+      <username>admin</username>
+      <password>${env.ARTIFACTORY_TOKEN}</password>
+    </server>
   </servers>
 </settings>
