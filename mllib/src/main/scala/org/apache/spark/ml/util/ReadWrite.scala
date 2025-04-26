@@ -875,7 +875,8 @@ private[spark] object ReadWriteUtils {
   }
 
   def saveArray[T <: Product: ClassTag: TypeTag](
-      path: String, data: Array[T], spark: SparkSession
+      path: String, data: Array[T], spark: SparkSession,
+      numDataParts: Int = -1
   ): Unit = {
     if (localSavingModeState.get()) {
       val serializer = SparkEnv.get.serializer.newInstance()
@@ -889,7 +890,12 @@ private[spark] object ReadWriteUtils {
       Files.write(filePath, dataBytes)
     } else {
       import org.apache.spark.util.ArrayImplicits._
-      spark.createDataFrame[T](data.toImmutableArraySeq).write.parquet(path)
+      val df = spark.createDataFrame[T](data.toImmutableArraySeq)
+      if (numDataParts == -1) {
+        df.write.parquet(path)
+      } else {
+        df.repartition(numDataParts).write.parquet(path)
+      }
     }
   }
 
