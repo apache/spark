@@ -2736,6 +2736,7 @@ class ExtendedDataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils
     class _ExtendedStructType(StructType): ...
 
     def test_verify_type_exception_msg(self):
+        # tests similar to DataTypeVerificationTests.test_verify_type_exception_msg
         with self.assertRaises(PySparkValueError) as pe:
             _make_type_verifier(
                 self._ExtendedStringType(), nullable=False, name="test_name"
@@ -2752,9 +2753,7 @@ class ExtendedDataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils
         schema = self._ExtendedStructType(
             [
                 StructField(
-                    "a", self._ExtendedStructType(
-                        [StructField("b", self._ExtendedIntegerType())]
-                    )
+                    "a", self._ExtendedStructType([StructField("b", self._ExtendedIntegerType())])
                 )
             ]
         )
@@ -2773,6 +2772,7 @@ class ExtendedDataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils
         )
 
     def test_verify_type_ok_nullable(self):
+        # tests similar to DataTypeVerificationTests.test_verify_type_ok_nullable
         obj = None
         types = [
             self._ExtendedIntegerType(),
@@ -2787,7 +2787,7 @@ class ExtendedDataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils
                 self.fail("verify_type(%s, %s, nullable=True)" % (obj, data_type))
 
     def test_verify_type_not_nullable(self):
-        # tests from test_verify_type_not_nullable
+        # tests similar to DataTypeVerificationTests.test_verify_type_not_nullable
         import array
         import datetime
         import decimal
