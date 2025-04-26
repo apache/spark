@@ -2701,16 +2701,20 @@ def _make_type_verifier(
         else:
             return False
 
-    _type = type(dataType)
-
     def assert_acceptable_types(obj: Any) -> None:
-        assert _type in _acceptable_types, new_msg(
+        assert any(isinstance(dataType, _type) for _type in _acceptable_types), new_msg(
             "unknown datatype: %s for object %r" % (dataType, obj)
         )
 
+    def _get_acceptable_type():
+        for _type, obj in _acceptable_types.items():
+            if isinstance(dataType, _type):
+                return obj
+        raise PySparkTypeError("unknown datatype: %s" % dataType)
+
     def verify_acceptable_types(obj: Any) -> None:
         # subclass of them can not be fromInternal in JVM
-        if type(obj) not in _acceptable_types[_type]:
+        if type(obj) not in _get_acceptable_type():
             if name is not None:
                 raise PySparkTypeError(
                     errorClass="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
