@@ -78,7 +78,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     ProcedureArgumentCoercion ::
-    ApplyDefaultCollationToStringType ::
     new AnsiCombinedTypeCoercionRule(
       CollationTypeCasts ::
       InConversion ::
