@@ -2706,7 +2706,7 @@ def _make_type_verifier(
             "unknown datatype: %s for object %r" % (dataType, obj)
         )
 
-    def _get_supported_types():
+    def _get_supported_types() -> Tuple[Any, ...]:
         for _type, data_types in _acceptable_types.items():
             if isinstance(dataType, _type):
                 return data_types
