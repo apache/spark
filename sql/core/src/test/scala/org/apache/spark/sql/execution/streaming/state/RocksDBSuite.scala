@@ -3516,6 +3516,24 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("SPARK-51922 - Changelog writer v1 with large key" +
+    " does not cause UTFDataFormatException") {
+    val remoteDir = Utils.createTempDir()
+
+    withDB(remoteDir.toString) { db =>
+      db.load(0)
+      val key = new Array[Char](98304).mkString("") // Large key that would trigger UTFException
+      // if handled incorrectly
+      db.put(key, "0")
+      db.commit()
+
+      val changelogReader = db.fileManager.getChangelogReader(1)
+      assert(changelogReader.version === 1)
+      val entries = changelogReader.toSeq
+      assert(entries.size == 1)
+    }
+  }
+
   private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
     val threadInfo = db.getAcquiredThreadInfo()
     assert(threadInfo != None,
