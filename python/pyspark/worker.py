@@ -969,9 +969,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_grouped_transform_with_state_pandas_init_state_udf(
             func, return_type, runner_conf
         )
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF:
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
         return args_offsets, wrap_grouped_transform_with_state_udf(func, return_type, runner_conf)
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF:
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
         return args_offsets, wrap_grouped_transform_with_state_init_state_udf(
             func, return_type, runner_conf
         )
@@ -1572,8 +1572,8 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
     ):
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
@@ -1588,8 +1588,8 @@ def read_udfs(pickleSer, infile, eval_type):
         elif (
             eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
             or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
-            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF
-            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF
+            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
+            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
         ):
             state_server_port = read_int(infile)
             if state_server_port == -1:
@@ -1641,14 +1641,14 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = TransformWithStateInPandasInitStateSerializer(
                 timezone, safecheck, _assign_cols_by_name, arrow_max_records_per_batch
             )
-        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF:
+        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
             arrow_max_records_per_batch = runner_conf.get(
                 "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
             ser = TransformWithStateInPySparkRowSerializer(arrow_max_records_per_batch)
-        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF:
+        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
             arrow_max_records_per_batch = runner_conf.get(
                 "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
             )
@@ -1889,7 +1889,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 # mode == PROCESS_TIMER or mode == COMPLETE
                 return f(stateful_processor_api_client, mode, None, iter([]))
 
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF:
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
@@ -1916,7 +1916,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 # mode == PROCESS_TIMER or mode == COMPLETE
                 return f(stateful_processor_api_client, mode, None, iter([]))
 
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF:
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1

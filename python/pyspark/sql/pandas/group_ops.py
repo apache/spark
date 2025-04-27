@@ -654,10 +654,10 @@ class PandasGroupedOpsMixin:
         elif usePandas and initialState is not None:
             functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
         elif not usePandas and initialState is None:
-            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF
+            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
         else:
             # not usePandas and initialState is not None
-            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF
+            functionType = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
 
         if initialState is None:
             initial_state_java_obj = None
