@@ -52,8 +52,8 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       case createView: CreateView =>
         createView.collation
 
-      // Temporary views are created using CreateViewCommand, which cannot be imported here.
-      // Handle CreateTempView separately to access its collation.
+      // Temporary views are created via CreateViewCommand, which we can't import here.
+      // Instead, we use the CreateTempView trait to access the collation.
       case createTempView: CreateTempView =>
         createTempView.collation
 
