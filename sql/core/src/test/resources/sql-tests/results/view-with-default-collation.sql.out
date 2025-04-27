@@ -225,7 +225,7 @@ struct<>
 
 -- !query
 CREATE VIEW v DEFAULT COLLATION UTF8_LCASE
-AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2
+AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, 'c'
 -- !query schema
 struct<>
 -- !query output
@@ -254,6 +254,14 @@ SELECT COUNT(*) FROM v WHERE c2 = 'b'
 struct<count(1):bigint>
 -- !query output
 0
+
+
+-- !query
+SELECT * FROM v
+-- !query schema
+struct<c1:string collate UTF8_LCASE,c2:string collate UTF8_LCASE,'c' collate UTF8_LCASE:string collate UTF8_LCASE>
+-- !query output
+a	a	c
 
 
 -- !query
@@ -693,7 +701,7 @@ struct<>
 
 -- !query
 CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE
-AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2
+AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, 'c'
 -- !query schema
 struct<>
 -- !query output
@@ -722,6 +730,14 @@ SELECT COUNT(*) FROM v WHERE c2 = 'b'
 struct<count(1):bigint>
 -- !query output
 0
+
+
+-- !query
+SELECT * FROM v
+-- !query schema
+struct<c1:string collate UTF8_LCASE,c2:string collate UTF8_LCASE,'c' collate UTF8_LCASE:string collate UTF8_LCASE>
+-- !query output
+a	a	c
 
 
 -- !query

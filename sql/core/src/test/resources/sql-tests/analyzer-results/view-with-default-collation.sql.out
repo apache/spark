@@ -246,10 +246,10 @@ DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
 
 -- !query
 CREATE VIEW v DEFAULT COLLATION UTF8_LCASE
-AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2
+AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, 'c'
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`v`, UTF8_LCASE, SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, false, false, PersistedView, COMPENSATION, true
-   +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+CreateViewCommand `spark_catalog`.`default`.`v`, UTF8_LCASE, SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, 'c', false, false, PersistedView, COMPENSATION, true
+   +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
       :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
       :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
       :     :     +- OneRowRelation
@@ -267,9 +267,9 @@ SELECT COUNT(*) FROM v WHERE c1 = 'A'
 Aggregate [count(1) AS count(1)#xL]
 +- Filter (c1#x = A)
    +- SubqueryAlias spark_catalog.default.v
-      +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x])
-         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
-            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+      +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
                :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
                :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
                :     :     +- OneRowRelation
@@ -287,9 +287,9 @@ SELECT COUNT(*) FROM v WHERE c2 = 'a'
 Aggregate [count(1) AS count(1)#xL]
 +- Filter (c2#x = a)
    +- SubqueryAlias spark_catalog.default.v
-      +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x])
-         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
-            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+      +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
                :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
                :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
                :     :     +- OneRowRelation
@@ -307,9 +307,9 @@ SELECT COUNT(*) FROM v WHERE c2 = 'b'
 Aggregate [count(1) AS count(1)#xL]
 +- Filter (c2#x = b)
    +- SubqueryAlias spark_catalog.default.v
-      +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x])
-         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
-            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+      +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
                :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
                :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
                :     :     +- OneRowRelation
@@ -319,6 +319,25 @@ Aggregate [count(1) AS count(1)#xL]
                :        :        +- OneRowRelation
                :        +- OneRowRelation
                +- OneRowRelation
+
+
+-- !query
+SELECT * FROM v
+-- !query analysis
+Project [c1#x, c2#x, 'c' collate UTF8_LCASE#x]
++- SubqueryAlias spark_catalog.default.v
+   +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+         +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
+            :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+            :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
+            :     :     +- OneRowRelation
+            :     +- Filter (scalar-subquery#x [] = B)
+            :        :  +- Project [b AS 'b' collate UTF8_LCASE#x]
+            :        :     +- Filter (c = C)
+            :        :        +- OneRowRelation
+            :        +- OneRowRelation
+            +- OneRowRelation
 
 
 -- !query
@@ -846,10 +865,10 @@ DropTempViewCommand v
 
 -- !query
 CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE
-AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2
+AS SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, 'c'
 -- !query analysis
-CreateViewCommand `v`, UTF8_LCASE, SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, false, false, LocalTempView, UNSUPPORTED, true
-   +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+CreateViewCommand `v`, UTF8_LCASE, SELECT 'a' AS c1, (SELECT (SELECT CASE 'a' = 'A' WHEN TRUE THEN 'a' ELSE 'b' END) WHERE (SELECT 'b' WHERE 'c' = 'C') = 'B') AS c2, 'c', false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
       :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
       :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
       :     :     +- OneRowRelation
@@ -867,9 +886,9 @@ SELECT COUNT(*) FROM v WHERE c1 = 'A'
 Aggregate [count(1) AS count(1)#xL]
 +- Filter (c1#x = A)
    +- SubqueryAlias v
-      +- View (`v`, [c1#x, c2#x])
-         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
-            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+      +- View (`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
                :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
                :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
                :     :     +- OneRowRelation
@@ -887,9 +906,9 @@ SELECT COUNT(*) FROM v WHERE c2 = 'a'
 Aggregate [count(1) AS count(1)#xL]
 +- Filter (c2#x = a)
    +- SubqueryAlias v
-      +- View (`v`, [c1#x, c2#x])
-         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
-            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+      +- View (`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
                :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
                :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
                :     :     +- OneRowRelation
@@ -907,9 +926,9 @@ SELECT COUNT(*) FROM v WHERE c2 = 'b'
 Aggregate [count(1) AS count(1)#xL]
 +- Filter (c2#x = b)
    +- SubqueryAlias v
-      +- View (`v`, [c1#x, c2#x])
-         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
-            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x]
+      +- View (`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+            +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
                :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
                :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
                :     :     +- OneRowRelation
@@ -919,6 +938,25 @@ Aggregate [count(1) AS count(1)#xL]
                :        :        +- OneRowRelation
                :        +- OneRowRelation
                +- OneRowRelation
+
+
+-- !query
+SELECT * FROM v
+-- !query analysis
+Project [c1#x, c2#x, 'c' collate UTF8_LCASE#x]
++- SubqueryAlias v
+   +- View (`v`, [c1#x, c2#x, 'c' collate UTF8_LCASE#x])
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast('c' collate UTF8_LCASE#x as string collate UTF8_LCASE) AS 'c' collate UTF8_LCASE#x]
+         +- Project [a AS c1#x, scalar-subquery#x [] AS c2#x, c AS 'c' collate UTF8_LCASE#x]
+            :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+            :     :  +- Project [CASE WHEN ((a = A) = true) THEN a ELSE b END AS CASE WHEN (('a' collate UTF8_LCASE = 'A' collate UTF8_LCASE) = true) THEN 'a' collate UTF8_LCASE ELSE 'b' collate UTF8_LCASE END#x]
+            :     :     +- OneRowRelation
+            :     +- Filter (scalar-subquery#x [] = B)
+            :        :  +- Project [b AS 'b' collate UTF8_LCASE#x]
+            :        :     +- Filter (c = C)
+            :        :        +- OneRowRelation
+            :        +- OneRowRelation
+            +- OneRowRelation
 
 
 -- !query
