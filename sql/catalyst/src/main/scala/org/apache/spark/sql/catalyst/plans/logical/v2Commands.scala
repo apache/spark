@@ -1362,7 +1362,7 @@ case class CreateView(
 /**
  * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
  */
-trait CreateTempViewWithCollation {
+trait CreateTempView {
   val collation: Option[String]
 }
 
