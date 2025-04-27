@@ -844,19 +844,23 @@ private[spark] object ReadWriteUtils {
     }
   }
 
+  def saveObjectToLocal[T <: Product: ClassTag: TypeTag](path: String, data: T): Unit = {
+    val serializer = SparkEnv.get.serializer.newInstance()
+    val dataBuffer = serializer.serialize(data)
+    val dataBytes = new Array[Byte](dataBuffer.limit)
+    dataBuffer.get(dataBytes)
+
+    val filePath = Paths.get(path)
+
+    Files.createDirectories(filePath.getParent)
+    Files.write(filePath, dataBytes)
+  }
+
   def saveObject[T <: Product: ClassTag: TypeTag](
       path: String, data: T, spark: SparkSession
   ): Unit = {
     if (localSavingModeState.get()) {
-      val serializer = SparkEnv.get.serializer.newInstance()
-      val dataBuffer = serializer.serialize(data)
-      val dataBytes = new Array[Byte](dataBuffer.limit)
-      dataBuffer.get(dataBytes)
-
-      val filePath = Paths.get(path)
-
-      Files.createDirectories(filePath.getParent)
-      Files.write(filePath, dataBytes)
+      saveObjectToLocal(path, data)
     } else {
       spark.createDataFrame[T](Seq(data)).write.parquet(path)
     }
