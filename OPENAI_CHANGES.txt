@@ -58,3 +58,4 @@
 - [INTERNAL] Switch to OpenAI Hadoop
 - [INTERNAL] Make max broadcast table size configurable
 - [INTERNAL] Temporarily switch back to OSS Hadoop
+- [INTERNAL] Improve release artifacts publishing
