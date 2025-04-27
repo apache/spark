@@ -195,7 +195,7 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault(jdbcPrefixes)
 
   private def jdbcPrefixes = Seq(
-    "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
+    "com.mysql.jdbc", "com.mysql.cj", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
   val HIVE_METASTORE_BARRIER_PREFIXES = buildStaticConf("spark.sql.hive.metastore.barrierPrefixes")
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
