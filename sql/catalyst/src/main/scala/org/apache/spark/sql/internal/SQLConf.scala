@@ -2487,6 +2487,18 @@ object SQLConf {
       .stringConf
       .createWithDefault(CompressionCodec.LZ4)
 
+  val STATE_STORE_UNLOAD_ON_COMMIT =
+    buildConf("spark.sql.streaming.stateStore.unloadOnCommit")
+      .internal()
+      .doc("When true, Spark will synchronously run maintenance and then close each StateStore " +
+        "instance on task completion. This removes the overhead of keeping every StateStore " +
+        "loaded indefinitely, at the cost of having to reload each StateStore every batch. " +
+        "Stateful applications that are failing due to resource exhaustion or that use " +
+        "dynamic allocation may benefit from enabling this.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
       .doc("When true, Spark will validate if renamed checkpoint file exists.")
@@ -6107,6 +6119,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def ratioExtraSpaceAllowedInCheckpoint: Double = getConf(RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+
+  def stateStoreUnloadOnCommit: Boolean = getConf(STATE_STORE_UNLOAD_ON_COMMIT)
 
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
