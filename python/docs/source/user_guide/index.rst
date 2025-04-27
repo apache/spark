@@ -30,8 +30,8 @@ Each of the below sections contains code-driven examples to help you get familia
    touroftypes
    dataprep
    bugbusting
-   udfsandudtfs
    sql
    loadandbehold
+   udfandudtf
 
 
