@@ -327,10 +327,6 @@ def del_remote_cache(ref_id: str) -> None:
 
             session = SparkSession.getActiveSession()
             if session is not None:
-                # TODO: `remove_ml_cache` is buggy, to ensure server side object is deleted,
-                #  we need to call `_delete_ml_cache` here.
-                #  remove `_delete_ml_cache` invocation once `remove_ml_cache` is fixed.
-                session.client._delete_ml_cache([ref_id])
                 session.client.remove_ml_cache(ref_id)
                 return
         except Exception:
