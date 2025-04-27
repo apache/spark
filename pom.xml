@@ -214,7 +214,7 @@
     <commons-cli.version>1.9.0</commons-cli.version>
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
-    <datasketches.version>6.1.1</datasketches.version>
+    <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.1.119.Final</netty.version>
     <netty-tcnative.version>2.0.70.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
