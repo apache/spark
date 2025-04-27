@@ -259,7 +259,17 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 
       val dataPath = new Path(path, "data").toString
 
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = if (ReadWriteUtils.localSavingModeState.get()) {
+        ReadWriteUtils.loadObjectFromLocal(dataPath)
+      } else {
+        val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
+        Data(
+          row.getSeq[Double](0).toArray,
+          row.getSeq[OldVector](1).toArray,
+          row.getSeq[OldMatrix](2).toArray
+        )
+      }
+
       require(data.mus.length == data.sigmas.length, "Length of Mu and Sigma array must match")
       require(
         data.mus.length == data.weights.length,

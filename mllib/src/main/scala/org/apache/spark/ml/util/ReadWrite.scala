@@ -862,12 +862,16 @@ private[spark] object ReadWriteUtils {
     }
   }
 
+  def loadObjectFromLocal[T <: Product: ClassTag: TypeTag](path: String): T = {
+    val serializer = SparkEnv.get.serializer.newInstance()
+
+    val dataBytes = Files.readAllBytes(Paths.get(path))
+    serializer.deserialize[T](java.nio.ByteBuffer.wrap(dataBytes))
+  }
+
   def loadObject[T <: Product: ClassTag: TypeTag](path: String, spark: SparkSession): T = {
     if (localSavingModeState.get()) {
-      val serializer = SparkEnv.get.serializer.newInstance()
-
-      val dataBytes = Files.readAllBytes(Paths.get(path))
-      serializer.deserialize[T](java.nio.ByteBuffer.wrap(dataBytes))
+      loadObjectFromLocal(path)
     } else {
       import spark.implicits._
       spark.read.parquet(path).as[T].head()
