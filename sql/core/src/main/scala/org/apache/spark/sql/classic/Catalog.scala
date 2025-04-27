@@ -20,8 +20,7 @@ package org.apache.spark.sql.classic
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CATALOG_NAME, DATABASE_NAME, TABLE_NAME}
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog
 import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
@@ -50,7 +49,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Internal implementation of the user-facing `Catalog`.
  */
-class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
+class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
 
@@ -184,25 +183,20 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
     try {
       Some(makeTable(nameParts))
     } catch {
-      case e: AnalysisException if e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" => None
-      // Swallow non-fatal throwables when resolving a table or view and
-      // return a table or view with partial results to
-      // prevent listTables from breaking easily due to a broken table or view.
-      case NonFatal(e) if !isTempView =>
-        val table = new Table(
-            name = tableName,
-            catalog = catalogName,
-            namespace = ns.toArray,
-            description = null,
-            tableType = null,
-            isTemporary = false
-        )
-        logWarning(log"Unable to resolve the table or view [" +
-          log"catalog=${MDC(CATALOG_NAME, table.catalog)}, " +
-          log"database=${MDC(DATABASE_NAME, table.database)}, " +
-          log"name=${MDC(TABLE_NAME, table.name)}" +
-          log"]; partial results will be returned.", e)
-        Some(table)
+      case e: SparkThrowable with Throwable =>
+        Catalog.ListTable.ERROR_HANDLING_RULES.get(e.getCondition) match {
+          case Some(Catalog.ListTable.Skip) => None
+          case Some(Catalog.ListTable.ReturnPartialResults) if !isTempView =>
+            Some(new Table(
+              name = tableName,
+              catalog = catalogName,
+              namespace = ns.toArray,
+              description = null,
+              tableType = null,
+              isTemporary = false
+            ))
+          case _ => throw e
+        }
     }
   }
 
@@ -970,4 +964,18 @@ private[sql] object Catalog {
   }
 
   private val FUNCTION_EXISTS_COMMAND_NAME = "Catalog.functionExists"
+
+  private object ListTable {
+
+    sealed trait ErrorHandlingAction
+
+    case object Skip extends ErrorHandlingAction
+
+    case object ReturnPartialResults extends ErrorHandlingAction
+
+    val ERROR_HANDLING_RULES: Map[String, ErrorHandlingAction] = Map(
+      "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" -> ReturnPartialResults,
+      "TABLE_OR_VIEW_NOT_FOUND" -> Skip
+    )
+  }
 }
