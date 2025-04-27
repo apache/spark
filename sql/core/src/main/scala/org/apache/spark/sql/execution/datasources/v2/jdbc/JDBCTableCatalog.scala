@@ -130,7 +130,10 @@ class JDBCTableCatalog extends TableCatalog
   }
 
   override def loadTable(ident: Identifier): Table = {
-    checkNamespace(ident.namespace())
+    if (!tableExists(ident)) {
+      throw QueryCompilationErrors.noSuchTableError(ident)
+    }
+
     val optionsWithTableName = new JDBCOptions(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
     JdbcUtils.classifyException(

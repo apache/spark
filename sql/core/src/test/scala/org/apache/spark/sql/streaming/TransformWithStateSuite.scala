@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
@@ -1830,6 +1831,21 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1")),
           StopStream
         )
+
+        // Here we are writing non-metadata files to the operator metadata directory to ensure that
+        // they are ignored during restart.
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fm = CheckpointFileManager.create(new Path(checkpointDir.toString),
+          hadoopConf)
+        fm.mkdirs(new Path(new Path(checkpointDir.toString, DIR_NAME_OFFSETS),
+          "dummy_path_name"))
+        fm.mkdirs(
+          new Path(OperatorStateMetadataV2.metadataDirPath(
+            new Path(new Path(new Path(checkpointDir.toString), "state"), "0")
+          ),
+            "dummy_path_name")
+        )
+
         val result2 = inputData.toDS()
           .groupByKey(x => x)
           .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
@@ -1886,17 +1902,17 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  private def getFiles(path: Path): Array[FileStatus] = {
+  private[sql] def getFiles(path: Path): Array[FileStatus] = {
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fileManager = CheckpointFileManager.create(path, hadoopConf)
     fileManager.list(path)
   }
 
-  private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
+  private[sql] def getStateSchemaPath(stateCheckpointPath: Path): Path = {
     new Path(stateCheckpointPath, "_stateSchema/default/")
   }
 
-  // TODO: [SPARK-50845] Re-enable tests after StateSchemaV3 threshold change
+  // TODO: [SPARK-50845] Re-enable tests after full-rewrite is enabled.
   ignore("transformWithState - verify that metadata and schema logs are purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
