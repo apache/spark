@@ -149,6 +149,7 @@ class AlterTableAddPartitionSuite
             },
             condition = "CAST_INVALID_INPUT",
             parameters = Map(
+              "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
               "expression" -> "'aaa'",
               "sourceType" -> "\"STRING\"",
               "targetType" -> "\"INT\""),

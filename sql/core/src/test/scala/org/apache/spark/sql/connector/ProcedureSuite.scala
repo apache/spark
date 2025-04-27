@@ -282,7 +282,8 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         parameters = Map(
           "expression" -> toSQLValue("A"),
           "sourceType" -> toSQLType("STRING"),
-          "targetType" -> toSQLType("INT")),
+          "targetType" -> toSQLType("INT"),
+          "ansiConfig" -> f"\"${SQLConf.ANSI_ENABLED.key}\""),
         context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
     }
   }

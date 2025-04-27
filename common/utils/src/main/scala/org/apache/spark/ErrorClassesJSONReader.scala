@@ -62,7 +62,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     }
     if (util.SparkEnvUtils.isTesting) {
       val placeHoldersNum = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).length
-      if (placeHoldersNum < sanitizedParameters.size) {
+      if (placeHoldersNum < sanitizedParameters.size &&
+          !ErrorClassesJsonReader.MORE_PARAMS_ALLOWLIST.contains(errorClass)) {
         throw SparkException.internalError(
           s"Found unused message parameters of the error class '$errorClass'. " +
           s"Its error message format has $placeHoldersNum placeholders, " +
@@ -122,6 +123,8 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
 private object ErrorClassesJsonReader {
   private val TEMPLATE_REGEX = "<([a-zA-Z0-9_-]+)>".r
+
+  private val MORE_PARAMS_ALLOWLIST = Array("CAST_INVALID_INPUT", "CAST_OVERFLOW")
 
   private val mapper: JsonMapper = JsonMapper.builder()
     .addModule(DefaultScalaModule)
