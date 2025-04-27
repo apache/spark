@@ -2380,9 +2380,9 @@
         ]
       },
       "REQUIREMENT" : {
-          "message" : [
+        "message" : [
           "<confRequirement>"
-          ]
+        ]
       },
       "TIME_ZONE" : {
         "message" : [
