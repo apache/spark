@@ -104,7 +104,7 @@ private object ConfigHelpers {
 
   def configTypeMismatchError(
       key: String, value: String, configType: String): SparkIllegalArgumentException = {
-     new SparkIllegalArgumentException(
+    new SparkIllegalArgumentException(
       errorClass = "INVALID_CONF_VALUE.TYPE_MISMATCH",
       messageParameters = Map(
         "confName" -> key,
