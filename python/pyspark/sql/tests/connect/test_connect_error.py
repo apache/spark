@@ -23,6 +23,7 @@ from pyspark.sql.types import Row
 from pyspark.sql import functions as F
 from pyspark.errors import PySparkTypeError
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.util import is_remote_only
 
 
 class SparkConnectErrorTests(ReusedConnectTestCase):
@@ -165,6 +166,7 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
             messageParameters={},
         )
 
+    @unittest.skipIf(is_remote_only(), "Disabled for remote only")
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.spark.range(10)
