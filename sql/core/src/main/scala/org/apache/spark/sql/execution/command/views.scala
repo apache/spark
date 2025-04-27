@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable
+
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, SchemaEvolution, SchemaUnsupported, ViewSchemaMode, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CTEInChildren, CTERelationDef, CreateTempView, LogicalPlan, Project, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CreateTempView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
