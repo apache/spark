@@ -32,41 +32,19 @@ struct<>
 
 
 -- !query
-CREATE VIEW v DEFAULT COLLATION UTF8_LCASE SELECT 'a' AS c1
+CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS c1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ": extra input 'SELECT'"
-  }
-}
+
 
 
 -- !query
 SELECT COUNT(*) FROM v WHERE c1 = 'A'
 -- !query schema
-struct<>
+struct<count(1):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`v`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 22,
-    "fragment" : "v"
-  } ]
-}
+1
 
 
 -- !query
@@ -279,14 +257,6 @@ struct<count(1):bigint>
 
 
 -- !query
-DROP VIEW IF EXISTS v
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 DROP TABLE IF EXISTS t
 -- !query schema
 struct<>
@@ -360,20 +330,18 @@ struct<count(1):bigint>
 
 -- !query
 SELECT COUNT(*) FROM v WHERE c3 = 'Č'
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+3
 
+
+-- !query
 DROP VIEW IF EXISTS v
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'DROP'",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
@@ -381,14 +349,7 @@ CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS SELECT 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`v`"
-  }
-}
+
 
 
 -- !query
@@ -404,7 +365,7 @@ SELECT COLLATION(c1) FROM v
 -- !query schema
 struct<collation(c1):string>
 -- !query output
-SYSTEM.BUILTIN.sr_CI_AI
+SYSTEM.BUILTIN.UTF8_LCASE
 
 
 -- !query
@@ -412,7 +373,7 @@ SELECT COLLATION(c2) FROM v
 -- !query schema
 struct<collation(c2):string>
 -- !query output
-SYSTEM.BUILTIN.sr_CI_AI
+SYSTEM.BUILTIN.UTF8_LCASE
 
 
 -- !query
@@ -428,7 +389,7 @@ SELECT COLLATION(c3) FROM v
 -- !query schema
 struct<collation(c3):string>
 -- !query output
-SYSTEM.BUILTIN.sr_CI_AI
+SYSTEM.BUILTIN.UTF8_LCASE
 
 
 -- !query
@@ -550,41 +511,19 @@ struct<>
 
 
 -- !query
-CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE SELECT 'a' AS c1
+CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS c1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ": extra input 'SELECT'"
-  }
-}
+
 
 
 -- !query
 SELECT COUNT(*) FROM v WHERE c1 = 'A'
 -- !query schema
-struct<>
+struct<count(1):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`v`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 22,
-    "fragment" : "v"
-  } ]
-}
+0
 
 
 -- !query
@@ -794,14 +733,6 @@ SELECT COUNT(*) FROM v WHERE c2 = 'b'
 struct<count(1):bigint>
 -- !query output
 0
-
-
--- !query
-DROP VIEW IF EXISTS v
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query

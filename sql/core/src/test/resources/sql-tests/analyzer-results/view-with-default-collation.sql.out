@@ -31,37 +31,23 @@ DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
 
 
 -- !query
-CREATE VIEW v DEFAULT COLLATION UTF8_LCASE SELECT 'a' AS c1
+CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS c1
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ": extra input 'SELECT'"
-  }
-}
+CreateViewCommand `spark_catalog`.`default`.`v`, UTF8_LCASE, SELECT 'a' AS c1, false, false, PersistedView, COMPENSATION, true
+   +- Project [a AS c1#x]
+      +- OneRowRelation
 
 
 -- !query
 SELECT COUNT(*) FROM v WHERE c1 = 'A'
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`v`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 22,
-    "fragment" : "v"
-  } ]
-}
+Aggregate [count(1) AS count(1)#xL]
++- Filter (c1#x = A)
+   +- SubqueryAlias spark_catalog.default.v
+      +- View (`spark_catalog`.`default`.`v`, [c1#x])
+         +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x]
+            +- Project [a AS c1#x]
+               +- OneRowRelation
 
 
 -- !query
@@ -336,12 +322,6 @@ Aggregate [count(1) AS count(1)#xL]
 
 
 -- !query
-DROP VIEW IF EXISTS v
--- !query analysis
-DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
-
-
--- !query
 DROP TABLE IF EXISTS t
 -- !query analysis
 DropTable true, false
@@ -438,31 +418,29 @@ Aggregate [count(1) AS count(1)#xL]
 
 -- !query
 SELECT COUNT(*) FROM v WHERE c3 = 'Č'
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter (c3#x = Č)
+   +- SubqueryAlias spark_catalog.default.v
+      +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x, c3#x])
+         +- Project [cast(c1#x as string) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x, cast(c3#x as string collate sr_CI_AI) AS c3#x]
+            +- Project [c1#x, c2#x, ć AS c3#x]
+               +- SubqueryAlias spark_catalog.default.t
+                  +- Relation spark_catalog.default.t[c1#x,c2#x] parquet
 
+
+-- !query
 DROP VIEW IF EXISTS v
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'DROP'",
-    "hint" : ""
-  }
-}
+DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
 
 
 -- !query
 CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS SELECT 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`v`"
-  }
-}
+CreateViewCommand `spark_catalog`.`default`.`v`, UTF8_LCASE, SELECT 1, false, false, PersistedView, COMPENSATION, true
+   +- Project [1 AS 1#x]
+      +- OneRowRelation
 
 
 -- !query
@@ -479,7 +457,7 @@ SELECT COLLATION(c1) FROM v
 Project [collation(c1#x) AS collation(c1)#x]
 +- SubqueryAlias spark_catalog.default.v
    +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x])
-      +- Project [cast(c1#x as string collate sr_CI_AI) AS c1#x, cast(c2#x as string collate sr_CI_AI) AS c2#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
          +- Project [a AS c1#x, b AS c2#x]
             +- OneRowRelation
 
@@ -490,7 +468,7 @@ SELECT COLLATION(c2) FROM v
 Project [collation(c2#x) AS collation(c2)#x]
 +- SubqueryAlias spark_catalog.default.v
    +- View (`spark_catalog`.`default`.`v`, [c1#x, c2#x])
-      +- Project [cast(c1#x as string collate sr_CI_AI) AS c1#x, cast(c2#x as string collate sr_CI_AI) AS c2#x]
+      +- Project [cast(c1#x as string collate UTF8_LCASE) AS c1#x, cast(c2#x as string collate UTF8_LCASE) AS c2#x]
          +- Project [a AS c1#x, b AS c2#x]
             +- OneRowRelation
 
@@ -510,7 +488,7 @@ SELECT COLLATION(c3) FROM v
 Project [collation(c3#x) AS collation(c3)#x]
 +- SubqueryAlias spark_catalog.default.v
    +- View (`spark_catalog`.`default`.`v`, [c3#x])
-      +- Project [cast(c3#x as string collate sr_CI_AI) AS c3#x]
+      +- Project [cast(c3#x as string collate UTF8_LCASE) AS c3#x]
          +- Project [c AS c3#x]
             +- Filter (a = A)
                +- OneRowRelation
@@ -659,43 +637,29 @@ DropTempViewCommand v
 
 
 -- !query
-CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE SELECT 'a' AS c1
+CREATE TEMPORARY VIEW v DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS c1
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ": extra input 'SELECT'"
-  }
-}
+CreateViewCommand `v`, UTF8_LCASE, SELECT 'a' AS c1, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [a AS c1#x]
+      +- OneRowRelation
 
 
 -- !query
 SELECT COUNT(*) FROM v WHERE c1 = 'A'
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`v`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 22,
-    "fragment" : "v"
-  } ]
-}
+Aggregate [count(1) AS count(1)#xL]
++- Filter (c1#x = A)
+   +- SubqueryAlias v
+      +- View (`v`, [c1#x])
+         +- Project [cast(c1#x as string) AS c1#x]
+            +- Project [a AS c1#x]
+               +- OneRowRelation
 
 
 -- !query
 DROP VIEW IF EXISTS v
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
+DropTempViewCommand v
 
 
 -- !query
@@ -961,12 +925,6 @@ Aggregate [count(1) AS count(1)#xL]
                :        :        +- OneRowRelation
                :        +- OneRowRelation
                +- OneRowRelation
-
-
--- !query
-DROP VIEW IF EXISTS v
--- !query analysis
-DropTempViewCommand v
 
 
 -- !query

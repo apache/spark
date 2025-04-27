@@ -513,6 +513,13 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
       }
     }
   }
+
+  test("sranje") {
+    withView(testView) {
+      sql(s"CREATE VIEW $testView AS SELECT 'a' AS c1")
+      checkAnswer(sql(s"SELECT * FROM $testView"), Row('a'))
+    }
+  }
 }
 
 class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with DatasourceV2SQLBase {
