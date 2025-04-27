@@ -141,7 +141,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
@@ -170,7 +174,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
@@ -193,7 +201,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
@@ -221,7 +233,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -232,7 +248,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("CREATE TABLE with table comment") {
