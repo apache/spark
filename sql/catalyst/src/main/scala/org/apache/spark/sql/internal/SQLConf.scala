@@ -3533,6 +3533,25 @@ object SQLConf {
       .intConf
       .createWithDefault(-1)
 
+  val ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH =
+    buildConf("spark.sql.execution.arrow.maxBytesPerOutputBatch")
+      .doc("When using Apache Arrow, limit the maximum bytes that can be output " +
+        "in a single ArrowRecordBatch to the downstream operator. If set to zero or negative " +
+        "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
+        "the number of bytes is limited when sending it to the downstream operator. This is " +
+        "used to avoid large batches being sent to the downstream operator including " +
+        "the columnar-based operator implemented by third-party libraries. Spark will try to " +
+        "create batches with the size equal or less than this value. Normally it should not " +
+        "happen, but if in extreme case that even one record is still larger than this value, " +
+        "Spark will create a batch with one record.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(x => x <= Int.MaxValue,
+        errorMsg = "The value of " +
+          "spark.sql.execution.arrow.maxBytesPerOutputBatch should be less than INT_MAX.")
+      .createWithDefault(-1)
+
   val ARROW_EXECUTION_MAX_BYTES_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxBytesPerBatch")
       .internal()
@@ -6532,6 +6551,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
+
+  def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
