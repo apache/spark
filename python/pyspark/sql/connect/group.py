@@ -434,7 +434,7 @@ class GroupedData:
             udf_obj = UserDefinedFunction(
                 udf_util.transformWithStateUDF,
                 returnType=outputStructType,
-                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_UDF,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
             )
             initial_state_plan = None
             initial_state_grouping_cols = None
@@ -443,7 +443,7 @@ class GroupedData:
             udf_obj = UserDefinedFunction(
                 udf_util.transformWithStateWithInitStateUDF,
                 returnType=outputStructType,
-                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_INIT_STATE_UDF,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
             )
             initial_state_plan = initialState._df._plan
             initial_state_grouping_cols = initialState._grouping_cols
