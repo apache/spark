@@ -661,11 +661,7 @@ class SparkConnectPlanner(
 
           case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF |
               PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
-            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = true)
-
-          case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF |
-              PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
-            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = false)
+            transformTransformWithStateInPandas(pythonUdf, group, rel)
 
           case _ =>
             throw InvalidPlanInput(
@@ -1106,11 +1102,10 @@ class SparkConnectPlanner(
       .logicalPlan
   }
 
-  private def transformTransformWithStateInPySpark(
+  private def transformTransformWithStateInPandas(
       pythonUdf: PythonUDF,
       groupedDs: RelationalGroupedDataset,
-      rel: proto.GroupMap,
-      usePandas: Boolean): LogicalPlan = {
+      rel: proto.GroupMap): LogicalPlan = {
     val twsInfo = rel.getTransformWithStateInfo
     val outputSchema: StructType = {
       transformDataType(twsInfo.getOutputSchema) match {
@@ -1136,52 +1131,25 @@ class SparkConnectPlanner(
         .builder(groupedDs.df.logicalPlan.output)
         .asInstanceOf[PythonUDF]
 
-      if (usePandas) {
-        groupedDs
-          .transformWithStateInPandas(
-            Column(resolvedPythonUDF),
-            outputSchema,
-            rel.getOutputMode,
-            twsInfo.getTimeMode,
-            initialStateDs,
-            twsInfo.getEventTimeColumnName)
-          .logicalPlan
-      } else {
-        // use Row
-        groupedDs
-          .transformWithStateInPySpark(
-            Column(resolvedPythonUDF),
-            outputSchema,
-            rel.getOutputMode,
-            twsInfo.getTimeMode,
-            initialStateDs,
-            twsInfo.getEventTimeColumnName)
-          .logicalPlan
-      }
-
+      groupedDs
+        .transformWithStateInPandas(
+          Column(resolvedPythonUDF),
+          outputSchema,
+          rel.getOutputMode,
+          twsInfo.getTimeMode,
+          initialStateDs,
+          twsInfo.getEventTimeColumnName)
+        .logicalPlan
     } else {
-      if (usePandas) {
-        groupedDs
-          .transformWithStateInPandas(
-            Column(pythonUdf),
-            outputSchema,
-            rel.getOutputMode,
-            twsInfo.getTimeMode,
-            null,
-            twsInfo.getEventTimeColumnName)
-          .logicalPlan
-      } else {
-        // use Row
-        groupedDs
-          .transformWithStateInPySpark(
-            Column(pythonUdf),
-            outputSchema,
-            rel.getOutputMode,
-            twsInfo.getTimeMode,
-            null,
-            twsInfo.getEventTimeColumnName)
-          .logicalPlan
-      }
+      groupedDs
+        .transformWithStateInPandas(
+          Column(pythonUdf),
+          outputSchema,
+          rel.getOutputMode,
+          twsInfo.getTimeMode,
+          null,
+          twsInfo.getEventTimeColumnName)
+        .logicalPlan
     }
   }
 
