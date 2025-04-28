@@ -261,43 +261,41 @@ case class TransformWithStateExec(
 
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
+    val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
-    withStatefulProcessorErrorHandling("handleInputRows") {
-      val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+    val keyObj = getKeyObj(keyRow) // convert key to objects
+    val valueObjIter = valueRowIter.map(getValueObj.apply)
 
-      val keyObj = getKeyObj(keyRow) // convert key to objects
-      val valueObjIter = valueRowIter.map(getValueObj.apply)
-
-      // The statefulProcessor's handleInputRows method may create an eager iterator,
-      // and in that case, the implicit key needs to be set now. However, it could return
-      // a lazy iterator, in which case the implicit key should be set when the actual
-      // methods on the iterator are invoked. This is done with the wrapper class
-      // at the end of this method.
-      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-      val mappedIterator = statefulProcessor.handleInputRows(
+    // The statefulProcessor's handleInputRows method may create an eager iterator,
+    // and in that case, the implicit key needs to be set now. However, it could return
+    // a lazy iterator, in which case the implicit key should be set when the actual
+    // methods on the iterator are invoked. This is done with the wrapper class
+    // at the end of this method.
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+    val mappedIterator = withStatefulProcessorErrorHandling("handleInputRows") {
+     statefulProcessor.handleInputRows(
         keyObj,
         valueObjIter,
         new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
         getOutputRow(obj)
       }
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-
-      iteratorWithImplicitKeySet(keyObj, mappedIterator)
     }
+    ImplicitGroupingKeyTracker.removeImplicitKey()
+
+    iteratorWithImplicitKeySet(keyObj, mappedIterator)
   }
 
   private def processInitialStateRows(
       keyRow: UnsafeRow,
       initStateIter: Iterator[InternalRow]): Unit = {
 
+    val getInitStateValueObj =
+      ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
+
+    val keyObj = getKeyObj(keyRow) // convert key to objects
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+    val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
     withStatefulProcessorErrorHandling("handleInitialState") {
-      val getInitStateValueObj =
-        ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
-
-      val keyObj = getKeyObj(keyRow) // convert key to objects
-      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-      val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
-
       initStateObjIter.foreach { initState =>
         // allow multiple initial state rows on the same grouping key for integration
         // with state data source reader with initial state
@@ -306,8 +304,8 @@ case class TransformWithStateExec(
           .handleInitialState(keyObj, initState,
             new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction))
       }
-      ImplicitGroupingKeyTracker.removeImplicitKey()
     }
+    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
   private def processNewData(dataIter: Iterator[InternalRow]): Iterator[InternalRow] = {
@@ -322,21 +320,21 @@ case class TransformWithStateExec(
       keyObj: Any,
       expiryTimestampMs: Long,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
-    withStatefulProcessorErrorHandling("handleExpiredTimer") {
-      val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
-      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-      val mappedIterator = statefulProcessor.handleExpiredTimer(
+    val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+    val mappedIterator = withStatefulProcessorErrorHandling("handleExpiredTimer") {
+      statefulProcessor.handleExpiredTimer(
         keyObj,
         new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
         new ExpiredTimerInfoImpl(Some(expiryTimestampMs))).map { obj =>
         getOutputRow(obj)
       }
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-
-      iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
-        processorHandle.deleteTimer(expiryTimestampMs)
-      })
     }
+    ImplicitGroupingKeyTracker.removeImplicitKey()
+
+    iteratorWithImplicitKeySet(keyObj, mappedIterator, () => {
+      processorHandle.deleteTimer(expiryTimestampMs)
+    })
   }
 
   private def processTimers(
