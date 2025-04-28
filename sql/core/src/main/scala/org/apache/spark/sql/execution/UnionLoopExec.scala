@@ -107,6 +107,7 @@ case class UnionLoopExec(
       plan
     }
     val df = Dataset.ofRows(session, planWithLimit)
+
     df.queryExecution.optimizedPlan match {
       case l: LocalRelation =>
         (df, l.data.length.toLong)
@@ -134,7 +135,7 @@ case class UnionLoopExec(
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
-    val AnchorRowLimitToConverToLocalLimit =
+    val AnchorRowLimitToConvertToLocalLimit =
       conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
@@ -161,7 +162,7 @@ case class UnionLoopExec(
     // we convert the result of the anchor into a LocalRelation, so that, if the recursion doesn't
     // reference any external tables, we are able to calculate everything in the optimizer, using
     // the ConvertToLocalRelation rule, which significantly improves runtime.
-    if (prevCount <= AnchorRowLimitToConverToLocalLimit &&
+    if (prevCount <= AnchorRowLimitToConvertToLocalLimit &&
       !prevDF.queryExecution.optimizedPlan.isInstanceOf[LocalRelation]) {
       val local = LocalRelation.fromExternalRows(anchor.output, prevDF.collect().toIndexedSeq)
       prevDF = Dataset.ofRows(session, local)
@@ -179,6 +180,10 @@ case class UnionLoopExec(
             case l: LocalRelation =>
               prevPlan = l
               l.copy(output = r.output)
+            // This case will be turned into a LocalRelation whenever the flag
+            // SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION is set to be
+            // anything larger than 0. However, we still handle this case in a special way to
+            // optimize the case when the flag is set to 0.
             case p @ Project(projectList, _: OneRowRelation) =>
               prevPlan = p
               val prevPlanToRefMapping = projectList.zip(r.output).map {

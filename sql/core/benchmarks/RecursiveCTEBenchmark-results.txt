@@ -6,90 +6,90 @@ OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 10 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 10 integers using VALUES                                     34             38           4          0.0     3360225.0       1.0X
-First 10 integers using SELECT                                     34             38           3          0.0     3449070.8       1.0X
-First 10 integers using SELECT and LIMIT                           34             36           3          0.0     3364316.7       1.0X
-First 10 integers referencing external table in anchor             46             57           9          0.0     4644775.0       0.7X
+First 10 integers using VALUES                                     37             40           2          0.0     3682883.3       1.0X
+First 10 integers using SELECT                                     32             35           3          0.0     3210412.5       1.1X
+First 10 integers using SELECT and LIMIT                           29             30           1          0.0     2911637.5       1.3X
+First 10 integers referencing external table in anchor             43             46           3          0.0     4322766.7       0.9X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 20 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 20 integers using VALUES                                     27             28           1          0.0     1347945.9       1.0X
-First 20 integers using SELECT                                     28             31           3          0.0     1415862.5       1.0X
-First 20 integers using SELECT and LIMIT                           29             29           1          0.0     1437150.0       0.9X
-First 20 integers referencing external table in anchor             49             52           3          0.0     2469258.4       0.5X
+First 20 integers using VALUES                                     28             29           1          0.0     1406766.7       1.0X
+First 20 integers using SELECT                                     29             30           1          0.0     1470922.9       1.0X
+First 20 integers using SELECT and LIMIT                           26             28           2          0.0     1305614.6       1.1X
+First 20 integers referencing external table in anchor             41             52          13          0.0     2050585.5       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 30 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 30 integers using VALUES                                     28             30           3          0.0      929980.6       1.0X
-First 30 integers using SELECT                                     34             38           6          0.0     1133522.2       0.8X
-First 30 integers using SELECT and LIMIT                           30             34           3          0.0      994287.5       0.9X
-First 30 integers referencing external table in anchor             46             64          29          0.0     1526647.2       0.6X
+First 30 integers using VALUES                                     25             25           0          0.0      825561.1       1.0X
+First 30 integers using SELECT                                     30             30           0          0.0      992773.6       0.8X
+First 30 integers using SELECT and LIMIT                           30             34           4          0.0      991687.5       0.8X
+First 30 integers referencing external table in anchor             46             53           7          0.0     1518338.9       0.5X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 40 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 40 integers using VALUES                                     30             30           0          0.0      746988.6       1.0X
-First 40 integers using SELECT                                     37             38           1          0.0      936157.3       0.8X
-First 40 integers using SELECT and LIMIT                           37             41           6          0.0      926869.8       0.8X
-First 40 integers referencing external table in anchor             55             58           3          0.0     1366019.8       0.5X
+First 40 integers using VALUES                                     29             30           1          0.0      725770.8       1.0X
+First 40 integers using SELECT                                     35             35           0          0.0      867568.8       0.8X
+First 40 integers using SELECT and LIMIT                           32             33           0          0.0      810769.8       0.9X
+First 40 integers referencing external table in anchor             53             74          36          0.0     1331934.4       0.5X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 50 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 50 integers using VALUES                                     34             35           1          0.0      680389.2       1.0X
-First 50 integers using SELECT                                     39             43           6          0.0      782812.5       0.9X
-First 50 integers using SELECT and LIMIT                           36             38           3          0.0      721986.7       0.9X
-First 50 integers referencing external table in anchor             84             91           7          0.0     1672220.0       0.4X
+First 50 integers using VALUES                                     33             34           1          0.0      662095.8       1.0X
+First 50 integers using SELECT                                     39             40           1          0.0      785291.7       0.8X
+First 50 integers using SELECT and LIMIT                           36             42           7          0.0      719409.2       0.9X
+First 50 integers referencing external table in anchor             56             83          45          0.0     1122269.2       0.6X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 60 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 60 integers using VALUES                                     40             41           1          0.0      672397.9       1.0X
-First 60 integers using SELECT                                     43             43           0          0.0      709770.2       0.9X
-First 60 integers using SELECT and LIMIT                           40             40           1          0.0      659009.7       1.0X
-First 60 integers referencing external table in anchor             80             89           8          0.0     1327043.8       0.5X
+First 60 integers using VALUES                                     38             38           0          0.0      628781.3       1.0X
+First 60 integers using SELECT                                     42             42           0          0.0      691815.3       0.9X
+First 60 integers using SELECT and LIMIT                           40             40           0          0.0      665591.7       0.9X
+First 60 integers referencing external table in anchor             66             70           4          0.0     1103973.6       0.6X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 70 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 70 integers using VALUES                                     42             46           7          0.0      595647.6       1.0X
-First 70 integers using SELECT                                     51             57           8          0.0      721890.5       0.8X
-First 70 integers using SELECT and LIMIT                           48             49           1          0.0      683898.2       0.9X
-First 70 integers referencing external table in anchor             65             98          31          0.0      924797.0       0.6X
+First 70 integers using VALUES                                     41             42           1          0.0      589520.2       1.0X
+First 70 integers using SELECT                                     46             47           1          0.0      655044.6       0.9X
+First 70 integers using SELECT and LIMIT                           43             45           2          0.0      621256.0       0.9X
+First 70 integers referencing external table in anchor             63             69           6          0.0      899411.9       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 80 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 80 integers using VALUES                                     47             48           1          0.0      583301.6       1.0X
-First 80 integers using SELECT                                     50             51           1          0.0      628145.8       0.9X
-First 80 integers using SELECT and LIMIT                           51             54           4          0.0      631403.7       0.9X
-First 80 integers referencing external table in anchor             74             96          21          0.0      926404.7       0.6X
+First 80 integers using VALUES                                     46             50           7          0.0      573280.2       1.0X
+First 80 integers using SELECT                                     50             52           2          0.0      628666.7       0.9X
+First 80 integers using SELECT and LIMIT                           49             54           7          0.0      613810.4       0.9X
+First 80 integers referencing external table in anchor             69             77          13          0.0      860075.0       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 90 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-First 90 integers using VALUES                                     55             56           1          0.0      611744.9       1.0X
-First 90 integers using SELECT                                     55             57           2          0.0      611401.4       1.0X
-First 90 integers using SELECT and LIMIT                           51             57           9          0.0      562340.7       1.1X
-First 90 integers referencing external table in anchor             82             88           6          0.0      909240.3       0.7X
+First 90 integers using VALUES                                     51             54           6          0.0      564482.9       1.0X
+First 90 integers using SELECT                                     54             55           0          0.0      603822.7       0.9X
+First 90 integers using SELECT and LIMIT                           54             57           5          0.0      594462.5       0.9X
+First 90 integers referencing external table in anchor             73             89          26          0.0      809716.2       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.13+11-LTS on Mac OS X 15.4
 Apple M3 Max
 First 100 integers:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------------
-First 100 integers using VALUES                                     59             61           2          0.0      592924.6       1.0X
-First 100 integers using SELECT                                     62             62           1          0.0      617839.2       1.0X
-First 100 integers using SELECT and LIMIT                           58             58           1          0.0      575044.2       1.0X
-First 100 integers referencing external table in anchor             76             78           3          0.0      760438.8       0.8X
+First 100 integers using VALUES                                     55             60           7          0.0      554092.1       1.0X
+First 100 integers using SELECT                                     61             61           0          0.0      609587.1       0.9X
+First 100 integers using SELECT and LIMIT                           56             61           7          0.0      561955.0       1.0X
+First 100 integers referencing external table in anchor             77             94          16          0.0      769263.8       0.7X
 
 
