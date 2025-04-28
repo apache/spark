@@ -1235,3 +1235,16 @@ Project [c5#x]
             +- Filter ((c1#x = A) AND (ć = Č))
                +- SubqueryAlias spark_catalog.default.t
                   +- Relation spark_catalog.default.t[c1#x,c2#x,c3#x] parquet
+
+
+-- !query
+DROP VIEW IF EXISTS v
+-- !query analysis
+DropTempViewCommand v
+
+
+-- !query
+DROP TABLE IF EXISTS t
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t

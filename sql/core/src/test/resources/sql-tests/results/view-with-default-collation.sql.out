@@ -949,3 +949,19 @@ SELECT c5 FROM v
 struct<c5:string collate sr_CI_AI>
 -- !query output
 d
+
+
+-- !query
+DROP VIEW IF EXISTS v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS t
+-- !query schema
+struct<>
+-- !query output
+
