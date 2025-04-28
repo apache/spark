@@ -4738,7 +4738,7 @@ object SQLConf {
       "unlimited.")
     .version("4.1.0")
     .intConf
-    .createWithDefault(100)
+    .createWithDefault(1000)
 
   val CTE_RECURSION_ROW_LIMIT = buildConf("spark.sql.cteRecursionRowLimit")
     .doc("Maximum number of rows that can be returned when executing a recursive CTE definition." +

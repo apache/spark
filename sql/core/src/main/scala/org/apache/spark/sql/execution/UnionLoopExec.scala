@@ -111,25 +111,31 @@ case class UnionLoopExec(
     }
     var df = Dataset.ofRows(session, planWithLimit)
 
-    // In the case we return a sufficiently small number of rows when executing any step of the
-    // recursion we convert the result into a LocalRelation, so that, if the recursion doesn't
-    // reference any external tables, we are able to calculate everything in the optimizer, using
-    // the ConvertToLocalRelation rule, which significantly improves runtime.
-    if (!df.queryExecution.optimizedPlan.isInstanceOf[LocalRelation] &&
-      df.queryExecution.toRdd.count() <= localRelationLimit) {
-      val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
-      df = Dataset.ofRows(session, local)
-    }
-
     df.queryExecution.optimizedPlan match {
       case l: LocalRelation =>
         (df, l.data.length.toLong)
       case Project(_, _: OneRowRelation) =>
-        (df, 1.toLong)
+        if (localRelationLimit != 0) {
+          val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
+          (Dataset.ofRows(session, local), 1.toLong)
+        } else {
+          (df, 1.toLong)
+        }
       case _ =>
         val materializedDF = df.repartition()
         val count = materializedDF.queryExecution.toRdd.count()
-        (materializedDF, count)
+
+        // In the case we return a sufficiently small number of rows when executing any step of the
+        // recursion we convert the result into a LocalRelation, so that, if the recursion doesn't
+        // reference any external tables, we are able to calculate everything in the optimizer,
+        // using the ConvertToLocalRelation rule, which significantly improves runtime.
+        if (count <= localRelationLimit) {
+          val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
+         (Dataset.ofRows(session, local), count)
+        }
+        else {
+          (materializedDF, count)
+        }
     }
   }
 
