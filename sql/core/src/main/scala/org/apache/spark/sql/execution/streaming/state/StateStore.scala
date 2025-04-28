@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
-import java.util.concurrent.{ScheduledFuture, TimeUnit}
+import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -847,6 +847,8 @@ object StateStore extends Logging {
 
   private val maintenanceThreadPoolLock = new Object
 
+  private val partitionsForMaintenance = new ConcurrentLinkedQueue[StateStoreProviderId]
+
   // This set is to keep track of the partitions that are queued
   // for maintenance or currently have maintenance running on them
   // to prevent the same partition from being processed concurrently.
@@ -1134,29 +1136,24 @@ object StateStore extends Logging {
   // Block until we can process this partition
   private def awaitProcessThisPartition(
       id: StateStoreProviderId,
-      storeConf: StateStoreConf): Unit = {
+      storeConf: StateStoreConf): Boolean = {
     maintenanceThreadPoolLock.synchronized {
       val timeoutMs = storeConf.stateStoreMaintenanceProcessingTimeout * 1000
       val endTime = System.currentTimeMillis() + timeoutMs
 
       // Try to process immediately first
-      if (processThisPartition(id)) return
+      if (processThisPartition(id)) return true
 
       // Wait with timeout and process after notification
       def timeRemaining: Long = endTime - System.currentTimeMillis()
 
       while (timeRemaining > 0) {
         maintenanceThreadPoolLock.wait(Math.min(timeRemaining, 10000))
-        if (processThisPartition(id)) return
+        if (processThisPartition(id)) return true
       }
 
       // Timeout reached without successfully processing the partition
-      throw new SparkException(
-        errorClass = "STATE_STORE_MAINTENANCE_TASK_TIMEOUT",
-        messageParameters = Map(
-          "timeoutMs" -> timeoutMs.toString,
-          "providerId" -> id.toString),
-        cause = null)
+      return false
     }
   }
 
@@ -1173,6 +1170,10 @@ object StateStore extends Logging {
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
     }
+
+    // Process queued providers first
+    processQueuedProviders(storeConf)
+
     loadedProviders.synchronized {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
@@ -1182,6 +1183,33 @@ object StateStore extends Logging {
         logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
           log"for maintenance because it is currently " +
           log"being processed")
+      }
+    }
+  }
+
+  private def processQueuedProviders(storeConf: StateStoreConf): Unit = {
+    // Get up to 5 queued providers at a time to avoid blocking maintenance for too long
+    val maxProvidersToProcess = 5
+    val providersToProcess = new mutable.ArrayBuffer[StateStoreProviderId](maxProvidersToProcess)
+
+    for (_ <- 1 to maxProvidersToProcess if !partitionsForMaintenance.isEmpty) {
+      val id = partitionsForMaintenance.poll()
+      if (id != null) {
+        providersToProcess += id
+      }
+    }
+
+    providersToProcess.foreach { id =>
+      loadedProviders.synchronized {
+        loadedProviders.get(id)
+      }.foreach { provider =>
+        if (processThisPartition(id)) {
+          logInfo(s"Processing previously queued provider $id for maintenance")
+          submitMaintenanceWorkForProvider(id, provider, storeConf)
+        } else {
+          // If we couldn't get the lock, put it back in the queue
+          partitionsForMaintenance.add(id)
+        }
       }
     }
   }
@@ -1208,7 +1236,12 @@ object StateStore extends Logging {
         // close it properly.
         // We block here until we can acquire the lock for this partition, waiting for any
         // possible ongoing maintenance on this partition to complete first.
-        awaitProcessThisPartition(id, storeConf)
+        val ableToProcess = awaitProcessThisPartition(id, storeConf)
+        if (!ableToProcess) {
+          // The provider has been added to the providersToClose queue in awaitProcessThisPartition
+          // so we can return early
+          return
+        }
       }
       val awaitingPartitionDuration = System.currentTimeMillis() - startTime
       try {
