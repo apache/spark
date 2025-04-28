@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
@@ -119,7 +120,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
-      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+      parentUID: Option[String] = None,
+      earlyStopModelSizeThresholdInBytes: Long = -1): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
     timer.start("total")
 
@@ -190,7 +192,8 @@ private[spark] object RandomForest extends Logging with Serializable {
 
     timer.stop("init")
 
-    while (nodeStack.nonEmpty) {
+    var earlyStop = false
+    while (nodeStack.nonEmpty && !earlyStop) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
@@ -214,6 +217,16 @@ private[spark] object RandomForest extends Logging with Serializable {
       }
 
       timer.stop("findBestSplits")
+
+      if (
+        earlyStopModelSizeThresholdInBytes != -1
+        && SizeEstimator.estimate(topNodes) > earlyStopModelSizeThresholdInBytes
+      ) {
+        earlyStop = true
+        logWarning(
+          "The random forest training stops early because the model size exceeds threshold."
+        )
+      }
     }
 
     timer.stop("total")
@@ -268,7 +281,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
-      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+      parentUID: Option[String] = None,
+      earlyStopModelSizeThresholdInBytes: Long = -1): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
 
     timer.start("build metadata")
@@ -301,7 +315,8 @@ private[spark] object RandomForest extends Logging with Serializable {
 
     val trees = runBagged(baggedInput = baggedInput, metadata = metadata, bcSplits = bcSplits,
       strategy = strategy, numTrees = numTrees, featureSubsetStrategy = featureSubsetStrategy,
-      seed = seed, instr = instr, prune = prune, parentUID = parentUID)
+      seed = seed, instr = instr, prune = prune, parentUID = parentUID,
+      earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes)
 
     baggedInput.unpersist()
     bcSplits.destroy()

@@ -32,6 +32,7 @@ import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 
 
 private[spark] object GradientBoostedTrees extends Logging {
@@ -290,7 +291,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       validate: Boolean,
       seed: Long,
       featureSubsetStrategy: String,
-      instr: Option[Instrumentation] = None):
+      instr: Option[Instrumentation] = None,
+      earlyStopModelSizeThresholdInBytes: Long = -1):
         (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
@@ -365,7 +367,8 @@ private[spark] object GradientBoostedTrees extends Logging {
     val firstTreeModel = RandomForest.runBagged(baggedInput = firstBagged,
       metadata = metadata, bcSplits = bcSplits, strategy = treeStrategy, numTrees = 1,
       featureSubsetStrategy = featureSubsetStrategy, seed = seed, instr = instr,
-      parentUID = None)
+      parentUID = None,
+      earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes)
       .head.asInstanceOf[DecisionTreeRegressionModel]
 
     firstCounts.unpersist()
@@ -400,11 +403,15 @@ private[spark] object GradientBoostedTrees extends Logging {
       timer.stop("init validation")
     }
 
-    var bestM = 1
+    var accTreeSize = SizeEstimator.estimate(firstTreeModel)
+    var validM = 1
 
     var m = 1
-    var doneLearning = false
-    while (m < numIterations && !doneLearning) {
+    var earlyStop = false
+    if (accTreeSize > earlyStopModelSizeThresholdInBytes) {
+      earlyStop = true
+    }
+    while (m < numIterations && !earlyStop) {
       timer.start(s"building tree $m")
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
@@ -434,7 +441,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       val model = RandomForest.runBagged(baggedInput = bagged,
         metadata = metadata, bcSplits = bcSplits, strategy = treeStrategy,
         numTrees = 1, featureSubsetStrategy = featureSubsetStrategy,
-        seed = seed + m, instr = None, parentUID = None)
+        seed = seed + m, instr = None, parentUID = None,
+        earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes - accTreeSize)
         .head.asInstanceOf[DecisionTreeRegressionModel]
 
       labelWithCounts.unpersist()
@@ -442,6 +450,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       timer.stop(s"building tree $m")
       // Update partial model
       baseLearners(m) = model
+      accTreeSize += SizeEstimator.estimate(model)
       // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
       //       Technically, the weight should be optimized for the particular loss.
       //       However, the behavior should be reasonable, though not optimal.
@@ -466,10 +475,16 @@ private[spark] object GradientBoostedTrees extends Logging {
         val currentValidateError = computeWeightedError(validationTreePoints, validatePredError)
         if (bestValidateError - currentValidateError < validationTol * Math.max(
           currentValidateError, 0.01)) {
-          doneLearning = true
+          earlyStop = true
         } else if (currentValidateError < bestValidateError) {
           bestValidateError = currentValidateError
-          bestM = m + 1
+          validM = m + 1
+        }
+      }
+      if (!earlyStop) {
+        if (accTreeSize > earlyStopModelSizeThresholdInBytes) {
+          earlyStop = true
+          validM = m + 1
         }
       }
       m += 1
@@ -490,8 +505,16 @@ private[spark] object GradientBoostedTrees extends Logging {
       validatePredErrorCheckpointer.deleteAllCheckpoints()
     }
 
-    if (validate) {
-      (baseLearners.slice(0, bestM), baseLearnerWeights.slice(0, bestM))
+    if (earlyStop) {
+      // Early stop occurs in one of the 2 cases:
+      //  - validation error increases
+      //  - the accumulated size of trees exceeds the value of `earlyStopModelSizeThresholdInBytes`
+      if (accTreeSize > earlyStopModelSizeThresholdInBytes) {
+        logWarning(
+          "The boosting tree training stops early because the model size exceeds threshold."
+        )
+      }
+      (baseLearners.slice(0, validM), baseLearnerWeights.slice(0, validM))
     } else {
       (baseLearners, baseLearnerWeights)
     }
