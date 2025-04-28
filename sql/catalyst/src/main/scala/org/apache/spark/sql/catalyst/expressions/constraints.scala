@@ -99,7 +99,7 @@ trait TableConstraint extends Expression with Unevaluable {
     }
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
 
   override def dataType: DataType = throw new UnresolvedException("dataType")
 }
