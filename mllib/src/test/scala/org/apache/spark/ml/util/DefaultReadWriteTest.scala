@@ -51,6 +51,10 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
     if (testSaveToLocal) {
       instance.write.saveToLocal(path)
+      assert(
+        new File(path, "metadata").isFile(),
+        "saveToLocal should generate metadata as a file."
+      )
       intercept[IOException] {
         instance.write.saveToLocal(path)
       }
