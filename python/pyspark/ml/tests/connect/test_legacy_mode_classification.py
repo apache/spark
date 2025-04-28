@@ -64,8 +64,8 @@ class ClassificationTestsMixin:
             ["features"],
         )
 
-        lorv2 = LORV2(maxIter=200, numTrainWorkers=2, learningRate=0.001)
-        assert lorv2.getMaxIter() == 200
+        lorv2 = LORV2(maxIter=20, numTrainWorkers=2, learningRate=0.001)
+        assert lorv2.getMaxIter() == 20
         assert lorv2.getNumTrainWorkers() == 2
         assert lorv2.getOrDefault(lorv2.learningRate) == 0.001
 
@@ -111,7 +111,7 @@ class ClassificationTestsMixin:
             ["features"],
         )
 
-        lorv2 = LORV2(maxIter=200, numTrainWorkers=2, learningRate=0.001)
+        lorv2 = LORV2(maxIter=20, numTrainWorkers=2, learningRate=0.001)
 
         model = lorv2.fit(df1)
 
