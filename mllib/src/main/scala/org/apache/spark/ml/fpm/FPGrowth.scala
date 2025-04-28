@@ -343,6 +343,11 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "FPGrowthModel does not support saving to local filesystem path."
+        )
+      }
       val extraMetadata: JObject = Map("numTrainingRecords" -> instance.numTrainingRecords)
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession,
         extraMetadata = Some(extraMetadata))
