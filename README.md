@@ -1,125 +1,67 @@
-# Apache Spark
+Apache Spark
 
-Spark is a unified analytics engine for large-scale data processing. It provides
-high-level APIs in Scala, Java, Python, and R (Deprecated), and an optimized engine that
-supports general computation graphs for data analysis. It also supports a
-rich set of higher-level tools including Spark SQL for SQL and DataFrames,
-pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing,
-and Structured Streaming for stream processing.
+Apache Spark is a unified analytics engine for large-scale data processing. It provides high-level APIs in Scala, Java, Python, and R (deprecated), and an optimized engine that supports general computation graphs for data analysis. It also supports a rich set of higher-level tools, including Spark SQL for SQL and DataFrames, pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing, and Structured Streaming for stream processing.
 
-- Official version: <https://spark.apache.org/>
-- Development version: <https://apache.github.io/spark/>
+    Official version: https://spark.apache.org/
 
-[![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_main.yml)
-[![PySpark Coverage](https://codecov.io/gh/apache/spark/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/spark)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyspark?period=month&units=international_system&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pypi.org/project/pyspark/)
+    Development version: https://apache.github.io/spark/
 
+GitHub Actions Build PySpark Coverage PyPI Downloads
+Online Documentation
 
-## Online Documentation
+The latest Spark documentation including a programming guide is available on the project web page. This README file only contains basic setup instructions.
+Building Spark
 
-You can find the latest Spark documentation, including a programming
-guide, on the [project web page](https://spark.apache.org/documentation.html).
-This README file only contains basic setup instructions.
+Spark is built using Apache Maven. To build Spark and its example programs, run:
 
-## Building Spark
-
-Spark is built using [Apache Maven](https://maven.apache.org/).
-To build Spark and its example programs, run:
-
-```bash
 ./build/mvn -DskipTests clean package
-```
 
-(You do not need to do this if you downloaded a pre-built package.)
+If you downloaded a pre-built package, you do not need to do this. For detailed guidance, visit the "Building Spark" page. You can also explore the "Useful Developer Tools" page for tips on using an IDE.
+Interactive Scala Shell
 
-More detailed documentation is available from the project site, at
-["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html).
+Start using Spark through the Scala shell:
 
-For general development tips, including info on developing Spark using an IDE, see ["Useful Developer Tools"](https://spark.apache.org/developer-tools.html).
-
-## Interactive Scala Shell
-
-The easiest way to start using Spark is through the Scala shell:
-
-```bash
 ./bin/spark-shell
-```
 
-Try the following command, which should return 1,000,000,000:
+Example command:
 
-```scala
 scala> spark.range(1000 * 1000 * 1000).count()
-```
 
-## Interactive Python Shell
+Interactive Python Shell
 
-Alternatively, if you prefer Python, you can use the Python shell:
+For Python users, use the Python shell:
 
-```bash
 ./bin/pyspark
-```
 
-And run the following command, which should also return 1,000,000,000:
+Example command:
 
-```python
 >>> spark.range(1000 * 1000 * 1000).count()
-```
 
-## Example Programs
+Example Programs
 
-Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./bin/run-example <class> [params]`. For example:
+Spark includes several example programs in the examples directory. To run one, use ./bin/run-example <class> [params]. For example:
 
-```bash
 ./bin/run-example SparkPi
-```
 
-will run the Pi example locally.
+You can also set the MASTER environment variable to submit examples to a cluster, such as a spark:// URL, "yarn" for YARN, or "local" for local execution.
+Running Tests
 
-You can set the MASTER environment variable when running examples to submit
-examples to a cluster. This can be spark:// URL,
-"yarn" to run on YARN, and "local" to run
-locally with one thread, or "local[N]" to run locally with N threads. You
-can also use an abbreviated class name if the class is in the `examples`
-package. For instance:
+After building Spark, tests can be run using:
 
-```bash
-MASTER=spark://host:7077 ./bin/run-example SparkPi
-```
-
-Many of the example programs print usage help if no params are given.
-
-## Running Tests
-
-Testing first requires [building Spark](#building-spark). Once Spark is built, tests
-can be run using:
-
-```bash
 ./dev/run-tests
-```
 
-Please see the guidance on how to
-[run tests for a module, or individual tests](https://spark.apache.org/developer-tools.html#individual-tests).
+For more information on running specific tests, refer to the "Running Tests for a Module" documentation.
+Hadoop Version Compatibility
 
-There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
+Since Spark uses Hadoop's core library to interact with HDFS and other Hadoop-supported storage systems, it's important to build Spark against the version of Hadoop used by your cluster. For more details, see "Specifying the Hadoop Version and Enabling YARN".
+Configuration
 
-## A Note About Hadoop Versions
+To configure Spark, refer to the Configuration Guide.
+Contributing
 
-Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
-storage systems. Because the protocols have changed in different versions of
-Hadoop, you must build Spark against the same version that your cluster runs.
+To contribute to Apache Spark, please review the Contribution Guide.
 
-Please refer to the build documentation at
-["Specifying the Hadoop Version and Enabling YARN"](https://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version-and-enabling-yarn)
-for detailed guidance on building for a particular distribution of Hadoop, including
-building for particular Hive and Hive Thriftserver distributions.
+You can use this as the foundation for raising a request or submitting documentation. Let me know if you need further changes!
 
-## Configuration
 
-Please refer to the [Configuration Guide](https://spark.apache.org/docs/latest/configuration.html)
-in the online documentation for an overview on how to configure Spark.
-
-## Contributing
-
-Please review the [Contribution to Spark guide](https://spark.apache.org/contributing.html)
-for information on how to get started contributing to the project.
+ChatGPT can make mistakes. Check important info.
