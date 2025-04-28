@@ -109,7 +109,7 @@ case class UnionLoopExec(
     } else {
       plan
     }
-    var df = Dataset.ofRows(session, planWithLimit)
+    val df = Dataset.ofRows(session, planWithLimit)
 
     df.queryExecution.optimizedPlan match {
       case l: LocalRelation =>
