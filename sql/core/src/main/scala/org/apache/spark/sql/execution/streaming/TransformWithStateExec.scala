@@ -261,6 +261,7 @@ case class TransformWithStateExec(
 
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
+
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
     val keyObj = getKeyObj(keyRow) // convert key to objects
