@@ -19,7 +19,6 @@ from io import StringIO
 import unittest
 from typing import Iterable
 
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
