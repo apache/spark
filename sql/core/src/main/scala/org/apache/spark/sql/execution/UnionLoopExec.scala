@@ -205,7 +205,7 @@ case class UnionLoopExec(
 
       unionChildren += prevPlan
 
-      currentNumRows += prevCount.toInt
+      currentNumRows += prevCount
 
       if (limit.isDefined) {
         currentLimit -= prevCount.toInt
