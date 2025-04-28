@@ -1230,8 +1230,8 @@ object StateStore extends Logging {
         // close it properly.
         // We block here until we can acquire the lock for this partition, waiting for any
         // possible ongoing maintenance on this partition to complete first.
-        val ableToProcessNow = awaitProcessThisPartition(
-          id, storeConf.stateStoreMaintenanceProcessingTimeout)
+        val timeoutMs = storeConf.stateStoreMaintenanceProcessingTimeout * 1000
+        val ableToProcessNow = awaitProcessThisPartition(id, timeoutMs)
         if (!ableToProcessNow) {
           // The provider has been added to the providersToClose queue in awaitProcessThisPartition
           // so we can return early
