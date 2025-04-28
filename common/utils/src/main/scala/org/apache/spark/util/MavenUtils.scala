@@ -343,11 +343,31 @@ private[spark] object MavenUtils extends Logging {
 
   /* Set ivy settings for location of cache, if option is supplied */
   private[util] def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
-    val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).getOrElse {
+    val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).map { path =>
+      // Expand tilde (~) in paths
+      if (path.startsWith("~")) {
+        val subPath = path.drop(1)
+        // Check for ~/foo or ~\foo or just ~
+        if (subPath.isEmpty || subPath.startsWith("/") || subPath.startsWith(File.separator)) {
+          System.getProperty("user.home") + subPath
+        } else {
+          // We don't support expanding ~user/foo paths
+          throw new IllegalArgumentException(
+            s"Cannot expand user-specific home directory in path: $path. " +
+            s"Only ~ or paths starting with ~/ (or ~\\) are supported.")
+        }
+      } else {
+        // Path doesn't start with ~, use it as is
+        path
+      }
+    }.getOrElse {
+      // Default path if spark.jars.ivy is not set
       // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
       System.getProperty("ivy.home",
         System.getProperty("user.home") + File.separator + ".ivy2.5.2")
     }
+
+    // Set the defaults using the determined (and potentially expanded) path
     ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
     ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
   }
