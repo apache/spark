@@ -185,8 +185,8 @@ private[hive] class SparkGetColumnsOperation(
     case DoubleType => java.sql.Types.DOUBLE
     case _: DecimalType => java.sql.Types.DECIMAL
     case CharType(_) => java.sql.Types.CHAR
-    case _: StringType => java.sql.Types.VARCHAR
     case VarcharType(_) => java.sql.Types.VARCHAR
+    case _: StringType => java.sql.Types.VARCHAR
     case BinaryType => java.sql.Types.BINARY
     case DateType => java.sql.Types.DATE
     case TimestampType | TimestampNTZType => java.sql.Types.TIMESTAMP
