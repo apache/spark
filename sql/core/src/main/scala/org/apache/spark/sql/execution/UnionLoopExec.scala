@@ -94,6 +94,9 @@ case class UnionLoopExec(
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"),
     "numAnchorOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of anchor output rows"))
 
+  val localRelationLimit =
+    conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
+
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
@@ -106,7 +109,17 @@ case class UnionLoopExec(
     } else {
       plan
     }
-    val df = Dataset.ofRows(session, planWithLimit)
+    var df = Dataset.ofRows(session, planWithLimit)
+
+    // In the case we return a sufficiently small number of rows when executing any step of the
+    // recursion we convert the result into a LocalRelation, so that, if the recursion doesn't
+    // reference any external tables, we are able to calculate everything in the optimizer, using
+    // the ConvertToLocalRelation rule, which significantly improves runtime.
+    if (!df.queryExecution.optimizedPlan.isInstanceOf[LocalRelation] &&
+      df.queryExecution.toRdd.count() <= localRelationLimit) {
+      val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
+      df = Dataset.ofRows(session, local)
+    }
 
     df.queryExecution.optimizedPlan match {
       case l: LocalRelation =>
@@ -135,8 +148,6 @@ case class UnionLoopExec(
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
     val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
-    val AnchorRowLimitToConvertToLocalLimit =
-      conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
@@ -158,15 +169,6 @@ case class UnionLoopExec(
 
     val numPartitions = prevDF.queryExecution.toRdd.partitions.length
 
-    // In the case we return a sufficiently small number of rows when executing the anchor,
-    // we convert the result of the anchor into a LocalRelation, so that, if the recursion doesn't
-    // reference any external tables, we are able to calculate everything in the optimizer, using
-    // the ConvertToLocalRelation rule, which significantly improves runtime.
-    if (prevCount <= AnchorRowLimitToConvertToLocalLimit &&
-      !prevDF.queryExecution.optimizedPlan.isInstanceOf[LocalRelation]) {
-      val local = LocalRelation.fromExternalRows(anchor.output, prevDF.collect().toIndexedSeq)
-      prevDF = Dataset.ofRows(session, local)
-    }
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
       var prevPlan: LogicalPlan = null
