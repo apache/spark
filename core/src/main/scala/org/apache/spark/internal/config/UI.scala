@@ -228,7 +228,7 @@ private[spark] object UI {
       "This configuration replaces original log urls in event log, which will be also effective " +
       "when accessing the application on history server. The new log urls must be permanent, " +
       "otherwise you might have dead link for executor log urls.")
-    .version("4.0.0")
+    .version("4.1.0")
     .stringConf
     .createOptional
 

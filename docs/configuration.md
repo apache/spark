@@ -1689,7 +1689,7 @@ Apart from these, the following properties are also available, and may be useful
     <p/>
     For now, only K8s cluster manager supports this configuration.
   </td>
-  <td>4.0.0</td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.custom.executor.log.url</code></td>
