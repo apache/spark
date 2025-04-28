@@ -63,7 +63,7 @@ abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructT
     val reducedExpr = filters
       .sortBy(_.references.length)
       .flatMap(filterToExpression(_, toRef))
-      .reduce(And)
+      .reduce(And(_, _))
     Predicate.create(reducedExpr)
   }
 
@@ -122,15 +122,15 @@ object StructFilters {
       case sources.Or(left, right) =>
         zip(translate(left), translate(right)).map(Or.tupled)
       case sources.Not(child) =>
-        translate(child).map(Not)
+        translate(child).map(Not(_))
       case sources.EqualTo(attribute, value) =>
         zipAttributeAndValue(attribute, value).map(EqualTo.tupled)
       case sources.EqualNullSafe(attribute, value) =>
         zipAttributeAndValue(attribute, value).map(EqualNullSafe.tupled)
       case sources.IsNull(attribute) =>
-        toRef(attribute).map(IsNull)
+        toRef(attribute).map(IsNull(_))
       case sources.IsNotNull(attribute) =>
-        toRef(attribute).map(IsNotNull)
+        toRef(attribute).map(IsNotNull(_))
       case sources.In(attribute, values) =>
         val literals = values.toImmutableArraySeq.flatMap(toLiteral)
         if (literals.length == values.length) {

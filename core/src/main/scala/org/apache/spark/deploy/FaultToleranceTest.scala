@@ -30,7 +30,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.sys.process._
 
-import org.json4s.Formats
+import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}

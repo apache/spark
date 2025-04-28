@@ -191,7 +191,7 @@ class MinMaxScalerModel private[ml] (
       if (range != 0) scale / range else 0.0
     }
 
-    val transformer = udf { vector: Vector =>
+    val transformer = udf { (vector: Vector) =>
       require(vector.size == numFeatures,
         s"Number of features must be $numFeatures but got ${vector.size}")
       // 0 in sparse vector will probably be rescaled to non-zero

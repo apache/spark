@@ -199,11 +199,17 @@ class CanonicalizeSuite extends SparkFunSuite {
   }
 
   test("SPARK-40362: Commutative operator under BinaryComparison") {
-    Seq(EqualTo, EqualNullSafe, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual)
-      .foreach { bc =>
-        assert(bc(Multiply($"a", $"b"), Literal(10)).semanticEquals(
-          bc(Multiply($"b", $"a"), Literal(10))))
-      }
+    Seq(
+      EqualTo(_, _),
+      EqualNullSafe(_, _),
+      GreaterThan(_, _),
+      LessThan(_, _),
+      GreaterThanOrEqual(_, _),
+      LessThanOrEqual(_, _)
+    ).foreach { bc =>
+      assert(bc(Multiply($"a", $"b"), Literal(10)).semanticEquals(
+        bc(Multiply($"b", $"a"), Literal(10))))
+    }
   }
 
   test("SPARK-40903: Only reorder decimal Add when the result data type is not changed") {

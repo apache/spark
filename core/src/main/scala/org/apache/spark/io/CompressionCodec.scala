@@ -244,7 +244,7 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     new BufferedOutputStream(os, bufferSize)
   }
 
-  override private[spark] def compressedContinuousOutputStream(s: OutputStream) = {
+  override private[spark] def compressedContinuousOutputStream(s: OutputStream): OutputStream = {
     // SPARK-29322: Set "closeFrameOnFlush" to 'true' to let continuous input stream not being
     // stuck on reading open frame.
     val os = new ZstdOutputStreamNoFinalizer(s, bufferPool)

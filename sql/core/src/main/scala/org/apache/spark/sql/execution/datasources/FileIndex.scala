@@ -61,7 +61,7 @@ class FilePruningRunner(filters: Seq[Expression]) {
           metadataAttr.name != FileFormat.FILE_BLOCK_LENGTH
       case _ => false
     }
-  }.reduceOption(And)
+  }.reduceOption(And(_, _))
 
   // - Retrieve all required metadata attributes and put them into a sequence
   // - Bind all file constant metadata attribute references to their respective index

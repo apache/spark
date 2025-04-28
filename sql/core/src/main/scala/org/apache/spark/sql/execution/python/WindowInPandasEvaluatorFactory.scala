@@ -143,7 +143,7 @@ class WindowInPandasEvaluatorFactory(
 
     private val (numBoundIndices, lowerBoundIndex, upperBoundIndex, frameWindowBoundTypes) =
       computeWindowBoundHelpers(factories.toImmutableArraySeq)
-    private val isBounded = { frameIndex: Int => lowerBoundIndex(frameIndex) >= 0 }
+    private val isBounded = { (frameIndex: Int) => lowerBoundIndex(frameIndex) >= 0 }
     private val numFrames = factories.length
 
     private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold

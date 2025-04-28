@@ -203,12 +203,12 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
 
     testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "prediction", "label") { predictionAndLabels: Seq[Row] =>
+      "prediction", "label") { (predictionAndLabels: Seq[Row]) =>
       validatePrediction(predictionAndLabels)
     }
 
     testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "features", "probability") { featureAndProbabilities: Seq[Row] =>
+      "features", "probability") { (featureAndProbabilities: Seq[Row]) =>
       validateProbabilities(featureAndProbabilities, model, "multinomial")
     }
 
@@ -290,12 +290,12 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 20, "bernoulli").toDF()
 
     testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "prediction", "label") { predictionAndLabels: Seq[Row] =>
+      "prediction", "label") { (predictionAndLabels: Seq[Row]) =>
       validatePrediction(predictionAndLabels)
     }
 
     testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "features", "probability") { featureAndProbabilities: Seq[Row] =>
+      "features", "probability") { (featureAndProbabilities: Seq[Row]) =>
       validateProbabilities(featureAndProbabilities, model, "bernoulli")
     }
 

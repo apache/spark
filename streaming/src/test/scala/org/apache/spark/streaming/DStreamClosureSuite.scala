@@ -127,7 +127,7 @@ class DStreamClosureSuite extends SparkFunSuite with LocalStreamingContext {
   private def testCombineByKey(ds: DStream[(Int, Int)]): Unit = {
     expectCorrectException {
       ds.combineByKey[Int](
-        { _: Int => return; 1 },
+        { (_: Int) => return; 1 },
         { case (_: Int, _: Int) => return; 1 },
         { case (_: Int, _: Int) => return; 1 },
         new HashPartitioner(5)

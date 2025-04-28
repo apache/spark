@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.AttributeSeq
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.StructType

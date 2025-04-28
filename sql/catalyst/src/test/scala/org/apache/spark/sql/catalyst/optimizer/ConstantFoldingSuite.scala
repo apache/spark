@@ -425,7 +425,7 @@ class ConstantFoldingSuite extends PlanTest {
       Optimize.execute(testRelation.select(ScalarSubquery(emptyRelation).as("o")).analyze),
       testRelation.select(nullIntLit.as("o")).analyze)
 
-    Seq(EqualTo, LessThan, GreaterThan).foreach { comparison =>
+    Seq(EqualTo(_, _), LessThan(_, _), GreaterThan(_, _)).foreach { comparison =>
       comparePlans(
         Optimize.execute(testRelation
           .select(comparison($"a", ScalarSubquery(emptyRelation)).as("o")).analyze),

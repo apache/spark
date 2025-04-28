@@ -93,7 +93,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
       val (compressFunc, compressionRatio, buf) = prepareEncodeInternal(count, tpe, scheme, input)
       val label = s"${getFormattedClassName(scheme)}(${"%.3f".format(compressionRatio)})"
 
-      benchmark.addCase(label)({ i: Int =>
+      benchmark.addCase(label)({ (i: Int) =>
         for (n <- 0L until iters) {
           compressFunc(input, buf)
           input.rewind()
@@ -120,7 +120,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
 
       input.rewind()
 
-      benchmark.addCase(label)({ i: Int =>
+      benchmark.addCase(label)({ (i: Int) =>
         val rowBuf = new GenericInternalRow(1)
 
         for (n <- 0L until iters) {

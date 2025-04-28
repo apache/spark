@@ -170,14 +170,15 @@ class ExecutePlanResponseReattachableIterator(
         // If iter ended, but there was no ResultComplete, it means that there is more,
         // and we need to reattach.
         if (!hasNext && !resultComplete) {
-          do {
+          while ({
             iter = None // unset iterator for new ReattachExecute to be called in _call_iter
             assert(!resultComplete) // shouldn't change...
             hasNext = callIter(_.hasNext())
             // It's possible that the new iter will be empty, so we need to loop to get another.
             // Eventually, there will be a non empty iter, because there is always a
             // ResultComplete inserted by the server at the end of the stream.
-          } while (!hasNext)
+            !hasNext
+          }) ()
         }
         hasNext
       }

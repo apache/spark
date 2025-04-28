@@ -51,7 +51,8 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
     this,
     "size",
     "Size of vectors in column.",
-    {s: Int => s >= 0})
+    (s: Int) => s >= 0
+  )
 
   /** group getParam */
   @Since("2.3.0")

@@ -138,13 +138,13 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
   test("[SPARK-43226] extra constant metadata fields with extractors") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
       val format = new TestFileFormat(extraConstantMetadataFields) {
-        val extractPartitionNumber = { pf: PartitionedFile =>
+        val extractPartitionNumber = { (pf: PartitionedFile) =>
           pf.toPath.toString.split("/").collectFirst {
             case "f0" => 9990
             case "f1" => 9991
           }.get
         }
-        val extractPartitionName = { pf: PartitionedFile =>
+        val extractPartitionName = { (pf: PartitionedFile) =>
           pf.toPath.toString.split("/").collectFirst {
             case "f0" => "f0f"
             case "f1" => "f1f"

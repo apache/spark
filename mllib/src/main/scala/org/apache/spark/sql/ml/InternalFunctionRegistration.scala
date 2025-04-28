@@ -44,7 +44,7 @@ object InternalFunctionRegistration {
     FunctionRegistry.internal.createOrReplaceTempFunction(name, builder, "internal")
   }
 
-  private val vectorToArrayUdf = udf { vec: Any =>
+  private val vectorToArrayUdf = udf { (vec: Any) =>
     vec match {
       case v: Vector => v.toArray
       case v: OldVector => v.toArray
@@ -55,7 +55,7 @@ object InternalFunctionRegistration {
     }
   }.asNonNullable()
 
-  private val vectorToArrayFloatUdf = udf { vec: Any =>
+  private val vectorToArrayFloatUdf = udf { (vec: Any) =>
     vec match {
       case v: SparseVector =>
         val data = new Array[Float](v.size)
@@ -87,7 +87,7 @@ object InternalFunctionRegistration {
       throw QueryCompilationErrors.wrongNumArgsError("vector_to_array", "2", exprs.size)
   }
 
-  private val arrayToVectorUdf = udf { array: Seq[Double] =>
+  private val arrayToVectorUdf = udf { (array: Seq[Double]) =>
     Vectors.dense(array.toArray)
   }
 

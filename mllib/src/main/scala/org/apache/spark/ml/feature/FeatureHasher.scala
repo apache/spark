@@ -156,7 +156,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
       }
     }
 
-    val hashFeatures = udf { row: Row =>
+    val hashFeatures = udf { (row: Row) =>
       val map = new OpenHashMap[Int, Double]()
 
       var i = 0

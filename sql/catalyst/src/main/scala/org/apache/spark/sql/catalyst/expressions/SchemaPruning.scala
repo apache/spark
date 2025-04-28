@@ -42,7 +42,7 @@ object SchemaPruning extends SQLConfHelper {
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
     val mergedSchema = requestedRootFields
-      .map { root: RootField => StructType(Array(root.field)) }
+      .map(root => StructType(Array(root.field)))
       .reduceLeft(_ merge _)
     val mergedDataSchema =
       StructType(schema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))

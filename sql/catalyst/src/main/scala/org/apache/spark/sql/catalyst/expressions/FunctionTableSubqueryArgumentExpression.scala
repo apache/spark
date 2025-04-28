@@ -83,7 +83,6 @@ case class FunctionTableSubqueryArgumentExpression(
     copy(plan = plan)
   override def withNewOuterAttrs(outerAttrs: Seq[Expression])
   : FunctionTableSubqueryArgumentExpression = copy(outerAttrs = outerAttrs)
-  override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
   override def toString: String = s"table-argument#${exprId.id} $conditionString"

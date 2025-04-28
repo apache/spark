@@ -58,7 +58,7 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
     val elemScaler = new OldElementwiseProduct(OldVectors.fromML($(scalingVec)))
     val vectorSize = $(scalingVec).size
 
-    vector: Vector => {
+    (vector: Vector) => {
       require(vector.size == vectorSize,
         s"vector sizes do not match: Expected $vectorSize but found ${vector.size}")
       vector match {

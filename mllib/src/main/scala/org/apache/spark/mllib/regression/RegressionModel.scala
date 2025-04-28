@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.json4s.{DefaultFormats, Formats, JValue}
+import org.json4s._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD

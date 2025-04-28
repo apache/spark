@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
   """,
   since = "1.0.0",
   group = "conditional_funcs")
-case class Between private(input: Expression, lower: Expression, upper: Expression, replacement: Expression)
+case class Between private (input: Expression, lower: Expression, upper: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules  {
   def this(input: Expression, lower: Expression, upper: Expression) = {
     this(input, lower, upper,

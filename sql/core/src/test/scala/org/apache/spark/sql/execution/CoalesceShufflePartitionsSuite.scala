@@ -95,7 +95,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     }
 
     test(s"determining the number of reducers: aggregate operator$testNameNote") {
-      val test: SparkSession => Unit = { spark: SparkSession =>
+      val test: SparkSession => Unit = { spark =>
         val df =
           spark
             .range(0, 1000, 1, numInputPartitions)
@@ -130,7 +130,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     }
 
     test(s"determining the number of reducers: join operator$testNameNote") {
-      val test: SparkSession => Unit = { spark: SparkSession =>
+      val test: SparkSession => Unit = { spark =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)
@@ -175,7 +175,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     }
 
     test(s"determining the number of reducers: complex query 1$testNameNote") {
-      val test: (SparkSession) => Unit = { spark: SparkSession =>
+      val test: SparkSession => Unit = { spark =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)
@@ -225,7 +225,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     }
 
     test(s"determining the number of reducers: complex query 2$testNameNote") {
-      val test: (SparkSession) => Unit = { spark: SparkSession =>
+      val test: SparkSession => Unit = { spark =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)
@@ -275,7 +275,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     }
 
     test(s"determining the number of reducers: plan already partitioned$testNameNote") {
-      val test: SparkSession => Unit = { spark: SparkSession =>
+      val test: SparkSession => Unit = { spark =>
         try {
           spark.range(1000).write.bucketBy(30, "id").saveAsTable("t")
           // `df1` is hash partitioned by `id`.
@@ -309,7 +309,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   }
 
   test("SPARK-46590 adaptive query execution works correctly with broadcast join and union") {
-    val test: SparkSession => Unit = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark =>
       import spark.implicits._
       spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
@@ -337,7 +337,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   }
 
   test("SPARK-46590 adaptive query execution works correctly with cartesian join and union") {
-    val test: SparkSession => Unit = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark =>
       import spark.implicits._
       spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "100B")
@@ -370,7 +370,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   }
 
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
-    val test: SparkSession => Unit = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark =>
       withSQLConf("spark.sql.exchange.reuse" -> "true") {
         val df = spark.range(0, 6, 1).selectExpr("id AS key", "id AS value")
 
@@ -441,7 +441,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   }
 
   test("Do not reduce the number of shuffle partition for repartition") {
-    val test: SparkSession => Unit = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark =>
       val ds = spark.range(3)
       val resultDf = ds.repartition(2, ds.col("id")).toDF()
 
@@ -457,7 +457,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   }
 
   test("Union two datasets with different pre-shuffle partition number") {
-    val test: SparkSession => Unit = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark =>
       val df1 = spark.range(3).join(spark.range(3), "id").toDF()
       val df2 = spark.range(3).groupBy().sum()
 
@@ -477,7 +477,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   }
 
   test("SPARK-34790: enable IO encryption in AQE partition coalescing") {
-    val test: SparkSession => Unit = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark =>
       val ds = spark.range(0, 100, 1, numInputPartitions)
       val resultDf = ds.repartition(ds.col("id"))
       resultDf.collect()
@@ -495,7 +495,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
   }
 
   test("SPARK-51505: log empty partition number metrics") {
-    val test: SparkSession => Unit = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark =>
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
         val df = spark.range(0, 1000, 1, 5).withColumn("value", when(col("id") < 500, 0)
             .otherwise(1)).groupBy("value").agg("value" -> "sum")

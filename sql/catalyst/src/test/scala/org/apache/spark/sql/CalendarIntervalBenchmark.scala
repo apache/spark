@@ -52,7 +52,7 @@ object CalendarIntervalBenchmark extends BenchmarkBase {
       val unsafeRow = UnsafeProjection.create(Array[DataType](CalendarIntervalType)).apply(row)
 
       val benchmark = new Benchmark(name, iters * numRows.toLong, output = output)
-      benchmark.addCase("Call setInterval & getInterval") { _: Int =>
+      benchmark.addCase("Call setInterval & getInterval") { (_: Int) =>
         for (_ <- 0L until iters) {
           var i = 0
           while (i < numRows) {

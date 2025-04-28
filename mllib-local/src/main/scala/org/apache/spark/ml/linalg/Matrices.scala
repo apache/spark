@@ -360,8 +360,8 @@ class DenseMatrix @Since("2.0.0") (
 
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
-  private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
-    isTransposed)
+  private[spark] def map(f: Double => Double): Matrix =
+    new DenseMatrix(numRows, numCols, values.map(f), isTransposed)
 
   private[ml] def update(f: Double => Double): DenseMatrix = {
     val len = values.length
@@ -700,7 +700,7 @@ class SparseMatrix @Since("2.0.0") (
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
   }
 
-  private[spark] def map(f: Double => Double) =
+  private[spark] def map(f: Double => Double): Matrix =
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f), isTransposed)
 
   private[ml] def update(f: Double => Double): SparseMatrix = {
@@ -1230,10 +1230,10 @@ object Matrices {
       numCols += mat.numCols
     }
     if (!hasSparse) {
-      new DenseMatrix(numRows, numCols, matrices.flatMap { m: Matrix => m.toArray })
+      new DenseMatrix(numRows, numCols, matrices.flatMap { (m: Matrix) => m.toArray })
     } else {
       var startCol = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { (mat: Matrix) =>
         val nCols = mat.numCols
         mat match {
           case spMat: SparseMatrix =>
@@ -1302,7 +1302,7 @@ object Matrices {
       new DenseMatrix(numRows, numCols, allValues)
     } else {
       var startRow = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat: Matrix =>
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { (mat: Matrix) =>
         val nRows = mat.numRows
         mat match {
           case spMat: SparseMatrix =>

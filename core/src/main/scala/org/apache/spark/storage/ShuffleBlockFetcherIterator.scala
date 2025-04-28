@@ -1014,39 +1014,44 @@ final class ShuffleBlockFetcherIterator(
           // a SuccessFetchResult or a FailureFetchResult.
           result = null
 
-          case PushMergedLocalMetaFetchResult(
-            shuffleId, shuffleMergeId, reduceId, bitmaps, localDirs) =>
-            // Fetch push-merged-local shuffle block data as multiple shuffle chunks
-            val shuffleBlockId = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
-            try {
-              val bufs: Seq[ManagedBuffer] = blockManager.getLocalMergedBlockData(shuffleBlockId,
-                localDirs)
-              // Since the request for local block meta completed successfully, numBlocksToFetch
-              // is decremented.
-              numBlocksToFetch -= 1
-              // Update total number of blocks to fetch, reflecting the multiple local shuffle
-              // chunks.
-              numBlocksToFetch += bufs.size
-              bufs.zipWithIndex.foreach { case (buf, chunkId) =>
-                buf.retain()
-                val shuffleChunkId = ShuffleBlockChunkId(shuffleId, shuffleMergeId, reduceId,
-                  chunkId)
-                pushBasedFetchHelper.addChunk(shuffleChunkId, bitmaps(chunkId))
-                results.put(SuccessFetchResult(shuffleChunkId, SHUFFLE_PUSH_MAP_ID,
-                  pushBasedFetchHelper.localShuffleMergerBlockMgrId, buf.size(), buf,
-                  isNetworkReqDone = false))
-              }
-            } catch {
-              case e: Exception =>
-                // If we see an exception with reading push-merged-local index file, we fallback
-                // to fetch the original blocks. We do not report block fetch failure
-                // and will continue with the remaining local block read.
-                logWarning("Error occurred while reading push-merged-local index, " +
-                  "prepare to fetch the original blocks", e)
-                pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
-                  shuffleBlockId, pushBasedFetchHelper.localShuffleMergerBlockMgrId)
+        case PushMergedLocalMetaFetchResult(
+          shuffleId,
+          shuffleMergeId,
+          reduceId,
+          bitmaps,
+          localDirs
+        ) =>
+          // Fetch push-merged-local shuffle block data as multiple shuffle chunks
+          val shuffleBlockId = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
+          try {
+            val bufs: Seq[ManagedBuffer] = blockManager.getLocalMergedBlockData(shuffleBlockId,
+              localDirs)
+            // Since the request for local block meta completed successfully, numBlocksToFetch
+            // is decremented.
+            numBlocksToFetch -= 1
+            // Update total number of blocks to fetch, reflecting the multiple local shuffle
+            // chunks.
+            numBlocksToFetch += bufs.size
+            bufs.zipWithIndex.foreach { case (buf, chunkId) =>
+              buf.retain()
+              val shuffleChunkId = ShuffleBlockChunkId(shuffleId, shuffleMergeId, reduceId,
+                chunkId)
+              pushBasedFetchHelper.addChunk(shuffleChunkId, bitmaps(chunkId))
+              results.put(SuccessFetchResult(shuffleChunkId, SHUFFLE_PUSH_MAP_ID,
+                pushBasedFetchHelper.localShuffleMergerBlockMgrId, buf.size(), buf,
+                isNetworkReqDone = false))
             }
-            result = null
+          } catch {
+            case e: Exception =>
+              // If we see an exception with reading push-merged-local index file, we fallback
+              // to fetch the original blocks. We do not report block fetch failure
+              // and will continue with the remaining local block read.
+              logWarning("Error occurred while reading push-merged-local index, " +
+                "prepare to fetch the original blocks", e)
+              pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
+                shuffleBlockId, pushBasedFetchHelper.localShuffleMergerBlockMgrId)
+          }
+          result = null
 
         case PushMergedRemoteMetaFetchResult(
           shuffleId, shuffleMergeId, reduceId, blockSize, bitmaps, address) =>

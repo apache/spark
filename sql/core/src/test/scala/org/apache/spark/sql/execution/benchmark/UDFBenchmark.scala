@@ -113,7 +113,7 @@ object UDFBenchmark extends SqlBasedBenchmark {
           .noop()
       }
 
-      val identityUDF = udf { x: Long => x }
+      val identityUDF = udf { (x: Long) => x }
       benchmark.addCase(s"With identity UDF", numIters = 5) { _ =>
         spark.range(cardinality)
           .select(

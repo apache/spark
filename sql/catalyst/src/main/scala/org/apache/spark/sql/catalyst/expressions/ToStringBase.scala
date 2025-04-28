@@ -47,7 +47,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   protected def useDecimalPlainString: Boolean
 
-  protected val binaryFormatter: BinaryFormatter = UTF8String.fromBytes
+  protected val binaryFormatter: BinaryFormatter = UTF8String.fromBytes(_)
 
   // Makes the function accept Any type input by doing `asInstanceOf[T]`.
   @inline private def acceptAny[T](func: T => UTF8String): Any => UTF8String =

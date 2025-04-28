@@ -30,8 +30,8 @@ import org.apache.spark.util.collection.BitSet
  * implicit evidence of membership in the `VertexPartitionBaseOpsConstructor` typeclass (for
  * example, `VertexPartition.VertexPartitionOpsConstructor`).
  */
-private[graphx] abstract class VertexPartitionBaseOps
-    [VD: ClassTag, Self[X] <: VertexPartitionBase[X]: VertexPartitionBaseOpsConstructor]
+private[graphx] abstract class VertexPartitionBaseOps[
+  VD: ClassTag, Self[X] <: VertexPartitionBase[X]: VertexPartitionBaseOpsConstructor]
     (self: Self[VD])
   extends Serializable with Logging {
 

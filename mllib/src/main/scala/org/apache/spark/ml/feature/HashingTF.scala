@@ -93,7 +93,7 @@ class HashingTF @Since("3.0.0") private[ml] (
     val n = $(numFeatures)
     val updateFunc = if ($(binary)) (v: Double) => 1.0 else (v: Double) => v + 1.0
 
-    val hashUDF = udf { terms: Seq[_] =>
+    val hashUDF = udf { (terms: Seq[_]) =>
       val map = new OpenHashMap[Int, Double]()
       terms.foreach { term => map.changeValue(indexOf(term), 1.0, updateFunc) }
       Vectors.sparse(n, map.toSeq)

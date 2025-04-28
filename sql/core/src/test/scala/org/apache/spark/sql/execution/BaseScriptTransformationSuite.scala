@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
-import org.json4s.DefaultFormats
+import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._

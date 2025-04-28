@@ -64,7 +64,7 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
   test("class NumericHistogram, basic operations") {
     val valueCount = 5
-    Seq(3, 5).foreach { nBins: Int =>
+    Seq(3, 5).foreach { (nBins: Int) =>
       val buffer = new NumericHistogram()
       buffer.allocate(nBins)
       (1 to valueCount).grouped(nBins).foreach { group =>
