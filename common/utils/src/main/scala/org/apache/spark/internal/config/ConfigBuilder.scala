@@ -89,12 +89,19 @@ private object ConfigHelpers {
         }
       multiplier * JavaUtils.byteStringAs(input, unit)
     } catch {
-      case _: NumberFormatException =>
+      case _: NumberFormatException | _: IllegalArgumentException =>
         throw configTypeMismatchError(key, str, s"bytes in $unit")
     }
   }
 
-  def byteToString(v: Long, unit: ByteUnit): String = s"${unit.convertTo(v, ByteUnit.BYTE)}b"
+  def byteToString(v: Long, unit: ByteUnit, key: String): String = {
+    try {
+      s"${unit.convertTo(v, ByteUnit.BYTE)}b"
+    } catch {
+      case _: IllegalArgumentException =>
+        throw configTypeMismatchError(key, v.toString, s"bytes in $unit")
+    }
+  }
 
   def regexFromString(str: String, key: String): Regex = {
     try str.r catch {
@@ -342,7 +349,7 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def bytesConf(unit: ByteUnit): TypedConfigBuilder[Long] = {
     checkPrependConfig
-    new TypedConfigBuilder(this, byteFromString(_, unit, key), byteToString(_, unit))
+    new TypedConfigBuilder(this, byteFromString(_, unit, key), byteToString(_, unit, key))
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
