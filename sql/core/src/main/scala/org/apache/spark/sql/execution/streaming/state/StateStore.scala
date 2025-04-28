@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
-import org.apache.spark.sql.execution.streaming.state.StateStore.submitMaintenanceWorkForProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
