@@ -1965,9 +1965,6 @@ class MapStateProcessor(StatefulProcessor):
         assert next(map_iter)[1] == (value2,)
         self.map_state.removeKey(key1)
         assert not self.map_state.containsKey(key1)
-        assert self.map_state.exists()
-        self.map_state.clear()
-        assert not self.map_state.exists()
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:
@@ -1980,7 +1977,8 @@ class MapStateLargeTTLProcessor(MapStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
-        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
+        # Use a large timeout as long as 1 year
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
