@@ -2374,9 +2374,24 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "OUT_OF_RANGE_OF_OPTIONS" : {
+        "message" : [
+          "It should be one of '<confOptions>'."
+        ]
+      },
+      "REQUIREMENT" : {
+        "message" : [
+          "<confRequirement>"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
+        ]
+      },
+      "TYPE_MISMATCH" : {
+        "message" : [
+          "It should be a/an '<confType>' value."
         ]
       }
     },
