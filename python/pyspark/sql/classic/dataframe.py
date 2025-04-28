@@ -1171,7 +1171,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
-        if not subset:
+        if subset is None or len(subset) == 0:
             jdf = self._jdf.dropDuplicates()
         else:
             for c in subset:
@@ -1190,7 +1190,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 messageParameters={"arg_name": "subset", "arg_type": type(subset).__name__},
             )
 
-        if not subset:
+        if subset is None or len(subset) == 0:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
         else:
             for c in subset:
