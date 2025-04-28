@@ -531,10 +531,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = {
       val collatedPlan =
         if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
-          Seq(
-            ApplyDefaultCollationToStringType,
-            CollationTypeCasts
-          ).foldLeft(plan) { case (plan, rule) => rule(plan) }
+          CollationRulesRunner(plan)
         } else {
           plan
         }
@@ -2812,7 +2809,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = {
       val collatedPlan =
         if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
-          CollationTypeCasts(plan)
+          CollationRulesRunner(plan)
         } else {
           plan
         }
