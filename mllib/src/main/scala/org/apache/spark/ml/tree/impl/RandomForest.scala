@@ -122,7 +122,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None,
-      earlyStopModelSizeThresholdInBytes: Long = -1): Array[DecisionTreeModel] = {
+      earlyStopModelSizeThresholdInBytes: Long = 0): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
     timer.start("total")
 
@@ -220,7 +220,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       timer.stop("findBestSplits")
 
       if (
-        earlyStopModelSizeThresholdInBytes != -1
+        earlyStopModelSizeThresholdInBytes > 0
         && SizeEstimator.estimate(topNodes) > earlyStopModelSizeThresholdInBytes
       ) {
         earlyStop = true
@@ -284,7 +284,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None,
-      earlyStopModelSizeThresholdInBytes: Long = -1): Array[DecisionTreeModel] = {
+      earlyStopModelSizeThresholdInBytes: Long = 0): Array[DecisionTreeModel] = {
     val timer = new TimeTracker()
 
     timer.start("build metadata")

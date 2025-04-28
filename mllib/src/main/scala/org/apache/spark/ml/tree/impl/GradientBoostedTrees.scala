@@ -292,7 +292,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       seed: Long,
       featureSubsetStrategy: String,
       instr: Option[Instrumentation] = None,
-      earlyStopModelSizeThresholdInBytes: Long = -1):
+      earlyStopModelSizeThresholdInBytes: Long = 0):
         (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
@@ -408,7 +408,10 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     var m = 1
     var earlyStop = false
-    if (accTreeSize > earlyStopModelSizeThresholdInBytes) {
+    if (
+        earlyStopModelSizeThresholdInBytes > 0
+        && accTreeSize > earlyStopModelSizeThresholdInBytes
+    ) {
       earlyStop = true
     }
     while (m < numIterations && !earlyStop) {
@@ -482,7 +485,10 @@ private[spark] object GradientBoostedTrees extends Logging {
         }
       }
       if (!earlyStop) {
-        if (accTreeSize > earlyStopModelSizeThresholdInBytes) {
+        if (
+            earlyStopModelSizeThresholdInBytes > 0
+            && accTreeSize > earlyStopModelSizeThresholdInBytes
+        ) {
           earlyStop = true
           validM = m + 1
         }
