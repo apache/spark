@@ -1965,6 +1965,9 @@ class MapStateProcessor(StatefulProcessor):
         assert next(map_iter)[1] == (value2,)
         self.map_state.removeKey(key1)
         assert not self.map_state.containsKey(key1)
+        assert self.map_state.exists()
+        self.map_state.clear()
+        assert not self.map_state.exists()
         yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
     def close(self) -> None:
@@ -1980,6 +1983,35 @@ class MapStateLargeTTLProcessor(MapStateProcessor):
         # Use a large timeout as long as 1 year
         self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        count = 0
+        key1 = ("key1",)
+        key2 = ("key2",)
+        for pdf in rows:
+            pdf_count = pdf.count()
+            count += pdf_count.get("temperature")
+        value1 = count
+        value2 = count
+        if self.map_state.exists():
+            if self.map_state.containsKey(key1):
+                value1 += self.map_state.getValue(key1)[0]
+            if self.map_state.containsKey(key2):
+                value2 += self.map_state.getValue(key2)[0]
+        self.map_state.updateValue(key1, (value1,))
+        self.map_state.updateValue(key2, (value2,))
+        key_iter = self.map_state.keys()
+        assert next(key_iter)[0] == "key1"
+        assert next(key_iter)[0] == "key2"
+        value_iter = self.map_state.values()
+        assert next(value_iter)[0] == value1
+        assert next(value_iter)[0] == value2
+        map_iter = self.map_state.iterator()
+        assert next(map_iter)[0] == key1
+        assert next(map_iter)[1] == (value2,)
+        self.map_state.removeKey(key1)
+        assert not self.map_state.containsKey(key1)
+        yield pd.DataFrame({"id": key, "countAsString": str(count)})
 
 
 class BasicProcessor(StatefulProcessor):
