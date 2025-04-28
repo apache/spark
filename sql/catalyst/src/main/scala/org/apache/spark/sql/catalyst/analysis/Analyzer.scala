@@ -688,7 +688,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
       }
 
-      if (groupByExprs.exists(expression => expression.exists(_.isInstanceOf[Generator]))) {
+      if (groupByExprs.exists(_.exists(_.isInstanceOf[Generator]))) {
         throw QueryCompilationErrors.generatorOutsideSelectError(operator)
       }
 
