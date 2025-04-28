@@ -110,6 +110,7 @@ private[spark] object RandomForest extends Logging with Serializable {
    * @param metadata Learning and dataset metadata for DecisionTree.
    * @return an unweighted set of trees
    */
+  // scalastyle:off
   def runBagged(
       baggedInput: RDD[BaggedPoint[TreePoint]],
       metadata: DecisionTreeMetadata,
@@ -266,6 +267,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         }
     }
   }
+  // scalastyle:on
 
   /**
    * Train a random forest.
