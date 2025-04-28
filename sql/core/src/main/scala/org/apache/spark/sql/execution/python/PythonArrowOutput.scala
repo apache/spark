@@ -255,9 +255,11 @@ class SliceBytesArrowOutputProcessorImpl(
       currentRowIdx = currentRowIdx + root.getRowCount
       root
     } else {
+      // We iteratively slice the batch by 90% until we reach a batch with required byte size.
+      // If we cannot have it even with one single row, we will output a batch with one row.
       var rootSlice = root
       val stepRatio = 0.9
-      var sliceBatchCount = ((rowCount - currentRowIdx) * stepRatio).toInt
+      var sliceBatchCount = rowCount - currentRowIdx
 
       while (sliceBatchCount > 0) {
         rootSlice = root.slice(currentRowIdx, sliceBatchCount)
