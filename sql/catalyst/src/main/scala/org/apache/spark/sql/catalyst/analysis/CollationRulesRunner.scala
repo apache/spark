@@ -21,10 +21,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 object CollationRulesRunner {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyCollationRules(plan)
-  }
-
-  def applyCollationRules(plan: LogicalPlan): LogicalPlan = {
     Seq(
       ApplyDefaultCollationToStringType,
       CollationTypeCasts
