@@ -181,7 +181,7 @@ class PCAModel private[ml] (
 
 @Since("1.6.0")
 object PCAModel extends MLReadable[PCAModel] {
-  private case class Data(pc: DenseMatrix, explainedVariance: DenseVector)
+  private case class Data(pc: Matrix, explainedVariance: Vector)
 
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
 
@@ -212,7 +212,7 @@ object PCAModel extends MLReadable[PCAModel] {
       val dataPath = new Path(path, "data").toString
       val model = if (majorVersion(metadata.sparkVersion) >= 2) {
         val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
-        new PCAModel(metadata.uid, data.pc, data.explainedVariance)
+        new PCAModel(metadata.uid, data.pc.toDense, data.explainedVariance.toDense)
       } else {
         // pc field is the old matrix format in Spark <= 1.6
         // explainedVariance field is not present in Spark <= 1.6
