@@ -107,7 +107,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         collation = u.collation,
         serde = u.serde,
         external = u.external,
-        constraints = u.constraints.map(_.toV2Constraint(isCreateTable = true)))
+        constraints = u.constraints.map(_.toV2Constraint))
       withNewSpec(newTableSpec)
     case _ =>
       input

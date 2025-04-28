@@ -296,7 +296,7 @@ case class AddConstraint(
     table: LogicalPlan,
     tableConstraint: TableConstraint) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
-    val constraint = tableConstraint.toV2Constraint(isCreateTable = false)
+    val constraint = tableConstraint.toV2Constraint
     val validatedTableVersion = table match {
       case t: ResolvedTable if constraint.enforced() =>
         t.table.currentVersion()

@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.UUID
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
@@ -27,8 +27,8 @@ import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.types.DataType
 
 trait TableConstraint extends Expression with Unevaluable {
-  // Convert to a data source v2 constraint
-  def toV2Constraint(isCreateTable: Boolean): Constraint
+  /** Convert to a data source v2 constraint */
+  def toV2Constraint: Constraint
 
   /** Returns the user-provided name of the constraint */
   def userProvidedName: String
@@ -99,10 +99,9 @@ trait TableConstraint extends Expression with Unevaluable {
     }
   }
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
-  override def dataType: DataType =
-    throw new SparkUnsupportedOperationException("CONSTRAINT_DOES_NOT_HAVE_DATA_TYPE")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
 }
 
 case class ConstraintCharacteristic(enforced: Option[Boolean], rely: Option[Boolean])
@@ -122,7 +121,7 @@ case class CheckConstraint(
   with TableConstraint {
 // scalastyle:on line.size.limit
 
-  def toV2Constraint(isCreateTable: Boolean): Constraint = {
+  def toV2Constraint: Constraint = {
     val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
     val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
@@ -164,7 +163,7 @@ case class PrimaryKeyConstraint(
   extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
 
-  override def toV2Constraint(isCreateTable: Boolean): Constraint = {
+  override def toV2Constraint: Constraint = {
     val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
@@ -196,7 +195,7 @@ case class UniqueConstraint(
   extends LeafExpression with TableConstraint {
 // scalastyle:on line.size.limit
 
-  override def toV2Constraint(isCreateTable: Boolean): Constraint = {
+  override def toV2Constraint: Constraint = {
     val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint
@@ -234,7 +233,7 @@ case class ForeignKeyConstraint(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def toV2Constraint(isCreateTable: Boolean): Constraint = {
+  override def toV2Constraint: Constraint = {
     val enforced = userProvidedCharacteristic.enforced.getOrElse(false)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
     Constraint

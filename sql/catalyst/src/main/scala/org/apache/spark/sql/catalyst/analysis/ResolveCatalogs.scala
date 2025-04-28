@@ -90,7 +90,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       r.copy(name = resolvedIdentifier)
 
     case UnresolvedIdentifier(nameParts, allowTemp) =>
-      resolveIdentifier(nameParts, allowTemp, Seq.empty)
+      resolveIdentifier(nameParts, allowTemp, Nil)
 
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
