@@ -2374,9 +2374,24 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "OUT_OF_RANGE_OF_OPTIONS" : {
+        "message" : [
+          "It should be one of '<confOptions>'."
+        ]
+      },
+      "REQUIREMENT" : {
+        "message" : [
+          "<confRequirement>"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
+        ]
+      },
+      "TYPE_MISMATCH" : {
+        "message" : [
+          "It should be a/an '<confType>' value."
         ]
       }
     },
@@ -5249,6 +5264,12 @@
       "Please make the schema nullable. Current schema: <schema>"
     ],
     "sqlState" : "XXKST"
+  },
+  "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user-defined function <function> of the StatefulProcessor. Reason: <reason>."
+    ],
+    "sqlState" : "39000"
   },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
@@ -8646,11 +8667,6 @@
   "_LEGACY_ERROR_TEMP_3026" : {
     "message" : [
       "duration() called on unfinished task"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3027" : {
-    "message" : [
-      "Unrecognized <schedulerModeProperty>: <schedulingModeConf>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3028" : {

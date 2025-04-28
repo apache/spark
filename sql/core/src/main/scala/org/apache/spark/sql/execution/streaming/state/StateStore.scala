@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
+import org.apache.spark.sql.execution.streaming.state.StateStore.submitMaintenanceWorkForProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
@@ -1013,24 +1014,40 @@ object StateStore extends Logging {
           log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
-      val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
-      val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
-      val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
-        log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
-      }.getOrElse(log"")
+      // Only tell the state store coordinator we are active if we will remain active
+      // after the task. When we unload after committing, there's no need for the coordinator
+      // to track which executor has which provider
+      if (!storeConf.unloadOnCommit) {
+        val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
+        val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+        val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
+          log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
+        }.getOrElse(log"")
 
-      providerIdsToUnload.foreach(id => {
-        loadedProviders.remove(id).foreach( provider => {
-          // Trigger maintenance thread to immediately do maintenance on and close the provider.
-          // Doing maintenance first allows us to do maintenance for a constantly-moving state
-          // store.
-          logInfo(log"Submitted maintenance from task thread to close " +
-            log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
-            log"Removed provider from loadedProviders")
-          submitMaintenanceWorkForProvider(id, provider, storeConf, submittedFromTaskThread = true)
+        providerIdsToUnload.foreach(id => {
+          loadedProviders.remove(id).foreach( provider => {
+            // Trigger maintenance thread to immediately do maintenance on and close the provider.
+            // Doing maintenance first allows us to do maintenance for a constantly-moving state
+            // store.
+            logInfo(log"Submitted maintenance from task thread to close " +
+              log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
+              log"Removed provider from loadedProviders")
+            submitMaintenanceWorkForProvider(
+              id, provider, storeConf, submittedFromTaskThread = true)
+          })
         })
-      })
+      }
       provider
+    }
+  }
+
+  /** Runs maintenance and then unload a state store provider */
+  def doMaintenanceAndUnload(storeProviderId: StateStoreProviderId): Unit = {
+    loadedProviders.synchronized {
+      loadedProviders.remove(storeProviderId)
+    }.foreach { provider =>
+      provider.doMaintenance()
+      provider.close()
     }
   }
 
@@ -1043,8 +1060,8 @@ object StateStore extends Logging {
    * WARNING: CAN ONLY BE CALLED FROM MAINTENANCE THREAD!
    */
   def unload(
-      storeProviderId: StateStoreProviderId,
-      alreadyRemovedProvider: Option[StateStoreProvider] = None
+    storeProviderId: StateStoreProviderId,
+    alreadyRemovedProvider: Option[StateStoreProvider] = None
   ): Unit = {
     // Get the provider to close - either the one passed in or one we remove from loadedProviders
     val providerToClose = alreadyRemovedProvider.orElse {
@@ -1110,7 +1127,7 @@ object StateStore extends Logging {
     val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
     loadedProviders.synchronized {
-      if (SparkEnv.get != null && !isMaintenanceRunning) {
+      if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
           task = { doMaintenance(storeConf) }

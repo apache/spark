@@ -17,6 +17,7 @@
 
 import json
 import os
+import threading
 import time
 import uuid
 import functools
@@ -75,7 +76,7 @@ def try_remote_intermediate_result(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            return f"{self._java_obj}.{f.__name__}"
+            return f"{str(self._java_obj)}.{f.__name__}"
         else:
             return f(self)
 
@@ -108,13 +109,18 @@ def invoke_remote_attribute_relation(
     from pyspark.ml.connect.proto import AttributeRelation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.ml.wrapper import JavaModel
 
     session = SparkSession.getActiveSession()
     assert session is not None
 
-    assert isinstance(instance._java_obj, str)
-
-    methods, obj_ref = _extract_id_methods(instance._java_obj)
+    if isinstance(instance, JavaModel):
+        assert isinstance(instance._java_obj, RemoteModelRef)
+        object_id = instance._java_obj.ref_id
+    else:
+        # model summary
+        object_id = instance._java_obj  # type: ignore
+    methods, obj_ref = _extract_id_methods(object_id)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
     plan = AttributeRelation(obj_ref, methods)
 
@@ -137,6 +143,33 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
             return f(self, *args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+class RemoteModelRef:
+    def __init__(self, ref_id: str) -> None:
+        self._ref_id = ref_id
+        self._ref_count = 1
+        self._lock = threading.Lock()
+
+    @property
+    def ref_id(self) -> str:
+        return self._ref_id
+
+    def add_ref(self) -> None:
+        with self._lock:
+            assert self._ref_count > 0
+            self._ref_count += 1
+
+    def release_ref(self) -> None:
+        with self._lock:
+            assert self._ref_count > 0
+            self._ref_count -= 1
+            if self._ref_count == 0:
+                # Delete the model if possible
+                del_remote_cache(self.ref_id)
+
+    def __str__(self) -> str:
+        return self.ref_id
 
 
 def try_remote_fit(f: FuncT) -> FuncT:
@@ -165,7 +198,8 @@ def try_remote_fit(f: FuncT) -> FuncT:
             (_, properties, _) = client.execute_command(command)
             model_info = deserialize(properties)
             client.add_ml_cache(model_info.obj_ref.id)
-            model = self._create_model(model_info.obj_ref.id)
+            remote_model_ref = RemoteModelRef(model_info.obj_ref.id)
+            model = self._create_model(remote_model_ref)
             if model.__class__.__name__ not in ["Bucketizer"]:
                 model._resetUid(self.uid)
             return self._copyValues(model)
@@ -192,11 +226,11 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
             if isinstance(self, Model):
                 from pyspark.ml.connect.proto import TransformerRelation
 
-                assert isinstance(self._java_obj, str)
+                assert isinstance(self._java_obj, RemoteModelRef)
                 params = serialize_ml_params(self, session.client)
                 plan = TransformerRelation(
                     child=dataset._plan,
-                    name=self._java_obj,
+                    name=self._java_obj.ref_id,
                     ml_params=params,
                     is_model=True,
                 )
@@ -246,11 +280,20 @@ def try_remote_call(f: FuncT) -> FuncT:
             from pyspark.sql.connect.session import SparkSession
             from pyspark.ml.connect.util import _extract_id_methods
             from pyspark.ml.connect.serialize import serialize, deserialize
+            from pyspark.ml.wrapper import JavaModel
 
             session = SparkSession.getActiveSession()
             assert session is not None
-            assert isinstance(self._java_obj, str)
-            methods, obj_ref = _extract_id_methods(self._java_obj)
+            if self._java_obj == ML_CONNECT_HELPER_ID:
+                obj_id = ML_CONNECT_HELPER_ID
+            else:
+                if isinstance(self, JavaModel):
+                    assert isinstance(self._java_obj, RemoteModelRef)
+                    obj_id = self._java_obj.ref_id
+                else:
+                    # model summary
+                    obj_id = self._java_obj  # type: ignore
+            methods, obj_ref = _extract_id_methods(obj_id)
             methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
             command = pb2.Command()
             command.ml_command.fetch.CopyFrom(
@@ -301,10 +344,8 @@ def try_remote_del(f: FuncT) -> FuncT:
         except Exception:
             return
 
-        if in_remote:
-            # Delete the model if possible
-            model_id = self._java_obj
-            del_remote_cache(cast(str, model_id))
+        if in_remote and isinstance(self._java_obj, RemoteModelRef):
+            self._java_obj.release_ref()
             return
         else:
             return f(self)

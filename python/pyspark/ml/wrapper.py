@@ -356,9 +356,15 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         if extra is None:
             extra = dict()
         that = super(JavaParams, self).copy(extra)
-        if self._java_obj is not None and not isinstance(self._java_obj, str):
-            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-            that._transfer_params_to_java()
+        if self._java_obj is not None:
+            from pyspark.ml.util import RemoteModelRef
+
+            if isinstance(self._java_obj, RemoteModelRef):
+                that._java_obj = self._java_obj
+                self._java_obj.add_ref()
+            elif not isinstance(self._java_obj, str):
+                that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+                that._transfer_params_to_java()
         return that
 
     @try_remote_intercept
@@ -452,6 +458,10 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         other ML classes).
         """
         super(JavaModel, self).__init__(java_model)
+        if is_remote() and java_model is not None:
+            from pyspark.ml.util import RemoteModelRef
+
+            assert isinstance(java_model, RemoteModelRef)
         if java_model is not None and not is_remote():
             # SPARK-10931: This is a temporary fix to allow models to own params
             # from estimators. Eventually, these params should be in models through
