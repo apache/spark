@@ -151,16 +151,14 @@ abstract class StreamExecution(
    */
   protected def sources: Seq[SparkDataStream]
 
-  /** Metadata associated with the whole query */
-  protected val streamMetadata: StreamMetadata = {
-    val metadataPath = new Path(checkpointFile("metadata"))
-    val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    StreamMetadata.read(metadataPath, hadoopConf).getOrElse {
-      val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
-      StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
-      newMetadata
-    }
-  }
+  /** Isolated spark session to run the batches with. */
+  protected val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
+
+  /**
+   * Manages the metadata from this checkpoint location.
+   */
+  protected lazy val checkpointMetadata =
+    new StreamingQueryCheckpointMetadata(sparkSessionForStream, resolvedCheckpointRoot)
 
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
@@ -172,7 +170,7 @@ abstract class StreamExecution(
    */
   protected val watermarkMsMap: MutableMap[Int, Long] = MutableMap()
 
-  override val id: UUID = UUID.fromString(streamMetadata.id)
+  override val id: UUID = UUID.fromString(checkpointMetadata.streamMetadata.id)
 
   override val runId: UUID = UUID.randomUUID
 
@@ -209,9 +207,6 @@ abstract class StreamExecution(
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
-  /** Isolated spark session to run the batches with. */
-  protected val sparkSessionForStream = sparkSession.cloneSession()
-
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
    * [[org.apache.spark.util.UninterruptibleThread]] to workaround KAFKA-1894: interrupting a
@@ -233,14 +228,14 @@ abstract class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
+  lazy val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
 
   /**
    * A log that records the batch ids that have completed. This is used to check if a batch was
    * fully processed, and its output was committed to the sink, hence no need to process it again.
    * This is used (for instance) during restart, to help identify which batch to run next.
    */
-  val commitLog = new CommitLog(sparkSession, checkpointFile("commits"))
+  lazy val commitLog: CommitLog = checkpointMetadata.commitLog
 
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING
