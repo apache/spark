@@ -409,7 +409,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
-            TypeCoercionValidation.failOnTypeCheckResult(e, operator)
+            TypeCoercionValidation.failOnTypeCheckResult(e, Some(operator))
 
           case c: Cast if !c.resolved =>
             throw SparkException.internalError(

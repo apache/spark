@@ -875,7 +875,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "expression" -> "'one'",
           "sourceType" -> "\"STRING\"",
-          "targetType" -> "\"BIGINT\""),
+          "targetType" -> "\"BIGINT\"",
+          "ansiConfig" -> f"\"${SQLConf.ANSI_ENABLED.key}\""),
         context = ExpectedContext(fragment = "", start = -1, stop = -1))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
