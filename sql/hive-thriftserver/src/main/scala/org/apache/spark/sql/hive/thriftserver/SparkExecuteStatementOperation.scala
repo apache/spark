@@ -339,7 +339,7 @@ object SparkExecuteStatementOperation {
     case LongType => TTypeId.BIGINT_TYPE
     case FloatType => TTypeId.FLOAT_TYPE
     case DoubleType => TTypeId.DOUBLE_TYPE
-    case StringType => TTypeId.STRING_TYPE
+    case _: StringType => TTypeId.STRING_TYPE
     case _: DecimalType => TTypeId.DECIMAL_TYPE
     case DateType => TTypeId.DATE_TYPE
     // TODO: Shall use TIMESTAMPLOCALTZ_TYPE, keep AS-IS now for
