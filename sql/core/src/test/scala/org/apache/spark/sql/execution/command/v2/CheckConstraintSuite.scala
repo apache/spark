@@ -21,9 +21,10 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
+import org.apache.spark.sql.internal.SQLConf
 
 class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
-  override protected def command: String = "ALTER TABLE .. ADD CONSTRAINT"
+  override protected def command: String = "Check CONSTRAINT"
 
   test("Nondeterministic expression -- alter table") {
     withTable("t") {
@@ -163,6 +164,26 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
         assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
+      }
+    }
+  }
+
+  test("Create table with check constraint: char/varchar type") {
+    Seq(true, false).foreach { preserveCharVarcharTypeInfo =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key ->
+        preserveCharVarcharTypeInfo.toString) {
+        Seq("CHAR(10)", "VARCHAR(10)").foreach { dt =>
+          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+            val constraintStr = "CONSTRAINT c1 CHECK (LENGTH(name) > 0)"
+            sql(s"CREATE TABLE $t (id bigint, name $dt, $constraintStr) $defaultUsing")
+            val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+            val constraint = getCheckConstraint(table)
+            assert(constraint.name() == "c1")
+            assert(constraint.toDDL ==
+              s"CONSTRAINT c1 CHECK (LENGTH(name) > 0) ENFORCED UNVALIDATED NORELY")
+            assert(constraint.predicateSql() == "LENGTH(name) > 0")
+          }
+        }
       }
     }
   }

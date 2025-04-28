@@ -20,7 +20,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
 
 class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
-  override protected def command: String = "ALTER TABLE .. ADD CONSTRAINT"
+  override protected def command: String = "PRIMARY KEY CONSTRAINT"
 
   private val validConstraintCharacteristics = Seq(
     ("", "NOT ENFORCED UNVALIDATED NORELY"),

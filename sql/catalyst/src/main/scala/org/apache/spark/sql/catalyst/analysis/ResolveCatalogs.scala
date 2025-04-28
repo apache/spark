@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{CharType, StringType, VarcharType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -105,7 +106,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       allowTemp: Boolean,
       columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
     val columnOutput = columns.map { col =>
-      AttributeReference(col.name, col.dataType, col.nullable, col.metadata)()
+      val dataType = col.dataType match {
+        case _: CharType | _: VarcharType if !conf.preserveCharVarcharTypeInfo =>
+          StringType
+        case _ => col.dataType
+      }
+      AttributeReference(col.name, dataType, col.nullable, col.metadata)()
     }
     if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
       val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
