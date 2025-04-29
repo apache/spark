@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, SortOrder, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
 /**
@@ -31,6 +31,7 @@ object PlanHelper {
    * - A WindowExpression but the plan is not Window
    * - An AggregateExpression but the plan is not Aggregate or Window
    * - A Generator but the plan is not Generate
+   * - A SortOrder but the plan is not Sort
    * Returns the list of invalid expressions that this operator hosts. This can happen when
    * 1. The input query from users contain invalid expressions.
    *    Example : SELECT * FROM tab WHERE max(c1) > 0
@@ -50,6 +51,8 @@ object PlanHelper {
         case e: Generator
           if !(plan.isInstanceOf[Generate] ||
                plan.isInstanceOf[BaseEvalPythonUDTF]) => e
+        case sortOrder: SortOrder if !plan.isInstanceOf[Sort] && !plan.isInstanceOf[Window] =>
+          sortOrder
       }
     }
     invalidExpressions

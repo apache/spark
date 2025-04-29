@@ -803,6 +803,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case p @ Project(projectList, _) =>
             checkForUnspecifiedWindow(projectList)
+            checkExpressionUnderUnsupportedOperator(p)
 
           case agg@Aggregate(_, aggregateExpressions, _, _) if
             PlanHelper.specialExpressionsInUnsupportedOperator(agg).isEmpty =>
@@ -912,12 +913,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "expressionList" -> invalidExprSqls.mkString(", ")))
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
-            val invalidExprSqls =
-              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
-            other.failAnalysis(
-              errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
-              messageParameters = Map(
-                "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
+            checkExpressionUnderUnsupportedOperator(other)
 
           case _ => // Analysis successful!
         }
@@ -1133,6 +1129,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       row.exists { expression =>
         expression.exists(_.isInstanceOf[ScalarSubquery])
       }
+    }
+  }
+
+  private def checkExpressionUnderUnsupportedOperator(plan: LogicalPlan): Unit = {
+    if (PlanHelper.specialExpressionsInUnsupportedOperator(plan).nonEmpty) {
+      val invalidExprSqls =
+        PlanHelper.specialExpressionsInUnsupportedOperator(plan).map(toSQLExpr)
+      plan.failAnalysis(
+        errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+        messageParameters = Map(
+          "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
     }
   }
 }
