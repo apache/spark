@@ -355,7 +355,7 @@ private[spark] object MavenUtils extends Logging {
             new File(expandedPath).getCanonicalPath()
           } catch {
             case e: IOException =>
-              logWarning(s"Could not get canonical path for expanded tilde path: $path", e)
+              logWarning(log"Could not get canonical path for expanded tilde path: ${MDC(LogKeys.PATH, path)}", e)
               System.getProperty("user.home") + subPath // Use unnormalized path as fallback
           }
         } else {
@@ -379,7 +379,7 @@ private[spark] object MavenUtils extends Logging {
       } catch {
         case e: IOException =>
           // Log warning and fall back to unnormalized path if canonical path fails
-          logWarning(s"Could not get canonical path for default Ivy path.", e)
+          logWarning(log"Could not get canonical path for default Ivy path.", e)
           System.getProperty("ivy.home",
             System.getProperty("user.home") + File.separator + ".ivy2.5.2")
       }
