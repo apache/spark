@@ -381,7 +381,7 @@ private[spark] object MavenUtils extends Logging {
           // Log warning and fall back to unnormalized path if canonical path fails
           logWarning(s"Could not get canonical path for default Ivy path.", e)
           System.getProperty("ivy.home",
-            System.getProperty("user.home") + File.separator + ".ivy2.5.2") // Use unnormalized path as fallback
+            System.getProperty("user.home") + File.separator + ".ivy2.5.2")
       }
     }
 
