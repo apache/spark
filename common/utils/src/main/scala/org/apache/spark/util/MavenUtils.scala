@@ -347,9 +347,17 @@ private[spark] object MavenUtils extends Logging {
       // Expand tilde (~) in paths
       if (path.startsWith("~")) {
         val subPath = path.drop(1)
-        // Check for ~/foo or ~\foo or just ~
-        if (subPath.isEmpty || subPath.startsWith("/") || subPath.startsWith(File.separator)) {
-          System.getProperty("user.home") + subPath
+        // Check for ~/foo, ~\foo, or just ~
+        if (subPath.isEmpty || subPath.startsWith(File.separator)) {
+          try {
+            val expandedPath = System.getProperty("user.home") + subPath
+            // Normalize the expanded path (resolves ., .., separators)
+            new File(expandedPath).getCanonicalPath()
+          } catch {
+            case e: IOException =>
+              logWarning(s"Could not get canonical path for expanded tilde path: $path", e)
+              System.getProperty("user.home") + subPath // Use unnormalized path as fallback
+          }
         } else {
           // We don't support expanding ~user/foo paths
           throw new IllegalArgumentException(
@@ -357,17 +365,27 @@ private[spark] object MavenUtils extends Logging {
             s"Only ~ or paths starting with ~/ (or ~\\) are supported.")
         }
       } else {
-        // Path doesn't start with ~, use it as is
+        // Doesn't start with ~, use it as is without normalization
+        // This avoids unintentionally changing relative paths
         path
       }
     }.getOrElse {
       // Default path if spark.jars.ivy is not set
-      // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
-      System.getProperty("ivy.home",
-        System.getProperty("user.home") + File.separator + ".ivy2.5.2")
+      try {
+        val defaultPath = System.getProperty("ivy.home",
+          System.getProperty("user.home") + File.separator + ".ivy2.5.2")
+        // Normalize the default path
+        new File(defaultPath).getCanonicalPath()
+      } catch {
+        case e: IOException =>
+          // Log warning and fall back to unnormalized path if canonical path fails
+          logWarning(s"Could not get canonical path for default Ivy path.", e)
+          System.getProperty("ivy.home",
+            System.getProperty("user.home") + File.separator + ".ivy2.5.2") // Use unnormalized path as fallback
+      }
     }
 
-    // Set the defaults using the determined (and potentially expanded) path
+    // Set the defaults using the determined (and potentially expanded/normalized) path
     ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
     ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
   }
