@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io.{File, IOException, OutputStream, PrintStream}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
