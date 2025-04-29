@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoH
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -4961,6 +4961,30 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
       parameters = Map("plan" -> "'Aggregate [groupingsets(Vector(0), posexplode(array(col)))]")
     )
+  }
+
+  test("SPARK-51016: Non-deterministic functions should set map stages indeterminate") {
+    Seq(true, false).foreach { aqeEnabled =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+        val df = sql(
+          """
+            |SELECT count(DISTINCT r)
+            |FROM (
+            |  SELECT rand() AS r FROM range(1000)
+            |)
+            |""".stripMargin)
+        df.collect()
+        val finalPlan = df.queryExecution.executedPlan
+        val mapStagePlans = collect(finalPlan) {
+          case p: Exchange => p.child
+        }
+        assert(mapStagePlans.size == 2, "there should 2 map stages in the plan")
+        assert(ShuffleExchangeExec.isDeterministicStage(mapStagePlans(0)),
+          "the second map stage should be deterministic")
+        assert(!ShuffleExchangeExec.isDeterministicStage(mapStagePlans(1)),
+          "the first map stage should be non-deterministic")
+      }
+    }
   }
 }
 

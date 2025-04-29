@@ -103,13 +103,21 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     AttributeSet(expressions) -- producedAttributes)
 
   /**
-   * Returns true when the all the expressions in the current node as well as all of its children
+   * Returns true when the current node (all the expressions in it) is deterministic.
+   */
+  def deterministicNode: Boolean = _deterministicNode()
+
+  private val _deterministicNode =
+    new BestEffortLazyVal[JBoolean](() => expressions.forall(_.deterministic))
+
+  /**
+   * Returns true when all the expressions in the current node as well as all of its children
    * are deterministic
    */
   def deterministic: Boolean = _deterministic()
 
-  private val _deterministic = new BestEffortLazyVal[JBoolean](() =>
-    expressions.forall(_.deterministic) && children.forall(_.deterministic))
+  private val _deterministic =
+    new BestEffortLazyVal[JBoolean](() => deterministicNode && children.forall(_.deterministic))
 
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.

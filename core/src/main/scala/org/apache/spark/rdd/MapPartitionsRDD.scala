@@ -35,13 +35,15 @@ import org.apache.spark.{Partition, TaskContext}
  * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
  *                         sensitive, it may return totally different result when the input order
  *                         is changed. Mostly stateful functions are order-sensitive.
+ * @param isNonDeterministic Whether the function is non-deterministic.
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
     preservesPartitioning: Boolean = false,
     isFromBarrier: Boolean = false,
-    isOrderSensitive: Boolean = false)
+    isOrderSensitive: Boolean = false,
+    isNonDeterministic: Boolean = false)
   extends RDD[U](prev) {
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
@@ -60,7 +62,8 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 
   override protected def getOutputDeterministicLevel = {
-    if (isOrderSensitive && prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
+    if (isNonDeterministic ||
+        isOrderSensitive && prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
       DeterministicLevel.INDETERMINATE
     } else {
       super.getOutputDeterministicLevel
