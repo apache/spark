@@ -528,16 +528,17 @@ class VectorIndexerModel private[ml] (
 
 @Since("1.6.0")
 object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
-  private case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
 
   private[VectorIndexerModel]
   class VectorIndexerModelWriter(instance: VectorIndexerModel) extends MLWriter {
+
+    private case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.numFeatures, instance.categoryMaps)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -548,8 +549,12 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
     override def load(path: String): VectorIndexerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
-      val model = new VectorIndexerModel(metadata.uid, data.numFeatures, data.categoryMaps)
+      val data = sparkSession.read.parquet(dataPath)
+        .select("numFeatures", "categoryMaps")
+        .head()
+      val numFeatures = data.getAs[Int](0)
+      val categoryMaps = data.getAs[Map[Int, Map[Double, Int]]](1)
+      val model = new VectorIndexerModel(metadata.uid, numFeatures, categoryMaps)
       metadata.getAndSetParams(model)
       model
     }

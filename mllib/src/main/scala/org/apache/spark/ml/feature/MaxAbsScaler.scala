@@ -158,16 +158,17 @@ class MaxAbsScalerModel private[ml] (
 
 @Since("2.0.0")
 object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
-  private case class Data(maxAbs: Vector)
 
   private[MaxAbsScalerModel]
   class MaxAbsScalerModelWriter(instance: MaxAbsScalerModel) extends MLWriter {
+
+    private case class Data(maxAbs: Vector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = new Data(instance.maxAbs)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -178,8 +179,10 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
     override def load(path: String): MaxAbsScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
-      val model = new MaxAbsScalerModel(metadata.uid, data.maxAbs)
+      val Row(maxAbs: Vector) = sparkSession.read.parquet(dataPath)
+        .select("maxAbs")
+        .head()
+      val model = new MaxAbsScalerModel(metadata.uid, maxAbs)
       metadata.getAndSetParams(model)
       model
     }

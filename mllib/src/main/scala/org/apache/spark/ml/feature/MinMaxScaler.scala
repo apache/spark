@@ -26,6 +26,7 @@ import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -242,16 +243,17 @@ class MinMaxScalerModel private[ml] (
 
 @Since("1.6.0")
 object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
-  private case class Data(originalMin: Vector, originalMax: Vector)
 
   private[MinMaxScalerModel]
   class MinMaxScalerModelWriter(instance: MinMaxScalerModel) extends MLWriter {
 
+    private case class Data(originalMin: Vector, originalMax: Vector)
+
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
-      val data = Data(instance.originalMin, instance.originalMax)
+      val data = new Data(instance.originalMin, instance.originalMax)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -262,8 +264,12 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
     override def load(path: String): MinMaxScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
-      val model = new MinMaxScalerModel(metadata.uid, data.originalMin, data.originalMax)
+      val data = sparkSession.read.parquet(dataPath)
+      val Row(originalMin: Vector, originalMax: Vector) =
+        MLUtils.convertVectorColumnsToML(data, "originalMin", "originalMax")
+          .select("originalMin", "originalMax")
+          .head()
+      val model = new MinMaxScalerModel(metadata.uid, originalMin, originalMax)
       metadata.getAndSetParams(model)
       model
     }
