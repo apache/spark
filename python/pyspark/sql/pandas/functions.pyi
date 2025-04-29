@@ -60,12 +60,6 @@ def arrow_udf(
 ) -> UserDefinedFunctionLike: ...
 @overload
 def arrow_udf(
-    f: ArrowScalarToScalarFunction,
-    returnType: DataTypeOrString,
-    functionType: ArrowScalarUDFType,
-) -> UserDefinedFunctionLike: ...
-@overload
-def arrow_udf(
     f: DataTypeOrString, returnType: ArrowScalarUDFType
 ) -> Callable[[ArrowScalarToScalarFunction], UserDefinedFunctionLike]: ...
 @overload
