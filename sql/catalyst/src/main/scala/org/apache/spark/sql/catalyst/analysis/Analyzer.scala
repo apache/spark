@@ -3997,19 +3997,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         c.markAsAnalyzed(AnalysisContext.get)
       case c: KeepAnalyzedQuery if c.resolved =>
         c.storeAnalyzedQuery()
-      case c: CreateTable if c.resolved =>
-        c.copy(columns = storeAnalyzedDefaultValues(c.columns))
-      case r: ReplaceTable if r.resolved =>
-        r.copy(columns = storeAnalyzedDefaultValues(r.columns))
-    }
-
-    private def storeAnalyzedDefaultValues(cols: Seq[ColumnDefinition]): Seq[ColumnDefinition] = {
-      cols.map { col =>
-        val analyzedDefaultValue = col.defaultValue.map { defaultValue =>
-          defaultValue.copy(analyzedChild = Some(defaultValue.child))
+      case p: LogicalPlan if p.resolved =>
+        p.transformAllExpressionsWithPruning(_.containsPattern(ANALYSIS_AWARE_EXPRESSION)) {
+          case e: AnalysisAwareExpression[_] => e.markAsAnalyzed()
         }
-        col.copy(defaultValue = analyzedDefaultValue)
-      }
     }
   }
 }

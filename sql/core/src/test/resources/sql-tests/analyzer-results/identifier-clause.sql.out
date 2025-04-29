@@ -567,7 +567,7 @@ DropFunctionCommand myDoubleAvg, false, true
 -- !query
 DECLARE var = 'sometable'
 -- !query analysis
-CreateVariable defaultvalueexpression(sometable, 'sometable', None), false
+CreateVariable defaultvalueexpression(sometable, 'sometable'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var
 
 
@@ -988,21 +988,21 @@ DropTable false, false
 -- !query
 DECLARE agg = 'max'
 -- !query analysis
-CreateVariable defaultvalueexpression(max, 'max', None), false
+CreateVariable defaultvalueexpression(max, 'max'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.agg
 
 
 -- !query
 DECLARE col = 'c1'
 -- !query analysis
-CreateVariable defaultvalueexpression(c1, 'c1', None), false
+CreateVariable defaultvalueexpression(c1, 'c1'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.col
 
 
 -- !query
 DECLARE tab = 'T'
 -- !query analysis
-CreateVariable defaultvalueexpression(T, 'T', None), false
+CreateVariable defaultvalueexpression(T, 'T'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.tab
 
 
