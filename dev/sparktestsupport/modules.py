@@ -329,18 +329,6 @@ protobuf = Module(
     ],
 )
 
-connect = Module(
-    name="connect",
-    dependencies=[hive, avro, protobuf],
-    source_file_regexes=[
-        "sql/connect",
-    ],
-    sbt_test_goals=[
-        "connect/test",
-        "connect-client-jvm/test",
-    ],
-)
-
 graphx = Module(
     name="graphx",
     dependencies=[tags, core],
@@ -420,6 +408,17 @@ mllib = Module(
     ],
 )
 
+connect = Module(
+    name="connect",
+    dependencies=[hive, avro, protobuf, mllib],
+    source_file_regexes=[
+        "sql/connect",
+    ],
+    sbt_test_goals=[
+        "connect/test",
+        "connect-client-jvm/test",
+    ],
+)
 
 examples = Module(
     name="examples",
