@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, InterpretedMutableProjection, Literal}
+import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation.hasUnevaluableExpr
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
@@ -115,7 +116,7 @@ case class UnionLoopExec(
       case l: LocalRelation =>
         (df, l.data.length.toLong)
       case Project(projectList, _: OneRowRelation) =>
-        if (localRelationLimit != 0) {
+        if (localRelationLimit != 0 && !projectList.exists(hasUnevaluableExpr)) {
           val projection = new InterpretedMutableProjection(projectList, Nil)
           projection.initialize(0)
           val local = LocalRelation(projectList.map(_.toAttribute),
