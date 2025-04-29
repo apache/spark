@@ -227,8 +227,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
         isSameName(v2Ident.toQualifiedNameParts(catalog))
 
-      case View(catalogTable, _, _) =>
-        isSameName(catalogTable.identifier.nameParts)
+      case v: View =>
+        isSameName(v.desc.identifier.nameParts)
 
       case HiveTableRelation(catalogTable, _, _, _, _) =>
         isSameName(catalogTable.identifier.nameParts)
