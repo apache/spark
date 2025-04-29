@@ -635,6 +635,7 @@ case class SubtractTimes(left: Expression, right: Expression)
 }
 
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(unit, expr) - Returns a TIME value representing `expr` truncated to the specified time unit.
@@ -657,6 +658,7 @@ case class SubtractTimes(left: Expression, right: Expression)
   """,
   since = "4.1.0",
   group = "datetime_funcs")
+// scalastyle:on line.size.limit
 case class TruncateTime(unit: Expression, timeExpr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with RuntimeReplaceable {
 
