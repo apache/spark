@@ -636,7 +636,7 @@ class TransformWithStateInPandasStateServer(
       stateName: String,
       schemaString: String,
       stateType: StateVariableType.StateVariableType,
-      ttlDurationMs: Option[Int],
+      ttlDurationMs: Option[Long],
       mapStateValueSchemaString: String = null): Unit = {
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()

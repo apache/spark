@@ -249,5 +249,5 @@ message SetHandleState {
 }
 
 message TTLConfig {
-  int32 durationMs = 1;
+  int64 durationMs = 1;
 }
