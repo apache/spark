@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, InterpretedMutableProjection, Literal}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
@@ -114,9 +114,12 @@ case class UnionLoopExec(
     df.queryExecution.optimizedPlan match {
       case l: LocalRelation =>
         (df, l.data.length.toLong)
-      case Project(_, _: OneRowRelation) =>
+      case Project(projectList, _: OneRowRelation) =>
         if (localRelationLimit != 0) {
-          val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
+          val projection = new InterpretedMutableProjection(projectList, Nil)
+          projection.initialize(0)
+          val local = LocalRelation(projectList.map(_.toAttribute),
+            Seq(projection(InternalRow.empty)))
           (Dataset.ofRows(session, local), 1.toLong)
         } else {
           (df, 1.toLong)
