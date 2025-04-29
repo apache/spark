@@ -48,14 +48,19 @@ class ArrowUDFType:
 
 
 def arrow_udf(f=None, returnType=None, functionType=None):
-    return vectorized_udf(f, returnType, functionType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
+    return vectorized_udf(f, returnType, functionType, "arrow")
 
 
 def pandas_udf(f=None, returnType=None, functionType=None):
-    return vectorized_udf(f, returnType, functionType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+    return vectorized_udf(f, returnType, functionType, "pandas")
 
 
-def vectorized_udf(f=None, returnType=None, functionType=None, defaultEvalType=None):
+def vectorized_udf(
+    f=None,
+    returnType=None,
+    functionType=None,
+    kind: str = "pandas",
+):
     """
     Creates a vectorized user defined function.
 
@@ -386,6 +391,8 @@ def vectorized_udf(f=None, returnType=None, functionType=None, defaultEvalType=N
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 
+    assert kind in ["pandas", "arrow"], "kind should be either 'pandas' or 'arrow'"
+
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
 
@@ -418,9 +425,8 @@ def vectorized_udf(f=None, returnType=None, functionType=None, defaultEvalType=N
             messageParameters={"arg_name": "returnType"},
         )
 
-    if eval_type not in [
+    if kind == "pandas" and eval_type not in [
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -443,25 +449,38 @@ def vectorized_udf(f=None, returnType=None, functionType=None, defaultEvalType=N
                 "arg_type": str(eval_type),
             },
         )
+    if kind == "arrow" and eval_type not in [
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        None,
+    ]:  # None means it should infer the type from type hints.
+        raise PySparkTypeError(
+            errorClass="INVALID_PANDAS_UDF_TYPE",
+            messageParameters={
+                "arg_name": "functionType",
+                "arg_type": str(eval_type),
+            },
+        )
 
     if is_decorator:
         return functools.partial(
             _create_vectorized_udf,
             returnType=return_type,
             evalType=eval_type,
-            defaultEvalType=defaultEvalType,
+            kind=kind,
         )
     else:
         return _create_vectorized_udf(
             f=f,
             returnType=return_type,
             evalType=eval_type,
-            defaultEvalType=defaultEvalType,
+            kind=kind,
         )
 
 
 # validate the pandas udf and return the adjusted eval type
-def _validate_vectorized_udf(f, evalType, defaultEvalType) -> int:
+def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
+    assert kind in ["pandas", "arrow"], "kind should be either 'pandas' or 'arrow'"
+
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
@@ -507,10 +526,10 @@ def _validate_vectorized_udf(f, evalType, defaultEvalType) -> int:
 
     if evalType is None:
         # Set default is scalar UDF.
-        if defaultEvalType is None:
+        if kind == "pandas":
             evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
         else:
-            evalType = defaultEvalType
+            evalType = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
     if (
         (
@@ -569,8 +588,8 @@ def _validate_vectorized_udf(f, evalType, defaultEvalType) -> int:
     return evalType
 
 
-def _create_vectorized_udf(f, returnType, evalType, defaultEvalType):
-    evalType = _validate_vectorized_udf(f, evalType, defaultEvalType)
+def _create_vectorized_udf(f, returnType, evalType, kind):
+    evalType = _validate_vectorized_udf(f, evalType, kind)
 
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
