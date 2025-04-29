@@ -2394,6 +2394,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       outerReferencesInSubquery.filter(
         _ match {
           case a: AttributeReference => !p.inputSet.contains(a)
+          case outer: AggregateExpression =>
+            // For resolveSubquery, we only check if the references of the aggregate expression
+            // can be resolved in the p.inputSet as p might be changed after resolveAggregate.
+            // Currently we only allow subqueries in the Having clause
+            // to have aggregate expressions as outer references.
+            // So if p does not have Aggregate or the output of Aggregate does not have
+            // this outer reference, UpdateOuterReference won't trigger and we throw
+            // UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE.
+            !p.exists{
+              case plan: LogicalPlan if outer.references.subsetOf(plan.inputSet) => true
+              case _ => false
+            }
           case _ => false
         }
       )
@@ -2903,7 +2915,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       expression.transformUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
         case sub: SubqueryExpression if sub.getOuterScopeAttrs.nonEmpty =>
           val newOuterScopeAttrs =
-            sub.getOuterScopeAttrs.filter( outerExpr => outerExpr match {
+            sub.getOuterAttrs.filter( outerExpr => outerExpr match {
               case a: AttributeReference => !aggregate.outputSet.contains(a)
               case _ => true
             })
@@ -4253,7 +4265,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
   private def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
       refExprs: Seq[Expression]): LogicalPlan = {
-    plan resolveExpressions { case e =>
+    val newPlan = plan resolveExpressions { case e =>
       val outerAlias =
         refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
       outerAlias match {
@@ -4261,12 +4273,30 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
         case _ => e
       }
     }
+    // The above step might modify the outerAttrs
+    // in any SubqueryExpressions in the plan.
+    // We need to make sure the outerAttrs and the outerScopeAttrs are aligned and
+    // don't contain any outer wrappers.
+    newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+      case s: SubqueryExpression if s.getOuterAttrs.exists(containsOuter) =>
+        val newOuterScopeAttrs = s.getOuterScopeAttrs.map { e =>
+          val outerAlias =
+            refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
+          outerAlias match {
+            case Some(a: Alias) => a.toAttribute
+            case _ => e
+          }
+        }
+        val newOuterAttrs = s.getOuterAttrs.map(stripOuterReference)
+        s.withNewOuterAttrs(newOuterAttrs).withNewOuterScopeAttrs(newOuterScopeAttrs)
+    }
   }
 
   def updateOuterReferenceInAllSubqueries(
       s: SubqueryExpression, outerAliases: Seq[Alias]): SubqueryExpression = {
+    val subPlan = s.plan
     val planWithNestedSubqueriesRewritten =
-      s.plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
+      subPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
         // Only update the nested subqueries if they have outer scope references
         // And we don't collect new outerAliases along s.plan because this rule
         // will be fired multiple times for each subquery plan in the Analyzer,
@@ -4274,7 +4304,8 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
         case s: SubqueryExpression if s.getOuterScopeAttrs.nonEmpty =>
           updateOuterReferenceInAllSubqueries(s, outerAliases)
       }
-    val newPlan = updateOuterReferenceInSubquery(planWithNestedSubqueriesRewritten, outerAliases)
+    val newPlan =
+      updateOuterReferenceInSubquery(planWithNestedSubqueriesRewritten, outerAliases)
     s.withNewPlan(newPlan)
   }
 
