@@ -22,6 +22,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -1186,12 +1187,22 @@ object StateStore extends Logging {
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
     }
-    unloadedProvidersToClose.forEach { case (providerId, provider) =>
-      // If we are removing from the queue, we know that this provider has already been
-      // removed from loadedProviders.
-      submitMaintenanceWorkForProvider(
-        providerId, provider, storeConf, MaintenanceTaskType.FromMaintenanceQueue)
+
+    // Providers that couldn't be processed now and need to be added back to the queue
+    val providersToRequeue = new ArrayBuffer[(StateStoreProviderId, StateStoreProvider)]()
+
+    while (!unloadedProvidersToClose.isEmpty) {
+      val (providerId, provider) = unloadedProvidersToClose.poll()
+
+      if (processThisPartition(providerId)) {
+        submitMaintenanceWorkForProvider(
+          providerId, provider, storeConf, MaintenanceTaskType.FromMaintenanceQueue)
+      } else {
+        providersToRequeue += (providerId, provider)
+      }
     }
+
+    providersToRequeue.foreach(unloadedProvidersToClose.offer)
 
     loadedProviders.synchronized {
       loadedProviders.toSeq
