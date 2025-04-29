@@ -355,7 +355,9 @@ private[spark] object MavenUtils extends Logging {
             new File(expandedPath).getCanonicalPath()
           } catch {
             case e: IOException =>
-              logWarning(log"Could not get canonical path for expanded tilde path: ${MDC(LogKeys.PATH, path)}", e)
+              logWarning(
+                log"Could not get canonical path for expanded tilde path: ${MDC(LogKeys.PATH, path)}", 
+                e)
               System.getProperty("user.home") + subPath // Use unnormalized path as fallback
           }
         } else {
