@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.SqlScriptingLocalVariableManager
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
+import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{CharType, StringType, VarcharType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -106,10 +106,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       allowTemp: Boolean,
       columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
     val columnOutput = columns.map { col =>
-      val dataType = col.dataType match {
-        case _: CharType | _: VarcharType if !conf.preserveCharVarcharTypeInfo =>
-          StringType
-        case _ => col.dataType
+      val dataType = if (conf.preserveCharVarcharTypeInfo) {
+        col.dataType
+      } else {
+        replaceCharVarcharWithString(col.dataType)
       }
       AttributeReference(col.name, dataType, col.nullable, col.metadata)()
     }
