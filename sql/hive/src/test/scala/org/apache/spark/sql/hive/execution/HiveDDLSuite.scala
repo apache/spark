@@ -3383,8 +3383,6 @@ class HiveDDLSuite
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE t (col int, b TIMESTAMP_NTZ) USING PARQUET PARTITIONED BY (col)")
       }
-      // scalastyle:off
-      println(e)
       checkError(
         exception = e,
         condition = "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED",
