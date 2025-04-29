@@ -330,13 +330,13 @@ class MavenUtilsSuite
     val expectedTildePath = getNormalizedPath(s"$homeDir${fs}.myIvy")
     MavenUtils.processIvyPathArg(settingsTilde, Some(inputTilde))
     assert(settingsTilde.getDefaultIvyUserDir.getPath === expectedTildePath)
-    assert(settingsTilde.getDefaultCache.getPath === s"$expectedTildePath${fs}cache") // Check cache
+    assert(settingsTilde.getDefaultCache.getPath === s"$expectedTildePath${fs}cache")
 
     // --- Test with tilde alone ---
     val settingsTildeAlone = new IvySettings()
     MavenUtils.processIvyPathArg(settingsTildeAlone, Some("~"))
     assert(settingsTildeAlone.getDefaultIvyUserDir.getPath === normalizedHomeDir)
-    assert(settingsTildeAlone.getDefaultCache.getPath === s"$normalizedHomeDir${fs}cache") // Check cache
+    assert(settingsTildeAlone.getDefaultCache.getPath === s"$normalizedHomeDir${fs}cache")
 
     // --- Test with absolute path ---
     val settingsAbsolute = new IvySettings()
@@ -344,7 +344,7 @@ class MavenUtilsSuite
     MavenUtils.processIvyPathArg(settingsAbsolute, Some(inputAbsolute))
     // Absolute paths provided by user are NOT normalized by our code
     assert(settingsAbsolute.getDefaultIvyUserDir.getPath === inputAbsolute)
-    assert(settingsAbsolute.getDefaultCache.getPath === s"$inputAbsolute${fs}cache") // Check cache
+    assert(settingsAbsolute.getDefaultCache.getPath === s"$inputAbsolute${fs}cache")
 
     // --- Test with relative path ---
     val settingsRelative = new IvySettings()
@@ -353,20 +353,20 @@ class MavenUtilsSuite
     // Relative paths provided by user are NOT normalized by our code
     assert(settingsRelative.getDefaultIvyUserDir.getPath === inputRelative)
     // Note: Cache path will be relative too!
-    assert(settingsRelative.getDefaultCache.getPath === s"$inputRelative${fs}cache") // Check cache
+    assert(settingsRelative.getDefaultCache.getPath === s"$inputRelative${fs}cache")
 
     // --- Test with default (None) ---
     val settingsDefaultNone = new IvySettings()
     val expectedDefaultPath = getNormalizedPath(s"$homeDir${fs}.ivy2.5.2")
     MavenUtils.processIvyPathArg(settingsDefaultNone, None) // Use None
     assert(settingsDefaultNone.getDefaultIvyUserDir.getPath === expectedDefaultPath)
-    assert(settingsDefaultNone.getDefaultCache.getPath === s"$expectedDefaultPath${fs}cache") // Check cache
+    assert(settingsDefaultNone.getDefaultCache.getPath === s"$expectedDefaultPath${fs}cache")
 
     // --- Test with default (Empty String) ---
     val settingsDefaultEmpty = new IvySettings()
     MavenUtils.processIvyPathArg(settingsDefaultEmpty, Some("")) // Use ""
     assert(settingsDefaultEmpty.getDefaultIvyUserDir.getPath === expectedDefaultPath)
-    assert(settingsDefaultEmpty.getDefaultCache.getPath === s"$expectedDefaultPath${fs}cache") // Check cache
+    assert(settingsDefaultEmpty.getDefaultCache.getPath === s"$expectedDefaultPath${fs}cache")
   }
 
   test("SPARK-XXXX: processIvyPathArg rejects user-specific home directory expansion") {
