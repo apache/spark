@@ -1659,7 +1659,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
 
           // Verify that you can remove the store and still reload and use it
-          StateStore.unload(storeId)
+          StateStore.removeFromLoadedProvidersAndClose(storeId)
           assert(!StateStore.isLoaded(storeId))
 
           val store1reloaded = StateStore.get(

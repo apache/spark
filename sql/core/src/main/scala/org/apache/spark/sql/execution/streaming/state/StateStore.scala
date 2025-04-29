@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
+import org.apache.spark.sql.execution.streaming.state.MaintenanceTaskType._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
@@ -51,6 +52,14 @@ sealed trait StateStoreEncoding {
 object StateStoreEncoding {
   case object UnsafeRow extends StateStoreEncoding
   case object Avro extends StateStoreEncoding
+}
+
+sealed trait MaintenanceTaskType
+
+object MaintenanceTaskType {
+  case object FromMaintenanceQueue extends MaintenanceTaskType
+  case object FromTaskThread extends MaintenanceTaskType
+  case object FromLoadedProviders extends MaintenanceTaskType
 }
 
 /**
@@ -827,7 +836,6 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
   }
 }
 
-
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
  * by their unique ids. In addition, when a SparkContext is active (i.e. SparkEnv.get is not null),
@@ -847,7 +855,7 @@ object StateStore extends Logging {
 
   private val maintenanceThreadPoolLock = new Object
 
-  private val partitionsForMaintenance =
+  private val unloadedProvidersToClose =
     new ConcurrentLinkedQueue[(StateStoreProviderId, StateStoreProvider)]
 
   // This set is to keep track of the partitions that are queued
@@ -1033,7 +1041,7 @@ object StateStore extends Logging {
               log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
               log"Removed provider from loadedProviders")
             submitMaintenanceWorkForProvider(
-              id, provider, storeConf, alreadyRemovedFromLoadedProviders = true)
+              id, provider, storeConf, MaintenanceTaskType.FromTaskThread)
           })
         })
       }
@@ -1062,8 +1070,7 @@ object StateStore extends Logging {
    */
   def removeFromLoadedProvidersAndClose(
       storeProviderId: StateStoreProviderId,
-      alreadyRemovedProvider: Option[StateStoreProvider] = None
-  ): Unit = {
+      alreadyRemovedProvider: Option[StateStoreProvider] = None): Unit = {
     // Get the provider to close - either the one passed in or one we remove from loadedProviders
     val providerToClose = alreadyRemovedProvider.orElse {
       loadedProviders.synchronized {
@@ -1073,15 +1080,6 @@ object StateStore extends Logging {
 
     // Close the provider if we found one
     providerToClose.foreach(_.close())
-  }
-
-  private def closeProvider(
-      storeProviderId: StateStoreProviderId,
-      removedProvider: Option[StateStoreProvider]): Unit = {
-    loadedProviders.synchronized {
-      assert(!loadedProviders.contains(storeProviderId))
-    }
-    removedProvider.foreach(_.close())
   }
 
   /** Unload all state store providers: unit test purpose */
@@ -1171,7 +1169,7 @@ object StateStore extends Logging {
     var canProcessThisPartition = processThisPartition(id)
     while (!canProcessThisPartition && System.currentTimeMillis() < endTime) {
       canProcessThisPartition = processThisPartition(id)
-      Thread.sleep(5000)
+      maintenanceThreadPoolLock.wait(timeoutMs)
     }
 
     canProcessThisPartition
@@ -1188,18 +1186,19 @@ object StateStore extends Logging {
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
     }
-    partitionsForMaintenance.forEach { case (providerId, provider) =>
+    unloadedProvidersToClose.forEach { case (providerId, provider) =>
       // If we are removing from the queue, we know that this provider has already been
       // removed from loadedProviders.
       submitMaintenanceWorkForProvider(
-        providerId, provider, storeConf, alreadyRemovedFromLoadedProviders = true)
+        providerId, provider, storeConf, MaintenanceTaskType.FromMaintenanceQueue)
     }
 
     loadedProviders.synchronized {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
       if (processThisPartition(id)) {
-        submitMaintenanceWorkForProvider(id, provider, storeConf)
+        submitMaintenanceWorkForProvider(
+          id, provider, storeConf, MaintenanceTaskType.FromLoadedProviders)
       } else {
         logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
           log"for maintenance because it is currently " +
@@ -1213,47 +1212,56 @@ object StateStore extends Logging {
    *
    * @param id The StateStore provider ID to perform maintenance on
    * @param provider The StateStore provider instance
-   * @param alreadyRemovedFromLoadedProviders If true, provider was already removed from
-   *                                loadedProviders. If false, we must already
-   *                                have acquired the lock to process this partition.
    */
   private def submitMaintenanceWorkForProvider(
       id: StateStoreProviderId,
       provider: StateStoreProvider,
       storeConf: StateStoreConf,
-      alreadyRemovedFromLoadedProviders: Boolean = false): Unit = {
+      source: MaintenanceTaskType = FromLoadedProviders): Unit = {
     maintenanceThreadPool.execute(() => {
       val startTime = System.currentTimeMillis()
-      val canProcessThisPartition = if (alreadyRemovedFromLoadedProviders) {
-        // If provider is already removed from loadedProviders (which can happen when a task thread
-        // triggers unloading of an old provider), we MUST process this partition to
-        // close it properly.
-        // We block here until we can acquire the lock for this partition, waiting for any
-        // possible ongoing maintenance on this partition to complete first.
-        val timeoutMs = storeConf.stateStoreMaintenanceProcessingTimeout * 1000
-        val ableToProcessNow = awaitProcessThisPartition(id, timeoutMs)
-        if (!ableToProcessNow) {
-          // The provider has been added to the providersToClose queue in awaitProcessThisPartition
-          // so we can return early
-          partitionsForMaintenance.add((id, provider))
-        }
-        ableToProcessNow
-      } else {
-        true
+      // Determine if we can process this partition based on the source
+      val canProcessThisPartition = source match {
+        case FromTaskThread =>
+          // Provider from task thread needs to wait for lock
+          val timeoutMs = storeConf.stateStoreMaintenanceProcessingTimeout * 1000
+          val ableToProcessNow = awaitProcessThisPartition(id, timeoutMs)
+          if (!ableToProcessNow) {
+            // Add to queue for later processing if we can't process now
+            unloadedProvidersToClose.add((id, provider))
+          }
+          ableToProcessNow
+
+        case FromMaintenanceQueue =>
+          // Provider from queue can be processed immediately
+          // (we've already removed it from loadedProviders)
+          true
+
+        case FromLoadedProviders =>
+          // Provider from loadedProviders can be processed if we can acquire the lock
+          processThisPartition(id)
       }
 
       if (canProcessThisPartition) {
         val awaitingPartitionDuration = System.currentTimeMillis() - startTime
         try {
           provider.doMaintenance()
-          // If alreadyClosed is false, we don't need to verify
-          // with the coordinator as we know it definitely should be unloaded.
-          if (alreadyRemovedFromLoadedProviders) {
-            closeProvider(id, Some(provider))
-          } else if (!verifyIfStoreInstanceActive(id)) {
-            removeFromLoadedProvidersAndClose(id)
+          // Handle unloading based on source
+          source match {
+            case FromTaskThread | FromMaintenanceQueue =>
+              // Provider already removed from loadedProviders, just close it
+              provider.close()
+
+            case FromLoadedProviders =>
+              // Check if provider should be unloaded
+              if (!verifyIfStoreInstanceActive(id)) {
+                removeFromLoadedProvidersAndClose(id)
+              }
           }
-          logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
+
+          if (source != FromLoadedProviders) {
+            logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
+          }
         } catch {
           case NonFatal(e) =>
             logWarning(log"Error ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
@@ -1270,10 +1278,12 @@ object StateStore extends Logging {
             // are rare. The benefit to unloading just the partition with an exception is that
             // transient issues on a given provider do not affect any other providers; so, in
             // most cases, this should be a more performant solution.
-            if (alreadyRemovedFromLoadedProviders) {
-              closeProvider(id, Some(provider))
-            } else {
-              removeFromLoadedProvidersAndClose(id)
+            source match {
+              case FromTaskThread | FromMaintenanceQueue =>
+                provider.close()
+
+              case FromLoadedProviders =>
+                removeFromLoadedProvidersAndClose(id)
             }
         } finally {
           val duration = System.currentTimeMillis() - startTime
@@ -1290,6 +1300,7 @@ object StateStore extends Logging {
           }
           maintenanceThreadPoolLock.synchronized {
             maintenancePartitions.remove(id)
+            maintenanceThreadPoolLock.notifyAll()
           }
         }
       }
