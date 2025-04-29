@@ -1009,9 +1009,62 @@ object RewriteLateralSubquery extends Rule[LogicalPlan] {
 }
 
 /**
+ * Recalculate outerAttrs and outerScopeAttrs in SubqueryExpressions.
+ */
+object RecalculateOuterAttrsAndOuterScopeAttrs extends Rule[LogicalPlan] {
+  /**
+   * Returns the outer scope attributes referenced in the subquery expressions
+   *  in current plan and the children of the current plan.
+   */
+  private def getOuterAttrsNeedToBePropagated(plan: LogicalPlan): Seq[Expression] = {
+    plan.expressions.flatMap {
+      case subExpr: SubqueryExpression => subExpr.getOuterScopeAttrs
+      case in: InSubquery => in.query.getOuterScopeAttrs
+      case expr if expr.containsPattern(PLAN_EXPRESSION) =>
+        expr.collect {
+          case subExpr: SubqueryExpression => subExpr.getOuterScopeAttrs
+        }.flatten
+      case _ => Seq.empty
+    } ++ plan.children.flatMap{
+      case p if p.containsPattern(PLAN_EXPRESSION) =>
+        getOuterAttrsNeedToBePropagated(p)
+      case _ => Seq.empty
+    }
+  }
+
+  private def getNestedOuterReferences(
+    outerAttrs: Seq[Expression], p: LogicalPlan
+  ): Seq[Expression] = {
+    outerAttrs.filter {
+      _ match {
+        case a: AttributeReference => !p.inputSet.contains(a)
+        case n: NamedExpression => !p.inputSet.contains(n.toAttribute)
+        case _ => false
+      }
+    }
+  }
+
+  def apply0(plan: LogicalPlan): LogicalPlan = plan.transformExpressions {
+    case s: SubqueryExpression if s.children.nonEmpty && s.getJoinCond.isEmpty =>
+      val newSubPlan = apply(s.plan)
+      val allOuterAttrs = getOuterReferences(newSubPlan) ++
+        getOuterAttrsNeedToBePropagated(newSubPlan)
+      val nestedOuterAttrs = getNestedOuterReferences(allOuterAttrs, plan)
+      s.withNewOuterAttrs(allOuterAttrs).withNewOuterScopeAttrs(nestedOuterAttrs)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+    case p: LogicalPlan if p.expressions.exists(SubqueryExpression.hasCorrelatedSubquery) =>
+      apply0(p)
+  }
+}
+
+/**
  * This rule optimizes subqueries with OneRowRelation as leaf nodes.
  */
 object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
+
+  var needToRecalculateOuterScopeAttrs = false
 
   object OneRowSubquery {
     def unapply(plan: LogicalPlan): Option[UnaryNode] = {
@@ -1060,10 +1113,18 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
-      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _, _, _)
+      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), outerAttrs, outerScopeAttrs, _, _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(p.projectList.size == 1)
-        stripOuterReferences(p.projectList).head
+        needToRecalculateOuterScopeAttrs = true
+        val originalOutput = p.projectList.head
+        // If the outer reference is a outerScopeAttr, even if current subquery
+        // is eliminated to one or multiple expressions, we can't strip its outer references.
+        // After the rule is applied, the outerAttrs and the outerScopeAttrs need to be reevaluated.
+        originalOutput.transform {
+          case OuterReference(a) if !outerScopeAttrs.contains(a) =>
+            a
+        }
     }
   }
 
@@ -1071,7 +1132,13 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
     if (!conf.getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY)) {
       plan
     } else {
-      rewrite(plan)
+      needToRecalculateOuterScopeAttrs = false
+      val newPlan = rewrite(plan)
+      if (needToRecalculateOuterScopeAttrs) {
+        RecalculateOuterAttrsAndOuterScopeAttrs(newPlan)
+      } else {
+        newPlan
+      }
     }
   }
 }

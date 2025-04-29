@@ -594,31 +594,23 @@ NULL	NULL
 -- !query
 SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1, (SELECT (SELECT 42+i1.i) AS k) s2) AS j FROM table_integers i1 ORDER BY i
 -- !query schema
-struct<>
+struct<i:int,j:int>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Couldn't find i#x in []"
-  }
-}
+NULL	NULL
+1	86
+2	88
+3	90
 
 
 -- !query
 SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1 LEFT OUTER JOIN (SELECT (SELECT 42+i1.i) AS k) s2 ON s1.k=s2.k) AS j FROM table_integers i1 ORDER BY i
 -- !query schema
-struct<>
+struct<i:int,j:int>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Couldn't find i#x in []"
-  }
-}
+NULL	NULL
+1	86
+2	88
+3	90
 
 
 -- !query

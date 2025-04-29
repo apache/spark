@@ -2989,13 +2989,12 @@ class SubquerySuite extends QueryTest
   test("postgresql test") {
     val query =
       """
-        |select ten, sum(distinct four) filter (where four > 10) from onek a
-        |group by ten
-        |having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+        |SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1,
+        | (SELECT (SELECT 42+i1.i) AS k) s2) AS j FROM table_integers i1 ORDER BY i;
         |""".stripMargin
-    sql("create table if not exists onek(ten int, four int);")
-    sql("insert into onek values (1, 5), (1, 15), (2, 20), (2, 25), (3, 30);")
-    withTable("onek") {
+    sql("CREATE TABLE table_integers(i INTEGER);")
+    sql("INSERT INTO table_integers VALUES (1), (2), (3), (NULL);")
+    withTable("table_integers") {
       withSQLConf(
         "spark.sql.planChangeLog.level" -> "info",
         "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
