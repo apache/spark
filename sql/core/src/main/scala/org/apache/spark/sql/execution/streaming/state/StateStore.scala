@@ -1162,9 +1162,9 @@ object StateStore extends Logging {
   // Wait until this partition can be processed
   private def awaitProcessThisPartition(
       id: StateStoreProviderId,
-      timeoutMs: Long
-  ): Boolean = maintenanceThreadPoolLock synchronized  {
-    val endTime = System.currentTimeMillis() + timeoutMs
+      timeoutMs: Long): Boolean = maintenanceThreadPoolLock synchronized  {
+    val startTime = System.currentTimeMillis()
+    val endTime = startTime + timeoutMs
 
     // If immediate processing fails, wait with timeout
     var canProcessThisPartition = processThisPartition(id)
@@ -1172,7 +1172,9 @@ object StateStore extends Logging {
       canProcessThisPartition = processThisPartition(id)
       maintenanceThreadPoolLock.wait(timeoutMs)
     }
-
+    val elapsedTime = System.currentTimeMillis() - startTime
+    logInfo(log"Waited for ${MDC(LogKeys.TOTAL_TIME, elapsedTime)} ms to be able to process " +
+      log"maintenance for partition ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}")
     canProcessThisPartition
   }
 
@@ -1200,6 +1202,11 @@ object StateStore extends Logging {
       } else {
         providersToRequeue += (providerId, provider)
       }
+    }
+
+    if (providersToRequeue.nonEmpty) {
+      logInfo(log"Had to requeue ${MDC(LogKeys.SIZE, providersToRequeue.size)} providers " +
+        log"for maintenance in doMaintenance")
     }
 
     providersToRequeue.foreach(unloadedProvidersToClose.offer)
@@ -1249,6 +1256,8 @@ object StateStore extends Logging {
           true
 
         case FromLoadedProviders =>
+          // Provider from loadedProviders can be processed immediately
+          // as it's in maintenancePartitions
           true
       }
 
