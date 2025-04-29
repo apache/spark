@@ -52,10 +52,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Nondeterministic expression -- create table") {
     Seq(
-      "create table t(i double check (i > rand(0)))",
-      "create table t(i double, constraint c1 check (i > rand(0)))",
-      "replace table t(i double check (i > rand(0)))",
-      "replace table t(i double, constraint c1 check (i > rand(0)))"
+      "CREATE TABLE t(i DOUBLE CHECK (i > rand(0)))",
+      "CREATE TABLE t(i DOUBLE, CONSTRAINT c1 CHECK (i > rand(0)))",
+      "REPLACE TABLE t(i DOUBLE CHECK (i > rand(0)))",
+      "REPLACE TABLE t(i DOUBLE, CONSTRAINT c1 CHECK (i > rand(0)))"
     ).foreach { query =>
       withTable("t") {
         val error = intercept[AnalysisException] {
@@ -76,8 +76,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Expression referring a column of another table -- alter table") {
     withTable("t", "t2") {
-      sql("create table t(i double) using parquet")
-      sql("create table t2(j string) using parquet")
+      sql("CREATE TABLE t(i DOUBLE) USING parquet")
+      sql("CREATE TABLE t2(j STRING) USING parquet")
       val query =
         """
           |ALTER TABLE t ADD CONSTRAINT c1 CHECK (len(t2.j) > 0)
@@ -101,8 +101,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("Expression referring a column of another table -- create and replace table") {
     withTable("t", "t2") {
-      sql("create table t(i double) using parquet")
-      val query = "create table t2(j string check(t.i > 0)) using parquet"
+      sql("CREATE TABLE t(i double) USING parquet")
+      val query = "CREATE TABLE t2(j string check(t.i > 0)) USING parquet"
       val error = intercept[AnalysisException] {
         sql(query)
       }
