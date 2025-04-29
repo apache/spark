@@ -48,14 +48,14 @@ class ArrowUDFType:
 
 
 def arrow_udf(f=None, returnType=None, functionType=None):
-    return vectorized_udf(f, returnType, functionType)
+    return vectorized_udf(f, returnType, functionType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
 
 
 def pandas_udf(f=None, returnType=None, functionType=None):
-    return vectorized_udf(f, returnType, functionType)
+    return vectorized_udf(f, returnType, functionType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
 
-def vectorized_udf(f=None, returnType=None, functionType=None, source=""):
+def vectorized_udf(f=None, returnType=None, functionType=None, defaultEvalType=None):
     """
     Creates a vectorized user defined function.
 
@@ -445,13 +445,23 @@ def vectorized_udf(f=None, returnType=None, functionType=None, source=""):
         )
 
     if is_decorator:
-        return functools.partial(_create_vectorized_udf, returnType=return_type, evalType=eval_type)
+        return functools.partial(
+            _create_vectorized_udf,
+            returnType=return_type,
+            evalType=eval_type,
+            defaultEvalType=defaultEvalType,
+        )
     else:
-        return _create_vectorized_udf(f=f, returnType=return_type, evalType=eval_type)
+        return _create_vectorized_udf(
+            f=f,
+            returnType=return_type,
+            evalType=eval_type,
+            defaultEvalType=defaultEvalType,
+        )
 
 
 # validate the pandas udf and return the adjusted eval type
-def _validate_vectorized_udf(f, evalType) -> int:
+def _validate_vectorized_udf(f, evalType, defaultEvalType) -> int:
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
@@ -497,7 +507,10 @@ def _validate_vectorized_udf(f, evalType) -> int:
 
     if evalType is None:
         # Set default is scalar UDF.
-        evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        if defaultEvalType is None:
+            evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        else:
+            evalType = defaultEvalType
 
     if (
         (
@@ -556,8 +569,8 @@ def _validate_vectorized_udf(f, evalType) -> int:
     return evalType
 
 
-def _create_vectorized_udf(f, returnType, evalType):
-    evalType = _validate_vectorized_udf(f, evalType)
+def _create_vectorized_udf(f, returnType, evalType, defaultEvalType):
+    evalType = _validate_vectorized_udf(f, evalType, defaultEvalType)
 
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
