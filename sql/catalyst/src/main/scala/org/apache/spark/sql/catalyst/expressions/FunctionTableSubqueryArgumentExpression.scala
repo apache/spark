@@ -105,10 +105,10 @@ case class FunctionTableSubqueryArgumentExpression(
     copy()
 
   override def withNewOuterScopeAttrs(
-    outerScopeAttrs: Seq[Expression]
+    newOuterScopeAttrs: Seq[Expression]
   ): FunctionTableSubqueryArgumentExpression = {
-    validateOuterScopeAttrs()
-    copy(outerScopeAttrs = outerScopeAttrs)
+    validateOuterScopeAttrs(newOuterScopeAttrs)
+    copy(outerScopeAttrs = newOuterScopeAttrs)
   }
 
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
