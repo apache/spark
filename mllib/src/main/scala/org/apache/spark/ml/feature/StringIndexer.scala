@@ -469,16 +469,17 @@ class StringIndexerModel (
 
 @Since("1.6.0")
 object StringIndexerModel extends MLReadable[StringIndexerModel] {
-  private case class Data(labelsArray: Seq[Seq[String]])
 
   private[StringIndexerModel]
   class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
 
+    private case class Data(labelsArray: Array[Array[String]])
+
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
-      val data = Data(instance.labelsArray.map(_.toImmutableArraySeq).toImmutableArraySeq)
+      val data = Data(instance.labelsArray)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -501,8 +502,11 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         val labels = data.getAs[Seq[String]](0).toArray
         Array(labels)
       } else {
-        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
-        data.labelsArray.map(_.toArray).toArray
+        // After Spark 3.0.
+        val data = sparkSession.read.parquet(dataPath)
+          .select("labelsArray")
+          .head()
+        data.getSeq[scala.collection.Seq[String]](0).map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)
       metadata.getAndSetParams(model)

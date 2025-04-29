@@ -401,16 +401,17 @@ class OneHotEncoderModel private[ml] (
 
 @Since("3.0.0")
 object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
-  private case class Data(categorySizes: Array[Int])
 
   private[OneHotEncoderModel]
   class OneHotEncoderModelWriter(instance: OneHotEncoderModel) extends MLWriter {
+
+    private case class Data(categorySizes: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.categorySizes)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -421,8 +422,11 @@ object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
     override def load(path: String): OneHotEncoderModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
-      val model = new OneHotEncoderModel(metadata.uid, data.categorySizes)
+      val data = sparkSession.read.parquet(dataPath)
+        .select("categorySizes")
+        .head()
+      val categorySizes = data.getAs[Seq[Int]](0).toArray
+      val model = new OneHotEncoderModel(metadata.uid, categorySizes)
       metadata.getAndSetParams(model)
       model
     }

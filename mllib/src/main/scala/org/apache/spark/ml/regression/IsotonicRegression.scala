@@ -285,10 +285,6 @@ class IsotonicRegressionModel private[ml] (
 
 @Since("1.6.0")
 object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
-  private case class Data(
-    boundaries: Array[Double],
-    predictions: Array[Double],
-    isotonic: Boolean)
 
   @Since("1.6.0")
   override def read: MLReader[IsotonicRegressionModel] = new IsotonicRegressionModelReader
@@ -301,6 +297,11 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       instance: IsotonicRegressionModel
     ) extends MLWriter with Logging {
 
+    private case class Data(
+        boundaries: Array[Double],
+        predictions: Array[Double],
+        isotonic: Boolean)
+
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
@@ -308,7 +309,7 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       val data = Data(
         instance.oldModel.boundaries, instance.oldModel.predictions, instance.oldModel.isotonic)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -321,11 +322,13 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
+      val data = sparkSession.read.parquet(dataPath)
+        .select("boundaries", "predictions", "isotonic").head()
+      val boundaries = data.getAs[Seq[Double]](0).toArray
+      val predictions = data.getAs[Seq[Double]](1).toArray
+      val isotonic = data.getBoolean(2)
       val model = new IsotonicRegressionModel(
-        metadata.uid,
-        new MLlibIsotonicRegressionModel(data.boundaries, data.predictions, data.isotonic)
-      )
+        metadata.uid, new MLlibIsotonicRegressionModel(boundaries, predictions, isotonic))
 
       metadata.getAndSetParams(model)
       model

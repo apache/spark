@@ -338,7 +338,6 @@ class UnivariateFeatureSelectorModel private[ml](
 
 @Since("3.1.1")
 object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelectorModel] {
-  private case class Data(selectedFeatures: Seq[Int])
 
   @Since("3.1.1")
   override def read: MLReader[UnivariateFeatureSelectorModel] =
@@ -350,11 +349,13 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
   private[UnivariateFeatureSelectorModel] class UnivariateFeatureSelectorModelWriter(
       instance: UnivariateFeatureSelectorModel) extends MLWriter {
 
+    private case class Data(selectedFeatures: Seq[Int])
+
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.selectedFeatures.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -367,8 +368,10 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
     override def load(path: String): UnivariateFeatureSelectorModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession)
-      val model = new UnivariateFeatureSelectorModel(metadata.uid, data.selectedFeatures.toArray)
+      val data = sparkSession.read.parquet(dataPath)
+        .select("selectedFeatures").head()
+      val selectedFeatures = data.getAs[Seq[Int]](0).toArray
+      val model = new UnivariateFeatureSelectorModel(metadata.uid, selectedFeatures)
       metadata.getAndSetParams(model)
       model
     }

@@ -300,7 +300,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
       val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
-      ReadWriteUtils.saveArray(dataPath, nodeData.toArray, sparkSession, numDataParts)
+      sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
     }
   }
 
