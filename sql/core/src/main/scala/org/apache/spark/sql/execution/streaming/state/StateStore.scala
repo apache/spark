@@ -1169,7 +1169,7 @@ object StateStore extends Logging {
     var canProcessThisPartition = processThisPartition(id)
     while (!canProcessThisPartition && System.currentTimeMillis() < endTime) {
       canProcessThisPartition = processThisPartition(id)
-      maintenanceThreadPoolLock.wait(timeoutMs)
+      maintenanceThreadPoolLock.wait()
     }
 
     canProcessThisPartition
@@ -1238,8 +1238,7 @@ object StateStore extends Logging {
           true
 
         case FromLoadedProviders =>
-          // Provider from loadedProviders can be processed if we can acquire the lock
-          processThisPartition(id)
+          true
       }
 
       if (canProcessThisPartition) {

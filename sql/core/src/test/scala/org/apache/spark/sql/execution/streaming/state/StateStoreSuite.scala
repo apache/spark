@@ -2018,7 +2018,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
         // Get the partitionsForMaintenance field to check the queue is empty
         val partitionsField = PrivateMethod[
-          ConcurrentLinkedQueue[StateStoreProviderId]](Symbol("partitionsForMaintenance"))
+          ConcurrentLinkedQueue[StateStoreProviderId]](Symbol("unloadedProvidersToClose"))
         val queue = StateStore invokePrivate partitionsField()
         assert(queue.isEmpty, "Maintenance queue should be empty after processing queued tasks")
       }
