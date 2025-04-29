@@ -18,7 +18,7 @@
 import unittest
 import datetime
 
-from pyspark.sql.functions import udf, arrow_udf, ArrowUDFType, PandasUDFType
+from pyspark.sql.functions import arrow_udf, ArrowUDFType, PandasUDFType
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DoubleType,
@@ -28,7 +28,7 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     VariantType,
 )
-from pyspark.errors import ParseException, PythonException, PySparkTypeError
+from pyspark.errors import ParseException, PySparkTypeError
 from pyspark.util import PythonEvalType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
