@@ -531,6 +531,8 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         else:
             evalType = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
+    kind_str = "pandas_udfs" if kind == "pandas" else "arrow_udfs"
+
     if (
         (
             evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
@@ -543,7 +545,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         raise PySparkValueError(
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
-                "detail": "0-arg pandas_udfs are not supported. "
+                "detail": f"0-arg {kind_str} are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function.",
             },
         )
@@ -552,7 +554,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         raise PySparkValueError(
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
-                "detail": "pandas_udf with function type GROUPED_MAP or the function in "
+                "detail": f"{kind_str} with function type GROUPED_MAP or the function in "
                 "groupby.applyInPandas must take either one argument (data) or "
                 "two arguments (key, data).",
             },

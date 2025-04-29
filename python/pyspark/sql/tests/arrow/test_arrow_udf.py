@@ -107,25 +107,18 @@ class ArrowUDFTestsMixin:
 
             with self.assertRaises(PySparkTypeError) as pe:
 
-                @arrow_udf(returnType="double", functionType=PandasUDFType.GROUPED_MAP)
+                @arrow_udf(returnType="double", functionType=PandasUDFType.SCALAR)
                 def foo(df):
                     return df
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
+                errorClass="INVALID_PANDAS_UDF_TYPE",
                 messageParameters={
-                    "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF "
-                    "or SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
-                    "return_type": "DoubleType()",
+                    "arg_name": "functionType",
+                    "arg_type": "200",
                 },
             )
-
-            with self.assertRaisesRegex(ValueError, "Invalid function"):
-
-                @arrow_udf(returnType="k int, v double", functionType=PandasUDFType.GROUPED_MAP)
-                def foo(k, v, w):
-                    return k
 
             with self.assertRaises(PySparkTypeError) as pe:
 
@@ -151,14 +144,6 @@ class ArrowUDFTestsMixin:
                 messageParameters={"arg_name": "functionType", "arg_type": "100"},
             )
 
-            with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
-                arrow_udf(lambda: 1, LongType(), ArrowUDFType.SCALAR)
-            with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
-
-                @arrow_udf(LongType(), ArrowUDFType.SCALAR)
-                def zero_with_type():
-                    return 1
-
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf(returnType=PandasUDFType.GROUPED_MAP)
@@ -167,9 +152,18 @@ class ArrowUDFTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="NOT_DATATYPE_OR_STR",
-                messageParameters={"arg_name": "returnType", "arg_type": "int"},
+                errorClass="INVALID_PANDAS_UDF_TYPE",
+                messageParameters={"arg_name": "functionType", "arg_type": "201"},
             )
+
+            with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
+                arrow_udf(lambda: 1, LongType(), ArrowUDFType.SCALAR)
+
+            with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
+
+                @arrow_udf(LongType(), ArrowUDFType.SCALAR)
+                def zero_with_type():
+                    return 1
 
     def test_arrow_udf_timestamp_ntz(self):
         import pyarrow as pa
