@@ -132,8 +132,7 @@ case class UnionLoopExec(
         if (count <= localRelationLimit) {
           val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
          (Dataset.ofRows(session, local), count)
-        }
-        else {
+        } else {
           (materializedDF, count)
         }
     }
