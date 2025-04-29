@@ -1162,7 +1162,7 @@ object StateStore extends Logging {
   private def awaitProcessThisPartition(
       id: StateStoreProviderId,
       timeoutMs: Long
-  ): Boolean = {
+  ): Boolean = maintenanceThreadPoolLock synchronized  {
     val endTime = System.currentTimeMillis() + timeoutMs
 
     // If immediate processing fails, wait with timeout
