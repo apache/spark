@@ -55,7 +55,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     return vectorized_udf(f, returnType, functionType)
 
 
-def vectorized_udf(f=None, returnType=None, functionType=None):
+def vectorized_udf(f=None, returnType=None, functionType=None, source=""):
     """
     Creates a vectorized user defined function.
 
