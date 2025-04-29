@@ -20,7 +20,7 @@ SELECT * FROM v
 -- !query schema
 struct<'a' collate UNICODE:string collate UNICODE>
 -- !query output
-"a"
+a
 
 
 -- !query
@@ -496,7 +496,7 @@ SELECT * FROM v
 -- !query schema
 struct<'a' collate UNICODE:string collate UNICODE>
 -- !query output
-"a"
+a
 
 
 -- !query

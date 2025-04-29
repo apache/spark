@@ -110,7 +110,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // VARIANT type
     "variant/named-function-arguments.sql",
     // SPARK-51516: Support the TIME data type by Thrift Server
-    "time.sql"
+    "time.sql",
+    "view-with-default-collation.sql"
   )
 
   override def runQueries(
