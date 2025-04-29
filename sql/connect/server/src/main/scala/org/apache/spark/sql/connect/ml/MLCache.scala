@@ -140,7 +140,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         val loadPath = offloadedModelsDir.resolve(refId)
         if (Files.isDirectory(loadPath)) {
           val className = Files.readString(loadPath.resolve(modelClassNameFile))
-          obj = MLUtils.loadTransformer(sessionHolder, className, loadPath.toString)
+          obj = MLUtils.loadTransformer(
+            sessionHolder, className, loadPath.toString, loadFromLocal = true
+          )
           cachedModel.put(refId, CacheItem(obj, estimateObjectSize(obj)))
         }
       }
