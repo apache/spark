@@ -231,6 +231,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo(s"Received tokens of ${tokenBytes.length} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
+    case UpdateAccessTokens(tokens) =>
+      logInfo(s"Received ${tokens.size} access token properties")
+      SparkHadoopUtil.get.addAccessTokens(tokens)
+
     case DecommissionExecutor =>
       decommissionSelf()
   }
@@ -471,6 +475,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
+      }
+
+      cfg.accessTokens.foreach { accessTokens =>
+        SparkHadoopUtil.get.addAccessTokens(accessTokens)
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)

@@ -49,6 +49,8 @@ private[spark] class SparkHadoopUtil extends Logging {
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 
+  private lazy val accessTokens: mutable.Map[String, String] = mutable.Map.empty
+
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
    * (distributed to child threads), used for authenticating HDFS and YARN calls.
@@ -340,6 +342,11 @@ private[spark] class SparkHadoopUtil extends Logging {
     ugi.getAuthenticationMethod() == UserGroupInformation.AuthenticationMethod.PROXY
   }
 
+  def addAccessTokens(tokens: Map[String, String]): Unit = synchronized {
+    accessTokens ++= tokens
+  }
+
+  def getAccessTokens(): Map[String, String] = accessTokens.toMap
 }
 
 private[spark] object SparkHadoopUtil extends Logging {

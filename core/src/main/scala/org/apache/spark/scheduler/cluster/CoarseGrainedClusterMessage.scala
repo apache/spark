@@ -35,6 +35,7 @@ private[spark] object CoarseGrainedClusterMessages {
       sparkProperties: Seq[(String, String)],
       ioEncryptionKey: Option[Array[Byte]],
       hadoopDelegationCreds: Option[Array[Byte]],
+      accessTokens: Option[Map[String, String]],
       resourceProfile: ResourceProfile)
     extends CoarseGrainedClusterMessage
 
@@ -53,6 +54,9 @@ private[spark] object CoarseGrainedClusterMessages {
     extends CoarseGrainedClusterMessage
 
   case class UpdateDelegationTokens(tokens: Array[Byte])
+    extends CoarseGrainedClusterMessage
+
+  case class UpdateAccessTokens(tokens: Map[String, String])
     extends CoarseGrainedClusterMessage
 
   // Executors to driver

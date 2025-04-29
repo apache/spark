@@ -126,6 +126,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
 
+  // Current set of access tokens to send to executors. Access tokens are a set of key-value pairs
+  // where keys are property names related to access tokens
+  private val accessTokens = new AtomicReference[Map[String, String]]()
+
   // The token manager used to create security tokens.
   private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
@@ -214,6 +218,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case UpdateDelegationTokens(newDelegationTokens) =>
         updateDelegationTokens(newDelegationTokens)
+
+      case UpdateAccessTokens(newAccessTokens) =>
+        updateAccessTokens(newAccessTokens)
 
       case RemoveExecutor(executorId, reason) =>
         // We will remove the executor's state and cannot restore it. However, the connection
@@ -345,6 +352,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
+          Option(accessTokens.get()),
           rp)
         context.reply(reply)
 
@@ -1037,6 +1045,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     delegationTokens.set(tokens)
     executorDataMap.values.foreach { ed =>
       ed.executorEndpoint.send(UpdateDelegationTokens(tokens))
+    }
+  }
+
+  protected def updateAccessTokens(tokens: Map[String, String]): Unit = {
+    SparkHadoopUtil.get.addAccessTokens(tokens)
+    accessTokens.updateAndGet { existing =>
+      val current = if (existing != null) existing else Map.empty[String, String]
+      current ++ tokens
+    }
+    executorDataMap.values.foreach { ed =>
+      ed.executorEndpoint.send(UpdateAccessTokens(tokens))
     }
   }
 

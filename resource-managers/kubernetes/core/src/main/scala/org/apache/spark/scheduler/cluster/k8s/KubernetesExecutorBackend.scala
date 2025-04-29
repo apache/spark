@@ -119,6 +119,10 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
+      cfg.accessTokens.foreach { accessTokens =>
+        SparkHadoopUtil.get.addAccessTokens(accessTokens)
+      }
+
       driverConf.set(EXECUTOR_ID, execId)
       val env = SparkEnv.createExecutorEnv(driverConf, execId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
