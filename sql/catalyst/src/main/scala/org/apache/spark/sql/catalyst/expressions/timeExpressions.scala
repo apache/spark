@@ -549,7 +549,7 @@ case class MakeTime(
     copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
 }
 
-
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(unit, expr) - Returns a TIME value representing `expr` truncated to the specified time unit.
@@ -572,6 +572,7 @@ case class MakeTime(
   """,
   since = "4.1.0",
   group = "datetime_funcs")
+// scalastyle:on line.size.limit
 case class TruncateTime(unit: Expression, timeExpr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with RuntimeReplaceable {
 
