@@ -1169,7 +1169,7 @@ object StateStore extends Logging {
     var canProcessThisPartition = processThisPartition(id)
     while (!canProcessThisPartition && System.currentTimeMillis() < endTime) {
       canProcessThisPartition = processThisPartition(id)
-      maintenanceThreadPoolLock.wait()
+      maintenanceThreadPoolLock.wait(timeoutMs)
     }
 
     canProcessThisPartition
