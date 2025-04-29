@@ -98,7 +98,7 @@ WHERE myt1.a = (
 );
 -- query 5
 SELECT myt1.a, (
-    SELECT MAX(myt2.a), (
+    SELECT (
             SELECT MAX(myt3.a)
             FROM myt3
             WHERE myt3.b > myt2.b AND myt3.c > myt1.c
@@ -108,7 +108,7 @@ SELECT myt1.a, (
 FROM myt1;
 -- query 6
 SELECT myt1.a, (
-    SELECT MAX(myt2.a), (
+    SELECT (
             SELECT MAX(myt3.a)
             FROM myt3
             WHERE myt3.b = myt2.b AND myt3.c = myt1.c
@@ -118,7 +118,7 @@ SELECT myt1.a, (
 FROM myt1;
 -- query 7
 SELECT myt1.a, (
-    SELECT COUNT(myt2.a), (
+    SELECT (
             SELECT COUNT(myt3.a)
             FROM myt3
             WHERE myt3.b > myt2.b AND myt3.c > myt1.c
@@ -128,7 +128,7 @@ SELECT myt1.a, (
 FROM myt1;
 -- query 8
 SELECT myt1.a, (
-    SELECT COUNT(myt2.a), (
+    SELECT (
             SELECT COUNT(myt3.a)
             FROM myt3
             WHERE myt3.b = myt2.b AND myt3.c = myt1.c
@@ -145,7 +145,6 @@ SELECT MIN(
         )
         FROM myt2
     )
-)
 FROM myt1;
 -- query 10
 SELECT MIN(
@@ -156,7 +155,6 @@ SELECT MIN(
         )
         FROM myt2
     )
-)
 FROM myt1;
 -- query 11
 SELECT COUNT(
@@ -167,7 +165,6 @@ SELECT COUNT(
         )
         FROM myt2
     )
-)
 FROM myt1;
 -- query 12
 SELECT COUNT(
@@ -178,11 +175,11 @@ SELECT COUNT(
         )
         FROM myt2
     )
-)
 FROM myt1;
 -- query 13
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT MAX(myt2.a)
     FROM myt2
@@ -193,8 +190,9 @@ HAVING (
     ) AND myt2.b > myt1.b
 );
 -- query 14
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT MAX(myt2.a)
     FROM myt2
@@ -205,8 +203,9 @@ HAVING (
     ) AND myt2.b = myt1.b
 );
 -- query 15
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT COUNT(myt2.a)
     FROM myt2
@@ -217,8 +216,9 @@ HAVING (
     ) AND myt2.b > myt1.b
 );
 -- query 16
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT COUNT(myt2.a)
     FROM myt2

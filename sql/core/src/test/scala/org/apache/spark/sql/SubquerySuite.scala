@@ -2952,4 +2952,57 @@ class SubquerySuite extends QueryTest
       val df = sql(querySuperNested).collect()
     }
   }
+
+  test("avery test") {
+    val query =
+      """
+        |SELECT b, MAX(t1.a)
+        |FROM t1
+        |GROUP BY b
+        |HAVING (
+        |    SELECT MAX(t2.a)
+        |    FROM t2
+        |    WHERE t2.a = (
+        |        SELECT MAX(t3.a)
+        |        FROM t3
+        |        WHERE t3.a > MAX(t1.a)
+        |    ) AND t2.b > t1.b
+        |);
+        |""".stripMargin
+    sql("CREATE TABLE IF NOT EXISTS t1(a INT, b INT, c INT);")
+    sql("CREATE TABLE IF NOT EXISTS t2(a INT, b INT, c INT);")
+    sql("CREATE TABLE IF NOT EXISTS t3(a INT, b INT, c INT);")
+    sql("INSERT INTO t1 VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2), (3, 3, 3), (NULL, NULL, NULL);")
+    sql("INSERT INTO t2 VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2), (3, 3, 3), (NULL, NULL, NULL);")
+    sql("INSERT INTO t3 VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2), (3, 3, 3), (NULL, NULL, NULL);")
+    withTable("t1", "t2", "t3") {
+      withSQLConf(
+        "spark.sql.planChangeLog.level" -> "info",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true"
+      ) {
+        val df = sql(query).collect()
+      }
+    }
+  }
+
+  test("postgresql test") {
+    val query =
+      """
+        |select ten, sum(distinct four) filter (where four > 10) from onek a
+        |group by ten
+        |having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+        |""".stripMargin
+    sql("create table if not exists onek(ten int, four int);")
+    sql("insert into onek values (1, 5), (1, 15), (2, 20), (2, 25), (3, 30);")
+    withTable("onek") {
+      withSQLConf(
+        "spark.sql.planChangeLog.level" -> "info",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled" -> "true",
+        "spark.sql.optimizer.supportNestedCorrelatedSubqueriesForScalarSubqueries.enabled" -> "true"
+      ) {
+        val df = sql(query).collect()
+      }
+    }
+  }
 }

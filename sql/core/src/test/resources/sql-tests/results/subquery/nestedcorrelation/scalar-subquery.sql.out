@@ -165,7 +165,7 @@ struct<a:int,b:int,c:int>
 
 -- !query
 SELECT myt1.a, (
-    SELECT MAX(myt2.a), (
+    SELECT (
             SELECT MAX(myt3.a)
             FROM myt3
             WHERE myt3.b > myt2.b AND myt3.c > myt1.c
@@ -176,26 +176,16 @@ FROM myt1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 159,
-    "fragment" : "(\n            SELECT MAX(myt3.a)\n            FROM myt3\n            WHERE myt3.b > myt2.b AND myt3.c > myt1.c\n        )"
-  } ]
+  "errorClass" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000"
 }
 
 
 -- !query
 SELECT myt1.a, (
-    SELECT MAX(myt2.a), (
+    SELECT (
             SELECT MAX(myt3.a)
             FROM myt3
             WHERE myt3.b = myt2.b AND myt3.c = myt1.c
@@ -204,28 +194,18 @@ SELECT myt1.a, (
 )
 FROM myt1
 -- !query schema
-struct<>
+struct<a:int,scalarsubquery(c):int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 159,
-    "fragment" : "(\n            SELECT MAX(myt3.a)\n            FROM myt3\n            WHERE myt3.b = myt2.b AND myt3.c = myt1.c\n        )"
-  } ]
-}
+0	0
+1	1
+2	2
+3	3
+NULL	NULL
 
 
 -- !query
 SELECT myt1.a, (
-    SELECT COUNT(myt2.a), (
+    SELECT (
             SELECT COUNT(myt3.a)
             FROM myt3
             WHERE myt3.b > myt2.b AND myt3.c > myt1.c
@@ -236,26 +216,16 @@ FROM myt1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 163,
-    "fragment" : "(\n            SELECT COUNT(myt3.a)\n            FROM myt3\n            WHERE myt3.b > myt2.b AND myt3.c > myt1.c\n        )"
-  } ]
+  "errorClass" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000"
 }
 
 
 -- !query
 SELECT myt1.a, (
-    SELECT COUNT(myt2.a), (
+    SELECT (
             SELECT COUNT(myt3.a)
             FROM myt3
             WHERE myt3.b = myt2.b AND myt3.c = myt1.c
@@ -264,23 +234,13 @@ SELECT myt1.a, (
 )
 FROM myt1
 -- !query schema
-struct<>
+struct<a:int,scalarsubquery(c):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 163,
-    "fragment" : "(\n            SELECT COUNT(myt3.a)\n            FROM myt3\n            WHERE myt3.b = myt2.b AND myt3.c = myt1.c\n        )"
-  } ]
-}
+0	1
+1	1
+2	1
+3	1
+NULL	NULL
 
 
 -- !query
@@ -292,7 +252,6 @@ SELECT MIN(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query schema
 struct<>
@@ -317,7 +276,6 @@ SELECT MIN(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query schema
 struct<>
@@ -342,7 +300,6 @@ SELECT COUNT(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query schema
 struct<>
@@ -367,7 +324,6 @@ SELECT COUNT(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query schema
 struct<>
@@ -384,8 +340,9 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT MAX(myt2.a)
     FROM myt2
@@ -396,30 +353,17 @@ HAVING (
     ) AND myt2.b > myt1.b
 )
 -- !query schema
-struct<>
+struct<b:int,max(a):int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 203,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT MAX(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT MAX(myt3.a)\n        FROM myt3\n        WHERE myt3.a > MAX(myt1.a)\n    ) AND myt2.b > myt1.b\n)"
-  } ]
-}
+0	0
+1	1
+2	2
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT MAX(myt2.a)
     FROM myt2
@@ -430,30 +374,17 @@ HAVING (
     ) AND myt2.b = myt1.b
 )
 -- !query schema
-struct<>
+struct<b:int,max(a):int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 203,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT MAX(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT MAX(myt3.a)\n        FROM myt3\n        WHERE myt3.a = MAX(myt1.a)\n    ) AND myt2.b = myt1.b\n)"
-  } ]
-}
+1	1
+2	2
+3	3
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT COUNT(myt2.a)
     FROM myt2
@@ -464,30 +395,16 @@ HAVING (
     ) AND myt2.b > myt1.b
 )
 -- !query schema
-struct<>
+struct<b:int,max(a):int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 207,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT COUNT(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT COUNT(myt3.a)\n        FROM myt3\n        WHERE myt3.a > MAX(myt1.a)\n    ) AND myt2.b > myt1.b\n)"
-  } ]
-}
+0	0
+1	1
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT COUNT(myt2.a)
     FROM myt2
@@ -498,25 +415,9 @@ HAVING (
     ) AND myt2.b = myt1.b
 )
 -- !query schema
-struct<>
+struct<b:int,max(a):int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 207,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT COUNT(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT COUNT(myt3.a)\n        FROM myt3\n        WHERE myt3.a = MAX(myt1.a)\n    ) AND myt2.b = myt1.b\n)"
-  } ]
-}
+1	1
 
 
 -- !query

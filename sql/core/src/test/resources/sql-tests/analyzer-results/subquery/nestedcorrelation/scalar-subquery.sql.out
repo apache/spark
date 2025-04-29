@@ -184,7 +184,7 @@ Project [a#x, b#x, c#x]
 
 -- !query
 SELECT myt1.a, (
-    SELECT MAX(myt2.a), (
+    SELECT (
             SELECT MAX(myt3.a)
             FROM myt3
             WHERE myt3.b > myt2.b AND myt3.c > myt1.c
@@ -193,26 +193,21 @@ SELECT myt1.a, (
 )
 FROM myt1
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 159,
-    "fragment" : "(\n            SELECT MAX(myt3.a)\n            FROM myt3\n            WHERE myt3.b > myt2.b AND myt3.c > myt1.c\n        )"
-  } ]
-}
+Project [a#x, scalar-subquery#x [c#x] AS scalarsubquery(c)#x]
+:  +- Project [scalar-subquery#x [b#x && c#x] AS scalarsubquery(b, c)#x]
+:     :  +- Aggregate [max(a#x) AS max(a)#x]
+:     :     +- Filter ((b#x > outer(b#x)) AND (c#x > outer(c#x)))
+:     :        +- SubqueryAlias spark_catalog.default.myt3
+:     :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:     +- SubqueryAlias spark_catalog.default.myt2
+:        +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- SubqueryAlias spark_catalog.default.myt1
+   +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
 SELECT myt1.a, (
-    SELECT MAX(myt2.a), (
+    SELECT (
             SELECT MAX(myt3.a)
             FROM myt3
             WHERE myt3.b = myt2.b AND myt3.c = myt1.c
@@ -221,26 +216,21 @@ SELECT myt1.a, (
 )
 FROM myt1
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 159,
-    "fragment" : "(\n            SELECT MAX(myt3.a)\n            FROM myt3\n            WHERE myt3.b = myt2.b AND myt3.c = myt1.c\n        )"
-  } ]
-}
+Project [a#x, scalar-subquery#x [c#x] AS scalarsubquery(c)#x]
+:  +- Project [scalar-subquery#x [b#x && c#x] AS scalarsubquery(b, c)#x]
+:     :  +- Aggregate [max(a#x) AS max(a)#x]
+:     :     +- Filter ((b#x = outer(b#x)) AND (c#x = outer(c#x)))
+:     :        +- SubqueryAlias spark_catalog.default.myt3
+:     :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:     +- SubqueryAlias spark_catalog.default.myt2
+:        +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- SubqueryAlias spark_catalog.default.myt1
+   +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
 SELECT myt1.a, (
-    SELECT COUNT(myt2.a), (
+    SELECT (
             SELECT COUNT(myt3.a)
             FROM myt3
             WHERE myt3.b > myt2.b AND myt3.c > myt1.c
@@ -249,26 +239,21 @@ SELECT myt1.a, (
 )
 FROM myt1
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 163,
-    "fragment" : "(\n            SELECT COUNT(myt3.a)\n            FROM myt3\n            WHERE myt3.b > myt2.b AND myt3.c > myt1.c\n        )"
-  } ]
-}
+Project [a#x, scalar-subquery#x [c#x] AS scalarsubquery(c)#xL]
+:  +- Project [scalar-subquery#x [b#x && c#x] AS scalarsubquery(b, c)#xL]
+:     :  +- Aggregate [count(a#x) AS count(a)#xL]
+:     :     +- Filter ((b#x > outer(b#x)) AND (c#x > outer(c#x)))
+:     :        +- SubqueryAlias spark_catalog.default.myt3
+:     :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:     +- SubqueryAlias spark_catalog.default.myt2
+:        +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- SubqueryAlias spark_catalog.default.myt1
+   +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
 SELECT myt1.a, (
-    SELECT COUNT(myt2.a), (
+    SELECT (
             SELECT COUNT(myt3.a)
             FROM myt3
             WHERE myt3.b = myt2.b AND myt3.c = myt1.c
@@ -277,21 +262,16 @@ SELECT myt1.a, (
 )
 FROM myt1
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"scalarsubquery(b, c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 163,
-    "fragment" : "(\n            SELECT COUNT(myt3.a)\n            FROM myt3\n            WHERE myt3.b = myt2.b AND myt3.c = myt1.c\n        )"
-  } ]
-}
+Project [a#x, scalar-subquery#x [c#x] AS scalarsubquery(c)#xL]
+:  +- Project [scalar-subquery#x [b#x && c#x] AS scalarsubquery(b, c)#xL]
+:     :  +- Aggregate [count(a#x) AS count(a)#xL]
+:     :     +- Filter ((b#x = outer(b#x)) AND (c#x = outer(c#x)))
+:     :        +- SubqueryAlias spark_catalog.default.myt3
+:     :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:     +- SubqueryAlias spark_catalog.default.myt2
+:        +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- SubqueryAlias spark_catalog.default.myt1
+   +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
@@ -303,7 +283,6 @@ SELECT MIN(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
@@ -326,7 +305,6 @@ SELECT MIN(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
@@ -349,7 +327,6 @@ SELECT COUNT(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
@@ -372,7 +349,6 @@ SELECT COUNT(
         )
         FROM myt2
     )
-)
 FROM myt1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
@@ -387,8 +363,9 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT MAX(myt2.a)
     FROM myt2
@@ -399,28 +376,24 @@ HAVING (
     ) AND myt2.b > myt1.b
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 203,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT MAX(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT MAX(myt3.a)\n        FROM myt3\n        WHERE myt3.a > MAX(myt1.a)\n    ) AND myt2.b > myt1.b\n)"
-  } ]
-}
+Filter cast(scalar-subquery#x [b#x && max(a)#x] as boolean)
+:  +- Aggregate [max(a#x) AS max(a)#x]
+:     +- Filter ((a#x = scalar-subquery#x [max(a)#x]) AND (b#x > outer(b#x)))
+:        :  +- Aggregate [max(a#x) AS max(a)#x]
+:        :     +- Filter (a#x > outer(max(a)#x))
+:        :        +- SubqueryAlias spark_catalog.default.myt3
+:        :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:        +- SubqueryAlias spark_catalog.default.myt2
+:           +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x]
+   +- SubqueryAlias spark_catalog.default.myt1
+      +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT MAX(myt2.a)
     FROM myt2
@@ -431,28 +404,24 @@ HAVING (
     ) AND myt2.b = myt1.b
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 203,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT MAX(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT MAX(myt3.a)\n        FROM myt3\n        WHERE myt3.a = MAX(myt1.a)\n    ) AND myt2.b = myt1.b\n)"
-  } ]
-}
+Filter cast(scalar-subquery#x [b#x && max(a)#x] as boolean)
+:  +- Aggregate [max(a#x) AS max(a)#x]
+:     +- Filter ((a#x = scalar-subquery#x [max(a)#x]) AND (b#x = outer(b#x)))
+:        :  +- Aggregate [max(a#x) AS max(a)#x]
+:        :     +- Filter (a#x = outer(max(a)#x))
+:        :        +- SubqueryAlias spark_catalog.default.myt3
+:        :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:        +- SubqueryAlias spark_catalog.default.myt2
+:           +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x]
+   +- SubqueryAlias spark_catalog.default.myt1
+      +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT COUNT(myt2.a)
     FROM myt2
@@ -463,28 +432,24 @@ HAVING (
     ) AND myt2.b > myt1.b
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 207,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT COUNT(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT COUNT(myt3.a)\n        FROM myt3\n        WHERE myt3.a > MAX(myt1.a)\n    ) AND myt2.b > myt1.b\n)"
-  } ]
-}
+Filter cast(scalar-subquery#x [b#x && max(a)#x] as boolean)
+:  +- Aggregate [count(a#x) AS count(a)#xL]
+:     +- Filter ((cast(a#x as bigint) = scalar-subquery#x [max(a)#x]) AND (b#x > outer(b#x)))
+:        :  +- Aggregate [count(a#x) AS count(a)#xL]
+:        :     +- Filter (a#x > outer(max(a)#x))
+:        :        +- SubqueryAlias spark_catalog.default.myt3
+:        :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:        +- SubqueryAlias spark_catalog.default.myt2
+:           +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x]
+   +- SubqueryAlias spark_catalog.default.myt1
+      +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
-SELECT MAX(myt1.a)
+SELECT b, MAX(myt1.a)
 FROM myt1
+GROUP BY b
 HAVING (
     SELECT COUNT(myt2.a)
     FROM myt2
@@ -495,23 +460,18 @@ HAVING (
     ) AND myt2.b = myt1.b
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"max(a)\"",
-    "missingAttributes" : "\"b\"",
-    "operator" : "Filter cast(scalar-subquery#x [b#x] as boolean)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 207,
-    "fragment" : "SELECT MAX(myt1.a)\nFROM myt1\nHAVING (\n    SELECT COUNT(myt2.a)\n    FROM myt2\n    WHERE myt2.a = (\n        SELECT COUNT(myt3.a)\n        FROM myt3\n        WHERE myt3.a = MAX(myt1.a)\n    ) AND myt2.b = myt1.b\n)"
-  } ]
-}
+Filter cast(scalar-subquery#x [b#x && max(a)#x] as boolean)
+:  +- Aggregate [count(a#x) AS count(a)#xL]
+:     +- Filter ((cast(a#x as bigint) = scalar-subquery#x [max(a)#x]) AND (b#x = outer(b#x)))
+:        :  +- Aggregate [count(a#x) AS count(a)#xL]
+:        :     +- Filter (a#x = outer(max(a)#x))
+:        :        +- SubqueryAlias spark_catalog.default.myt3
+:        :           +- Relation spark_catalog.default.myt3[a#x,b#x,c#x] parquet
+:        +- SubqueryAlias spark_catalog.default.myt2
+:           +- Relation spark_catalog.default.myt2[a#x,b#x,c#x] parquet
++- Aggregate [b#x], [b#x, max(a#x) AS max(a)#x]
+   +- SubqueryAlias spark_catalog.default.myt1
+      +- Relation spark_catalog.default.myt1[a#x,b#x,c#x] parquet
 
 
 -- !query
