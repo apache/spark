@@ -4140,7 +4140,8 @@ class SparkConnectPlanner(
    */
   private def replaceIntegerLiteralWithOrdinal(groupingExpression: Expression) =
     groupingExpression match {
-      case Literal(value: Int, IntegerType) => UnresolvedOrdinal(value)
+      case literal @ Literal(value: Int, IntegerType) =>
+        CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
       case other => other
     }
 
