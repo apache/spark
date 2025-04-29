@@ -97,10 +97,10 @@ abstract class SubqueryExpression(
 
   def withNewOuterScopeAttrs(outerScopeAttrs: Seq[Expression]): SubqueryExpression
 
-  def validateOuterScopeAttrs(): Unit = {
-    assert(outerScopeAttrs.toSet.subsetOf(outerAttrs.toSet),
+  def validateOuterScopeAttrs(newOuterScopeAttrs: Seq[Expression]): Unit = {
+    assert(newOuterScopeAttrs.toSet.subsetOf(outerAttrs.toSet),
       s"outerScopeAttrs must be a subset of outerAttrs, " +
-        s"but got ${outerScopeAttrs.mkString(", ")}")
+        s"but got ${newOuterScopeAttrs.mkString(", ")}")
   }
 
   def getOuterScopeAttrs: Seq[Expression] = outerScopeAttrs
@@ -446,10 +446,10 @@ case class ScalarSubquery(
     outerAttrs = outerAttrs)
 
   override def withNewOuterScopeAttrs(
-      outerScopeAttrs: Seq[Expression]
+      newOuterScopeAttrs: Seq[Expression]
   ): ScalarSubquery = {
-    validateOuterScopeAttrs()
-    copy(outerScopeAttrs = outerScopeAttrs)
+    validateOuterScopeAttrs(newOuterScopeAttrs)
+    copy(outerScopeAttrs = newOuterScopeAttrs)
   }
 
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
@@ -534,10 +534,10 @@ case class LateralSubquery(
     outerAttrs = outerAttrs)
 
   override def withNewOuterScopeAttrs(
-    outerScopeAttrs: Seq[Expression]
+    newOuterScopeAttrs: Seq[Expression]
   ): LateralSubquery = {
-    validateOuterScopeAttrs()
-    copy(outerScopeAttrs = outerScopeAttrs)
+    validateOuterScopeAttrs(newOuterScopeAttrs)
+    copy(outerScopeAttrs = newOuterScopeAttrs)
   }
 
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
@@ -612,9 +612,9 @@ case class ListQuery(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery = copy(
     outerAttrs = outerAttrs)
 
-  override def withNewOuterScopeAttrs(outerScopeAttrs: Seq[Expression]): ListQuery = {
-    validateOuterScopeAttrs()
-    copy(outerScopeAttrs = outerScopeAttrs)
+  override def withNewOuterScopeAttrs(newOuterScopeAttrs: Seq[Expression]): ListQuery = {
+    validateOuterScopeAttrs(newOuterScopeAttrs)
+    copy(outerScopeAttrs = newOuterScopeAttrs)
   }
 
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
@@ -683,9 +683,9 @@ case class Exists(
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists = copy(
     outerAttrs = outerAttrs)
 
-  override def withNewOuterScopeAttrs(outerScopeAttrs: Seq[Expression]): Exists = {
-    validateOuterScopeAttrs()
-    copy(outerScopeAttrs = outerScopeAttrs)
+  override def withNewOuterScopeAttrs(newOuterScopeAttrs: Seq[Expression]): Exists = {
+    validateOuterScopeAttrs(newOuterScopeAttrs)
+    copy(outerScopeAttrs = newOuterScopeAttrs)
   }
 
   override def withNewHint(hint: Option[HintInfo]): Exists = copy(hint = hint)
