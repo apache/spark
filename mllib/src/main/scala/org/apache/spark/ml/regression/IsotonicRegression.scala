@@ -285,7 +285,7 @@ class IsotonicRegressionModel private[ml] (
 
 @Since("1.6.0")
 object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
-  private case class Data(
+  private[ml] case class Data(
     boundaries: Array[Double],
     predictions: Array[Double],
     isotonic: Boolean)

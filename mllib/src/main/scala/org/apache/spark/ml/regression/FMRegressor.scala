@@ -510,7 +510,7 @@ class FMRegressionModel private[regression] (
 
 @Since("3.0.0")
 object FMRegressionModel extends MLReadable[FMRegressionModel] {
-  private case class Data(
+  private[ml] case class Data(
      intercept: Double,
      linear: Vector,
      factors: Matrix)

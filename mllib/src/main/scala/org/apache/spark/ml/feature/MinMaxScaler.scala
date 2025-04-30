@@ -242,7 +242,7 @@ class MinMaxScalerModel private[ml] (
 
 @Since("1.6.0")
 object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
-  private case class Data(originalMin: Vector, originalMax: Vector)
+  private[ml] case class Data(originalMin: Vector, originalMax: Vector)
 
   private[MinMaxScalerModel]
   class MinMaxScalerModelWriter(instance: MinMaxScalerModel) extends MLWriter {

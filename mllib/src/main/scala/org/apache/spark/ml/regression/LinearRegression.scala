@@ -786,7 +786,7 @@ class LinearRegressionModel private[ml] (
   }
 }
 
-private case class LinearModelData(intercept: Double, coefficients: Vector, scale: Double)
+private[ml] case class LinearModelData(intercept: Double, coefficients: Vector, scale: Double)
 
 /** A writer for LinearRegression that handles the "internal" (or default) format */
 private class InternalLinearRegressionModelWriter
@@ -816,7 +816,7 @@ private class PMMLLinearRegressionModelWriter
 
   override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
 
-  private case class Data(intercept: Double, coefficients: Vector)
+  private[ml] case class Data(intercept: Double, coefficients: Vector)
 
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {

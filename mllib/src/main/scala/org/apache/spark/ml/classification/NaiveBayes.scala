@@ -598,7 +598,7 @@ class NaiveBayesModel private[ml] (
 
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
-  private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
+  private[ml] case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader

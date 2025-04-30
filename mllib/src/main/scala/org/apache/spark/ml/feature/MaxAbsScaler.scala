@@ -158,7 +158,7 @@ class MaxAbsScalerModel private[ml] (
 
 @Since("2.0.0")
 object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
-  private case class Data(maxAbs: Vector)
+  private[ml] case class Data(maxAbs: Vector)
 
   private[MaxAbsScalerModel]
   class MaxAbsScalerModelWriter(instance: MaxAbsScalerModel) extends MLWriter {

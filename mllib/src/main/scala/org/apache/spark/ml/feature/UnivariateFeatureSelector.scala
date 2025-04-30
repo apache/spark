@@ -338,7 +338,7 @@ class UnivariateFeatureSelectorModel private[ml](
 
 @Since("3.1.1")
 object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelectorModel] {
-  private case class Data(selectedFeatures: Seq[Int])
+  private[ml] case class Data(selectedFeatures: Seq[Int])
 
   @Since("3.1.1")
   override def read: MLReader[UnivariateFeatureSelectorModel] =

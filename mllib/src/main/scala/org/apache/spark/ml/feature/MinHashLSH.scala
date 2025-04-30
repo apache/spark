@@ -210,7 +210,7 @@ object MinHashLSH extends DefaultParamsReadable[MinHashLSH] {
 
 @Since("2.1.0")
 object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
-  private case class Data(randCoefficients: Array[Int])
+  private[ml] case class Data(randCoefficients: Array[Int])
 
   @Since("2.1.0")
   override def read: MLReader[MinHashLSHModel] = new MinHashLSHModelReader
