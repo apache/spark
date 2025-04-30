@@ -77,9 +77,14 @@ class FunctionResolver(
 
   private val typeCoercionResolver: TypeCoercionResolver =
     new TypeCoercionResolver(timezoneAwareExpressionResolver)
+  private val expressionResolutionContextStack =
+    expressionResolver.getExpressionResolutionContextStack
 
   /**
    * Main method used to resolve an [[UnresolvedFunction]]. It resolves it in the following steps:
+   *  - Check if the `unresolvedFunction` is an aggregate expression. Set
+   *    `resolvingTreeUnderAggregateExpression` to `true` in that case so we can properly resolve
+   *    attributes in ORDER BY and HAVING.
    *  - If the function is `count(*)` it is replaced with `count(1)` (please check
    *    [[normalizeCountExpression]] documentation for more details). Otherwise, we resolve the
    *    children of it.
@@ -93,6 +98,13 @@ class FunctionResolver(
    *  - Apply timezone, if the resulting expression is [[TimeZoneAwareExpression]].
    */
   override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
+    val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
+      unresolvedFunction.nameParts, Some(unresolvedFunction)
+    )
+    if (expressionInfo.exists(_.getGroup == "agg_funcs")) {
+      expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression = true
+    }
+
     val functionWithResolvedChildren =
       if (isCountStarExpansionAllowed(unresolvedFunction)) {
         normalizeCountExpression(unresolvedFunction)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.LinkedHashMap
+import java.util.{HashSet, LinkedHashMap}
 
 import scala.jdk.CollectionConverters._
 
@@ -29,7 +29,9 @@ import org.apache.spark.sql.catalyst.analysis.{
 }
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
+  AttributeReference,
   Expression,
+  ExprId,
   ExprUtils,
   IntegerLiteral,
   Literal,
@@ -109,7 +111,8 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
     ExprUtils.assertValidAggregation(resolvedAggregate)
 
     scopes.overwriteOutputAndExtendHiddenOutput(
-      output = resolvedAggregate.aggregateExpressions.map(_.toAttribute)
+      output = resolvedAggregate.aggregateExpressions.map(_.toAttribute),
+      groupingAttributeIds = Some(getGroupingAttributeIds(resolvedAggregate))
     )
 
     resolvedAggregate
@@ -328,5 +331,18 @@ class AggregateResolver(operatorResolver: Resolver, expressionResolver: Expressi
       .resolveMultipartName(Seq("ALL"))
       .candidates
       .isEmpty
+  }
+
+  private def getGroupingAttributeIds(aggregate: Aggregate): HashSet[ExprId] = {
+    val groupingAttributeIds = new HashSet[ExprId](aggregate.groupingExpressions.size)
+    aggregate.groupingExpressions.foreach { rootExpression =>
+      rootExpression.foreach {
+        case attribute: AttributeReference =>
+          groupingAttributeIds.add(attribute.exprId)
+        case _ =>
+      }
+    }
+
+    groupingAttributeIds
   }
 }
