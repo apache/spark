@@ -653,12 +653,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         assert isinstance(arr, pa.Array)
         assert isinstance(arrow_type, pa.DataType)
 
-        # def convert_timestamp(value):
-        #     if isinstance(value, datetime.datetime) and value.tzinfo is not None:
-        #         ts = pd.Timestamp(value)
-        #     else:
-        #         ts = pd.Timestamp(value).tz_localize(self._timezone)
-        #     return ts.to_pydatetime()
+        # TODO: should we handle timezone here?
 
         try:
             return arr
@@ -680,8 +675,10 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
             should_write_start_length = True
             for packed in iterator:
                 if len(packed) == 2 and isinstance(packed[1], pa.DataType):
+                    # single array UDF in a projection
                     arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
                 else:
+                    # multiple array UDFs in a projection
                     arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
 
                 batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
