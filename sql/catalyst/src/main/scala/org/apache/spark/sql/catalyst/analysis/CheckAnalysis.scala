@@ -1047,6 +1047,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
+      case AddConstraint(_: ResolvedTable, check: CheckConstraint) if !check.deterministic =>
+        check.child.failAnalysis(
+          errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+          messageParameters = Map("checkCondition" -> check.condition)
+        )
+
       case AlterColumns(table: ResolvedTable, specs) =>
         val groupedColumns = specs.groupBy(_.column.name)
         groupedColumns.collect {
