@@ -23,8 +23,10 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
-import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetRecordReader}
+import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.io.SeekableInputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -86,17 +88,21 @@ case class ParquetPartitionReaderFactory(
 
   private val parquetReaderCallback = new ParquetReaderCallback()
 
-  private def getFooter(file: PartitionedFile): ParquetMetadata = {
-    val conf = broadcastedConf.value.value
-    if (aggregation.isDefined || enableVectorizedReader) {
-      // There are two purposes for reading footer with row groups：
-      // 1. When there are aggregates to push down, we get max/min/count from footer statistics.
-      // 2. When there are vectorized reads, we can avoid reading the footer twice by reading
-      //    all row groups in advance and filter row groups according to filters that require
-      //    push down (no need to read the footer metadata again).
-      ParquetFooterReader.readFooter(conf, file, ParquetFooterReader.WITH_ROW_GROUPS)
+  private def openFileAndReadFooter(file: PartitionedFile):
+      (Option[HadoopInputFile], Option[SeekableInputStream], ParquetMetadata) = {
+    val hadoopConf = broadcastedConf.value.value
+    if (aggregation.isDefined) {
+      // When there are aggregates to push down, we get max/min/count from footer statistics.
+      val footer = ParquetFooterReader.readFooter(
+        HadoopInputFile.fromPath(file.toPath, hadoopConf),
+        ParquetFooterReader.buildFilter(hadoopConf, file, skipRowGroup = false))
+      (None, None, footer)
     } else {
-      ParquetFooterReader.readFooter(conf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+      // When there are vectorized reads, we can avoid
+      // 1. opening the file twice by transfering the SeekableInputStream
+      // 2. reading the footer twice by reading all row groups in advance and filter row groups
+      //    according to filters that require push down
+      ParquetFooterReader.openFileAndReadFooter(hadoopConf, file, enableVectorizedReader)
     }
   }
 
@@ -130,7 +136,7 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[InternalRow] {
         private var hasNext = true
         private lazy val row: InternalRow = {
-          val footer = getFooter(file)
+          val (_, _, footer) = openFileAndReadFooter(file)
 
           if (footer != null && footer.getBlocks.size > 0) {
             ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
@@ -175,7 +181,7 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
         private val batch: ColumnarBatch = {
-          val footer = getFooter(file)
+          val (_, _, footer) = openFileAndReadFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
             val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
               dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
@@ -211,74 +217,88 @@ case class ParquetPartitionReaderFactory(
           RebaseSpec) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
 
-    val filePath = file.toPath
-    val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
-    val fileFooter = getFooter(file)
-    val footerFileMetaData = fileFooter.getFileMetaData
-    val datetimeRebaseSpec = getDatetimeRebaseSpec(footerFileMetaData)
-    // Try to push down filters when filter push-down is enabled.
-    val pushed = if (enableParquetFilterPushDown) {
-      val parquetSchema = footerFileMetaData.getSchema
-      val parquetFilters = new ParquetFilters(
-        parquetSchema,
-        pushDownDate,
-        pushDownTimestamp,
-        pushDownDecimal,
-        pushDownStringPredicate,
-        pushDownInFilterThreshold,
-        isCaseSensitive,
-        datetimeRebaseSpec)
-      filters
-        // Collects all converted Parquet filter predicates. Notice that not all predicates can be
-        // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
-        // is used here.
-        .flatMap(parquetFilters.createFilter)
-        .reduceOption(FilterApi.and)
-    } else {
-      None
-    }
-    // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
-    // *only* if the file was created by something other than "parquet-mr", so check the actual
-    // writer here for this file.  We have to do this per-file, as each file in the table may
-    // have different writers.
-    // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
-    def isCreatedByParquetMr: Boolean =
-      footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
-
-    val convertTz =
-      if (timestampConversion && !isCreatedByParquetMr) {
-        Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+    val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
+    val (inputFileOpt, inputStreamOpt, fileFooter) = openFileAndReadFooter(file)
+    // Before transferring the ownership of inputStream to the vectorizedReader,
+    // we must take responsibility to close the inputStream if something goes wrong
+    // to avoid resource leak.
+    var shouldCloseInputStream = inputStreamOpt.isDefined
+    try {
+      val footerFileMetaData = fileFooter.getFileMetaData
+      val datetimeRebaseSpec = getDatetimeRebaseSpec(footerFileMetaData)
+      // Try to push down filters when filter push-down is enabled.
+      val pushed = if (enableParquetFilterPushDown) {
+        val parquetSchema = footerFileMetaData.getSchema
+        val parquetFilters = new ParquetFilters(
+          parquetSchema,
+          pushDownDate,
+          pushDownTimestamp,
+          pushDownDecimal,
+          pushDownStringPredicate,
+          pushDownInFilterThreshold,
+          isCaseSensitive,
+          datetimeRebaseSpec)
+        filters
+          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+          // is used here.
+          .flatMap(parquetFilters.createFilter)
+          .reduceOption(FilterApi.and)
       } else {
         None
       }
 
-    val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-    val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+      // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
+      // *only* if the file was created by something other than "parquet-mr", so check the actual
+      // writer here for this file.  We have to do this per-file, as each file in the table may
+      // have different writers.
+      // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
+      def isCreatedByParquetMr: Boolean =
+        footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
 
-    // Try to push down filters when filter push-down is enabled.
-    // Notice: This push-down is RowGroups level, not individual records.
-    if (pushed.isDefined) {
-      ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
-    }
-    val int96RebaseSpec = DataSourceUtils.int96RebaseSpec(
-      footerFileMetaData.getKeyValueMetaData.get,
-      int96RebaseModeInRead)
-    Utils.createResourceUninterruptiblyIfInTaskThread {
-      Utils.tryInitializeResource(
-        buildReaderFunc(
-          file.partitionValues,
-          pushed,
-          convertTz,
-          datetimeRebaseSpec,
-          int96RebaseSpec)
-      ) { reader =>
-        reader match {
-          case vectorizedReader: VectorizedParquetRecordReader =>
-            vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
-          case _ =>
-            reader.initialize(split, hadoopAttemptContext)
+      val convertTz =
+        if (timestampConversion && !isCreatedByParquetMr) {
+          Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+        } else {
+          None
         }
-        reader
+
+      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+      val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+
+      // Try to push down filters when filter push-down is enabled.
+      // Notice: This push-down is RowGroups level, not individual records.
+      if (pushed.isDefined) {
+        ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
+      }
+      val int96RebaseSpec = DataSourceUtils.int96RebaseSpec(
+        footerFileMetaData.getKeyValueMetaData.get,
+        int96RebaseModeInRead)
+      Utils.createResourceUninterruptiblyIfInTaskThread {
+        Utils.tryInitializeResource(
+          buildReaderFunc(
+            file.partitionValues,
+            pushed,
+            convertTz,
+            datetimeRebaseSpec,
+            int96RebaseSpec)
+        ) { reader =>
+          reader match {
+            case vectorizedReader: VectorizedParquetRecordReader =>
+              // We don't need to take care the close of inputStream because this transfers
+              // the ownership of inputStream to the vectorizedReader
+              vectorizedReader.initialize(
+                split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Some(fileFooter))
+              shouldCloseInputStream = false
+            case _ =>
+              reader.initialize(split, hadoopAttemptContext)
+          }
+          reader
+        }
+      }
+    } finally {
+      if (shouldCloseInputStream) {
+        inputStreamOpt.foreach(Utils.closeQuietly)
       }
     }
   }
