@@ -272,7 +272,8 @@ case class ParquetPartitionReaderFactory(
       ) { reader =>
         reader match {
           case vectorizedReader: VectorizedParquetRecordReader =>
-            vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
+            // FIXME: support DSv2
+            vectorizedReader.initialize(split, hadoopAttemptContext, None, None, Some(fileFooter))
           case _ =>
             reader.initialize(split, hadoopAttemptContext)
         }
