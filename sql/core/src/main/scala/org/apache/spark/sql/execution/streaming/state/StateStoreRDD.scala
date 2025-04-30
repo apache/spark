@@ -17,15 +17,36 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+
 import java.util.UUID
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
+
+/**
+ * Thread local storage for sharing StateStore instances between RDDs.
+ * This allows a ReadStateStore to be reused by a subsequent StateStore operation.
+ */
+object StateStoreThreadLocalTracker {
+  private val readStore: ThreadLocal[ReadStateStore] = new ThreadLocal[ReadStateStore]
+  private val usedForWriteStore: ThreadLocal[Boolean] = new ThreadLocal[Boolean]
+  def setStore(store: ReadStateStore): Unit = readStore.set(store)
+
+  def getStore: Option[ReadStateStore] = {
+    usedForWriteStore.set(true)
+    Option(readStore.get())
+  }
+
+  def isUsedForWriteStore: Boolean = usedForWriteStore.get()
+
+  def clearStore(): Unit = readStore.remove()
+}
 
 abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
@@ -95,6 +116,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
       stateStoreCkptIds.map(_.apply(partition.index).head),
       stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
+    StateStoreThreadLocalTracker.setStore(store)
     storeReadFunction(store, inputIter)
   }
 }
@@ -122,7 +144,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     extraOptions: Map[String, String] = Map.empty,
     useMultipleValuesPerKey: Boolean = false)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) {
+    sessionState, storeCoordinator, extraOptions) with Logging {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
@@ -130,12 +152,22 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val storeProviderId = getStateProviderId(partition)
 
     val inputIter = dataRDD.iterator(partition, ctxt)
-    val store = StateStore.get(
-      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      uniqueId.map(_.apply(partition.index).head),
-      stateSchemaBroadcast,
-      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey)
+    val store = StateStoreThreadLocalTracker.getStore match {
+      case Some(readStateStore: ReadStateStore) =>
+        StateStore.getWriteStore(readStateStore, storeProviderId,
+          keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
+      case None =>
+        StateStore.get(
+          storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
+    }
 
     if (storeConf.unloadOnCommit) {
       ctxt.addTaskCompletionListener[Unit](_ => {

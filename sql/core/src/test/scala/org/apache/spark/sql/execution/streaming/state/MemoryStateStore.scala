@@ -55,6 +55,8 @@ class MemoryStateStore extends StateStore() {
 
   override def abort(): Unit = {}
 
+  override def release(): Unit = {}
+
   override def id: StateStoreId = null
 
   override def version: Long = 0

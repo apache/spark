@@ -89,6 +89,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def abort(): Unit = {}
 
+    override def release(): Unit = {}
+
     override def toString(): String = {
       s"HDFSReadStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
@@ -193,6 +195,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       logInfo(log"Aborted version ${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} " +
         log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)}")
     }
+
+    override def release(): Unit = {}
 
     /**
      * Get an iterator of all the store data.

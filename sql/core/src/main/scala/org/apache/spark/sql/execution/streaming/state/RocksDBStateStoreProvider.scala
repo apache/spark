@@ -49,6 +49,7 @@ private[sql] class RocksDBStateStoreProvider
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+    case object RELEASED extends STATE
 
     @volatile private var state: STATE = UPDATING
     @volatile private var isValidated = false
@@ -365,6 +366,18 @@ private[sql] class RocksDBStateStoreProvider
       }
       result
     }
+
+    override def release(): Unit = {
+      if (state != RELEASED) {
+        logInfo(log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
+        rocksDB.release()
+        state = RELEASED
+      } else {
+        // Optionally log at DEBUG level that it's already released
+        logDebug(log"State store already released")
+      }
+    }
   }
 
   // Test-visible method to fetch the internal RocksDBStateStore class
@@ -446,17 +459,47 @@ private[sql] class RocksDBStateStoreProvider
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
-  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+  /**
+   * Creates and returns a state store with the specified parameters.
+   *
+   * @param version The version of the state store to load
+   * @param uniqueId Optional unique identifier for checkpoint
+   * @param readOnly Whether to open the store in read-only mode
+   * @param existingStore Optional existing store to reuse instead of creating a new one
+   * @return The loaded state store
+   */
+  private def loadStateStore(
+      version: Long,
+      uniqueId: Option[String],
+      readOnly: Boolean,
+      existingStore: Option[ReadStateStore] = None): StateStore = {
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
-      new RocksDBStateStore(version)
-    }
-    catch {
+      try {
+        // Load RocksDB store
+        rocksDB.load(
+          version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+          readOnly = readOnly)
+
+        // Return appropriate store instance
+        existingStore match {
+          case Some(stateStore: RocksDBStateStore) =>
+            // Reuse existing store for getWriteStore case
+            stateStore
+          case Some(_) =>
+            throw new IllegalArgumentException("Existing store must be a RocksDBStateStore")
+          case None =>
+            // Create new store instance for getStore/getReadStore cases
+            new RocksDBStateStore(version)
+        }
+      } catch {
+        case e: Throwable =>
+          throw e
+      }
+    } catch {
       case e: SparkException
         if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
         throw e
@@ -468,29 +511,22 @@ private[sql] class RocksDBStateStoreProvider
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
+  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+    loadStateStore(version, uniqueId, readOnly = false)
+  }
+
+  override def upgradeReadStoreToWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = {
+    assert(version == readStore.version,
+      s"Can only upgrade readStore to writeStore with the same version," +
+        s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
+    loadStateStore(version, uniqueId, readOnly = false, existingStore = Some(readStore))
+  }
 
   override def getReadStore(version: Long, uniqueId: Option[String] = None): StateStore = {
-    try {
-      if (version < 0) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
-      }
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = true)
-      new RocksDBStateStore(version)
-    }
-    catch {
-      case e: SparkException
-        if Option(e.getCondition).exists(_.contains("CANNOT_LOAD_STATE_STORE")) =>
-        throw e
-      case e: OutOfMemoryError =>
-        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
-          stateStoreId.toString,
-          "ROCKSDB_STORE_PROVIDER",
-          e)
-      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
-    }
+    loadStateStore(version, uniqueId, readOnly = true)
   }
 
   override def doMaintenance(): Unit = {
