@@ -634,9 +634,39 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
     Serializer used by Python worker to evaluate Arrow UDFs
     """
 
-    def __init__(self, assign_cols_by_name):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_cast,
+    ):
         super(ArrowStreamArrowUDFSerializer, self).__init__()
+        self._timezone = timezone
+        self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
+        self._arrow_cast = arrow_cast
+
+    def _create_array(self, arr, arrow_type, arrow_cast):
+        import pyarrow as pa
+
+        assert isinstance(arr, pa.Array)
+        assert isinstance(arrow_type, pa.DataType)
+
+        # def convert_timestamp(value):
+        #     if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+        #         ts = pd.Timestamp(value)
+        #     else:
+        #         ts = pd.Timestamp(value).tz_localize(self._timezone)
+        #     return ts.to_pydatetime()
+
+        try:
+            return arr
+        except pa.lib.ArrowException:
+            if arrow_cast:
+                return arr.cast(target_type=arrow_type, safe=self._safecheck)
+            else:
+                raise
 
     def dump_stream(self, iterator, stream):
         """
@@ -650,11 +680,9 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
             should_write_start_length = True
             for packed in iterator:
                 if len(packed) == 2 and isinstance(packed[1], pa.DataType):
-                    arr, _ = packed
-                    arrs = [arr]
+                    arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
                 else:
-                    assert all(len(t) == 2 and isinstance(t[1], pa.DataType) for t in packed)
-                    arrs = [t[0] for t in packed]
+                    arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
 
                 batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
