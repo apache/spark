@@ -1377,6 +1377,13 @@ case class CreateView(
 }
 
 /**
+ * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
+ */
+trait CreateTempView {
+  val collation: Option[String]
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(
