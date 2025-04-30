@@ -27,7 +27,8 @@ class ConstraintExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   def expectedMessage(value: String): String =
     s"""|[CHECK_CONSTRAINT_VIOLATION] CHECK constraint c1 a > 0 violated by row with values:
-        | - a : $value SQLSTATE: 23001""".stripMargin
+        | - a : $value
+        | SQLSTATE: 23001""".stripMargin
 
   test("CheckInvariant: returns null if column 'a' > 0") {
     checkEvaluation(expr, null, InternalRow(1))

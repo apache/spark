@@ -536,14 +536,6 @@
     ],
     "sqlState" : "42P08"
   },
-  "CHECK_CONSTRAINT_VIOLATION" : {
-    "message": [
-      "CHECK constraint <constraintName> <expression> violated by row with values:",
-      "<values>",
-      ""
-    ],
-    "sqlState": "23001"
-  },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
       "Checkpoint block <rddBlockId> not found!",
@@ -551,6 +543,14 @@
       "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
     ],
     "sqlState" : "56000"
+  },
+  "CHECK_CONSTRAINT_VIOLATION" : {
+    "message" : [
+      "CHECK constraint <constraintName> <expression> violated by row with values:",
+      "<values>",
+      ""
+    ],
+    "sqlState" : "23001"
   },
   "CIRCULAR_CLASS_REFERENCE" : {
     "message" : [

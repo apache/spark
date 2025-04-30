@@ -32,28 +32,24 @@ class ResolveTableConstraint(val catalogManager: CatalogManager) extends Rule[Lo
     _.containsPattern(COMMAND), ruleId) {
     case v2Write: V2WriteCommand
       if v2Write.table.resolved && v2Write.query.resolved &&
-        !v2Write.query.isInstanceOf[Validate] &&v2Write.outputResolved =>
-      val checks: Array[Check] = v2Write.table match {
-        case r: DataSourceV2Relation if r.table.constraints().nonEmpty =>
-          r.table.constraints().collect {
-            case c: Check if c.enforced() => c
+        !v2Write.query.isInstanceOf[Validate] && v2Write.outputResolved =>
+      v2Write.table match {
+        case r: DataSourceV2Relation
+          if r.table.constraints() != null && r.table.constraints().nonEmpty =>
+          val checks = r.table.constraints().collect {
+            case c: Check => c
           }
-        case _ => Array.empty
+          val checkInvariants = checks.map { c =>
+            val parsed =
+              catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql())
+            val columnExtractors = mutable.Map[String, Expression]()
+            buildColumnExtractors(parsed, columnExtractors)
+            CheckInvariant(parsed, columnExtractors.toSeq, c.name(), c.predicateSql())
+          }.toSeq
+          v2Write.withNewQuery(Validate(checkInvariants, v2Write.query))
+        case _ =>
+          v2Write
       }
-
-      val planWithCheckData = if (checks.isEmpty) {
-        v2Write.query
-      } else {
-        val checkExprs = checks.map { c =>
-          val parsed =
-            catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql())
-          val columnExtractors = mutable.Map[String, Expression]()
-          buildColumnExtractors(parsed, columnExtractors)
-          CheckInvariant(parsed, columnExtractors.toSeq, c.name(), c.predicateSql())
-        }
-        Validate(checkExprs.toSeq, v2Write.query)
-      }
-      v2Write.withNewQuery(planWithCheckData)
   }
 
   private def buildColumnExtractors(
