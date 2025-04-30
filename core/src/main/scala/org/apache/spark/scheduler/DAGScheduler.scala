@@ -1554,8 +1554,10 @@ private[spark] class DAGScheduler(
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
         // already executed atleast once
         if (sms.getNextAttemptId > 0) {
-          val (allJobsAborted, rollingBackStages) = abortIndeterminateStageChildren(sms)
-          if (allJobsAborted) {
+          val allStageDependentJobsAborted = abortIndeterminateStageChildren(sms)._1
+          if (allStageDependentJobsAborted) {
+            logInfo("All jobs depending on this indeterminate stage (" + stage + ") were " +
+              "aborted so this stage is not needed anymore.")
             return
           }
         }
@@ -2340,7 +2342,6 @@ private[spark] class DAGScheduler(
 
     // The stages will be rolled back after checking
     val rollingBackStages = HashSet[Stage](mapStage)
-    var numAbortedJobs = 0
     stagesToRollback.foreach {
       case mapStage: ShuffleMapStage =>
         val numMissingPartitions = mapStage.findMissingPartitions().length
@@ -2362,12 +2363,15 @@ private[spark] class DAGScheduler(
         if (numMissingPartitions < resultStage.numTasks) {
           // TODO: support to rollback result tasks.
           abortStage(resultStage, generateErrorMessage(resultStage), None)
-          numAbortedJobs += 1
         }
 
       case _ =>
     }
-    (numAbortedJobs >= numJobsWithStage, rollingBackStages)
+
+    val numActiveJobsWithStageAfterRollback =
+      activeJobs.count(job => stagesToRollback.contains(job.finalStage))
+
+    (numActiveJobsWithStageAfterRollback == 0, rollingBackStages)
   }
 
   /**
