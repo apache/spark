@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import os
 import random
 import time
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from pyspark import TaskContext
@@ -54,7 +55,6 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -360,21 +360,21 @@ class ScalarArrowUDFTestsMixin:
                     int(h[i].as_py()),
                     int(mi[i].as_py()),
                     int(s[i].as_py()),
+                    tzinfo=timezone.utc,
                 )
                 for i in range(len(y))
             ]
             return pa.array(dates, pa.timestamp("us", "UTC"))
 
-        with self.sql_conf({"spark.sql.session.timeZone": "Asia/Hong_Kong"}):
-            result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
-            self.assertEqual(
-                [
-                    Row(ts=datetime(2022, 1, 5, 7, 0, 1)),
-                    Row(ts=datetime(2023, 2, 6, 8, 1, 2)),
-                    Row(ts=datetime(2024, 3, 7, 9, 2, 3)),
-                ],
-                result.collect(),
-            )
+        result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
+        self.assertEqual(
+            [
+                Row(ts=datetime(2022, 1, 5, 7, 0, 1)),
+                Row(ts=datetime(2023, 2, 6, 8, 1, 2)),
+                Row(ts=datetime(2024, 3, 7, 9, 2, 3)),
+            ],
+            result.collect(),
+        )
 
     def test_arrow_udf_output_timestamps_ntz(self):
         import pyarrow as pa
