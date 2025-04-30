@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-
 import java.util.UUID
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
@@ -144,7 +142,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     extraOptions: Map[String, String] = Map.empty,
     useMultipleValuesPerKey: Boolean = false)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
-    sessionState, storeCoordinator, extraOptions) with Logging {
+    sessionState, storeCoordinator, extraOptions) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
