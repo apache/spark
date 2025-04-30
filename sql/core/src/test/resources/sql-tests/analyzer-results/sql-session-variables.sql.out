@@ -842,6 +842,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -884,6 +885,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
     "targetType" : "\"SMALLINT\"",
     "value" : "100000"
@@ -1000,6 +1002,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"INT\"",
     "value" : "1.0E10D"
@@ -1059,6 +1062,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -1995,8 +1999,8 @@ Aggregate [(c1#x + variablereference(system.session.var1=1))], [1 AS 1#x]
 SELECT c1, sum(c2) FROM VALUES(1, 2) AS T(c1, c2) GROUP BY c1 HAVING sum(c1) != var1
 -- !query analysis
 Project [c1#x, sum(c2)#xL]
-+- Filter NOT (sum(c1#x)#xL = cast(variablereference(system.session.var1=1) as bigint))
-   +- Aggregate [c1#x], [c1#x, sum(c2#x) AS sum(c2)#xL, sum(c1#x) AS sum(c1#x)#xL]
++- Filter NOT (sum(c1)#xL = cast(variablereference(system.session.var1=1) as bigint))
+   +- Aggregate [c1#x], [c1#x, sum(c2#x) AS sum(c2)#xL, sum(c1#x) AS sum(c1)#xL]
       +- SubqueryAlias T
          +- LocalRelation [c1#x, c2#x]
 
@@ -2050,7 +2054,7 @@ WithCTE
 :        +- OneRowRelation
 +- Project [c1#x AS 1#x]
    +- SubqueryAlias v1
-      +- CTERelationRef xxxx, true, [c1#x], false, false
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
 
 
 -- !query

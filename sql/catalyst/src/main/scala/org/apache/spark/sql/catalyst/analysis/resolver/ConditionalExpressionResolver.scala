@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.{ConditionalExpression, Expression}
 
@@ -28,8 +27,7 @@ class ConditionalExpressionResolver(
     expressionResolver: ExpressionResolver,
     timezoneAwareExpressionResolver: TimezoneAwareExpressionResolver)
   extends TreeNodeResolver[ConditionalExpression, Expression]
-  with ResolvesExpressionChildren
-  with SQLConfHelper {
+  with ResolvesExpressionChildren {
 
   private val typeCoercionTransformations: Seq[Expression => Expression] =
     if (conf.ansiEnabled) {
@@ -42,7 +40,7 @@ class ConditionalExpressionResolver(
 
   override def resolve(unresolvedConditionalExpression: ConditionalExpression): Expression = {
     val conditionalExpressionWithResolvedChildren =
-      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve)
+      withResolvedChildren(unresolvedConditionalExpression, expressionResolver.resolve _)
 
     typeCoercionResolver.resolve(conditionalExpressionWithResolvedChildren)
   }

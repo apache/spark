@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.lang.reflect.InvocationTargetException
 import java.util.{Optional, ServiceLoader}
 import java.util.stream.Collectors
 
@@ -415,10 +416,15 @@ private[ml] object MLUtils {
     if (operators.isEmpty || !operators.contains(name)) {
       throw MlUnsupportedException(s"Unsupported read for $name")
     }
-    operators(name)
-      .getMethod("load", classOf[String])
-      .invoke(null, path)
-      .asInstanceOf[T]
+    try {
+      operators(name)
+        .getMethod("load", classOf[String])
+        .invoke(null, path)
+        .asInstanceOf[T]
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   /**
@@ -620,8 +626,8 @@ private[ml] object MLUtils {
         "isDistributed",
         "logLikelihood",
         "logPerplexity",
-        "describeTopics")),
-    (classOf[LocalLDAModel], Set("vocabSize")),
+        "describeTopics",
+        "vocabSize")),
     (
       classOf[DistributedLDAModel],
       Set("trainingLogLikelihood", "logPrior", "getCheckpointFiles", "toLocal")),
@@ -688,7 +694,12 @@ private[ml] object MLUtils {
 
   def invokeMethodAllowed(obj: Object, methodName: String): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName)
+    try {
+      invokeMethod(obj, methodName)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def invokeMethodAllowed(
@@ -697,7 +708,12 @@ private[ml] object MLUtils {
       args: Array[Object],
       parameterTypes: Array[Class[_]]): Object = {
     validate(obj, methodName)
-    invokeMethod(obj, methodName, args, parameterTypes)
+    try {
+      invokeMethod(obj, methodName, args, parameterTypes)
+    } catch {
+      case e: InvocationTargetException if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
   def write(instance: MLWritable, writeProto: proto.MlCommand.Write): Unit = {

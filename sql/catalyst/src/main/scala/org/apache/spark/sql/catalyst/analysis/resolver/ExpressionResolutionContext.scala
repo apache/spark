@@ -23,21 +23,66 @@ package org.apache.spark.sql.catalyst.analysis.resolver
  * of [[ExpressionResolver.resolve]] call, which are not the resolved child itself, from children
  * to parents.
  *
- * @param hasAggregateExpressionsInASubtree A flag that highlights that a specific node
- *                                    corresponding to [[ExpressionResolutionContext]] has
- *                                    aggregate expressions in its subtree.
- * @param hasAttributeInASubtree A flag that highlights that a specific node corresponding to
- *                         [[ExpressionResolutionContext]] has attributes in its subtree.
+ * @param isRoot A flag indicating that we are resolving the root of the expression tree. It's
+ *   used by the [[ExpressionResolver]] to correctly propagate top-level information like
+ *   [[isTopOfProjectList]]. It's going to be set to `true` for the top-level context when we are
+ *   entering expression resolution from a specific operator (this can be either a top-level query
+ *   or a subquery).
+ * @param hasLocalReferences A flag that highlights that a specific node corresponding to
+ *   [[ExpressionResolutionContext]] has local [[AttributeReferences]] in its subtree.
+ * @param hasOuterReferences A flag that highlights that a specific node corresponding to
+ *   [[ExpressionResolutionContext]] has outer [[AttributeReferences]] in its subtree.
+ * @param hasAggregateExpressions A flag that highlights that a specific node
+ *   corresponding to [[ExpressionResolutionContext]] has aggregate expressions in its subtree.
+ * @param hasAttributeOutsideOfAggregateExpressions A flag that highlights that a specific node
+ *   corresponding to [[ExpressionResolutionContext]] has attributes in its subtree which are not
+ *   under an [[AggregateExpression]].
  * @param hasLateralColumnAlias A flag that highlights that a specific node corresponding to
- *                        [[ExpressionResolutionContext]] has LCA in its subtree.
+ *   [[ExpressionResolutionContext]] has LCA in its subtree.
+ * @param isTopOfProjectList A flag indicating that we are resolving top of [[Project]] list.
+ *   Otherwise, extra [[Alias]]es have to be stripped away.
+ * @param resolvingGroupingExpressions A flag indicating whether an expression we are resolving is
+ *   one of [[Aggregate.groupingExpressions]].
  */
 class ExpressionResolutionContext(
-    var hasAggregateExpressionsInASubtree: Boolean = false,
-    var hasAttributeInASubtree: Boolean = false,
-    var hasLateralColumnAlias: Boolean = false) {
-  def merge(other: ExpressionResolutionContext): Unit = {
-    hasAggregateExpressionsInASubtree |= other.hasAggregateExpressionsInASubtree
-    hasAttributeInASubtree |= other.hasAttributeInASubtree
-    hasLateralColumnAlias |= other.hasLateralColumnAlias
+    val isRoot: Boolean = false,
+    var hasLocalReferences: Boolean = false,
+    var hasOuterReferences: Boolean = false,
+    var hasAggregateExpressions: Boolean = false,
+    var hasAttributeOutsideOfAggregateExpressions: Boolean = false,
+    var hasLateralColumnAlias: Boolean = false,
+    var isTopOfProjectList: Boolean = false,
+    var resolvingGroupingExpressions: Boolean = false) {
+
+  /**
+   * Propagate generic information that is valid across the whole expression tree from the
+   * [[child]] context.
+   */
+  def mergeChild(child: ExpressionResolutionContext): Unit = {
+    hasLocalReferences |= child.hasLocalReferences
+    hasOuterReferences |= child.hasOuterReferences
+    hasAggregateExpressions |= child.hasAggregateExpressions
+    hasAttributeOutsideOfAggregateExpressions |= child.hasAttributeOutsideOfAggregateExpressions
+    hasLateralColumnAlias |= child.hasLateralColumnAlias
+  }
+}
+
+object ExpressionResolutionContext {
+
+  /**
+   * Create a new child [[ExpressionResolutionContext]]. Propagates the relevant information
+   * top-down.
+   */
+  def createChild(parent: ExpressionResolutionContext): ExpressionResolutionContext = {
+    if (parent.isRoot) {
+      new ExpressionResolutionContext(
+        isTopOfProjectList = parent.isTopOfProjectList,
+        resolvingGroupingExpressions = parent.resolvingGroupingExpressions
+      )
+    } else {
+      new ExpressionResolutionContext(
+        resolvingGroupingExpressions = parent.resolvingGroupingExpressions
+      )
+    }
   }
 }

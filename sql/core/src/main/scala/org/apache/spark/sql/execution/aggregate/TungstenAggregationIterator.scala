@@ -212,7 +212,7 @@ class TungstenAggregationIterator(
           if (buffer == null) {
             // failed to allocate the first page
             // scalastyle:off throwerror
-            throw new SparkOutOfMemoryError("_LEGACY_ERROR_TEMP_3302", new util.HashMap())
+            throw new SparkOutOfMemoryError("AGGREGATE_OUT_OF_MEMORY", new util.HashMap())
             // scalastyle:on throwerror
           }
         }

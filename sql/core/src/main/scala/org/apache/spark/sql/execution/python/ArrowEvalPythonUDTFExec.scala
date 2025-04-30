@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
@@ -81,8 +82,10 @@ case class ArrowEvalPythonUDTFExec(
 
       val actualDataTypes = (0 until flattenedBatch.numCols()).map(
         i => flattenedBatch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from arrow-enabled Python UDTF: " +
-        s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+      if (outputTypes != actualDataTypes) {
+        throw QueryExecutionErrors.arrowDataTypeMismatchError(
+          "Python UDTF", outputTypes, actualDataTypes)
+      }
 
       flattenedBatch.setNumRows(batch.numRows())
       flattenedBatch.rowIterator().asScala

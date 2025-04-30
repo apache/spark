@@ -214,6 +214,15 @@ object StateStoreErrors {
     new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
   }
 
+  def failedToGetChangelogWriter(version: Long, e: Throwable):
+    StateStoreFailedToGetChangelogWriter = {
+    new StateStoreFailedToGetChangelogWriter(version, e)
+  }
+
+  def stateStoreOperationOutOfOrder(errorMsg: String): StateStoreOperationOutOfOrder = {
+    new StateStoreOperationOutOfOrder(errorMsg)
+  }
+
   def cannotLoadStore(e: Throwable): Throwable = {
     e match {
       case e: SparkException
@@ -378,6 +387,16 @@ class TWSSchemaMustBeNullable(
       "columnFamilyName" -> columnFamilyName,
       "schema" -> schema))
 
+private[sql] case class TransformWithStateUserFunctionException(
+    cause: Throwable,
+    functionName: String)
+  extends SparkException(
+    errorClass = "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR",
+    messageParameters = Map(
+      "reason" -> Option(cause.getMessage).getOrElse(""),
+      "function" -> functionName),
+    cause = cause)
+
 class StateStoreInvalidValueSchemaEvolution(
     oldValueSchema: String,
     newValueSchema: String)
@@ -427,6 +446,12 @@ class StateStoreSnapshotPartitionNotFound(
       "operatorId" -> operatorId.toString,
       "checkpointLocation" -> checkpointLocation))
 
+class StateStoreFailedToGetChangelogWriter(version: Long, e: Throwable)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.FAILED_TO_GET_CHANGELOG_WRITER",
+    messageParameters = Map("version" -> version.toString),
+    cause = e)
+
 class StateStoreKeyRowFormatValidationFailure(errorMsg: String, stateStoreID: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
@@ -457,3 +482,9 @@ class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
     messageParameters = Map("inputClass" -> inputClass))
+
+class StateStoreOperationOutOfOrder(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+    messageParameters = Map("errorMsg" -> errorMsg)
+  )

@@ -181,15 +181,7 @@ private[spark] class TaskSchedulerImpl(
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
-  private val schedulingModeConf = conf.get(SCHEDULER_MODE)
-  val schedulingMode: SchedulingMode =
-    try {
-      SchedulingMode.withName(schedulingModeConf)
-    } catch {
-      case e: java.util.NoSuchElementException =>
-        throw SparkCoreErrors.unrecognizedSchedulerModePropertyError(SCHEDULER_MODE_PROPERTY,
-          schedulingModeConf)
-    }
+  val schedulingMode: SchedulingMode = conf.get(SCHEDULER_MODE)
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 
@@ -780,8 +772,6 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
-    var failedExecutor: Option[String] = None
-    var reason: Option[ExecutorLossReason] = None
     synchronized {
       try {
         Option(taskIdToTaskSetManager.get(tid)) match {
@@ -808,12 +798,6 @@ private[spark] class TaskSchedulerImpl(
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
       }
-    }
-    // Update the DAGScheduler without holding a lock on this, since that can deadlock
-    if (failedExecutor.isDefined) {
-      assert(reason.isDefined)
-      dagScheduler.executorLost(failedExecutor.get, reason.get)
-      backend.reviveOffers()
     }
   }
 

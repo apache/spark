@@ -68,6 +68,7 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
 test_packages = []
 if "SPARK_TESTING" in os.environ:
     test_packages = [
+        "pyspark.errors.tests.connect",
         "pyspark.tests",  # for Memory profiler parity tests
         "pyspark.resource.tests",
         "pyspark.sql.tests",
@@ -79,6 +80,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.connect.pandas",
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
+        "pyspark.sql.tests.pandas.helper",
         "pyspark.sql.tests.plot",
         "pyspark.sql.tests.streaming",
         "pyspark.ml.tests",
@@ -133,8 +135,8 @@ try:
     _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "11.0.0"
-    _minimum_grpc_version = "1.59.3"
-    _minimum_googleapis_common_protos_version = "1.56.4"
+    _minimum_grpc_version = "1.67.0"
+    _minimum_googleapis_common_protos_version = "1.65.0"
 
     with open("README.md") as f:
         long_description = f.read()
@@ -168,6 +170,7 @@ try:
         "pyspark.sql.plot",
         "pyspark.sql.protobuf",
         "pyspark.sql.streaming",
+        "pyspark.sql.streaming.proto",
         "pyspark.sql.worker",
         "pyspark.streaming",
         "pyspark.pandas",

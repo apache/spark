@@ -21,6 +21,7 @@ from shutil import rmtree
 
 import numpy as np
 
+from pyspark.errors import PySparkException
 from pyspark.ml.linalg import Vectors, Matrices
 from pyspark.sql import DataFrame, Row
 from pyspark.ml.classification import (
@@ -977,6 +978,10 @@ class ClassificationTestsMixin:
             model.write().overwrite().save(d)
             model2 = MultilayerPerceptronClassificationModel.load(d)
             self.assertEqual(str(model), str(model2))
+
+    def test_invalid_load_location(self):
+        with self.assertRaisesRegex(PySparkException, "Path does not exist"):
+            LogisticRegression.load("invalid_location")
 
 
 class ClassificationTests(ClassificationTestsMixin, ReusedSQLTestCase):

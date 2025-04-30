@@ -2721,6 +2721,70 @@ class DataFrameSuite extends QueryTest
       parameters = Map("name" -> ".whatever")
     )
   }
+
+  test("SPARK-50994: RDD conversion is performed with execution context") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        withTempDir(dir => {
+          val dummyDF = Seq((1, 1.0), (2, 2.0), (3, 3.0), (1, 1.0)).toDF("a", "A")
+          dummyDF.write.format("parquet").mode("overwrite").save(dir.getCanonicalPath)
+
+          val df = spark.read.parquet(dir.getCanonicalPath)
+          val encoder = ExpressionEncoder(df.schema)
+          val deduplicated = df.dropDuplicates(Array("a"))
+          val df2 = deduplicated.flatMap(row => Seq(row))(encoder).rdd
+
+          val output = spark.createDataFrame(df2, df.schema)
+          checkAnswer(output, Seq(Row(1, 1.0), Row(2, 2.0), Row(3, 3.0)))
+        })
+      }
+    }
+  }
+
+  test("Nested order by") {
+    val df = sql("SELECT * FROM VALUES (4,5,6), (1,2,3)")
+
+    checkAnswer(df.select("col1").orderBy("col2"), Seq(Row(1), Row(4)))
+    checkAnswer(df.select("col1").orderBy("col2").orderBy("col3"), Seq(Row(1), Row(4)))
+    checkAnswer(df.select("col1").orderBy(df("col2")), Seq(Row(1), Row(4)))
+    val df1 = df.select("col1").orderBy("col2").orderBy("col1").orderBy("col2").orderBy("col3")
+    checkAnswer(df1, Seq(Row(1), Row(4)))
+
+    // Cannot order by missing attribute under SubqueryAlias
+    val df2 = df1.select("col1").as("q1")
+    checkAnswer(df2.orderBy("col1"), Seq(Row(1), Row(4)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.orderBy("col2")
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`col2`", "proposal" -> "`col1`"),
+      context = ExpectedContext("orderBy", getCurrentClassCallSitePattern)
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.orderBy(df1("col2"))
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`col2`", "proposal" -> "`col1`")
+    )
+  }
+
+  test("Column reference above JOIN takes precedence over ALL keyword") {
+    val df1 = sql("select * from values(4, 5, 6), (1, 2, 3) as t1(a, b, all1)")
+    val df2 = sql("select * from values(4, 8, 9), (1, 5, 6) as t2(a, b, all)")
+    val df3 = df1.join(df2, df1("a") === df2("a"))
+
+    checkAnswer(df3.select(df2("all").as("all1")).orderBy("all"), Seq(Row(6), Row(9)))
+    checkAnswer(df3.orderBy("all"), Seq(Row(1, 2, 3, 1, 5, 6), Row(4, 5, 6, 4, 8, 9)))
+  }
+
+  test("Column reference takes precedence over ALL keyword with nested ORDER BY") {
+    val df = sql("SELECT * FROM VALUES(4, 5, 6), (1, 2, 3) as t(a, b, all)")
+
+    val df1 = df.select("a").orderBy("b").orderBy("all")
+    checkAnswer(df1, Seq(Row(1), Row(4)))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

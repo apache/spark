@@ -18,30 +18,50 @@ import os
 import platform
 import tempfile
 import unittest
-from typing import Callable, Union
+from datetime import datetime
+from decimal import Decimal
+from typing import Callable, Iterable, List, Union
 
-from pyspark.errors import PythonException, AnalysisException
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.datasource import (
-    DataSource,
-    DataSourceReader,
-    InputPartition,
-    DataSourceWriter,
-    DataSourceArrowWriter,
-    WriterCommitMessage,
     CaseInsensitiveDict,
+    DataSource,
+    DataSourceArrowWriter,
+    DataSourceReader,
+    DataSourceWriter,
+    EqualNullSafe,
+    EqualTo,
+    Filter,
+    GreaterThan,
+    GreaterThanOrEqual,
+    In,
+    InputPartition,
+    IsNotNull,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Not,
+    StringContains,
+    StringEndsWith,
+    StringStartsWith,
+    WriterCommitMessage,
 )
 from pyspark.sql.functions import spark_partition_id
+from pyspark.sql.session import SparkSession
 from pyspark.sql.types import Row, StructType
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
+    SPARK_HOME,
+    ReusedSQLTestCase,
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import ReusedSQLTestCase, SPARK_HOME
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonDataSourceTestsMixin:
+    spark: SparkSession
+
     def test_basic_data_source_class(self):
         class MyDataSource(DataSource):
             ...
@@ -245,6 +265,209 @@ class BasePythonDataSourceTestsMixin:
         df = self.spark.read.format("memory").option("num_partitions", 2).load()
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
         self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
+
+    def test_filter_pushdown(self):
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.has_filter = False
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                assert set(filters) == {
+                    IsNotNull(("x",)),
+                    IsNotNull(("y",)),
+                    EqualTo(("x",), 1),
+                    EqualTo(("y",), 2),
+                }, filters
+                self.has_filter = True
+                # pretend we support x = 1 filter but in fact we don't
+                # so we only return y = 2 filter
+                yield filters[filters.index(EqualTo(("y",), 2))]
+
+            def partitions(self):
+                assert self.has_filter
+                return super().partitions()
+
+            def read(self, partition):
+                assert self.has_filter
+                yield [1, 1]
+                yield [1, 2]
+                yield [2, 2]
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "x int, y int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("test").load().filter("x = 1 and y = 2")
+            # only the y = 2 filter is applied post scan
+            assertDataFrameEqual(df, [Row(x=1, y=2), Row(x=2, y=2)])
+
+    def test_extraneous_filter(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                yield EqualTo(("x",), 1)
+
+            def partitions(self):
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_EXTRANEOUS_FILTERS"):
+                self.spark.read.format("test").load().filter("x = 1").show()
+
+    def test_filter_pushdown_error(self):
+        error_str = "dummy error"
+
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                raise Exception(error_str)
+
+            def read(self, partition):
+                yield [1]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1 or x is null")
+            assertDataFrameEqual(df, [Row(x=1)])  # works when not pushing down filters
+            with self.assertRaisesRegex(Exception, error_str):
+                df.filter("x = 1").explain()
+
+    def test_filter_pushdown_disabled(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("x int").load()
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def _check_filters(self, sql_type, sql_filter, python_filters):
+        """
+        Parameters
+        ----------
+        sql_type: str
+            The SQL type of the column x.
+        sql_filter: str
+            A SQL filter using the column x.
+        python_filters: List[Filter]
+            The expected python filters to be pushed down.
+        """
+
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                actual = [f for f in filters if not isinstance(f, IsNotNull)]
+                expected = python_filters
+                assert actual == expected, (actual, expected)
+                return filters
+
+            def read(self, partition):
+                yield from []
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return f"x {sql_type}"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter(sql_filter)
+            df.count()
+
+    def test_unsupported_filter(self):
+        self._check_filters(
+            "struct<a:int, b:int, c:int>", "x.a = 1 and x.b = x.c", [EqualTo(("x", "a"), 1)]
+        )
+        self._check_filters("int", "x = 1 or x > 2", [])
+        self._check_filters("int", "(0 < x and x < 1) or x = 2", [])
+        self._check_filters("int", "x % 5 = 1", [])
+        self._check_filters("array<int>", "x[0] = 1", [])
+        self._check_filters("string", "x like 'a%a%'", [])
+        self._check_filters("string", "x ilike 'a'", [])
+        self._check_filters("string", "x = 'a' collate zh", [])
+
+    def test_filter_value_type(self):
+        self._check_filters("int", "x = 1", [EqualTo(("x",), 1)])
+        self._check_filters("int", "x = null", [EqualTo(("x",), None)])
+        self._check_filters("float", "x = 3 / 2", [EqualTo(("x",), 1.5)])
+        self._check_filters("string", "x = '1'", [EqualTo(("x",), "1")])
+        self._check_filters("array<int>", "x = array(1, 2)", [EqualTo(("x",), [1, 2])])
+        self._check_filters(
+            "struct<x:int>", "x = named_struct('x', 1)", [EqualTo(("x",), {"x": 1})]
+        )
+        self._check_filters(
+            "decimal", "x in (1.1, 2.1)", [In(("x",), [Decimal(1.1), Decimal(2.1)])]
+        )
+        self._check_filters(
+            "timestamp_ntz",
+            "x = timestamp_ntz '2020-01-01 00:00:00'",
+            [EqualTo(("x",), datetime.strptime("2020-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"))],
+        )
+        self._check_filters(
+            "interval second",
+            "x = interval '2' second",
+            [],  # intervals are not supported
+        )
+
+    def test_filter_type(self):
+        self._check_filters("boolean", "x", [EqualTo(("x",), True)])
+        self._check_filters("boolean", "not x", [Not(EqualTo(("x",), True))])
+        self._check_filters("int", "x is null", [IsNull(("x",))])
+        self._check_filters("int", "x <> 0", [Not(EqualTo(("x",), 0))])
+        self._check_filters("int", "x <=> 1", [EqualNullSafe(("x",), 1)])
+        self._check_filters("int", "1 < x", [GreaterThan(("x",), 1)])
+        self._check_filters("int", "1 <= x", [GreaterThanOrEqual(("x",), 1)])
+        self._check_filters("int", "x < 1", [LessThan(("x",), 1)])
+        self._check_filters("int", "x <= 1", [LessThanOrEqual(("x",), 1)])
+        self._check_filters("string", "x like 'a%'", [StringStartsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a'", [StringEndsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a%'", [StringContains(("x",), "a")])
+        self._check_filters(
+            "string", "x like 'a%b'", [StringStartsWith(("x",), "a"), StringEndsWith(("x",), "b")]
+        )
+        self._check_filters("int", "x in (1, 2)", [In(("x",), [1, 2])])
+
+    def test_filter_nested_column(self):
+        self._check_filters("struct<y:int>", "x.y = 1", [EqualTo(("x", "y"), 1)])
 
     def _get_test_json_data_source(self):
         import json

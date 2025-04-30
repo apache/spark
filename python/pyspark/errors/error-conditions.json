@@ -159,8 +159,8 @@
       "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
     ]
   },
-  "COLLATION_INVALID_PROVIDER" : {
-    "message" : [
+  "COLLATION_INVALID_PROVIDER": {
+    "message": [
       "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
     ]
   },
@@ -189,9 +189,19 @@
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_EXTRANEOUS_FILTERS": {
+    "message": [
+      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
+    ]
+  },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
     "message": [
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
+    ]
+  },
+  "DATA_SOURCE_PUSHDOWN_DISABLED": {
+    "message": [
+      "<type> implements pushFilters() but filter pushdown is disabled because configuration '<conf>' is false. Set it to true to enable filter pushdown."
     ]
   },
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
@@ -202,6 +212,11 @@
   "DATA_SOURCE_TYPE_MISMATCH": {
     "message": [
       "Expected <expected>, but got <actual>."
+    ]
+  },
+  "DATA_SOURCE_UNSUPPORTED_FILTER": {
+    "message": [
+      "Unexpected filter <name>."
     ]
   },
   "DIFFERENT_PANDAS_DATAFRAME": {
@@ -372,8 +387,8 @@
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
-  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS" : {
-    "message" : [
+  "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS": {
+    "message": [
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ]
   },
@@ -502,8 +517,8 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
-  "MALFORMED_VARIANT" : {
-    "message" : [
+  "MALFORMED_VARIANT": {
+    "message": [
       "Variant binary is malformed. Please check the data source is valid."
     ]
   },
@@ -517,7 +532,7 @@
       "A master URL must be set in your configuration."
     ]
   },
-  "MEMORY_PROFILE_INVALID_SOURCE":{
+  "MEMORY_PROFILE_INVALID_SOURCE": {
     "message": [
       "Memory profiler can only be used on editors with line numbers."
     ]
@@ -812,7 +827,7 @@
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
     ]
   },
-  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS" : {
+  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS": {
     "message": [
       "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
     ]
@@ -865,7 +880,7 @@
   },
   "RESPONSE_ALREADY_RECEIVED": {
     "message": [
-      "OPERATION_NOT_FOUND on the server but responses were already received from it."
+      "<error_type> on the server but responses were already received from it."
     ]
   },
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
@@ -905,7 +920,7 @@
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
-      "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
     ]
   },
   "SESSION_ALREADY_EXIST": {

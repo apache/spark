@@ -48,7 +48,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
-  override val defaultNamespace: Array[String] = Array(SQLConf.get.defaultDatabase)
+  override val defaultNamespace: Array[String] = Array(conf.defaultDatabase)
 
   override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
@@ -83,7 +83,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def hasCustomSessionCatalog: Boolean = {
-    catalog.conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) != "builtin"
   }
 
   override def loadTable(ident: Identifier): Table = {

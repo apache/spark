@@ -37,6 +37,7 @@ DAG visualization, and all stages of the job.
 
 The information that is displayed in this section is
 * User: Current Spark user
+* Started At: The startup time of Spark application
 * Total uptime: Time since Spark application started
 * Scheduling mode: See [job scheduling](job-scheduling.html#configuring-pool-properties)
 * Number of jobs per status: Active, Completed, Failed

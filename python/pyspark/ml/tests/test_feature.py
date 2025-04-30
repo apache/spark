@@ -891,6 +891,8 @@ class FeatureTestsMixin:
         self.assertEqual(stopWordRemover.getInputCol(), "input")
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
+        self.assertEqual(type(stopWordRemover.getStopWords()), list)
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], str))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)

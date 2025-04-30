@@ -892,7 +892,7 @@ struct<>
 -- !query
 select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
 -- !query schema
-struct<concat_ws( , utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day. Hello, world! Nice day.
 SQL SQL
@@ -914,7 +914,7 @@ sitTing sitTing
 -- !query
 select concat_ws(' ', utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<concat_ws( , utf8_binary, utf8_lcase):string collate null>
+struct<concat_ws(' ' collate null, utf8_binary, utf8_lcase):string collate null>
 -- !query output
 Hello, world! Nice day. Hello, world! Nice day.
 Something else. Nothing here. Something else. Nothing here.
@@ -973,7 +973,7 @@ kitten SQL
 -- !query
 select concat_ws(',', utf8_lcase, 'word'), concat_ws(',', utf8_binary, 'word') from t5
 -- !query schema
-struct<concat_ws(,, utf8_lcase, word):string collate UTF8_LCASE,concat_ws(,, utf8_binary, word):string>
+struct<concat_ws(',' collate UTF8_LCASE, utf8_lcase, 'word' collate UTF8_LCASE):string collate UTF8_LCASE,concat_ws(,, utf8_binary, word):string>
 -- !query output
 Hello, world! Nice day.,word	Hello, world! Nice day.,word
 SQL,word	Spark,word
@@ -995,7 +995,7 @@ sitTing,word	kitten,word
 -- !query
 select concat_ws(',', utf8_lcase, 'word' collate utf8_binary), concat_ws(',', utf8_binary, 'word' collate utf8_lcase) from t5
 -- !query schema
-struct<concat_ws(,, utf8_lcase, collate(word, utf8_binary)):string,concat_ws(,, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE>
+struct<concat_ws(,, utf8_lcase, collate(word, utf8_binary)):string,concat_ws(',' collate UTF8_LCASE, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.,word	Hello, world! Nice day.,word
 SQL,word	Spark,word
@@ -1269,7 +1269,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t5
 -- !query schema
-struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, a, 3):string collate UTF8_LCASE>
+struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, 'a' collate UTF8_LCASE, 3):string collate UTF8_LCASE>
 -- !query output
 	
 	
@@ -1464,7 +1464,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select contains(utf8_binary, 'a'), contains(utf8_lcase, 'a') from t5
 -- !query schema
-struct<contains(utf8_binary, a):boolean,contains(utf8_lcase, a):boolean>
+struct<contains(utf8_binary, a):boolean,contains(utf8_lcase, 'a' collate UTF8_LCASE):boolean>
 -- !query output
 false	false
 false	false
@@ -1659,7 +1659,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select substring_index(utf8_binary, 'a', 2), substring_index(utf8_lcase, 'a', 2) from t5
 -- !query schema
-struct<substring_index(utf8_binary, a, 2):string,substring_index(utf8_lcase, a, 2):string collate UTF8_LCASE>
+struct<substring_index(utf8_binary, a, 2):string,substring_index(utf8_lcase, 'a' collate UTF8_LCASE, 2):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1854,7 +1854,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select instr(utf8_binary, 'a'), instr(utf8_lcase, 'a') from t5
 -- !query schema
-struct<instr(utf8_binary, a):int,instr(utf8_lcase, a):int>
+struct<instr(utf8_binary, a):int,instr(utf8_lcase, 'a' collate UTF8_LCASE):int>
 -- !query output
 0	0
 0	0
@@ -2001,7 +2001,7 @@ struct<find_in_set(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lc
 -- !query
 select find_in_set(utf8_binary, 'aaAaaAaA,i̇o'), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o') from t5
 -- !query schema
-struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, aaAaaAaA,i̇o):int>
+struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate UTF8_LCASE):int>
 -- !query output
 0	0
 0	0
@@ -2196,7 +2196,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select startswith(utf8_binary, 'aaAaaAaA'), startswith(utf8_lcase, 'aaAaaAaA') from t5
 -- !query schema
-struct<startswith(utf8_binary, aaAaaAaA):boolean,startswith(utf8_lcase, aaAaaAaA):boolean>
+struct<startswith(utf8_binary, aaAaaAaA):boolean,startswith(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE):boolean>
 -- !query output
 false	false
 false	false
@@ -2262,7 +2262,7 @@ true	true
 -- !query
 select translate(utf8_lcase, utf8_lcase, '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, utf8_lcase, 12345):string collate UTF8_LCASE>
+struct<translate(utf8_lcase, utf8_lcase, '12345' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 1
 11111111
@@ -2369,7 +2369,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select translate(utf8_lcase, 'aaAaaAaA', '12345'), translate(utf8_binary, 'aaAaaAaA', '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE,translate(utf8_binary, aaAaaAaA, 12345):string>
+struct<translate(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE, '12345' collate UTF8_LCASE):string collate UTF8_LCASE,translate(utf8_binary, aaAaaAaA, 12345):string>
 -- !query output
 1	bb3b33b3
 11111111	11313313
@@ -2391,7 +2391,7 @@ sitTing	kitten
 -- !query
 select translate(utf8_lcase, 'aBc' collate utf8_binary, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, collate(aBc, utf8_binary), 12345):string,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
+struct<translate(utf8_lcase, collate(aBc, utf8_binary), 12345):string,translate(utf8_binary, collate(aBc, utf8_lcase), '12345' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 1	22121121
 11A11A1A	11111111
@@ -2413,7 +2413,7 @@ sitTing	kitten
 -- !query
 select translate(utf8_lcase, 'aBc ' collate utf8_binary_rtrim, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, collate(aBc , utf8_binary_rtrim), 12345):string collate UTF8_BINARY_RTRIM,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
+struct<translate(utf8_lcase, collate(aBc , utf8_binary_rtrim), '12345' collate UTF8_BINARY_RTRIM):string collate UTF8_BINARY_RTRIM,translate(utf8_binary, collate(aBc, utf8_lcase), '12345' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 1	22121121
 11A11A1A	11111111
@@ -2516,7 +2516,7 @@ kitten
 -- !query
 select replace(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 'abc') from t5
 -- !query schema
-struct<replace(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), abc):string collate UTF8_LCASE>
+struct<replace(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), 'abc' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Spark
 aaAaAAaA
@@ -2564,7 +2564,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select replace(utf8_binary, 'aaAaaAaA', 'abc'), replace(utf8_lcase, 'aaAaaAaA', 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, aaAaaAaA, abc):string,replace(utf8_lcase, aaAaaAaA, abc):string collate UTF8_LCASE>
+struct<replace(utf8_binary, aaAaaAaA, abc):string,replace(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE, 'abc' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2586,7 +2586,7 @@ kitten	sitTing
 -- !query
 select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), abc):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
+struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), 'abc' collate UTF8_LCASE):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2608,7 +2608,7 @@ kitten	sitTing
 -- !query
 select replace(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), abc):string collate UTF8_LCASE_RTRIM,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
+struct<replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), 'abc' collate UTF8_LCASE_RTRIM):string collate UTF8_LCASE_RTRIM,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2759,7 +2759,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select endswith(utf8_binary, 'aaAaaAaA'), endswith(utf8_lcase, 'aaAaaAaA') from t5
 -- !query schema
-struct<endswith(utf8_binary, aaAaaAaA):boolean,endswith(utf8_lcase, aaAaaAaA):boolean>
+struct<endswith(utf8_binary, aaAaaAaA):boolean,endswith(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE):boolean>
 -- !query output
 false	false
 false	false
@@ -3791,7 +3791,7 @@ struct<levenshtein(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lc
 -- !query
 select levenshtein(utf8_binary, 'a'), levenshtein(utf8_lcase, 'a') from t5
 -- !query schema
-struct<levenshtein(utf8_binary, a):int,levenshtein(utf8_lcase, a):int>
+struct<levenshtein(utf8_binary, a):int,levenshtein(utf8_lcase, 'a' collate UTF8_LCASE):int>
 -- !query output
 2	2
 2	2
@@ -4356,7 +4356,7 @@ sikitten
 -- !query
 select rpad(utf8_binary, 8, 'a'), rpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
-struct<rpad(utf8_binary, 8, a):string,rpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
+struct<rpad(utf8_binary, 8, a):string,rpad(utf8_lcase, 8, 'a' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4525,7 +4525,7 @@ sikitten
 -- !query
 select lpad(utf8_binary, 8, 'a'), lpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
-struct<lpad(utf8_binary, 8, a):string,lpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
+struct<lpad(utf8_binary, 8, a):string,lpad(utf8_lcase, 8, 'a' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4698,7 +4698,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select locate(utf8_binary, 'a'), locate(utf8_lcase, 'a') from t5
 -- !query schema
-struct<locate(utf8_binary, a, 1):int,locate(utf8_lcase, a, 1):int>
+struct<locate(utf8_binary, a, 1):int,locate(utf8_lcase, 'a' collate UTF8_LCASE, 1):int>
 -- !query output
 0	0
 0	0
@@ -4901,7 +4901,7 @@ sitTing
 -- !query
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH 'ABc' collate UTF8_LCASE FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -5277,7 +5277,7 @@ sitTing
 -- !query
 select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(LEADING ABc FROM utf8_binary):string,TRIM(LEADING ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(LEADING ABc FROM utf8_binary):string,TRIM(LEADING 'ABc' collate UTF8_LCASE FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -5472,7 +5472,7 @@ sitTing
 -- !query
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(TRAILING ABc FROM utf8_binary):string,TRIM(TRAILING ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(TRAILING ABc FROM utf8_binary):string,TRIM(TRAILING 'ABc' collate UTF8_LCASE FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -5511,6 +5511,279 @@ kitten	sitTing
 İo	İo
 İo	İo 
 İo 	İo
+
+
+-- !query
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select subq1.* from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+) AS subq1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+with cte as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+select * from cte
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select * from values (1) where exists (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+select (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+)
+-- !query schema
+struct<scalarsubquery():string collate UTF8_LCASE>
+-- !query output
+Something else. Nothing here. Something else. Nothing here.
+
+
+-- !query
+select (
+  with cte as (
+    select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  )
+  select * from cte limit 1
+)
+-- !query schema
+struct<scalarsubquery():string collate UTF8_LCASE>
+-- !query output
+Something else. Nothing here. Something else. Nothing here.
+
+
+-- !query
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+)
+where (
+  `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` == 'aaa'
+)
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+
+
+
+-- !query
+select lower(`concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)`) from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  group by 1
+  order by 1
+)
+-- !query schema
+struct<lower(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+a a
+aaaaaaaa aaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaa
+abc abc
+abcdcba abcdcba
+efd2 efd2
+hello, world! nice day. hello, world! nice day.
+i̇o  i̇o 
+i̇o i̇o
+sitting sitting
+something else. nothing here. something else. nothing here.
+sql sql
+
+
+-- !query
+select lower(`concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)`) from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  group by 1
+  order by max(concat_ws(' ', utf8_lcase, utf8_lcase))
+)
+-- !query schema
+struct<lower(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+a a
+aaaaaaaa aaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaa
+abc abc
+abcdcba abcdcba
+efd2 efd2
+hello, world! nice day. hello, world! nice day.
+i̇o  i̇o 
+i̇o i̇o
+sitting sitting
+something else. nothing here. something else. nothing here.
+sql sql
+
+
+-- !query
+create temporary view v1 as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from v1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` from v1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+drop view v1
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

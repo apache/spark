@@ -363,14 +363,8 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
         sc.conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "64m"))
       val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
         bufferSizeInBytes, instance.wordVectors.wordIndex.size, instance.getVectorSize)
-      val spark = sparkSession
-      import spark.implicits._
-      spark.createDataset[(String, Array[Float])](wordVectors.toSeq)
-        .repartition(numPartitions)
-        .map { case (word, vector) => Data(word, vector) }
-        .toDF()
-        .write
-        .parquet(dataPath)
+      val datum = wordVectors.toArray.map { case (word, vector) => Data(word, vector) }
+      ReadWriteUtils.saveArray[Data](dataPath, datum, sparkSession, numPartitions)
     }
   }
 
@@ -408,7 +402,6 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
 
     override def load(path: String): Word2VecModel = {
       val spark = sparkSession
-      import spark.implicits._
 
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
@@ -423,10 +416,8 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
         val wordVectors = data.getAs[Seq[Float]](1).toArray
         new feature.Word2VecModel(wordIndex, wordVectors)
       } else {
-        val wordVectorsMap = spark.read.parquet(dataPath).as[Data]
-          .collect()
-          .map(wordVector => (wordVector.word, wordVector.vector))
-          .toMap
+        val datum = ReadWriteUtils.loadArray[Data](dataPath, sparkSession)
+        val wordVectorsMap = datum.map(wordVector => (wordVector.word, wordVector.vector)).toMap
         new feature.Word2VecModel(wordVectorsMap)
       }
 

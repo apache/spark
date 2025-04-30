@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import tempfile
 import unittest
 
@@ -22,7 +22,7 @@ import numpy as np
 
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.linalg import Vectors
-from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.classification import LogisticRegression, RandomForestClassifier
 from pyspark.ml.tuning import (
     ParamGridBuilder,
     CrossValidator,
@@ -30,6 +30,7 @@ from pyspark.ml.tuning import (
     TrainValidationSplit,
     TrainValidationSplitModel,
 )
+from pyspark.ml.util import _SPARKML_TEMP_DFS_PATH
 from pyspark.sql.functions import rand
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -69,6 +70,18 @@ class TuningTestsMixin:
 
         evaluation_score = evaluator.evaluate(tvs_model.transform(dataset))
         self.assertTrue(np.isclose(evaluation_score, 0.8333333333333333, atol=1e-4))
+
+        with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
+            os.environ[_SPARKML_TEMP_DFS_PATH] = d
+            try:
+                tvs_model2 = tvs.fit(dataset)
+                assert len(os.listdir(d)) == 0
+                self.assertTrue(np.isclose(tvs_model2.validationMetrics[0], 0.5, atol=1e-4))
+                self.assertTrue(
+                    np.isclose(tvs_model2.validationMetrics[1], 0.8857142857142857, atol=1e-4)
+                )
+            finally:
+                os.environ.pop(_SPARKML_TEMP_DFS_PATH, None)
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="train_validation_split") as d:
@@ -117,6 +130,15 @@ class TuningTestsMixin:
         self.assertEqual(model.getEvaluator(), evaluator)
         self.assertEqual(model.getEstimatorParamMaps(), grid)
         self.assertTrue(np.isclose(model.avgMetrics[0], 0.5, atol=1e-4))
+
+        with tempfile.TemporaryDirectory(prefix="ml_tmp_dir") as d:
+            os.environ[_SPARKML_TEMP_DFS_PATH] = d
+            try:
+                model2 = cv.fit(dataset)
+                assert len(os.listdir(d)) == 0
+                self.assertTrue(np.isclose(model2.avgMetrics[0], 0.5, atol=1e-4))
+            finally:
+                os.environ.pop(_SPARKML_TEMP_DFS_PATH, None)
 
         output = model.transform(dataset)
         self.assertEqual(
@@ -229,6 +251,28 @@ class TuningTestsMixin:
         )
         with self.assertRaisesRegex(Exception, "The validation data at fold 3 is empty"):
             cv.fit(dataset_with_folds)
+
+    def test_crossvalidator_with_random_forest_classifier(self):
+        dataset = self.spark.createDataFrame(
+            [
+                (Vectors.dense(1.0, 2.0), 0),
+                (Vectors.dense(2.0, 3.0), 1),
+                (Vectors.dense(1.5, 2.5), 0),
+                (Vectors.dense(3.0, 4.0), 1),
+                (Vectors.dense(1.1, 2.1), 0),
+                (Vectors.dense(2.5, 3.5), 1),
+            ],
+            ["features", "label"],
+        )
+        rf = RandomForestClassifier(labelCol="label", featuresCol="features")
+        evaluator = BinaryClassificationEvaluator(labelCol="label")
+        paramGrid = (
+            ParamGridBuilder().addGrid(rf.maxDepth, [2]).addGrid(rf.numTrees, [5, 10]).build()
+        )
+        cv = CrossValidator(
+            estimator=rf, estimatorParamMaps=paramGrid, evaluator=evaluator, numFolds=3
+        )
+        cv.fit(dataset)
 
 
 class TuningTests(TuningTestsMixin, ReusedSQLTestCase):

@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -71,6 +71,7 @@ object CatalystTypeConverters {
       case _: StringType => StringConverter
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
+      case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
@@ -372,6 +373,18 @@ object CatalystTypeConverters {
       DateTimeUtils.daysToLocalDate(row.getInt(column))
   }
 
+  private object TimeConverter extends CatalystTypeConverter[LocalTime, LocalTime, Any] {
+    override def toCatalystImpl(scalaValue: LocalTime): Long = {
+      DateTimeUtils.localTimeToMicros(scalaValue)
+    }
+    override def toScala(catalystValue: Any): LocalTime = {
+      if (catalystValue == null) null
+      else DateTimeUtils.microsToLocalTime(catalystValue.asInstanceOf[Long])
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
+      DateTimeUtils.microsToLocalTime(row.getLong(column))
+  }
+
   private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
     override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
@@ -558,11 +571,14 @@ object CatalystTypeConverters {
     case c: Char => StringConverter.toCatalyst(c.toString)
     case d: Date => DateConverter.toCatalyst(d)
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
+    case t: LocalTime => TimeConverter.toCatalyst(t)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
-    case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
-    case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
+    case d: BigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
+    case d: JavaBigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr

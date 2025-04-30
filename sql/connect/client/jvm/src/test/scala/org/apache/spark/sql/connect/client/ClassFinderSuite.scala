@@ -28,15 +28,15 @@ class ClassFinderSuite extends ConnectFunSuite {
   private val classResourcePath = commonResourcePath.resolve("artifact-tests")
 
   test("REPLClassDirMonitor functionality test") {
+    val requiredClasses = Seq("Hello.class", "smallClassFile.class", "smallClassFileDup.class")
+    requiredClasses.foreach(className =>
+      assume(classResourcePath.resolve(className).toFile.exists))
     val copyDir = SparkFileUtils.createTempDir().toPath
     FileUtils.copyDirectory(classResourcePath.toFile, copyDir.toFile)
     val monitor = new REPLClassDirMonitor(copyDir.toAbsolutePath.toString)
 
     def checkClasses(monitor: REPLClassDirMonitor, additionalClasses: Seq[String] = Nil): Unit = {
-      val expectedClassFiles = (Seq(
-        "Hello.class",
-        "smallClassFile.class",
-        "smallClassFileDup.class") ++ additionalClasses).map(name => Paths.get(name))
+      val expectedClassFiles = (requiredClasses ++ additionalClasses).map(name => Paths.get(name))
 
       val foundArtifacts = monitor.findClasses().toSeq
       assert(expectedClassFiles.forall { classPath =>

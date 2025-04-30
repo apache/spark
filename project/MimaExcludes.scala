@@ -35,6 +35,8 @@ import com.typesafe.tools.mima.core.*
 object MimaExcludes {
 
   lazy val v41excludes = v40excludes ++ Seq(
+    // [SPARK-51261][ML][CONNECT] Introduce model size estimation to control ml cache
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes")
   )
 
   // Exclude rules for 4.0.x from 3.5.0
@@ -267,6 +269,9 @@ object MimaExcludes {
     // SPARK-44104: shaded protobuf code and Apis with parameters relocated
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
+
+    // SPARK-51267: Match local Spark Connect server logic between Python and Scala
+    ProblemFilters.exclude[MissingFieldProblem]("org.apache.spark.launcher.SparkLauncher.SPARK_LOCAL_REMOTE"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

@@ -1758,7 +1758,9 @@ abstract class Dataset[T] extends Serializable {
    * @group subquery
    * @since 4.0.0
    */
-  def scalar(): Column
+  def scalar(): Column = {
+    Column(internal.SubqueryExpression(this, internal.SubqueryType.SCALAR))
+  }
 
   /**
    * Return a `Column` object for an EXISTS Subquery.
@@ -1771,7 +1773,9 @@ abstract class Dataset[T] extends Serializable {
    * @group subquery
    * @since 4.0.0
    */
-  def exists(): Column
+  def exists(): Column = {
+    Column(internal.SubqueryExpression(this, internal.SubqueryType.EXISTS))
+  }
 
   /**
    * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset

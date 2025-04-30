@@ -32,7 +32,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding.Avro
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
@@ -67,7 +67,7 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
-        queryRunId = getRunId(hadoopConf),
+        queryRunId = StateStoreProvider.getRunId(hadoopConf),
         operatorId = stateStoreId.operatorId,
         partitionId = stateStoreId.partitionId,
         stateStoreName = stateStoreId.storeName,
@@ -230,10 +230,12 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    var checkpointInfo: Option[StateStoreCheckpointInfo] = None
     override def commit(): Long = synchronized {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        val newVersion = rocksDB.commit()
+        val (newVersion, newCheckpointInfo) = rocksDB.commit()
+        checkpointInfo = Some(newCheckpointInfo)
         state = COMMITTED
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
@@ -325,7 +327,8 @@ private[sql] class RocksDBStateStoreProvider
           rocksDBMetrics.numUncommittedKeys,
           rocksDBMetrics.totalMemUsageBytes,
           stateStoreCustomMetrics,
-          stateStoreInstanceMetrics)
+          stateStoreInstanceMetrics
+        )
       } else {
         logInfo(log"Failed to collect metrics for store_id=${MDC(STATE_STORE_ID, id)} " +
           log"and version=${MDC(VERSION_NUM, version)}")
@@ -334,8 +337,11 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
-      val checkpointInfo = rocksDB.getLatestCheckpointInfo(id.partitionId)
-      checkpointInfo
+      checkpointInfo match {
+        case Some(info) => info
+        case None => throw StateStoreErrors.stateStoreOperationOutOfOrder(
+          "Cannot get checkpointInfo without committing the store")
+      }
     }
 
     override def hasCommitted: Boolean = state == COMMITTED
@@ -384,6 +390,8 @@ private[sql] class RocksDBStateStoreProvider
     this.useColumnFamilies = useColumnFamilies
     this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
     this.stateSchemaProvider = stateSchemaProvider
+    this.rocksDBEventForwarder =
+      Some(RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -393,7 +401,7 @@ private[sql] class RocksDBStateStoreProvider
     rocksDB // lazy initialization
 
     val dataEncoderCacheKey = StateRowEncoderCacheKey(
-      queryRunId = getRunId(hadoopConf),
+      queryRunId = StateStoreProvider.getRunId(hadoopConf),
       operatorId = stateStoreId.operatorId,
       partitionId = stateStoreId.partitionId,
       stateStoreName = stateStoreId.storeName,
@@ -511,6 +519,29 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var useColumnFamilies: Boolean = _
   @volatile private var stateStoreEncoding: String = _
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
+  @volatile private var rocksDBEventForwarder: Option[RocksDBEventForwarder] = _
+
+  protected def createRocksDB(
+      dfsRootDir: String,
+      conf: RocksDBConf,
+      localRootDir: File,
+      hadoopConf: Configuration,
+      loggingId: String,
+      useColumnFamilies: Boolean,
+      enableStateStoreCheckpointIds: Boolean,
+      partitionId: Int = 0,
+      eventForwarder: Option[RocksDBEventForwarder] = None): RocksDB = {
+    new RocksDB(
+      dfsRootDir,
+      conf,
+      localRootDir,
+      hadoopConf,
+      loggingId,
+      useColumnFamilies,
+      enableStateStoreCheckpointIds,
+      partitionId,
+      eventForwarder)
+  }
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -518,8 +549,9 @@ private[sql] class RocksDBStateStoreProvider
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
-      useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
+    createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+      useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
+      rocksDBEventForwarder)
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -790,16 +822,6 @@ object RocksDBStateStoreProvider {
     )
   }
 
-  private def getRunId(hadoopConf: Configuration): String = {
-    val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
-    if (runId != null) {
-      runId
-    } else {
-      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
-      UUID.randomUUID().toString
-    }
-  }
-
   // Native operation latencies report as latency in microseconds
   // as SQLMetrics support millis. Convert the value to millis
   val CUSTOM_METRIC_GET_TIME = StateStoreCustomTimingMetric(
@@ -957,5 +979,35 @@ class RocksDBStateStoreChangeDataReader(
       val valueRow = currEncoder._2.decodeValue(currRecord._3)
       (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
     }
+  }
+}
+
+/**
+ * Class used to relay events reported from a RocksDB instance to the state store coordinator.
+ *
+ * We pass this into the RocksDB instance to report specific events like snapshot uploads.
+ * This should only be used to report back to the coordinator for metrics and monitoring purposes.
+ */
+private[state] case class RocksDBEventForwarder(queryRunId: String, stateStoreId: StateStoreId) {
+  // Build the state store provider ID from the query run ID and the state store ID
+  private val providerId = StateStoreProviderId(stateStoreId, UUID.fromString(queryRunId))
+
+  /**
+   * Callback function from RocksDB to report events to the coordinator.
+   * Information from the store provider such as the state store ID and query run ID are
+   * attached here to report back to the coordinator.
+   *
+   * @param version The snapshot version that was just uploaded from RocksDB
+   */
+  def reportSnapshotUploaded(version: Long): Unit = {
+    // Report the state store provider ID and the version to the coordinator
+    val currentTimestamp = System.currentTimeMillis()
+    StateStoreProvider.coordinatorRef.foreach(
+      _.snapshotUploaded(
+        providerId,
+        version,
+        currentTimestamp
+      )
+    )
   }
 }

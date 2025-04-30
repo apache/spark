@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OUT_OF_MEMORY" : {
+    "message" : [
+      "No enough memory for aggregation"
+    ],
+    "sqlState" : "82001"
+  },
   "ALL_PARAMETERS_MUST_BE_NAMED" : {
     "message" : [
       "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
@@ -81,6 +87,12 @@
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22003"
+  },
+  "ARROW_TYPE_MISMATCH" : {
+    "message" : [
+      "Invalid schema from <operation>: expected <outputTypes>, got <actualDataTypes>."
+    ],
+    "sqlState" : "42K0G"
   },
   "ARTIFACT_ALREADY_EXISTS" : {
     "message" : [
@@ -292,6 +304,11 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "FAILED_TO_GET_CHANGELOG_WRITER" : {
+        "message" : [
+          "Failed to get the changelog writer for state store at version <version>."
+        ]
+      },
       "HDFS_STORE_PROVIDER_OUT_OF_MEMORY" : {
         "message" : [
           "Could not load HDFS state store with id <stateStoreId> because of an out of memory exception."
@@ -409,6 +426,12 @@
       "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
     ],
     "sqlState" : "22018"
+  },
+  "CANNOT_PARSE_TIME" : {
+    "message" : [
+      "The input string <input> cannot be parsed to a TIME value because it does not match to the datetime format <format>."
+    ],
+    "sqlState" : "22010"
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
@@ -754,6 +777,14 @@
     ],
     "sqlState" : "KD009"
   },
+  "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED" : {
+    "message" : [
+      "Partition column name '<partitionColumnName>' conflicts with reserved column name.",
+      "The schema of <tableName> is Hive-incompatible, Spark automatically generates a reserved column '<partitionColumnName>' to store the table in a specific way.",
+      "Please use a different name for the partition column."
+    ],
+    "sqlState" : "KD009"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
@@ -809,6 +840,20 @@
       }
     },
     "sqlState" : "XX000"
+  },
+  "CONSTRAINT_ALREADY_EXISTS" : {
+    "message" : [
+      "Constraint '<constraintName>' already exists. Please delete the existing constraint first.",
+      "Existing constraint:",
+      "<oldConstraint>"
+    ],
+    "sqlState" : "42710"
+  },
+  "CONSTRAINT_DOES_NOT_EXIST" : {
+    "message" : [
+      "Cannot drop nonexistent constraint <constraintName> from table <tableName>."
+    ],
+    "sqlState" : "42704"
   },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
@@ -991,6 +1036,11 @@
       "INVALID_XML_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
+      "INVALID_XML_SCHEMA" : {
+        "message" : [
+          "Input schema <schema> must be a struct or a variant."
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -1189,8 +1239,20 @@
   },
   "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
-      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "<rangeMessage>."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "If necessary set <ansiConfig> to \"false\" to bypass this error."
+        ]
+      }
+    },
     "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {
@@ -2342,13 +2404,34 @@
       "The value '<confValue>' in the config \"<confName>\" is invalid."
     ],
     "subClass" : {
+      "OUT_OF_RANGE_OF_OPTIONS" : {
+        "message" : [
+          "It should be one of '<confOptions>'."
+        ]
+      },
+      "REQUIREMENT" : {
+        "message" : [
+          "<confRequirement>"
+        ]
+      },
       "TIME_ZONE" : {
         "message" : [
           "Cannot resolve the given timezone."
         ]
+      },
+      "TYPE_MISMATCH" : {
+        "message" : [
+          "It should be a/an '<confType>' value."
+        ]
       }
     },
     "sqlState" : "22022"
+  },
+  "INVALID_CONSTRAINT_CHARACTERISTICS" : {
+    "message" : [
+      "Constraint characteristics [<characteristics>] are duplicated or conflict with each other."
+    ],
+    "sqlState" : "42613"
   },
   "INVALID_CORRUPT_RECORD_TYPE" : {
     "message" : [
@@ -2402,6 +2485,11 @@
       "SECONDS_FRACTION" : {
         "message" : [
           "Cannot detect a seconds fraction pattern of variable length. Please make sure the pattern contains 'S', and does not contain illegal characters."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       }
     },
@@ -2906,6 +2994,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_KRYO_SERIALIZER_NO_DATA" : {
+    "message" : [
+      "The object '<obj>' is invalid or malformed to <serdeOp> using <serdeClass>."
+    ],
+    "sqlState" : "22002"
+  },
   "INVALID_LABEL_USAGE" : {
     "message" : [
       "The usage of the label <labelName> is invalid."
@@ -2947,6 +3041,11 @@
       "NUM_ARGS_MISMATCH" : {
         "message" : [
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
+        ]
+      },
+      "PARAMETER_DOES_NOT_ACCEPT_LAMBDA_FUNCTION" : {
+        "message" : [
+          "You passed a lambda function to a parameter that does not accept it. Please check if lambda function argument is in the correct position."
         ]
       }
     },
@@ -3319,7 +3418,7 @@
   },
   "INVALID_SINGLE_VARIANT_COLUMN" : {
     "message" : [
-      "The `singleVariantColumn` option cannot be used if there is also a user specified schema."
+      "User specified schema <schema> is invalid when the `singleVariantColumn` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
     ],
     "sqlState" : "42613"
   },
@@ -3388,6 +3487,16 @@
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
+        ]
+      },
+      "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
+        "message" : [
+          "CREATE FUNCTION with constraints on parameters is not allowed."
+        ]
+      },
+      "CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS" : {
+        "message" : [
+          "CREATE FUNCTION with generated columns as parameters is not allowed."
         ]
       },
       "CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
@@ -3514,6 +3623,11 @@
       "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
         "message" : [
           "Scalar subquery must return only one column, but got <number>."
+        ]
+      },
+      "STREAMING_QUERY" : {
+        "message" : [
+          "Streaming query is not allowed in subquery expressions."
         ]
       }
     },
@@ -3837,6 +3951,25 @@
     },
     "sqlState" : "22023"
   },
+  "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE" : {
+    "message" : [
+      "Malformed state in RatePerMicroBatch source."
+    ],
+    "subClass" : {
+      "INVALID_OFFSET" : {
+        "message" : [
+          "The offset value is invalid: startOffset should less than or equal to the endOffset, but startOffset(<startOffset>) > endOffset(<endOffset>)."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp value is invalid: startTimestamp should less than or equal to the endTimestamp, but startTimestamp(<startTimestamp>) > endTimestamp(<endTimestamp>).",
+          "This could happen when the streaming query is restarted with a newer `startingTimestamp` and reprocess the first batch (i.e. batch 0). Please consider using a new checkpoint location."
+        ]
+      }
+    },
+    "sqlState" : "22000"
+  },
   "MALFORMED_VARIANT" : {
     "message" : [
       "Variant binary is malformed. Please check the data source is valid."
@@ -3905,6 +4038,12 @@
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_PRIMARY_KEYS" : {
+    "message" : [
+      "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
+    ],
+    "sqlState" : "42P16"
   },
   "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
     "message" : [
@@ -3985,6 +4124,12 @@
       "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
+  },
+  "NON_DETERMINISTIC_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` is non-deterministic. Check constraints must only contain deterministic expressions."
+    ],
+    "sqlState" : "42621"
   },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
@@ -4403,6 +4548,12 @@
     ],
     "sqlState" : "XXKD0"
   },
+  "POINTER_ARRAY_OUT_OF_MEMORY" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ],
+    "sqlState" : "82002"
+  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
@@ -4463,6 +4614,18 @@
       "Failed when Python streaming data source perform <action>: <msg>"
     ],
     "sqlState" : "38000"
+  },
+  "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing 'spark.sql.cteRecursionLevelLimit'"
+    ],
+    "sqlState" : "42836"
+  },
+  "RECURSION_ROW_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Recursion row limit <rowLimit> reached but query has not exhausted, try increasing 'spark.sql.cteRecursionRowLimit'"
+    ],
+    "sqlState" : "42836"
   },
   "RECURSIVE_CTE_IN_LEGACY_MODE" : {
     "message" : [
@@ -4656,6 +4819,12 @@
     ],
     "sqlState" : "42601"
   },
+  "SPILL_OUT_OF_MEMORY" : {
+    "message" : [
+      "Error while calling spill() on <consumerToSpill> : <message>"
+    ],
+    "sqlState" : "82003"
+  },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
       "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
@@ -4799,6 +4968,12 @@
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_OPERATION_OUT_OF_ORDER" : {
+    "message" : [
+      "Streaming stateful operator attempted to access state store out of order. This is a bug, please retry. error_msg=<errorMsg>"
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY" : {
     "message" : [
@@ -5119,6 +5294,12 @@
     ],
     "sqlState" : "XXKST"
   },
+  "TRANSFORM_WITH_STATE_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user-defined function <function> of the StatefulProcessor. Reason: <reason>."
+    ],
+    "sqlState" : "39000"
+  },
   "TRANSPOSE_EXCEED_ROW_LIMIT" : {
     "message" : [
       "Number of rows exceeds the allowed limit of <maxValues> for TRANSPOSE. If this was intended, set <config> to at least the current row count."
@@ -5222,6 +5403,12 @@
       "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
     ],
     "sqlState" : "42846"
+  },
+  "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE" : {
+    "message" : [
+      "The UNION operator is not yet supported within recursive common table expressions (WITH clauses that refer to themselves, directly or indirectly). Please use UNION ALL instead."
+    ],
+    "sqlState" : "42836"
   },
   "UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT" : {
     "message" : [
@@ -5472,6 +5659,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC" : {
+    "message" : [
+      "Constraint characteristic '<characteristic>' is not supported for constraint type '<constraintType>'."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
@@ -6211,6 +6404,12 @@
       "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
     ],
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_TIME_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
+    ],
+    "sqlState" : "0A001"
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
@@ -7857,11 +8056,6 @@
       "Conflict found: Field <field> <actual> differs from <field> <expected> derived from <candidate>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2130" : {
-    "message" : [
-      "Fail to recognize '<pattern>' pattern in the DateTimeFormatter. You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
@@ -8502,11 +8696,6 @@
   "_LEGACY_ERROR_TEMP_3026" : {
     "message" : [
       "duration() called on unfinished task"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3027" : {
-    "message" : [
-      "Unrecognized <schedulerModeProperty>: <schedulingModeConf>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3028" : {
@@ -9330,21 +9519,6 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3300" : {
-    "message" : [
-      "error while calling spill() on <consumerToSpill> : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3301" : {
-    "message" : [
-      "Not enough memory to grow pointer array"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3302" : {
-    "message" : [
-      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

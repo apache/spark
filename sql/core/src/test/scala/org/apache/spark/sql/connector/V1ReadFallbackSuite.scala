@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CatalogV2Util, Column, Identifier, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CatalogV2Util, Column, Identifier, SupportsRead, Table, TableCapability, TableInfo}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1Scan}
 import org.apache.spark.sql.execution.RowDataSourceScanExec
@@ -112,6 +112,10 @@ class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
     val table = new TableWithV1ReadFallback(ident.toString)
     tables.put(ident, table)
     table
+  }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
   }
 }
 

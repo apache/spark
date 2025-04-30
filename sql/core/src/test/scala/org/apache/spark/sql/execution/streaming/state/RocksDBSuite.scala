@@ -433,7 +433,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
       // Verify schema ID in remaining key bytes
-      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(
+        encoder.removeVersionByte(encodedRemainingKey))
       assert(decodedSchemaIdRow.schemaId === 18,
         "Schema ID not preserved in prefix scan remaining key encoding")
     }
@@ -462,7 +463,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
 
       // Verify schema ID in remaining key bytes
-      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(encodedRemainingKey)
+      val decodedSchemaIdRow = encoder.decodeStateSchemaIdRow(
+        encoder.removeVersionByte(encodedRemainingKey))
       assert(decodedSchemaIdRow.schemaId === 24,
         "Schema ID not preserved in range scan remaining key encoding")
 
@@ -565,7 +567,8 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       val encodedValue = valueEncoder.encodeValue(value)
 
       // Verify schema ID was included and preserved
-      val decodedSchemaIdRow = avroEncoder.decodeStateSchemaIdRow(encodedValue)
+      val decodedSchemaIdRow = avroEncoder.decodeStateSchemaIdRow(
+        avroEncoder.removeVersionByte(encodedValue))
       assert(decodedSchemaIdRow.schemaId === 42,
         "Schema ID not preserved in single value encoding")
 
@@ -946,13 +949,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
       }
 
-      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
-        // This is because 30 is executed twice and snapshot does not overwrite in checkpoint v2
-        assert(snapshotVersionsPresent(remoteDir) === (1 to 30) :+ 30 :+ 31)
-      } else {
-        assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
-      }
-
+      assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       for (version <- 1 to 60) {
         db.load(version, versionToUniqueId.get(version), readOnly = true)
@@ -969,20 +966,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
 
-      // Behavior is slightly different when column families are enabled with checkpoint v2
-      // since snapshot version 31 was created previously.
-      if (enableStateStoreCheckpointIds && colFamiliesEnabled) {
-        assert(snapshotVersionsPresent(remoteDir) === Seq(31, 60, 60))
-      } else {
-        assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
-      }
+      assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
       if (enableStateStoreCheckpointIds) {
         // recommit version 60 creates another changelog file with different unique id
-        if (colFamiliesEnabled) {
-          assert(changelogVersionsPresent(remoteDir) === (31 to 60) :+ 60)
-        } else {
-          assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
-        }
+        assert(changelogVersionsPresent(remoteDir) === (30 to 60) :+ 60)
       } else {
         assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       }
@@ -1191,6 +1178,95 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withDB(remoteDir, conf = RocksDBConf().copy(), useColumnFamilies = colFamiliesEnabled) { db =>
       assert(db.rocksDbOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
+  }
+
+  testWithColumnFamilies(
+    "RocksDB: test includesPrefix parameter during changelog replay",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+
+    // Only test when column families are enabled, as the includesPrefix parameter
+    // is only relevant in that case
+    if (colFamiliesEnabled) {
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = 3, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+
+      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+        // Create a test column family
+        val testCfName = "test_cf"
+        db.createColFamilyIfAbsent(testCfName, isInternal = false)
+
+        // Write initial data
+        db.load(0)
+        db.put("key1", "value1", StateStore.DEFAULT_COL_FAMILY_NAME)
+        db.put("key2", "value2", testCfName)
+        db.commit()
+
+        // Get the encoded keys with column family prefixes
+        val keyWithPrefix1 = getKeyWithPrefix(db, "key1", StateStore.DEFAULT_COL_FAMILY_NAME)
+        val keyWithPrefix2 = getKeyWithPrefix(db, "key2", testCfName)
+
+        // Pretend we're replaying changelog with already-prefixed keys
+        // Throughout this test, we will load version 0 and the latest version
+        // in order to ensure that the changelog files are read from and
+        // replayed
+        db.load(0)
+        db.load(1)
+
+        // Use the includesPrefix=true parameter with keys that already have prefixes
+        db.put(keyWithPrefix1, "updated1", includesPrefix = true)
+        db.put(keyWithPrefix2, "updated2", includesPrefix = true)
+        db.commit()
+
+        // Verify the updates were applied correctly
+        db.load(0)
+        db.load(2)
+        assert(toStr(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME)) === "updated1")
+        assert(toStr(db.get("key2", testCfName)) === "updated2")
+
+        // Test remove with includesPrefix
+        db.remove(keyWithPrefix1, includesPrefix = true)
+        db.remove(keyWithPrefix2, includesPrefix = true)
+        db.commit()
+
+        // Verify removals worked
+        db.load(0)
+        db.load(3)
+        assert(db.get("key1", StateStore.DEFAULT_COL_FAMILY_NAME) === null)
+        assert(db.get("key2", testCfName) === null)
+
+        // Add back some data for testing merge operation
+        db.put("merge_key", "base", StateStore.DEFAULT_COL_FAMILY_NAME)
+        db.commit()
+
+        // Get encoded key for merge test
+        val mergeKeyWithPrefix = getKeyWithPrefix(
+          db, "merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)
+
+        // Test merge with includesPrefix
+        db.load(0)
+        db.load(4)
+        db.merge(mergeKeyWithPrefix, "appended", includesPrefix = true)
+        db.commit()
+
+        // Verify merge operation worked
+        db.load(0)
+        db.load(5)
+        assert(toStr(db.get("merge_key", StateStore.DEFAULT_COL_FAMILY_NAME)) === "base,appended")
+      }
+    }
+  }
+
+  // Helper method to get a key with column family prefix
+  private def getKeyWithPrefix(db: RocksDB, key: String, cfName: String): Array[Byte] = {
+    // This uses reflection to call the private encodeStateRowWithPrefix method
+    val encodeMethod = classOf[RocksDB].getDeclaredMethod(
+      "encodeStateRowWithPrefix",
+      classOf[Array[Byte]],
+      classOf[String]
+    )
+    encodeMethod.setAccessible(true)
+    encodeMethod.invoke(db, key.getBytes, cfName).asInstanceOf[Array[Byte]]
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies(s"RocksDB: get, put, iterator, commit, load",
@@ -2564,7 +2640,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("a", "5")
         db.put("b", "5")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 2)
         assert(db.metricsOpt.get.numCommittedKeys === 2)
@@ -2580,7 +2656,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("b", "7")
         db.put("c", "7")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === -1)
         assert(db.metricsOpt.get.numCommittedKeys === -1)
@@ -2596,7 +2672,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.put("c", "8")
         db.put("d", "8")
 
-        curVersion = db.commit()
+        curVersion = db.commit()._1
 
         assert(db.metricsOpt.get.numUncommittedKeys === 4)
         assert(db.metricsOpt.get.numCommittedKeys === 4)
@@ -3135,6 +3211,52 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-51717 - validate that RocksDB file mapping is cleared " +
+      "when we reload version 0 after we have created a snapshot to avoid SST mismatch") {
+    withTempDir { dir =>
+      val conf = dbConf.copy(minDeltasForSnapshot = 2)
+      val hadoopConf = new Configuration()
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+        db.load(0)
+        db.put("a", "1")
+        db.put("b", "1")
+        db.commit()
+
+        db.load(1)
+        db.put("a", "1")
+        db.commit() // we will create a snapshot for v2
+
+        // invalidate the db, so next load will reload from dfs
+        db.rollback()
+
+        // We will replay changelog from 0 -> 2 since the v2 snapshot haven't been uploaded yet.
+        // We had a bug where file mapping is not being cleared when we start from v0 again,
+        // hence files of v2 snapshot were being reused, if v2 snapshot is uploaded
+        // after this load(2) but before v3 snapshot
+        db.load(2)
+        // add a larger row to make sure new sst size is different
+        db.put("b", "1555315569874537247638950872648")
+
+        // now upload v2 snapshot
+        db.doMaintenance()
+
+        // we will create a snapshot for v3. We shouldn't reuse files of v2 snapshot,
+        // given that v3 was not created from v2 snapshot since we replayed changelog from 0 -> 2
+        db.commit()
+
+        db.doMaintenance() // upload v3 snapshot
+
+        // invalidate the db, so next load will reload from dfs
+        db.rollback()
+
+        // loading v3 from dfs should be successful and no SST mismatch error
+        db.load(3)
+      }
+    }
+  }
+
   test("ensure local files deleted on filesystem" +
     " are cleaned from dfs file mapping") {
     def getSSTFiles(dir: File): Set[File] = {
@@ -3394,6 +3516,24 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("SPARK-51922 - Changelog writer v1 with large key" +
+    " does not cause UTFDataFormatException") {
+    val remoteDir = Utils.createTempDir()
+
+    withDB(remoteDir.toString) { db =>
+      db.load(0)
+      val key = new Array[Char](98304).mkString("") // Large key that would trigger UTFException
+      // if handled incorrectly
+      db.put(key, "0")
+      db.commit()
+
+      val changelogReader = db.fileManager.getChangelogReader(1)
+      assert(changelogReader.version === 1)
+      val entries = changelogReader.toSeq
+      assert(entries.size == 1)
+    }
+  }
+
   private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
     val threadInfo = db.getAcquiredThreadInfo()
     assert(threadInfo != None,
@@ -3431,7 +3571,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
-    override def commit(): Long = {
+    override def commit(): (Long, StateStoreCheckpointInfo) = {
       val ret = super.commit()
       // update versionToUniqueId from lineageManager
       lineageManager.getLineageForCurrVersion().foreach {

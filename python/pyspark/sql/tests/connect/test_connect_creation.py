@@ -32,10 +32,9 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
-from pyspark.testing.sqlutils import MyObject, PythonOnlyUDT
-
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.objects import MyObject, PythonOnlyUDT
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
     import pandas as pd
@@ -45,7 +44,7 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import ParseException
 
 
-class SparkConnectCreationTests(SparkConnectSQLTestCase):
+class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})

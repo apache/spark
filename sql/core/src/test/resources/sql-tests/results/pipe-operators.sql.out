@@ -628,6 +628,71 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+from t
+|> select sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SELECT",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 23,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+from t as t_alias
+|> select y, sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SELECT",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 37,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+from t as t_alias
+|> select y, sum(x) group by y
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'group'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 table t
 |> extend 1 as z
 -- !query schema

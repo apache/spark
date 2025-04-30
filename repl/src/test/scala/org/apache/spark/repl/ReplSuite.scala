@@ -400,6 +400,7 @@ class ReplSuite extends SparkFunSuite {
   test("register UDF via SparkSession.addArtifact") {
     val artifactPath = new File("src/test/resources").toPath
     val intSumUdfPath = artifactPath.resolve("IntSumUdf.class")
+    assume(intSumUdfPath.toFile.exists)
     val output = runInterpreterInPasteMode("local",
       s"""
          |import org.apache.spark.sql.api.java.UDF2
@@ -438,6 +439,7 @@ class ReplSuite extends SparkFunSuite {
   test("register a class via SparkSession.addArtifact") {
     val artifactPath = new File("src/test/resources").toPath
     val intSumUdfPath = artifactPath.resolve("IntSumUdf.class")
+    assume(intSumUdfPath.toFile.exists)
     val output = runInterpreterInPasteMode("local",
       s"""
          |import org.apache.spark.sql.functions.udf

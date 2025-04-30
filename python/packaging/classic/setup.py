@@ -291,6 +291,7 @@ try:
             "pyspark.sql.plot",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
+            "pyspark.sql.streaming.proto",
             "pyspark.sql.worker",
             "pyspark.streaming",
             "pyspark.bin",

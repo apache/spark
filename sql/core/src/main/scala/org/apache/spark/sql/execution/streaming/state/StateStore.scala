@@ -593,7 +593,15 @@ trait StateStoreProvider {
   def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] = Seq.empty
 }
 
-object StateStoreProvider {
+object StateStoreProvider extends Logging {
+
+  /**
+   * The state store coordinator reference used to report events such as snapshot uploads from
+   * the state store providers.
+   * For all other messages, refer to the coordinator reference in the [[StateStore]] object.
+   */
+  @GuardedBy("this")
+  private var stateStoreCoordinatorRef: StateStoreCoordinatorRef = _
 
   /**
    * Return a instance of the given provider class name. The instance will not be initialized.
@@ -651,6 +659,47 @@ object StateStoreProvider {
           throw StateStoreErrors.valueRowFormatValidationFailure(error, stateStoreId.toString)
         }
       }
+    }
+  }
+
+  /**
+   * Get the runId from the provided hadoopConf. If it is not found, generate a random UUID.
+   *
+   * @param hadoopConf Hadoop configuration used by the StateStore to save state data
+   */
+  private[state] def getRunId(hadoopConf: Configuration): String = {
+    val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
+    if (runId != null) {
+      runId
+    } else {
+      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
+      UUID.randomUUID().toString
+    }
+  }
+
+  /**
+   * Create the state store coordinator reference which will be reused across state store providers
+   * in the executor.
+   * This coordinator reference should only be used to report events from store providers regarding
+   * snapshot uploads to avoid lock contention with other coordinator RPC messages.
+   */
+  private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
+    val env = SparkEnv.get
+    if (env != null) {
+      val isDriver = env.executorId == SparkContext.DRIVER_IDENTIFIER
+      // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
+      // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
+      // driver, always recreate the reference.
+      if (isDriver || stateStoreCoordinatorRef == null) {
+        logDebug("Getting StateStoreCoordinatorRef")
+        stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(env)
+      }
+      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
+        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
+      Some(stateStoreCoordinatorRef)
+    } else {
+      stateStoreCoordinatorRef = null
+      None
     }
   }
 }
@@ -839,7 +888,9 @@ object StateStore extends Logging {
    * Thread Pool that runs maintenance on partitions that are scheduled by
    * MaintenanceTask periodically
    */
-  class MaintenanceThreadPool(numThreads: Int) {
+  class MaintenanceThreadPool(
+      numThreads: Int,
+      shutdownTimeout: Long) {
     private val threadPool = ThreadUtils.newDaemonFixedThreadPool(
       numThreads, "state-store-maintenance-thread")
 
@@ -852,10 +903,11 @@ object StateStore extends Logging {
       threadPool.shutdown() // Disable new tasks from being submitted
 
       // Wait a while for existing tasks to terminate
-      if (!threadPool.awaitTermination(5 * 60, TimeUnit.SECONDS)) {
+      if (!threadPool.awaitTermination(shutdownTimeout, TimeUnit.SECONDS)) {
         logWarning(
-          s"MaintenanceThreadPool is not able to be terminated within 300 seconds," +
-            " forcefully shutting down now.")
+          log"MaintenanceThreadPool failed to terminate within " +
+          log"waitTimeout=${MDC(LogKeys.TIMEOUT, shutdownTimeout)} seconds, " +
+          log"forcefully shutting down now.")
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
@@ -956,10 +1008,26 @@ object StateStore extends Logging {
           log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
-      val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
-      val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
-      providerIdsToUnload.foreach(unload(_))
+      // Only tell the state store coordinator we are active if we will remain active
+      // after the task. When we unload after committing, there's no need for the coordinator
+      // to track which executor has which provider
+      if (!storeConf.unloadOnCommit) {
+        val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
+        val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+        providerIdsToUnload.foreach(unload(_))
+      }
+
       provider
+    }
+  }
+
+  /** Runs maintenance and then unload a state store provider */
+  def doMaintenanceAndUnload(storeProviderId: StateStoreProviderId): Unit = {
+    loadedProviders.synchronized {
+      loadedProviders.remove(storeProviderId)
+    }.foreach { provider =>
+      provider.doMaintenance()
+      provider.close()
     }
   }
 
@@ -986,6 +1054,14 @@ object StateStore extends Logging {
 
   /** Stop maintenance thread and reset the maintenance task */
   def stopMaintenanceTask(): Unit = loadedProviders.synchronized {
+    stopMaintenanceTaskWithoutLock()
+  }
+
+  /**
+   * Only used for unit tests. The function doesn't hold loadedProviders lock. Calling
+   * it can work-around a deadlock condition where a maintenance task is waiting for the lock
+   * */
+  private[streaming] def stopMaintenanceTaskWithoutLock(): Unit = {
     if (maintenanceThreadPool != null) {
       maintenanceThreadPoolLock.synchronized {
         maintenancePartitions.clear()
@@ -1011,13 +1087,15 @@ object StateStore extends Logging {
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
     val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
+    val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
     loadedProviders.synchronized {
-      if (SparkEnv.get != null && !isMaintenanceRunning) {
+      if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
           task = { doMaintenance() }
         )
-        maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads)
+        maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
+          maintenanceShutdownTimeout)
         logInfo("State Store maintenance task started")
       }
     }

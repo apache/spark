@@ -25,6 +25,7 @@ object TreePattern extends Enumeration  {
   // Expression patterns (alphabetically ordered)
   val AGGREGATE_EXPRESSION = Value(0)
   val ALIAS: Value = Value
+  val ANALYSIS_AWARE_EXPRESSION: Value = Value
   val AND: Value = Value
   val ARRAYS_ZIP: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
@@ -131,6 +132,7 @@ object TreePattern extends Enumeration  {
   val LOCAL_RELATION: Value = Value
   val LOGICAL_QUERY_STAGE: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
+  val OFFSET: Value = Value
   val OUTER_JOIN: Value = Value
   val PROJECT: Value = Value
   val PYTHON_DATA_SOURCE: Value = Value
