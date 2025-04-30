@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.ml
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
-
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
@@ -27,6 +26,7 @@ import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -119,6 +119,9 @@ private[connect] object MLHandler extends Logging {
 
     mlCommand.getCommandCase match {
       case proto.MlCommand.CommandCase.FIT =>
+        val offloadingEnabled = sessionHolder.session.conf.get(
+          Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED
+        )
         val fitCmd = mlCommand.getFit
         val estimatorProto = fitCmd.getEstimator
         assert(estimatorProto.getType == proto.MlOperator.OperatorType.OPERATOR_TYPE_ESTIMATOR)
@@ -126,6 +129,24 @@ private[connect] object MLHandler extends Logging {
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
         val estimator =
           MLUtils.getEstimator(sessionHolder, estimatorProto, Some(fitCmd.getParams))
+        if (offloadingEnabled) {
+          if (estimator.getClass.getName == "org.apache.spark.ml.fpm.FPGrowth") {
+            throw new UnsupportedOperationException(
+              "FPGrowth algorithm is not supported " +
+              "if Spark Connect model cache offloading is enabled."
+            )
+          }
+          if (
+            estimator.getClass.getName == "org.apache.spark.ml.clustering.LDA"
+            && estimator.asInstanceOf[org.apache.spark.ml.clustering.LDA]
+              .getOptimizer.toLowerCase() == "em"
+          ) {
+            throw new UnsupportedOperationException(
+              "LDA algorithm with 'em' optimizer is not supported " +
+              "if Spark Connect model cache offloading is enabled."
+            )
+          }
+        }
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
         proto.MlCommandResult

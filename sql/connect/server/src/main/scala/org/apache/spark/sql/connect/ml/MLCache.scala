@@ -106,7 +106,11 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       }
       cachedSummary.put(objectId, obj.asInstanceOf[Summary])
     } else if (obj.isInstanceOf[Model[_]]) {
-      val sizeBytes = estimateObjectSize(obj)
+      val sizeBytes = if (getOffloadingEnabled) {
+        estimateObjectSize(obj)
+      } else {
+        0L  // Don't need to calculate size if disables offloading.
+      }
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getOffloadingEnabled) {
         val savePath = offloadedModelsDir.resolve(objectId)
