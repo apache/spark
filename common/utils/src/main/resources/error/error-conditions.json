@@ -536,6 +536,14 @@
     ],
     "sqlState" : "42P08"
   },
+  "CHECK_CONSTRAINT_VIOLATION" : {
+    "message": [
+      "CHECK constraint <constraintName> <expression> violated by row with values:",
+      "<values>",
+      ""
+    ],
+    "sqlState": "23001"
+  },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
       "Checkpoint block <rddBlockId> not found!",

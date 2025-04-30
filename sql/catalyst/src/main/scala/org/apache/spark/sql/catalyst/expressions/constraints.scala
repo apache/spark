@@ -18,13 +18,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.UUID
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, JavaCode, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.types.{DataType, NullType}
 
 trait TableConstraint extends Expression with Unevaluable {
   /** Convert to a data source v2 constraint */
@@ -257,5 +261,96 @@ case class ForeignKeyConstraint(
   override def withUserProvidedCharacteristic(c: ConstraintCharacteristic): TableConstraint = {
     failIfEnforced(c, "FOREIGN KEY")
     copy(userProvidedCharacteristic = c)
+  }
+}
+
+/**
+ * An expression that validates a specific invariant on a column, before writing into table.
+ *
+ * @param child The fully resolved expression to be evaluated to check the constraint.
+ * @param columnExtractors Extractors for each referenced column. Used to generate readable errors.
+ * @param constraintName The name of the constraint.
+ * @param predicateSql The SQL representation of the constraint.
+ */
+case class CheckInvariant(
+    child: Expression,
+    columnExtractors: Seq[(String, Expression)],
+    constraintName: String,
+    predicateSql: String)
+  extends Expression with NonSQLExpression {
+
+  override def children: Seq[Expression] = child +: columnExtractors.map(_._2)
+  override def dataType: DataType = NullType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val result = child.eval(input)
+    if (result == null || result == false) {
+      val values = columnExtractors.map {
+        case (column, extractor) => column -> extractor.eval(input)
+      }.toMap
+      throw QueryExecutionErrors.checkViolation(constraintName, predicateSql, values)
+    }
+    null
+  }
+
+  /**
+   * Generate the code to extract values for the columns referenced in a violated CHECK constraint.
+   * We build parallel lists of full column names and their extracted values in the row which
+   * violates the constraint, to be passed to the [[InvariantViolationException]] constructor
+   * in [[generateExpressionValidationCode()]].
+   *
+   * Note that this code is a bit expensive, so it shouldn't be run until we already
+   * know the constraint has been violated.
+   */
+  private def generateColumnValuesCode(
+    colList: String, valList: String, ctx: CodegenContext): Block = {
+    val start =
+      code"""
+            |java.util.List<String> $colList = new java.util.ArrayList<String>();
+            |java.util.List<Object> $valList = new java.util.ArrayList<Object>();
+            |""".stripMargin
+    columnExtractors.map {
+      case (name, extractor) =>
+        val colValue = extractor.genCode(ctx)
+        code"""
+              |$colList.add("$name");
+              |${colValue.code}
+              |if (${colValue.isNull}) {
+              |  $valList.add(null);
+              |} else {
+              |  $valList.add(${colValue.value});
+              |}
+              |""".stripMargin
+    }.fold(start)(_ + _)
+  }
+
+  private def generateExpressionValidationCode(ctx: CodegenContext): Block = {
+    val elementValue = child.genCode(ctx)
+    val colListName = ctx.freshName("colList")
+    val valListName = ctx.freshName("valList")
+    val ret = code"""${elementValue.code}
+          |
+          |if (${elementValue.isNull} || ${elementValue.value} == false) {
+          |  ${generateColumnValuesCode(colListName, valListName, ctx)}
+          |  throw org.apache.spark.sql.errors.QueryExecutionErrors.checkViolationJava(
+          |     "$constraintName", "$predicateSql", $colListName, $valListName);
+          |}
+     """.stripMargin
+    ret
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val code = generateExpressionValidationCode(ctx)
+    ev.copy(code = code, isNull = TrueLiteral, value = JavaCode.literal("null", NullType))
+  }
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+    copy(
+      child = newChildren.head,
+      columnExtractors = columnExtractors.map(_._1).zip(newChildren.tail)
+    )
   }
 }
