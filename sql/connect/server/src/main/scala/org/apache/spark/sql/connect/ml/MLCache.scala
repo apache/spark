@@ -20,10 +20,11 @@ import java.io.File
 import java.nio.file.{Files, Path}
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import com.google.common.cache.CacheBuilder
+import com.google.common.cache.{CacheBuilder, RemovalNotification}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
@@ -40,6 +41,10 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   private val helper = new ConnectHelper()
   private val helperID = "______ML_CONNECT_HELPER______"
   private val modelClassNameFile = "__model_class_name__"
+
+  // TODO: rename it to `totalInMemorySizeBytes` because it only counts the in-memory
+  //  part data size.
+  private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
 
   val offloadedModelsDir: Path = Utils.createTempDir().toPath
   private def getOffloadingEnabled: Boolean = {
@@ -69,6 +74,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
     if (getOffloadingEnabled) {
       builder = builder
+        .removalListener((removed: RemovalNotification[String, CacheItem]) =>
+          totalSizeBytes.addAndGet(-removed.getValue.sizeBytes))
         .maximumWeight(getMaxInMemoryCacheSizeKB)
         .expireAfterAccess(getOffloadingTimeoutMinute, TimeUnit.MINUTES)
     }
@@ -122,6 +129,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
           obj.getClass.getName
         )
       }
+      totalSizeBytes.addAndGet(sizeBytes)
     } else {
       throw new RuntimeException("'MLCache.register' only accepts model or summary objects.")
     }
@@ -149,11 +157,30 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
           obj = MLUtils.loadTransformer(
             sessionHolder, className, loadPath.toString, loadFromLocal = true
           )
-          cachedModel.put(refId, CacheItem(obj, estimateObjectSize(obj)))
+          val sizeBytes = estimateObjectSize(obj)
+          cachedModel.put(refId, CacheItem(obj, sizeBytes))
+          totalSizeBytes.addAndGet(sizeBytes)
         }
       }
       obj
     }
+  }
+
+  def _removeModel(refId: String): Boolean = {
+    val removedModel = cachedModel.remove(refId)
+    val removedFromMem = removedModel != null
+    val removedFromDisk = if (getOffloadingEnabled) {
+      val offloadingPath = new File(offloadedModelsDir.resolve(refId).toString)
+      if (offloadingPath.exists()) {
+        FileUtils.deleteDirectory(offloadingPath)
+        true
+      } else {
+        false
+      }
+    } else {
+      false
+    }
+    removedFromMem || removedFromDisk
   }
 
   /**
@@ -162,16 +189,14 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
    *   the key used to look up the corresponding object
    */
   def remove(refId: String): Boolean = {
-    var removed: Object = cachedModel.remove(refId)
-    if (removed == null) {
-      removed = cachedSummary.remove(refId)
+    val modelIsRemoved = _removeModel(refId)
+
+    if (modelIsRemoved) {
+      true
     } else {
-      if (getOffloadingEnabled) {
-        FileUtils.deleteDirectory(new File(offloadedModelsDir.resolve(refId).toString))
-      }
+      val removedSummary = cachedSummary.remove(refId)
+      removedSummary != null
     }
-    // remove returns null if the key is not present
-    removed != null
   }
 
   /**
