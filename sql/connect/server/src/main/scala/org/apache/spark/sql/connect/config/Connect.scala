@@ -364,5 +364,5 @@ object Connect {
       .version("4.1.0")
       .internal()
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 }

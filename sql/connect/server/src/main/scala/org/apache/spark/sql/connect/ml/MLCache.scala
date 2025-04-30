@@ -29,7 +29,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
-import org.apache.spark.ml.util.{ConnectHelper, MLWriter, Summary}
+import org.apache.spark.ml.util.{ConnectHelper, MLWritable, Summary}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -70,21 +70,21 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   private[ml] case class CacheItem(obj: Object, sizeBytes: Long)
   private[ml] val cachedModel: ConcurrentMap[String, CacheItem] = {
-    var builder = CacheBuilder
-      .newBuilder()
-      .softValues()
-      .weigher((key: String, value: CacheItem) => {
-        Math.ceil(value.sizeBytes.toDouble / 1024).toInt
-      })
-
     if (getOffloadingEnabled) {
-      builder = builder
+      CacheBuilder
+        .newBuilder()
+        .softValues()
         .removalListener((removed: RemovalNotification[String, CacheItem]) =>
           totalSizeBytes.addAndGet(-removed.getValue.sizeBytes))
         .maximumWeight(getMaxInMemoryCacheSizeKB)
+        .weigher((key: String, value: CacheItem) => {
+          Math.ceil(value.sizeBytes.toDouble / 1024).toInt
+        })
         .expireAfterAccess(getOffloadingTimeoutMinute, TimeUnit.MINUTES)
+        .build[String, CacheItem]().asMap()
+    } else {
+      new ConcurrentHashMap[String, CacheItem]()
     }
-    builder.build[String, CacheItem]().asMap()
   }
 
   private[ml] val cachedSummary: ConcurrentMap[String, Summary] = {
@@ -128,7 +128,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       cachedModel.put(objectId, CacheItem(obj, sizeBytes))
       if (getOffloadingEnabled) {
         val savePath = offloadedModelsDir.resolve(objectId)
-        obj.asInstanceOf[MLWriter].saveToLocal(savePath.toString)
+        obj.asInstanceOf[MLWritable].write.saveToLocal(savePath.toString)
         Files.writeString(
           savePath.resolve(modelClassNameFile),
           obj.getClass.getName
