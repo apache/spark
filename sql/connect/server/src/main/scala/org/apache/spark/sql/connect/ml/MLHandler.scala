@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.ml
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
+
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model

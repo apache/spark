@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.ml
 
+import java.io.File
 import java.nio.file.{Files, Path}
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
@@ -23,6 +24,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import scala.collection.mutable
 
 import com.google.common.cache.CacheBuilder
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.Model
@@ -163,6 +165,10 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     var removed: Object = cachedModel.remove(refId)
     if (removed == null) {
       removed = cachedSummary.remove(refId)
+    } else {
+      if (getOffloadingEnabled) {
+        FileUtils.deleteDirectory(new File(offloadedModelsDir.resolve(refId).toString))
+      }
     }
     // remove returns null if the key is not present
     removed != null
@@ -175,6 +181,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     val size = cachedModel.size()
     cachedModel.clear()
     cachedSummary.clear()
+    if (getOffloadingEnabled) {
+      FileUtils.cleanDirectory(new File(offloadedModelsDir.toString))
+    }
     size
   }
 
