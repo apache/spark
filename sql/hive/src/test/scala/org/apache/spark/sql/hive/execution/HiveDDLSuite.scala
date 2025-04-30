@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfterEach
@@ -2710,8 +2711,9 @@ class HiveDDLSuite
         OrcFileOperator.getFileReader(maybeFile.get.toPath.toString).get.getCompression.name
 
       case "parquet" =>
+        val hadoopConf = sparkContext.hadoopConfiguration
         val footer = ParquetFooterReader.readFooter(
-          sparkContext.hadoopConfiguration, new Path(maybeFile.get.getPath), NO_FILTER)
+          HadoopInputFile.fromPath(new Path(maybeFile.get.getPath), hadoopConf), NO_FILTER)
         footer.getBlocks.get(0).getColumns.get(0).getCodec.toString
     }
 

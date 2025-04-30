@@ -85,7 +85,7 @@ class FilePruningRunner(filters: Seq[Expression]) {
     boundedFilterMetadataStructOpt.forall { boundedFilter =>
       val row =
         FileFormat.createMetadataInternalRow(partitionValues, requiredMetadataColumnNames.toSeq,
-          SparkPath.fromFileStatus(f), f.getLen, f.getModificationTime)
+          SparkPath.fromFileStatus(f), f.getLen, f.getModificationTime, f)
       boundedFilter.eval(row)
     }
   }
