@@ -160,6 +160,12 @@ abstract class StreamExecution(
   protected val checkpointMetadata =
     new StreamingQueryCheckpointMetadata(sparkSessionForStream, resolvedCheckpointRoot)
 
+  private val streamMetadata: StreamMetadata = checkpointMetadata.streamMetadata
+
+  lazy val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
+
+  lazy val commitLog: CommitLog = checkpointMetadata.commitLog
+
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
    * physical plan.
@@ -170,7 +176,7 @@ abstract class StreamExecution(
    */
   protected val watermarkMsMap: MutableMap[Int, Long] = MutableMap()
 
-  override val id: UUID = UUID.fromString(checkpointMetadata.streamMetadata.id)
+  override val id: UUID = UUID.fromString(streamMetadata.id)
 
   override val runId: UUID = UUID.randomUUID
 
@@ -221,21 +227,6 @@ abstract class StreamExecution(
         runStream()
       }
     }
-
-  /**
-   * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
-   * that a given batch will always consist of the same data, we write to this log *before* any
-   * processing is done.  Thus, the Nth record in this log indicated data that is currently being
-   * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
-   */
-  val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
-
-  /**
-   * A log that records the batch ids that have completed. This is used to check if a batch was
-   * fully processed, and its output was committed to the sink, hence no need to process it again.
-   * This is used (for instance) during restart, to help identify which batch to run next.
-   */
-  val commitLog: CommitLog = checkpointMetadata.commitLog
 
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING
