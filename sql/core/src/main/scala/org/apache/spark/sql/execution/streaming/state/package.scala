@@ -68,8 +68,15 @@ package object state {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       val wrappedF = (store: StateStore, iter: Iterator[T]) => {
         // Abort the state store in case of error
-        TaskContext.get().addTaskCompletionListener[Unit](_ => {
+        val ctxt = TaskContext.get()
+        ctxt.addTaskCompletionListener[Unit](_ => {
           if (!store.hasCommitted) store.abort()
+          StateStoreThreadLocalTracker.clearStore()
+        })
+        ctxt.addTaskFailureListener(new TaskFailureListener {
+          override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+            store.abort()
+            StateStoreThreadLocalTracker.clearStore()
         })
         cleanedF(store, iter)
       }
@@ -112,11 +119,17 @@ package object state {
         // Clean up the state store.
         val ctxt = TaskContext.get()
         ctxt.addTaskCompletionListener[Unit](_ => {
-          if (!StateStoreThreadLocalTracker.isUsedForWriteStore) store.release()
+          if (!StateStoreThreadLocalTracker.isUsedForWriteStore) {
+            store.release()
+            StateStoreThreadLocalTracker.clearStore()
+          }
         })
         ctxt.addTaskFailureListener(new TaskFailureListener {
           override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
-            if (!StateStoreThreadLocalTracker.isUsedForWriteStore) store.abort()
+            if (!StateStoreThreadLocalTracker.isUsedForWriteStore) {
+              store.abort()
+              StateStoreThreadLocalTracker.clearStore()
+            }
         })
         cleanedF(store, iter)
       }
