@@ -1870,10 +1870,6 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
             # Arrow cast for type coercion is disabled by default
-            # input_types = (
-            #     [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
-            # )
-            # assert 1 == 2, input_types
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
