@@ -34,9 +34,8 @@ class ConstraintExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(expr, null, InternalRow(1))
   }
 
-  test("CheckInvariant: throws exception if column 'a' is null") {
-    checkExceptionInExpression[SparkRuntimeException](
-      expr, InternalRow(null), expectedMessage("null"))
+  test("CheckInvariant: return null if column 'a' is null") {
+    checkEvaluation(expr, null, InternalRow(null))
   }
 
   test("CheckInvariant: throws exception if column 'a' <= 0") {

@@ -374,8 +374,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("Check constraint validation succeeds on table insert - top level column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
-      sql(s"INSERT INTO $t VALUES 1")
-      checkAnswer(spark.table(t), Seq(Row(1)))
+      sql(s"INSERT INTO $t VALUES (1), (null)")
+      checkAnswer(spark.table(t), Seq(Row(1), Row(null)))
     }
   }
 
@@ -383,8 +383,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT," +
         s" s STRUCT<num INT, str STRING> CONSTRAINT positive_num CHECK (s.num > 0)) $defaultUsing")
-      sql(s"INSERT INTO $t VALUES (1, struct(5, 'test'))")
-      checkAnswer(spark.table(t), Seq(Row(1, Row(5, "test"))))
+      sql(s"INSERT INTO $t VALUES (1, struct(5, 'test')), (2, struct(null, 'test'))")
+      checkAnswer(spark.table(t), Seq(Row(1, Row(5, "test")), Row(2, Row(null, "test"))))
     }
   }
 
@@ -392,8 +392,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT," +
         s" m MAP<STRING, INT> CONSTRAINT positive_num CHECK (m['a'] > 0)) $defaultUsing")
-      sql(s"INSERT INTO $t VALUES (1, map('a', 10, 'b', 20))")
-      checkAnswer(spark.table(t), Seq(Row(1, Map("a" -> 10, "b" -> 20))))
+      sql(s"INSERT INTO $t VALUES (1, map('a', 10, 'b', 20)), (2, map('a', null))")
+      checkAnswer(spark.table(t), Seq(Row(1, Map("a" -> 10, "b" -> 20)), Row(2, Map("a" -> null))))
     }
   }
 
@@ -401,8 +401,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT," +
         s" a ARRAY<INT>, CONSTRAINT positive_array CHECK (a[1] > 0)) $defaultUsing")
-      sql(s"INSERT INTO $t VALUES (1, array(5, 6, 7))")
-      checkAnswer(spark.table(t), Seq(Row(1, Seq(5, 6, 7))))
+      sql(s"INSERT INTO $t VALUES (1, array(5, 6, 7)), (2, array(8, null))")
+      checkAnswer(spark.table(t), Seq(Row(1, Seq(5, 6, 7)), Row(2, Seq(8, null))))
     }
   }
 }

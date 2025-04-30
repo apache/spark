@@ -286,7 +286,7 @@ case class CheckInvariant(
 
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
-    if (result == null || result == false) {
+    if (result == false) {
       val values = columnExtractors.map {
         case (column, extractor) => column -> extractor.eval(input)
       }.toMap
@@ -332,7 +332,7 @@ case class CheckInvariant(
     val valListName = ctx.freshName("valList")
     val ret = code"""${elementValue.code}
           |
-          |if (${elementValue.isNull} || ${elementValue.value} == false) {
+          |if (!${elementValue.isNull} && ${elementValue.value} == false) {
           |  ${generateColumnValuesCode(colListName, valListName, ctx)}
           |  throw org.apache.spark.sql.errors.QueryExecutionErrors.checkViolationJava(
           |     "$constraintName", "$predicateSql", $colListName, $valListName);
