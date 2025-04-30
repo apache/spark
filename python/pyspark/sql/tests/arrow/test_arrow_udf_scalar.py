@@ -22,10 +22,8 @@ import unittest
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from pyspark import TaskContext
 from pyspark.util import PythonEvalType
-from pyspark.sql import Column
-from pyspark.sql.functions import arrow_udf, ArrowUDFType, PandasUDFType
+from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     IntegerType,
@@ -41,15 +39,10 @@ from pyspark.sql.types import (
     ArrayType,
     StructField,
     Row,
-    TimestampType,
     MapType,
-    DateType,
     BinaryType,
-    YearMonthIntervalType,
-    VariantType,
-    VariantVal,
 )
-from pyspark.errors import AnalysisException, PythonException
+from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
