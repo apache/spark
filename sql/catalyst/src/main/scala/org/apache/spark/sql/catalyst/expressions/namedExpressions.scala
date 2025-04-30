@@ -192,6 +192,14 @@ case class Alias(child: Expression, name: String)(
       explicitMetadata = explicitMetadata,
       nonInheritableMetadataKeys = nonInheritableMetadataKeys)
 
+  def withExprId(newExprId: ExprId): Alias = {
+    if (exprId == newExprId) {
+      this
+    } else {
+      Alias(child, name)(newExprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+    }
+  }
+
   override def toAttribute: Attribute = {
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
