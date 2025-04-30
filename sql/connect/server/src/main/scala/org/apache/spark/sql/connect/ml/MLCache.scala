@@ -17,7 +17,7 @@
 package org.apache.spark.sql.connect.ml
 
 import java.io.File
-import java.nio.file.{Files, Path}
+import java.nio.file.{Files, Path, Paths}
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
@@ -46,7 +46,13 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   //  part data size.
   private[ml] val totalSizeBytes: AtomicLong = new AtomicLong(0)
 
-  val offloadedModelsDir: Path = Utils.createTempDir().toPath
+  val offloadedModelsDir: Path = {
+    Paths.get(
+      System.getProperty("java.io.tmpdir"),
+      "spark_connect_model_cache",
+      sessionHolder.sessionId
+    )
+  }
   private def getOffloadingEnabled: Boolean = {
     sessionHolder.session.conf.get(
       Connect.CONNECT_SESSION_CONNECT_ML_CACHE_OFFLOADING_ENABLED
