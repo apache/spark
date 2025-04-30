@@ -320,6 +320,57 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+
+  test("Check constraint violation on insert overwrite by position") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
+      // First insert valid data
+      sql(s"INSERT INTO $t VALUES (1, 10)")
+
+      // Try to overwrite with invalid data
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT OVERWRITE TABLE $t SELECT 2, -5")
+      }
+
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "positive_value",
+          "expression" -> "value > 0",
+          "values" -> " - value : -5"
+        )
+      )
+    }
+  }
+
+  test("Check constraint violation on insert overwrite by name") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT," +
+        s" CONSTRAINT positive_value CHECK (value > 0)) $defaultUsing")
+      // First insert valid data
+      sql(s"INSERT INTO $t VALUES (1, 10)")
+
+      // Try to overwrite with invalid data using column names
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT OVERWRITE TABLE $t BY NAME SELECT -5 as value, 2 as id")
+      }
+
+      checkError(
+        exception = error,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "positive_value",
+          "expression" -> "value > 0",
+          "values" -> " - value : -5"
+        )
+      )
+    }
+  }
+
   test("Check constraint validation succeeds on table insert - top level column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
