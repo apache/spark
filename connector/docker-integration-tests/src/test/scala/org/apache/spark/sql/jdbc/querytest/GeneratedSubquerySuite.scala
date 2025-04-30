@@ -50,6 +50,13 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
   Attribute(SECOND_COLUMN, Some(INNER_TABLE_NAME)))
   private val INNER_TABLE = TableRelation(INNER_TABLE_NAME, INNER_TABLE_SCHEMA)
 
+  private val MIDDLE_TABLE_NAME = "middle_table"
+  private val MIDDLE_TABLE_SCHEMA = Seq(
+    Attribute(FIRST_COLUMN, Some(MIDDLE_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(MIDDLE_TABLE_NAME)))
+  )
+  private val MIDDLE_TABLE = TableRelation(MIDDLE_TABLE_NAME, MIDDLE_TABLE_SCHEMA)
+
   private val OUTER_TABLE_NAME = "outer_table"
   private val OUTER_TABLE_SCHEMA = Seq(
     Attribute(FIRST_COLUMN, Some(OUTER_TABLE_NAME)),
@@ -169,8 +176,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
    * @param operatorInSubquery The operator to be included in the subquery.
    */
   private def generateQuery(
-      innerTable: Relation,
-      outerTable: Relation,
+      tables: Seq[Relation],
       subqueryAlias: String,
       subqueryLocation: SubqueryLocation.Value,
       subqueryType: SubqueryType.Value,
@@ -257,26 +263,41 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     }
   }
 
-  def generateQueriesAndRunTestCases(): Unit = {
-    val tableCombinations = Seq(
-      (INNER_TABLE, OUTER_TABLE),
-      (INNER_TABLE, NULL_TABLE),
-      (NULL_TABLE, OUTER_TABLE),
-      (NO_MATCH_TABLE, OUTER_TABLE),
-      (INNER_TABLE, NO_MATCH_TABLE)
-    )
+  private def generateBasicTableCombinations(testNestedCorrelations: Boolean): Seq[Seq[Relation]] = {
+    if (testNestedCorrelations) {
+        Seq(
+          (INNER_TABLE, MIDDLE_TABLE, OUTER_TABLE),
+          (INNER_TABLE, MIDDLE_TABLE, NULL_TABLE),
+          (INNER_TABLE, MIDDLE_TABLE, NO_MATCH_TABLE),
+          (INNER_TABLE, NULL_TABLE, OUTER_TABLE),
+          (INNER_TABLE, NULL_TABLE, NO_MATCH_TABLE),
+          (INNER_TABLE, NO_MATCH_TABLE, OUTER_TABLE),
+          (INNER_TABLE, NO_MATCH_TABLE, NULL_TABLE),
+          (NULL_TABLE, MIDDLE_TABLE, OUTER_TABLE),
+          (NULL_TABLE, MIDDLE_TABLE, NO_MATCH_TABLE),
+          (NO_MATCH_TABLE, MIDDLE_TABLE, OUTER_TABLE),
+          (NO_MATCH_TABLE, MIDDLE_TABLE, NULL_TABLE)
+        )
+    } else {
+      Seq(
+        (INNER_TABLE, OUTER_TABLE),
+        (INNER_TABLE, NULL_TABLE),
+        (NULL_TABLE, OUTER_TABLE),
+        (NO_MATCH_TABLE, OUTER_TABLE),
+        (INNER_TABLE, NO_MATCH_TABLE)
+      )
+    }
+  }
 
-    val innerSubqueryAlias = "innerSubqueryAlias"
-    val subqueryAlias = "subqueryAlias"
-    val aggregationFunctionAlias = "aggFunctionAlias"
-    val joinTypes = Seq(JoinType.INNER, JoinType.LEFT_OUTER, JoinType.RIGHT_OUTER)
-    val setOperations = Seq(
-      SetOperationType.UNION, SetOperationType.EXCEPT, SetOperationType.INTERSECT)
-
+  private def generateAllRelationCombinations(tableCombinations: Seq[Seq[Relation]]): Seq[Seq[Relation]] = {
     // Generate combinations of the inner table to have joins and set operations (with the
     // JOIN_TABLE).
-    val allRelationCombinations = tableCombinations.flatMap {
-      case (innerTable, outerTable) =>
+    tableCombinations.flatMap {
+      case tables =>
+        val (innerTable, remainedTables) = (tables.head, tables.tail)
+        val joinTypes = Seq(JoinType.INNER, JoinType.LEFT_OUTER, JoinType.RIGHT_OUTER)
+        val setOperations = Seq(
+          SetOperationType.UNION, SetOperationType.EXCEPT, SetOperationType.INTERSECT)
         val joins = joinTypes.map(joinType => JoinedRelation(
           leftRelation = innerTable,
           rightRelation = JOIN_TABLE,
@@ -287,70 +308,112 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         val leftTableQuery = Query(SelectClause(innerTable.output), FromClause(Seq(innerTable)))
         val rightTableQuery = Query(SelectClause(JOIN_TABLE.output), FromClause(Seq(JOIN_TABLE)))
         val setOps = setOperations.map(setOp =>
-          SetOperation(leftTableQuery, rightTableQuery, setOp))
+            SetOperation(leftTableQuery, rightTableQuery, setOp))
           .map(plan => {
             val output = innerTable.output.map(a => a.copy(qualifier = Some(innerSubqueryAlias)))
             SubqueryRelation(name = innerSubqueryAlias, output = output, inner = plan)
           })
-        (Seq(innerTable) ++ joins ++ setOps).map(inner => (inner, outerTable))
+        (Seq(innerTable) ++ joins ++ setOps).map(inner => Seq(inner) ++ remainedTables)
     }
+  }
 
-    def subqueryTypeChoices(subqueryLocation: SubqueryLocation.Value): Seq[SubqueryType.Value] = {
-      subqueryLocation match {
-        case SubqueryLocation.SELECT => Seq(SubqueryType.ATTRIBUTE)
-        case SubqueryLocation.FROM => Seq(SubqueryType.RELATION)
-        case SubqueryLocation.WHERE => Seq(
-          SubqueryType.SCALAR_PREDICATE_LESS_THAN,
-          SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
-          SubqueryType.SCALAR_PREDICATE_GREATER_THAN,
-          SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS,
-          SubqueryType.SCALAR_PREDICATE_EQUALS,
-          SubqueryType.SCALAR_PREDICATE_NOT_EQUALS,
-          SubqueryType.IN,
-          SubqueryType.NOT_IN,
-          SubqueryType.EXISTS,
-          SubqueryType.NOT_EXISTS)
-      }
-    }
-
-    // If the subquery is in the FROM clause of the main query, it cannot be correlated.
-    def correlationChoices(subqueryLocation: SubqueryLocation.Value): Seq[Boolean] =
-      subqueryLocation match {
-        case SubqueryLocation.FROM => Seq(false)
-        case _ => Seq(true, false)
-      }
-
-    def generateCorrelationConditions(innerTable: Relation, outerTable: Relation,
-                                      isCorrelated: Boolean): Seq[Seq[Predicate]] = {
-      if (isCorrelated) {
-        Seq(Seq(Equals(innerTable.output.head, outerTable.output.head)),
+  private def generateCorrelationConditions(
+      tables: Seq[Relation],
+      isCorrelated: Boolean): Seq[Seq[Predicate]] = {
+    if (isCorrelated) {
+      if (tables.size > 2) {
+        // test nested correlations
+        val innerTable = tables(0)
+        val middleTable = tables(1)
+        val outerTable = tables.last
+        Seq(
+          Seq(Equals(innerTable.output.head, outerTable.output.head)),
           Seq(NotEquals(innerTable.output.head, outerTable.output.head)),
           Seq(LessThan(innerTable.output.head, outerTable.output.head)),
           Seq(LessThanOrEquals(innerTable.output.head, outerTable.output.head)),
           Seq(GreaterThan(innerTable.output.head, outerTable.output.head)),
-          Seq(GreaterThanOrEquals(innerTable.output.head, outerTable.output.head)))
-      } else {
-        Seq(Seq())
-      }
-    }
-
-    def distinctChoices(subqueryOperator: Operator): Seq[Boolean] = {
-      subqueryOperator match {
-        // Don't do DISTINCT if there is group by because it is redundant.
-        case Aggregate(_, groupingExpressions) if groupingExpressions.isEmpty => Seq(false)
-        case _ => Seq(true, false)
-      }
-    }
-
-    def limitAndOffsetChoices(): Seq[LimitAndOffset] = {
-      val limitValues = Seq(0, 1, 10)
-      val offsetValues = Seq(0, 1, 10)
-      limitValues.flatMap(
-        limit => offsetValues.map(
-          offset => LimitAndOffset(limit, offset)
+          Seq(GreaterThanOrEquals(innerTable.output.head, outerTable.output.head)),
+          Seq(Equals(innerTable.output.head, outerTable.output.head),
+            Equals(innerTable.output.head, middleTable.output.head)),
+          Seq(NotEquals(innerTable.output.head, outerTable.output.head),
+            NotEquals(innerTable.output.head, middleTable.output.head)),
+          Seq(LessThan(innerTable.output.head, outerTable.output.head),
+            LessThan(innerTable.output.head, middleTable.output.head)),
+          Seq(LessThanOrEquals(innerTable.output.head, outerTable.output.head),
+            LessThanOrEquals(innerTable.output.head, middleTable.output.head)),
+          Seq(GreaterThan(innerTable.output.head, outerTable.output.head),
+            GreaterThan(innerTable.output.head, middleTable.output.head)),
+          Seq(GreaterThanOrEquals(innerTable.output.head, outerTable.output.head),
+            GreaterThanOrEquals(innerTable.output.head, middleTable.output.head))
         )
-      ).filter(lo => !(lo.limitValue == 0 && lo.offsetValue == 0))
+      } else {
+        val innerTable = tables(0)
+        val outerTable = tables(1)
+        Seq(
+          Seq(Equals(innerTable.output.head, outerTable.output.head)),
+          Seq(NotEquals(innerTable.output.head, outerTable.output.head)),
+          Seq(LessThan(innerTable.output.head, outerTable.output.head)),
+          Seq(LessThanOrEquals(innerTable.output.head, outerTable.output.head)),
+          Seq(GreaterThan(innerTable.output.head, outerTable.output.head)),
+          Seq(GreaterThanOrEquals(innerTable.output.head, outerTable.output.head))
+        )
+      }
+    } else {
+      Seq(Seq())
     }
+  }
+
+  private def subqueryTypeChoices(subqueryLocation: SubqueryLocation.Value): Seq[SubqueryType.Value] = {
+    subqueryLocation match {
+      case SubqueryLocation.SELECT => Seq(SubqueryType.ATTRIBUTE)
+      case SubqueryLocation.FROM => Seq(SubqueryType.RELATION)
+      case SubqueryLocation.WHERE => Seq(
+        SubqueryType.SCALAR_PREDICATE_LESS_THAN,
+        SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+        SubqueryType.SCALAR_PREDICATE_GREATER_THAN,
+        SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS,
+        SubqueryType.SCALAR_PREDICATE_EQUALS,
+        SubqueryType.SCALAR_PREDICATE_NOT_EQUALS,
+        SubqueryType.IN,
+        SubqueryType.NOT_IN,
+        SubqueryType.EXISTS,
+        SubqueryType.NOT_EXISTS)
+    }
+  }
+
+  private def correlationChoices(subqueryLocation: SubqueryLocation.Value): Seq[Boolean] =
+    // If the subquery is in the FROM clause of the main query, it cannot be correlated.
+    subqueryLocation match {
+      case SubqueryLocation.FROM => Seq(false)
+      case _ => Seq(true, false)
+    }
+
+  private def distinctChoices(subqueryOperator: Operator): Seq[Boolean] = {
+    subqueryOperator match {
+      // Don't do DISTINCT if there is group by because it is redundant.
+      case Aggregate(_, groupingExpressions) if groupingExpressions.isEmpty => Seq(false)
+      case _ => Seq(true, false)
+    }
+  }
+
+  private def limitAndOffsetChoices(): Seq[LimitAndOffset] = {
+    val limitValues = Seq(0, 1, 10)
+    val offsetValues = Seq(0, 1, 10)
+    limitValues.flatMap(
+      limit => offsetValues.map(
+        offset => LimitAndOffset(limit, offset)
+      )
+    ).filter(lo => !(lo.limitValue == 0 && lo.offsetValue == 0))
+  }
+
+  def generateQueriesAndRunTestCases(testNestedCorrelations: Boolean = false): Unit = {
+    val tableCombinations = generateBasicTableCombinations(testNestedCorrelations)
+
+    val innerSubqueryAlias = "innerSubqueryAlias"
+    val subqueryAlias = "subqueryAlias"
+    val aggregationFunctionAlias = "aggFunctionAlias"
+
+    val allRelationCombinations = generateAllRelationCombinations(tableCombinations)
 
     case class SubquerySpec(query: String, isCorrelated: Boolean, subqueryType: SubqueryType.Value)
 
@@ -358,12 +421,12 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
 
     // Generate queries across the different axis.
     for {
-      (innerTable, outerTable) <- allRelationCombinations
+      tables <- allRelationCombinations
       subqueryLocation <-
         Seq(SubqueryLocation.WHERE, SubqueryLocation.SELECT, SubqueryLocation.FROM)
       subqueryType <- subqueryTypeChoices(subqueryLocation)
       isCorrelated <- correlationChoices(subqueryLocation)
-      correlationCondition <- generateCorrelationConditions(innerTable, outerTable, isCorrelated)
+      correlationCondition <- generateCorrelationConditions(tables, isCorrelated)
     } {
       // Hardcoded aggregation column and group by column.
       val (aggColumn, groupByColumn) = innerTable.output.head -> innerTable.output(1)
@@ -382,7 +445,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         subqueryOperator <- subqueryOperators
         isDistinct <- distinctChoices(subqueryOperator)
       } {
-        generatedQuerySpecs += SubquerySpec(generateQuery(innerTable, outerTable,
+        generatedQuerySpecs += SubquerySpec(generateQuery(tables,
           subqueryAlias, subqueryLocation, subqueryType, correlationCondition, isDistinct,
           subqueryOperator).toString + ";", isCorrelated, subqueryType)
       }
