@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.Path;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
@@ -63,20 +61,10 @@ public class ParquetFooterReader {
           .build()
           .getMetadataFilter();
     }
-    return readFooter(configuration, file.toPath(), filter);
+    return readFooter(HadoopInputFile.fromStatus(file.fileStatus(), configuration), filter);
   }
 
-  public static ParquetMetadata readFooter(Configuration configuration,
-      Path file, ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    return readFooter(HadoopInputFile.fromPath(file, configuration), filter);
-  }
-
-  public static ParquetMetadata readFooter(Configuration configuration,
-      FileStatus fileStatus, ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    return readFooter(HadoopInputFile.fromStatus(fileStatus, configuration), filter);
-  }
-
-  private static ParquetMetadata readFooter(HadoopInputFile inputFile,
+  public static ParquetMetadata readFooter(HadoopInputFile inputFile,
       ParquetMetadataConverter.MetadataFilter filter) throws IOException {
     ParquetReadOptions readOptions =
       HadoopReadOptions.builder(inputFile.getConfiguration(), inputFile.getPath())

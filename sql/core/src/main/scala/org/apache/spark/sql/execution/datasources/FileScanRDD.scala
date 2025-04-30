@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.{Closeable, FileNotFoundException}
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
 
@@ -50,6 +50,7 @@ import org.apache.spark.util.NextIterator
  * @param filePath URI of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
+ * @param fileStatus The FileStatus instance of the file to read.
  * @param modificationTime The modification time of the input file, in milliseconds.
  * @param fileSize The length of the input file (not the block), in bytes.
  * @param otherConstantMetadataColumnValues The values of any additional constant metadata columns.
@@ -59,6 +60,7 @@ case class PartitionedFile(
     filePath: SparkPath,
     start: Long,
     length: Long,
+    fileStatus: FileStatus,
     @transient locations: Array[String] = Array.empty,
     modificationTime: Long = 0L,
     fileSize: Long = 0L,

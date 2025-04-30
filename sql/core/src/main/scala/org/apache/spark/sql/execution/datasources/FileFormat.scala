@@ -317,7 +317,8 @@ object FileFormat {
       fieldNames: Seq[String],
       filePath: SparkPath,
       fileSize: Long,
-      fileModificationTime: Long): InternalRow = {
+      fileModificationTime: Long,
+      fileStatus: FileStatus): InternalRow = {
     // When scanning files directly from the filesystem, we only support file-constant metadata
     // fields whose values can be derived from a file status. In particular, we don't have accurate
     // file split information yet, nor do we have a way to provide custom metadata column values.
@@ -330,6 +331,7 @@ object FileFormat {
       filePath = filePath,
       start = 0L,
       length = fileSize,
+      fileStatus = fileStatus,
       locations = Array.empty,
       modificationTime = fileModificationTime,
       fileSize = fileSize,
